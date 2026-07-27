@@ -2,10 +2,18 @@
 
 Feature screenshots used by the root README and the docs.
 
-**Every image here is captured from a credential-free checkout containing only
-starter market data and synthetic examples.** No real position, account name or
-number, cost basis, transaction, trade history, token, or local filesystem path
-appears in any of them. That is a hard rule, not a preference — see
+**Every image here is captured from a checkout containing only starter market
+data and synthetic examples.** No real position, account name or number, cost
+basis, transaction, trade history, token, or local filesystem path appears in
+any of them.
+
+The three `*-connected.png` frames show the brokerage integrations populated.
+Their ledger data is **generated, not imported**: the account is literally named
+"Demo Retirement Account", every position is invented, every note reads
+"Synthetic demonstration position", and the underlyings are ETFs from the
+starter universe so the app can price them locally. No brokerage was contacted
+and no real credential was used — the connected state is reproduced by writing
+the ledger CSVs directly. That is a hard rule, not a preference — see
 [../../CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ## Inventory
@@ -24,8 +32,11 @@ application's only theme.
 | `portfolios.png` | `/portfolios` | 1440×900 | The five portfolios bootstrap seeds, compared equal-weighted against SPY. Exactly what a new user sees after `bootstrap-data`. |
 | `portfolio-detail-defensive-broad.png` | `/portfolios` → detail drawer | 1440×1000 | The "Defensive - Broad" detail drawer, showing a portfolio holding more than one symbol: per-member price, weekly move, 52-week range, and YTD/inception returns. |
 | `stock-detail-aapl.png` | `/stockDetail/AAPL` | 1440×900 | Per-symbol analysis for a well-known public company. |
-| `options-ledger-unconfigured.png` | `/options` | 1440×900 | The optional-setup state with no brokerage connected. |
-| `retirement-unconfigured.png` | `/retirement` | 1440×900 | The same, for the retirement ledger. |
+| `options-ledger-unconfigured.png` | `/options` | 1440×1500 | The optional-setup state with no brokerage connected. |
+| `retirement-unconfigured.png` | `/retirement` | 1440×1700 | The same, for the retirement ledger. |
+| `options-ledger-connected.png` | `/options` | 1440×1720 | Tastytrade connected: three cash-secured puts with group P/L, live IV and Greeks, market-metric beta, and a COMPLETE portfolio-risk panel. |
+| `retirement-ledger-connected.png` | `/retirement` | 1440×1180 | SnapTrade connected: holdings with cost basis, gain/loss, and allocation by category and industry. |
+| `retirement-options-connected.png` | `/retirement` → Options tab | 1440×1560 | Covered calls held against those holdings, with per-leg risk and beta-delta. |
 | `momentum-scanner-mobile.png` | `/momentum` | 420×900 | The most table-dense screen at a narrow width. |
 
 Both Wheel screens are included because they communicate different things: the
