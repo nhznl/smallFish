@@ -428,14 +428,39 @@ def _verify_tastytrade(root: Path, settings: dict[str, str]) -> int:
 
     import subprocess
 
+    # Refreshing the session is the real test: it exchanges the refresh token
+    # using the client secret, so it fails distinctly when the two belong to
+    # different OAuth applications. Constructing a Session alone proves nothing
+    # — the SDK authenticates lazily.
     script = (
-        "import json, sys\n"
+        "import asyncio, json, os\n"
         "from utilities.options import tastytrade_quotes as q\n"
-        "try:\n"
-        "    q.build_session()\n"
-        "    print(json.dumps({'ok': True, 'accounts': None}))\n"
-        "except Exception as exc:\n"
-        "    print(json.dumps({'ok': False, 'error': type(exc).__name__}))\n"
+        "from tastytrade import Session\n"
+        "\n"
+        "def scrub(text):\n"
+        "    for name in ('TT_CLIENT_SECRET', 'TT_REFRESH_TOKEN'):\n"
+        "        value = os.environ.get(name, '')\n"
+        "        if len(value) >= 8:\n"
+        "            text = text.replace(value, '<REDACTED>')\n"
+        "    return text\n"
+        "\n"
+        "async def main():\n"
+        "    creds = q.load_credentials()\n"
+        "    session = Session(creds.client_secret, creds.refresh_token,\n"
+        "                      is_test=(creds.environment == 'sandbox'))\n"
+        "    try:\n"
+        "        await session.refresh()\n"
+        "        return {'ok': True, 'accounts': None, 'env': creds.environment}\n"
+        "    except Exception as exc:\n"
+        "        return {'ok': False, 'error': type(exc).__name__,\n"
+        "                'detail': scrub(str(exc))[:300], 'env': creds.environment}\n"
+        "    finally:\n"
+        "        try:\n"
+        "            await session._client.aclose()\n"
+        "        except Exception:\n"
+        "            pass\n"
+        "\n"
+        "print(json.dumps(asyncio.run(main())))\n"
     )
     result = subprocess.run([str(python), "-c", script], cwd=root,
                             capture_output=True, text=True,
@@ -470,8 +495,21 @@ def _report_verification(label: str, result) -> int:
 
     print(f"  ERROR: {label} rejected the read-only call "
           f"({payload.get('error', 'unknown')}).")
-    print("  Common causes: an expired or revoked refresh token, the wrong "
-          "environment, or keys from a different account.")
+    detail = (payload.get("detail") or "").strip()
+    if detail:
+        # Already scrubbed of the configured secret values by the probe.
+        print(f"  Provider said: {detail}")
+    if payload.get("env"):
+        print(f"  Environment:   {payload['env']}")
+    print()
+    print("  Common causes:")
+    print("    - 'Client secret mismatch': the refresh token was created under a")
+    print("      different OAuth application than the client secret belongs to.")
+    print("      Create the grant on the SAME application, or use that")
+    print("      application's secret.")
+    print("    - Wrong environment: sandbox credentials do not authenticate")
+    print("      against TT_ENV=live, or vice versa.")
+    print("    - The grant was revoked at the provider.")
     print("  Re-run ./setup-brokerages.sh setup to replace the credentials.")
     return 1
 

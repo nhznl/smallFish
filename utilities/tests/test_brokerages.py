@@ -260,8 +260,8 @@ def test_confirm_declines_without_a_terminal(monkeypatch, capsys):
 
 # ------------------------------------------------------- verification text
 
-def test_verification_failure_reports_only_the_exception_type():
-    """Provider errors can embed tokens; only the type may be surfaced."""
+def test_verification_failure_names_the_exception_and_gives_guidance():
+    """The type alone is not actionable, so remediation must accompany it."""
     class Result:
         stdout = '{"ok": false, "error": "AuthenticationError"}'
         returncode = 0
@@ -275,7 +275,24 @@ def test_verification_failure_reports_only_the_exception_type():
     output = buffer.getvalue()
     assert code == 1
     assert "AuthenticationError" in output
-    assert "expired or revoked" in output
+    assert "revoked" in output
+    assert "./setup-brokerages.sh setup" in output
+
+
+def test_a_secret_in_a_provider_message_is_never_printed():
+    """The probe scrubs configured values; this pins the reporting side."""
+    class Result:
+        stdout = ('{"ok": false, "error": "TastytradeError", '
+                  '"detail": "rejected token <REDACTED>", "env": "live"}')
+        returncode = 0
+
+    import io
+    import contextlib
+
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        B._report_verification("Tastytrade", Result())
+    assert "<REDACTED>" in buffer.getvalue()
 
 
 def test_verification_success_reports_a_count_never_an_identifier():
@@ -339,3 +356,52 @@ def test_the_wrapper_script_delegates_to_the_tested_module():
     body = (REPO_ROOT / "setup-brokerages.sh").read_text(encoding="utf-8")
     assert "tools/brokerages.py" in body
     assert "set -euo pipefail" in body
+
+
+def test_the_tastytrade_probe_calls_functions_that_exist():
+    """The probe once called a build_session() that was never defined.
+
+    It raised AttributeError on every run, so the check reported "expired or
+    revoked refresh token" without having contacted Tastytrade at all. Assert
+    every attribute it touches is real.
+    """
+    import ast
+    import importlib
+
+    source = (REPO_ROOT / "tools/brokerages.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    probe = next(
+        node.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+        and "tastytrade_quotes" in node.value.value
+    )
+
+    module = importlib.import_module("utilities.options.tastytrade_quotes")
+    for name in {n.attr for n in ast.walk(ast.parse(probe))
+                 if isinstance(n, ast.Attribute)
+                 and isinstance(n.value, ast.Name) and n.value.id == "q"}:
+        assert hasattr(module, name), \
+            f"the verify probe calls tastytrade_quotes.{name}(), which does not exist"
+
+
+def test_verification_failure_shows_the_provider_message():
+    """Suppressing it entirely turned a diagnosable failure into a dead end."""
+    class Result:
+        stdout = ('{"ok": false, "error": "TastytradeError", '
+                  '"detail": "invalid_grant: Client secret mismatch", "env": "live"}')
+        returncode = 0
+
+    import contextlib
+    import io
+
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        code = B._report_verification("Tastytrade", Result())
+    output = buffer.getvalue()
+    assert code == 1
+    assert "Client secret mismatch" in output
+    assert "same OAuth application" in output.lower() or "SAME application" in output
+    assert "live" in output
