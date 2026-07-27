@@ -50,18 +50,35 @@ It writes those into git-ignored CSVs under `$SFP_DATA_DIR/ledger_options/`.
 
 ### Setup
 
-1. In your Tastytrade account's API settings, create an OAuth client and
-   generate a refresh token.
-2. Run:
+1. Open the [OAuth applications portal](https://my.tastytrade.com/app.html#/manage/api-access/oauth-applications)
+   (my.tastytrade.com → Manage → API Access → OAuth Applications).
+2. **Create an application.** Tick every scope you intend to use and add
+   `http://localhost:8000` as the callback URL.
+3. **Save the client secret now** — it is displayed only once. This is
+   `TT_CLIENT_SECRET`.
+4. On that application, choose **Manage → Create Grant** to generate a refresh
+   token. This is `TT_REFRESH_TOKEN`.
+
+   Refresh tokens **do not expire**, so this is a one-time setup. If
+   authentication fails later it is a revoked grant or the wrong environment,
+   not expiry.
+
+   Sandbox uses a [separate portal](https://developer.tastytrade.com/sandbox/)
+   with its own credentials. Sandbox credentials will not authenticate against
+   `TT_ENV=live`, and vice versa — a mismatch looks like a bad credential.
+
+   Reference: [tastytrade SDK session documentation](https://tastyworks-api.readthedocs.io/en/latest/sessions.html).
+
+5. Run:
 
    ```bash
    ./setup-brokerages.sh setup tastytrade
    ```
 
-3. Paste the client secret and refresh token when prompted. Input is hidden and
+6. Paste the client secret and refresh token when prompted. Input is hidden and
    is never taken as a command-line argument, so nothing reaches your shell
    history or a process listing.
-4. Choose the environment. **Sandbox is the default and the safe choice**;
+7. Choose the environment. **Sandbox is the default and the safe choice**;
    `live` reads your real account and requires explicit confirmation.
 
 smallFish uses only `TT_CLIENT_SECRET`, `TT_REFRESH_TOKEN`, and `TT_ENV`. There
