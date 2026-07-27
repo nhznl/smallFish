@@ -111,12 +111,15 @@ def finnhub_capability() -> Capability:
     configured = bool(_setting("FINNHUB_API_KEY"))
     return Capability(
         id="earnings", label="Earnings calendar",
-        provides="upcoming earnings dates and the live pre-earnings scan",
+        provides="upcoming earnings dates, used by the Pre-Earnings Momentum scan "
+                 "and by the earnings-window labels on Wheel candidates and ledger "
+                 "positions",
         state=CONFIGURED if configured else NOT_CONFIGURED,
         available=configured,
         reason=("A Finnhub API key is configured." if configured else
-                "No Finnhub API key. Upcoming earnings and any scan that depends "
-                "on them are unavailable; every other feature works."),
+                "No Finnhub API key. The Pre-Earnings Momentum scan cannot run, "
+                "and earnings windows on Wheel candidates and ledger positions "
+                "read as unknown. Every other feature works."),
         action="" if configured else "Add FINNHUB_API_KEY to app.env",
         provider="Finnhub", docs="docs/CONFIGURATION.md",
         requires=_present("FINNHUB_API_KEY"))

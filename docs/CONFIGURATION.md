@@ -39,7 +39,7 @@ directory that does not exist.
 
 | Setting | Type | Default | Effect |
 |---|---|---|---|
-| `FINNHUB_API_KEY` | Optional, secret | empty | Earnings calendar. Without it, `./commands.sh fetch`, the upcoming-earnings feed, and the live pre-earnings scan are unavailable. Everything else works. Free key at <https://finnhub.io/register>. |
+| `FINNHUB_API_KEY` | Optional, secret | empty | Upcoming earnings dates, fetched by `./commands.sh fetch`. Consumed by the Pre-Earnings Momentum scan and by the earnings-window labels on Wheel candidates and ledger positions. There is no standalone earnings view. Without it those labels read unknown and the scan cannot run; everything else works. Free key at <https://finnhub.io/register>. |
 
 Price history needs no key: it comes from Yahoo Finance through `yfinance`.
 

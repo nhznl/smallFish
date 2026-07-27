@@ -62,7 +62,7 @@ Optional, each independently:
 
 | Feature | Needs | Without it |
 |---|---|---|
-| Upcoming earnings, live pre-earnings scan | Finnhub API key (free) | Marked unavailable; everything else works |
+| Upcoming earnings dates | Finnhub API key (free) | The Pre-Earnings Momentum scan cannot run, and Wheel candidates and ledger positions show their earnings window as unknown |
 | Options ledger, quotes, Greeks, beta | Tastytrade (read-only) | Options page shows an optional-setup card |
 | Retirement holdings | SnapTrade — Fidelity and others connect *through* it | Retirement page shows an optional-setup card |
 

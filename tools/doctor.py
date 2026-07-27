@@ -199,7 +199,8 @@ def build_report(root: Path) -> Report:
     finnhub = setting("FINNHUB_API_KEY")
     report.add(rows, OK if finnhub else OFF, "Finnhub earnings",
                mask(finnhub) if finnhub
-               else "not configured — upcoming earnings and the live pre-earnings scan are unavailable")
+               else "not configured — the Pre-Earnings Momentum scan cannot run, "
+                    "and Wheel and ledger earnings windows read unknown")
 
     tt_secret, tt_token = setting("TT_CLIENT_SECRET"), setting("TT_REFRESH_TOKEN")
     tt_env = setting("TT_ENV", "sandbox").lower()
