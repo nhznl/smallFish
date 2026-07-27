@@ -102,8 +102,10 @@ When sources disagree, prefer in this order:
    below.
 4. **Module READMEs** and `docs/` — current behaviour. Fix them when you change
    behaviour.
-5. **`Requirements.md`** — product and backlog history. Useful for intent, but
-   older entries describe superseded states. Never cite it over code.
+5. **`Requirements.md`** — outstanding, deferred, and closed work only. It
+   states what must not be reopened without a decision, so read it before
+   starting anything in those areas. It no longer records finished work; for
+   how something behaves, read the code and `docs/`.
 6. **`stock-app-ui/docs/UX_GUIDANCE.md`** — required reading before UI work.
 
 ## Hard rules

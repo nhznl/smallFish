@@ -249,8 +249,8 @@ an issue, a pull request, or a screenshot.
 
 Working and in daily use. Known follow-ups, none of them blocking: Docker and
 devcontainer support, native Windows outside WSL, and broader Angular test
-coverage. [`Requirements.md`](Requirements.md) is the working product and
-backlog record.
+coverage. [`Requirements.md`](Requirements.md) records what is still open,
+deferred, or decided-and-closed.
 
 ## License
 
