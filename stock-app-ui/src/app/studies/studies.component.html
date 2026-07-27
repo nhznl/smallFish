@@ -1,0 +1,74 @@
+<ng-container *ngIf="loading; else loaded">
+  <div class="studies-skeleton" aria-busy="true" aria-label="Loading research studies">
+    <div class="skeleton skeleton-tab"></div>
+    <div class="skeleton skeleton-title"></div>
+    <div class="skeleton skeleton-panel"></div>
+  </div>
+</ng-container>
+
+<ng-template #loaded>
+  <div *ngIf="error" class="banner banner-neg" role="alert">{{ error }}</div>
+  <div *ngIf="!error && !study" class="empty-state">
+    <span class="empty-title">No research studies are published</span>
+    <span class="empty-hint">Publish a valid materialized catalog to make study evidence available.</span>
+  </div>
+
+  <section *ngIf="study && selectedVariation as variation">
+    <nav class="tab-bar studies-tabs" aria-label="Research studies" role="tablist">
+      <a *ngFor="let item of catalog" class="tab" role="tab" [routerLink]="['/studies', item.id]"
+         [queryParams]="{ variation: item.defaultVariationId }" [attr.aria-selected]="item.id === study.id">
+        {{ item.name }}<span class="tab-count">{{ item.variationCount }}</span>
+      </a>
+    </nav>
+
+    <header class="page-header studies-header">
+      <div>
+        <p class="page-eyebrow">Research study</p>
+        <h1 class="page-title">{{ study.name }}</h1>
+        <p class="page-subtitle">{{ study.summary }}</p>
+        <div class="study-labels" aria-label="Evidence and verdict">
+          <span class="badge" [class]="evidenceClass(variation.outcome.evidenceLevel)">Evidence: {{ variation.outcome.evidenceLevel }}</span>
+          <span class="badge" [class]="verdictClass(variation.outcome.verdict)">Verdict: {{ variation.outcome.verdict }}</span>
+        </div>
+      </div>
+      <div class="snapshot-chip"><span>Evidence generated</span><strong>{{ variation.provenance.generatedAt | date:'mediumDate' }}</strong></div>
+    </header>
+
+    <fieldset class="variation-selector">
+      <legend>Study variation</legend>
+      <label *ngFor="let item of study.variations" class="variation-option">
+        <input type="radio" name="variation" [checked]="item.id === variation.id" (change)="selectVariation(item)">
+        <span>{{ item.name }}</span>
+      </label>
+    </fieldset>
+
+    <div *ngIf="variation.scan?.warning" class="banner banner-warn study-warning" role="note">{{ variation.scan?.warning }}</div>
+    <section *ngIf="variation.scan?.executionSupported" class="panel scan-panel"><div class="panel-heading"><div><h2>Current candidate scan</h2><small *ngIf="scanGeneratedAt">Snapshot: {{ scanGeneratedAt | date:'medium' }}</small></div><button type="button" class="btn btn-primary" [disabled]="scanRunning" [attr.aria-busy]="scanRunning" (click)="runScan()"><span *ngIf="scanRunning" class="btn-spinner"></span>{{ scanRunning ? 'Running scan' : 'Run scan' }}</button></div><div class="panel-body"><p>Current candidates apply the studied selection rules. They do not change this variation’s historical evidence.</p><p *ngIf="scanMessage" class="scan-message" role="status">{{ scanMessage }}</p><app-strategy-stocks *ngIf="scanCandidates.length; else noScanCandidates" [candidates]="scanCandidates"></app-strategy-stocks><ng-template #noScanCandidates><p class="scan-empty">Run the scan to produce the latest candidate snapshot.</p></ng-template></div></section>
+
+    <section class="panel"><div class="panel-heading"><h2>Thesis</h2></div><div class="panel-body prose">{{ variation.thesis }}</div></section>
+
+    <section class="panel">
+      <div class="panel-heading"><h2>Methodology</h2><small>{{ variation.methodology.period }}</small></div>
+      <div class="panel-body methodology-grid">
+        <div><strong>Population</strong><p>{{ variation.methodology.population }}</p></div>
+        <div><strong>Primary endpoint</strong><p>{{ variation.methodology.endpoint }}</p></div>
+        <div><strong>Inference</strong><p>{{ variation.methodology.inference }}</p></div>
+        <div><strong>Inclusion</strong><ul><li *ngFor="let item of variation.methodology.inclusionCriteria">{{ item }}</li></ul></div>
+        <div><strong>Exclusion</strong><ul><li *ngFor="let item of variation.methodology.exclusionCriteria">{{ item }}</li></ul></div>
+        <div><strong>Controls</strong><ul><li *ngFor="let item of variation.methodology.controls">{{ item }}</li></ul></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><h2>Outcome</h2></div>
+      <div class="panel-body outcome"><p class="outcome-summary">{{ variation.outcome.summary }}</p>
+        <div class="outcome-grid"><div><strong>What worked</strong><ul><li *ngFor="let item of variation.outcome.whatWorked">{{ item }}</li></ul></div><div><strong>What did not work</strong><ul><li *ngFor="let item of variation.outcome.whatDidNotWork">{{ item }}</li></ul></div><div><strong>Next steps</strong><ul><li *ngFor="let item of variation.outcome.nextSteps">{{ item }}</li></ul></div></div>
+        <p class="more-data"><strong>Would more data help?</strong> {{ variation.outcome.moreData.assessment ? 'Potentially.' : 'No.' }} {{ variation.outcome.moreData.rationale }}</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="study-stats"><h2 id="study-stats" class="section-title">Statistics</h2><div class="stat-strip"><article *ngFor="let stat of variation.stats" class="stat-card"><span class="stat-label">{{ stat.label }}</span><strong class="stat-value" [class]="statisticClass(stat)">{{ formatStatistic(stat) }}</strong><span class="stat-delta">{{ stat.scope }}</span><small *ngIf="stat.confidenceInterval">95% CI: {{ formatIntervalValue(stat, stat.confidenceInterval.low) }} to {{ formatIntervalValue(stat, stat.confidenceInterval.high) }}</small><small>{{ stat.interpretation }}</small></article></div></section>
+
+    <section class="panel"><div class="panel-heading"><h2>Caveats and provenance</h2></div><div class="panel-body provenance"><ul><li *ngFor="let item of variation.caveats">{{ item }}</li></ul><dl><dt>Specification</dt><dd>{{ variation.provenance.specificationPath }}</dd><dt>Frozen artifact</dt><dd>{{ variation.provenance.artifactPath }}</dd><dt>Run</dt><dd>{{ variation.provenance.runId }} · {{ variation.provenance.verificationState }}</dd></dl><a *ngIf="study.id === 'sector-relative-leadership'" routerLink="/sectors" class="btn btn-ghost">View separate descriptive Sectors context</a></div></section>
+  </section>
+</ng-template>

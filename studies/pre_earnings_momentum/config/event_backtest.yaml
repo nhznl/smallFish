@@ -1,0 +1,17 @@
+# Behavioral settings for the pre-earnings momentum event backtest. Paths come from app.env.
+price_min: 7
+price_max: 150
+exit_rules:
+  take_profit_pct: 0.10
+  stop_loss_pct: -0.05
+  max_hold_trading_days: 50
+liquidity:
+  min_avg_volume: 1000000
+  min_avg_dollar_volume: 10000000
+market_regime:
+  sma_window: 50
+buckets:
+  - { name: "$7-$10", min: 7, max: 10 }
+  - { name: "$10-$50", min: 10, max: 50 }
+  - { name: "$50-$100", min: 50, max: 100 }
+  - { name: "$100-$150", min: 100, max: 150 }

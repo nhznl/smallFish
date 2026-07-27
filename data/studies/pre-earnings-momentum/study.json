@@ -1,0 +1,255 @@
+{
+  "defaultVariationId": "base",
+  "id": "pre-earnings-momentum",
+  "name": "Pre-Earnings Momentum",
+  "schemaName": "smallfish.research-study",
+  "schemaVersion": 1,
+  "summary": "A fixed pre-earnings stock-selection study with a failed primary portfolio endpoint and a separately labeled exploratory cash-sweep replay.",
+  "updatedAt": "2026-07-26T00:00:00Z",
+  "variations": [
+    {
+      "caveats": [
+        "The failed primary portfolio endpoint remains the study verdict.",
+        "Current candidates are operational matches, not historical candidate rows or validated recommendations."
+      ],
+      "id": "base",
+      "methodology": {
+        "controls": [
+          "SPY buy-and-hold over the identical holdout window.",
+          "Frozen random eligible controls recorded in the historical run."
+        ],
+        "endpoint": "Holdout portfolio return relative to SPY; daily excess versus SPY is reported with a 95% interval.",
+        "exclusionCriteria": [
+          "Missing or inconsistent price/event data.",
+          "Stocks outside the fixed price, liquidity, event, sector, or position constraints."
+        ],
+        "features": [
+          "Pre-earnings event timing.",
+          "Frozen momentum signal and liquidity gates.",
+          "Weekly Friday decisions with fixed portfolio allocation rules."
+        ],
+        "inclusionCriteria": [
+          "Price from $10 through $300.",
+          "Upcoming earnings two through five weeks away.",
+          "Super High or High eligible signal band with the frozen liquidity and freshness rules."
+        ],
+        "inference": "The primary portfolio comparison is frozen. The daily-excess interval is descriptive and does not rescue a failed portfolio endpoint.",
+        "limitations": [
+          "The observed holdout is spent and cannot be reused for validation.",
+          "Cash exposure makes the portfolio comparison different from fully invested SPY."
+        ],
+        "period": "One-shot holdout decisions 2025-04-04 through 2026-06-26.",
+        "population": "Eligible liquid stocks with upcoming earnings events and the required current strategy signals.",
+        "summary": "A frozen no-cash-sweep portfolio simulation evaluated the pre-registered holdout after development and embargo periods."
+      },
+      "name": "Pre-Earnings Momentum \u2014 Study 1",
+      "outcome": {
+        "evidenceLevel": "CONFIRMATORY",
+        "moreData": {
+          "assessment": false,
+          "rationale": "The pre-specified holdout is spent; more observations cannot convert it into a fresh validation test."
+        },
+        "nextSteps": [
+          "Keep the failed primary result visible.",
+          "Do not treat current candidates as evidence of a validated edge."
+        ],
+        "summary": "The frozen primary portfolio returned +22.42% versus SPY +49.17% across 281 completed trades, so the primary endpoint failed.",
+        "verdict": "FAILED",
+        "whatDidNotWork": [
+          "The portfolio materially trailed SPY.",
+          "Mean daily excess versus SPY had a 95% interval crossing zero."
+        ],
+        "whatWorked": [
+          "The fixed pipeline produced the planned holdout and completed trades."
+        ]
+      },
+      "provenance": {
+        "artifactPath": "data/backtest/pre_earnings_momentum/strategy_study/holdout/summary.json",
+        "dataCutoff": "2026-06-26",
+        "generatedAt": "2026-07-18T23:55:05.534289Z",
+        "runId": "holdout-no-cash-sweep",
+        "sourceCommit": "80906cbd290fcd73476c5dd87c0fe3ad7f0ecb0e",
+        "specificationPath": "studies/pre_earnings_momentum/backtest_spec.md",
+        "verificationState": "VERIFIED"
+      },
+      "scan": {
+        "eligibilityExplanation": "The operational scan applies the current pre-earnings candidate selection rules, not a new historical test.",
+        "executionSupported": true,
+        "latestSnapshot": null,
+        "resultSchema": "pre-earnings-candidates-v1",
+        "scanType": "pre-earnings-current-candidates",
+        "warning": "This scan reproduces the studied selection rules; the historical primary endpoint failed, so candidates are not evidence of a validated edge."
+      },
+      "stats": [
+        {
+          "format": "PERCENT",
+          "id": "portfolio-return",
+          "interpretation": "The portfolio trailed SPY.",
+          "label": "Portfolio return",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "Primary no-cash-sweep holdout portfolio",
+          "value": 0.22415696429508136
+        },
+        {
+          "format": "PERCENT",
+          "id": "spy-return",
+          "interpretation": "Benchmark buy-and-hold return.",
+          "label": "SPY return",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "Same holdout window",
+          "value": 0.49174142533164744
+        },
+        {
+          "format": "INTEGER",
+          "id": "completed-trades",
+          "interpretation": "The result covers the fixed completed trade count.",
+          "label": "Completed trades",
+          "precision": 0,
+          "priority": "SECONDARY",
+          "scope": "Holdout",
+          "value": 281
+        },
+        {
+          "confidenceInterval": {
+            "high": 4.081869029808111e-05,
+            "level": 0.95,
+            "low": -0.0013372614787677763
+          },
+          "format": "PERCENT",
+          "id": "mean-daily-excess-vs-spy",
+          "interpretation": "The confidence interval includes zero.",
+          "label": "Mean daily excess versus SPY",
+          "precision": 3,
+          "priority": "PRIMARY",
+          "scope": "Holdout daily comparison",
+          "value": -0.0006466896106918963
+        }
+      ],
+      "thesis": "Stocks meeting the frozen pre-earnings momentum selection rules would outperform SPY in the one-shot holdout portfolio test."
+    },
+    {
+      "caveats": [
+        "This is an exploratory replay on dates already spent by Study 1.",
+        "The cash-sweep variation does not alter the failed Study 1 primary verdict."
+      ],
+      "id": "spy-cash-sweep",
+      "methodology": {
+        "controls": [
+          "SPY buy-and-hold over the identical spent window.",
+          "The inherited fixed selection pipeline with the mechanical SPY sweep."
+        ],
+        "endpoint": "Exploratory spent-window portfolio comparison and daily excess versus SPY; neither has validation weight.",
+        "exclusionCriteria": [
+          "Missing or inconsistent price/event data.",
+          "Stocks outside the fixed price, liquidity, event, sector, or position constraints."
+        ],
+        "features": [
+          "Pre-earnings event timing.",
+          "Frozen momentum signal and liquidity gates.",
+          "Weekly Friday decisions with fixed portfolio allocation rules."
+        ],
+        "inclusionCriteria": [
+          "Price from $10 through $300.",
+          "Upcoming earnings two through five weeks away.",
+          "Super High or High eligible signal band with the frozen liquidity and freshness rules."
+        ],
+        "inference": "All results are descriptive only. The window was observed by Study 1 and the sweep was designed afterward.",
+        "limitations": [
+          "The dates and sweep behavior were selected after Study 1.",
+          "This replay cannot validate the strategy or support an edge claim."
+        ],
+        "period": "Exploratory spent-window replay of decisions 2025-04-04 through 2026-06-26.",
+        "population": "Eligible liquid stocks with upcoming earnings events and the required current strategy signals.",
+        "summary": "The inherited selection pipeline was replayed on the already-spent Study 1 dates with a fixed SPY cash sweep."
+      },
+      "name": "SPY Cash Sweep \u2014 Study 2",
+      "outcome": {
+        "evidenceLevel": "EXPLORATORY",
+        "moreData": {
+          "assessment": true,
+          "rationale": "Only a separately pre-specified prospective or PIT-historical evaluation could provide fresh validation evidence."
+        },
+        "nextSteps": [
+          "Retain the result as exploratory evidence only.",
+          "A prospective or PIT-historical holdout would require a dated amendment."
+        ],
+        "summary": "The exploratory spent-window replay returned +53.16% versus SPY +49.17%, but it has no validation weight because it followed Study 1.",
+        "verdict": "NO_VERDICT",
+        "whatDidNotWork": [
+          "The daily-excess interval crosses zero.",
+          "The post-outcome design and spent dates prevent a confirmatory verdict."
+        ],
+        "whatWorked": [
+          "The fully invested sweep replay exceeded SPY over the already-spent window."
+        ]
+      },
+      "provenance": {
+        "artifactPath": "data/backtest/pre_earnings_momentum/strategy_study/sweep/holdout/summary.json",
+        "dataCutoff": "2026-06-26",
+        "generatedAt": "2026-07-19T03:35:56.471394Z",
+        "runId": "holdout-spy-cash-sweep",
+        "sourceCommit": "8a0969bdb44d1f89ea5696f424b51cc1ac932e77",
+        "specificationPath": "studies/pre_earnings_momentum/backtest_spec_2.md",
+        "verificationState": "VERIFIED"
+      },
+      "scan": {
+        "eligibilityExplanation": "The operational scan applies the current pre-earnings candidate selection rules, not a new historical test.",
+        "executionSupported": true,
+        "latestSnapshot": null,
+        "resultSchema": "pre-earnings-candidates-v1",
+        "scanType": "pre-earnings-current-candidates",
+        "warning": "This scan reproduces the studied selection rules; the historical primary endpoint failed, so candidates are not evidence of a validated edge."
+      },
+      "stats": [
+        {
+          "format": "PERCENT",
+          "id": "portfolio-return",
+          "interpretation": "This is descriptive only, not a validated edge.",
+          "label": "Portfolio return",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "Exploratory spent-window replay",
+          "value": 0.53157003114508
+        },
+        {
+          "format": "PERCENT",
+          "id": "spy-return",
+          "interpretation": "Benchmark buy-and-hold return.",
+          "label": "SPY return",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "Same spent window",
+          "value": 0.49174142533164744
+        },
+        {
+          "format": "INTEGER",
+          "id": "completed-trades",
+          "interpretation": "The replay covers the original fixed trade count.",
+          "label": "Completed trades",
+          "precision": 0,
+          "priority": "SECONDARY",
+          "scope": "Spent-window replay",
+          "value": 281
+        },
+        {
+          "confidenceInterval": {
+            "high": 0.0004961223968991391,
+            "level": 0.95,
+            "low": -0.000312778235419554
+          },
+          "format": "PERCENT",
+          "id": "mean-daily-excess-vs-spy",
+          "interpretation": "The confidence interval includes zero.",
+          "label": "Mean daily excess versus SPY",
+          "precision": 3,
+          "priority": "PRIMARY",
+          "scope": "Exploratory daily comparison",
+          "value": 9.446922820661016e-05
+        }
+      ],
+      "thesis": "Mechanically sweeping idle portfolio cash into SPY could remove the deployment gap observed in Study 1, but this replay is exploratory because both the dates and sweep followed Study 1."
+    }
+  ]
+}

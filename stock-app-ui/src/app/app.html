@@ -1,0 +1,58 @@
+<header class="app-header">
+  <a class="brand" routerLink="/momentum" aria-label="smallFish — home">
+    <svg class="brand-mark" viewBox="0 0 32 32" width="22" height="22" aria-hidden="true" focusable="false">
+      <path d="M10 16c3-6.6 11.5-7.6 17.5 0-6 7.6-14.5 6.6-17.5 0Z" fill="currentColor"/>
+      <path d="M10 16 3.5 9.5C5.4 13.6 5.4 18.4 3.5 22.5L10 16Z" fill="currentColor"/>
+      <circle cx="22.6" cy="14.3" r="1.35" fill="#16232b"/>
+    </svg>
+    <span class="brand-name">smallFish</span>
+  </a>
+
+  <nav class="app-nav" aria-label="Primary">
+    <div class="nav-group">
+      <span class="nav-group-label" aria-hidden="true">Research</span>
+      <a routerLink="/momentum" routerLinkActive="active" #momentumLink="routerLinkActive"
+         [routerLinkActiveOptions]="{ exact: false }"
+         [attr.aria-current]="momentumLink.isActive ? 'page' : null">Momentum</a>
+      <a routerLink="/wheel" routerLinkActive="active" #wheelLink="routerLinkActive"
+         [routerLinkActiveOptions]="{ exact: false }"
+         [class.active-section]="isWheelExplainer()"
+         [attr.aria-current]="wheelLink.isActive || isWheelExplainer() ? 'page' : null">Wheel</a>
+      <!-- Market-regime context about the market itself, so it sits with the
+           research screens rather than under Portfolios (what the user owns). -->
+      <a routerLink="/sectors" routerLinkActive="active" #sectorsLink="routerLinkActive"
+         [routerLinkActiveOptions]="{ exact: false }"
+         [attr.aria-current]="sectorsLink.isActive ? 'page' : null">Sectors</a>
+      <a routerLink="/studies" routerLinkActive="active" #strategyLink="routerLinkActive"
+         [routerLinkActiveOptions]="{ exact: false }"
+         [attr.aria-current]="strategyLink.isActive ? 'page' : null">Studies</a>
+    </div>
+
+    <span class="nav-sep" aria-hidden="true"></span>
+
+    <div class="nav-group">
+      <span class="nav-group-label" aria-hidden="true">Ledgers</span>
+      <a routerLink="/options" routerLinkActive="active" #optionsLink="routerLinkActive"
+         [routerLinkActiveOptions]="{ exact: false }"
+         [attr.aria-current]="optionsLink.isActive ? 'page' : null">Options</a>
+      <a routerLink="/retirement" routerLinkActive="active" #retirementLink="routerLinkActive"
+         [routerLinkActiveOptions]="{ exact: false }"
+         [attr.aria-current]="retirementLink.isActive ? 'page' : null">Retirement</a>
+    </div>
+
+    <span class="nav-sep" aria-hidden="true"></span>
+
+    <!-- Portfolios is user-authored tracking: neither a research scan nor a
+         broker ledger, so it gets its own group rather than diluting Ledgers. -->
+    <div class="nav-group">
+      <span class="nav-group-label" aria-hidden="true">Tracking</span>
+      <a routerLink="/portfolios" routerLinkActive="active" #portfoliosLink="routerLinkActive"
+         [routerLinkActiveOptions]="{ exact: false }"
+         [attr.aria-current]="portfoliosLink.isActive ? 'page' : null">Portfolios</a>
+    </div>
+  </nav>
+</header>
+
+<main class="page">
+  <router-outlet />
+</main>

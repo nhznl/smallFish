@@ -1,0 +1,18 @@
+# Behavioral settings for utilities.sector_rotation. Artifact paths come from app.env.
+#
+# This analysis is a PRICE-LEADERSHIP AND ROTATION PROXY, not a fund-flow
+# measurement. Adjusted price and volume can show one sector gaining relative
+# strength while another loses it; they cannot establish dollars moving between
+# funds without point-in-time shares-outstanding, creations/redemptions, or AUM
+# data. Output language stays "rotation", "leadership", or "relative strength".
+windows: [5, 20, 63]
+# Volume is confirmation only -- trading activity, never net subscriptions.
+volume_baseline_sessions: 20
+# A sector is called LEADING/LAGGING only when the excess return agrees with the
+# cross-sector rank. With 11 sectors these are the top and bottom thirds.
+leading_rank_max: 4
+lagging_rank_min: 8
+# A rotation candidate needs the target strengthening AND improving in rank
+# while the source weakens AND loses rank. Ranked by how many windows agree.
+min_windows_confirmed: 1
+max_rotation_candidates: 10

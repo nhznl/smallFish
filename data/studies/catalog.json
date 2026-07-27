@@ -1,0 +1,28 @@
+{
+  "schemaName": "smallfish.research-study",
+  "schemaVersion": 1,
+  "studies": [
+    {
+      "defaultVariationId": "base",
+      "evidenceLevel": "CONFIRMATORY",
+      "id": "pre-earnings-momentum",
+      "name": "Pre-Earnings Momentum",
+      "scanAvailable": true,
+      "summary": "A fixed pre-earnings stock-selection study with a failed primary portfolio endpoint and a separately labeled exploratory cash-sweep replay.",
+      "updatedAt": "2026-07-26T00:00:00Z",
+      "variationCount": 2,
+      "verdict": "FAILED"
+    },
+    {
+      "defaultVariationId": "base",
+      "evidenceLevel": "CONFIRMATORY",
+      "id": "sector-relative-leadership",
+      "name": "Sector Relative Leadership",
+      "scanAvailable": false,
+      "summary": "A legacy-nine sector relative-leadership study with a failed frozen primary and a separate exploratory full-period estimate.",
+      "updatedAt": "2026-07-26T00:00:00Z",
+      "variationCount": 2,
+      "verdict": "FAILED"
+    }
+  ]
+}

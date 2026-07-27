@@ -1,0 +1,246 @@
+name: CI
+
+# No job in this workflow receives a secret, and none may. Every suite runs
+# offline against committed fixtures and injected fakes; a job that needs a
+# provider credential is a bug in the test, not a missing secret.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Untrusted pull requests run here. Keep the default token read-only and grant
+# nothing further.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The declared minimums from docs/SUPPORT_MATRIX.md, not the maintainer's
+  # machine. A build that only passes on newer runtimes is not supported.
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  backend:
+    name: Backend tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The declared floor, and a current release to catch upcoming breakage.
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: stock-app/requirements.txt
+
+      - name: Install
+        run: |
+          python -m venv stock-app/.venv
+          stock-app/.venv/bin/python -m pip install --quiet --upgrade pip
+          stock-app/.venv/bin/python -m pip install --quiet -r stock-app/requirements.txt
+
+      - name: pip check
+        run: stock-app/.venv/bin/python -m pip check
+
+      - name: Tests
+        run: stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app stock-app/tests
+
+  utilities:
+    name: Utilities tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: utilities/requirements.txt
+
+      - name: Install
+        run: |
+          python -m venv utilities/.venv
+          utilities/.venv/bin/python -m pip install --quiet --upgrade pip
+          utilities/.venv/bin/python -m pip install --quiet -r utilities/requirements.txt
+
+      - name: pip check
+        run: utilities/.venv/bin/python -m pip check
+
+      - name: Tests
+        # Covers utilities, studies, and the repository tooling in tools/.
+        run: utilities/.venv/bin/python -m pytest -q utilities/tests
+
+  ui:
+    name: UI build and tests (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["20", "22"]
+    defaults:
+      run:
+        working-directory: stock-app-ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: stock-app-ui/package-lock.json
+
+      - name: Install
+        # ci, not install: the committed lockfile is the contract.
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Tests
+        # ubuntu-latest ships Chrome; karma-chrome-launcher finds it via CHROME_BIN.
+        run: npm run test:ci
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+
+  scripts:
+    name: Shell and tooling checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Shell syntax
+        run: |
+          for script in setup.sh commands.sh setup-brokerages.sh; do
+            bash -n "$script" && echo "ok  $script"
+          done
+
+      - name: shellcheck
+        # Preinstalled on the ubuntu-latest runner image, so nothing is
+        # installed and no privileged command runs anywhere in this workflow.
+        # Advisory severity: style findings must not block a contribution.
+        run: shellcheck --severity=error setup.sh commands.sh setup-brokerages.sh
+
+      - name: Scripts are executable
+        run: |
+          for script in setup.sh commands.sh setup-brokerages.sh; do
+            test -x "$script" || { echo "$script is not executable"; exit 1; }
+          done
+
+      - name: setup.sh --check runs on a clean checkout
+        # Proves the prerequisite path works with no venv, no app.env, and no
+        # credentials. --check changes nothing on disk.
+        run: ./setup.sh --check
+
+      - name: setup.sh --help
+        run: ./setup.sh --help
+
+  docs:
+    name: Documentation checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Links, referenced files, and command references
+        run: python3 tools/check_docs.py
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Scan tracked files
+        # Masks every excerpt, so its output is safe in a public log.
+        # The full-history scan is deliberately manual: it is slow, and its
+        # findings need to be read by a person.
+        run: python3 tools/scan_secrets.py
+
+  offline:
+    name: Suites pass with no network
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install
+        run: |
+          python -m venv utilities/.venv
+          utilities/.venv/bin/python -m pip install --quiet --upgrade pip
+          utilities/.venv/bin/python -m pip install --quiet -r utilities/requirements.txt
+          python -m venv stock-app/.venv
+          stock-app/.venv/bin/python -m pip install --quiet --upgrade pip
+          stock-app/.venv/bin/python -m pip install --quiet -r stock-app/requirements.txt
+
+      - name: Run both suites with all network access blocked
+        # Enforced inside Python by the conftest guard, not with a kernel
+        # firewall. `iptables -P OUTPUT DROP` also severs the Actions agent's
+        # own connection, so the job hangs until its six-hour timeout instead
+        # of failing — which is exactly what happened on the first run.
+        env:
+          SFP_BLOCK_NETWORK: "1"
+        run: |
+          utilities/.venv/bin/python -m pytest -q utilities/tests
+          stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app stock-app/tests
+
+      - name: Prove the guard actually blocks
+        # A guard that never fires proves nothing, so assert it fails a
+        # deliberate connection. Written into the real test directory so it
+        # picks up the same conftest the suite above uses.
+        env:
+          SFP_BLOCK_NETWORK: "1"
+        run: |
+          cat > utilities/tests/test_network_guard_probe.py <<'EOF'
+          def test_a_socket_is_refused():
+              import socket
+              socket.create_connection(("example.com", 80), timeout=5)
+          EOF
+          if utilities/.venv/bin/python -m pytest -q \
+               utilities/tests/test_network_guard_probe.py; then
+            echo "::error::the network guard did not fire; offline enforcement is broken"
+            rm -f utilities/tests/test_network_guard_probe.py
+            exit 1
+          fi
+          rm -f utilities/tests/test_network_guard_probe.py
+          echo "guard fires as expected"
+
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    # Only meaningful on a pull request, where there is a base to diff against.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # Advisories in the Karma/socket.io test toolchain do not ship in the
+          # application bundle.
+          fail-on-scopes: runtime

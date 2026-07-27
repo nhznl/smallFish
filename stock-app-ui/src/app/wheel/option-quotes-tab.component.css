@@ -1,0 +1,140 @@
+/* The panel, stat cards, table shell and badges all come from the global
+   primitives in styles.scss; only this tab's own layout lives here. */
+
+:host {
+  display: block;
+}
+
+.panel {
+  margin-top: 4px;
+}
+
+.archive-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0 0 14px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.archive-meta strong {
+  color: var(--text-primary);
+}
+
+.caveat {
+  margin: 14px 0;
+  padding: 10px 13px;
+  border-left: 4px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.quote-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+
+.control {
+  display: grid;
+  gap: 4px;
+}
+
+.control-label {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.control-input,
+.control-select {
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.control-input {
+  width: 160px;
+}
+
+.control-input:focus-visible,
+.control-select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.result-count {
+  margin-left: auto;
+  padding-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.table-shell {
+  max-height: calc(100vh - 520px);
+  min-height: 240px;
+}
+
+.quotes-table td {
+  max-width: 220px;
+  vertical-align: top;
+}
+
+.quotes-table .symbol-cell {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.quotes-table a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.quotes-table a:hover {
+  text-decoration: underline;
+}
+
+.quotes-table small {
+  color: var(--text-faint);
+}
+
+.timestamp-cell,
+.reason-cell {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.reason-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.no-rows {
+  padding: 28px !important;
+  color: var(--text-secondary);
+  text-align: center !important;
+}
+
+@media (max-width: 700px) {
+  .table-shell { max-height: none; }
+}
+
+/* Scope disclosure sits between the run metadata and the counts it qualifies. */
+.scope-banner {
+  margin: 12px 0 0;
+}

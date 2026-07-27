@@ -1,0 +1,40 @@
+# Frozen exploratory full-period configuration.
+# Protocol: utilities/sector_rotation_study_v2_spec.md.
+schema_name: smallfish.sector-rotation-study
+schema_version: 2
+study_id: legacy-nine-v2-full-period
+analysis_class: EXPLORATORY_POST_OUTCOME
+
+benchmark: SPY
+universe: [XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY]
+excluded_product_sectors: [XLC, XLRE]
+data_end: '2026-07-24'
+expected_decisions: 108
+
+feature_windows: [5, 20, 63]
+forward_sessions: 63
+decision_stride_sessions: 63
+volume_baseline_sessions: 20
+leading_rank_max: 3
+lagging_rank_min: 7
+min_windows_confirmed: 1
+max_rotation_candidates: 72
+
+regimes:
+  pre_end: '2019-12-31'
+  post_start: '2020-01-01'
+
+inference:
+  bootstrap_draws: 10000
+  block_length_decisions: 4
+  random_seed: 20260727
+  confidence_level: 0.95
+
+controls:
+  random_pair_seeds: 1000
+  momentum_lookback_sessions: 63
+  momentum_top_count: 3
+  momentum_bottom_count: 3
+
+costs:
+  round_trip_cost_bps_per_leg: 20

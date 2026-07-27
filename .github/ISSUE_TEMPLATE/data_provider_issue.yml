@@ -1,0 +1,77 @@
+name: Data or provider issue
+description: Wrong, missing, or stale market data, or a provider integration problem
+labels: ["data"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Providers change shape and rate-limit without notice, so these reports
+        are genuinely useful.
+
+        **Never paste real position data, an account identifier, or a
+        credential.** Describe the symbol and the dates instead.
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - Yahoo Finance (price history)
+        - Wikipedia / index sources (universe)
+        - Finnhub (earnings)
+        - Tastytrade (options, quotes, Greeks, beta)
+        - SnapTrade (retirement holdings)
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of problem
+      options:
+        - Data is missing
+        - Data is wrong or implausible
+        - Data is stale and will not refresh
+        - Fetch fails or is rate-limited
+        - Integration reports the wrong state
+    validations:
+      required: true
+
+  - type: textarea
+    id: detail
+    attributes:
+      label: What you observed
+      description: >-
+        Symbols and dates, what you expected, and what appeared. For a value
+        that looks wrong, say what the correct value should be and where you
+        checked.
+      placeholder: |
+        AAPL 2026-07-23 close reads 0.00 in data/2026/AAPL.txt.
+        The provider shows 321.66 for that session.
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and output
+      description: The command you ran and what it printed. Redact absolute paths.
+      render: shell
+
+  - type: textarea
+    id: freshness
+    attributes:
+      label: Data section of ./commands.sh doctor
+      description: Reports cached years, symbol counts, and freshness. Already redacted.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I re-ran the relevant command (scrape, bootstrap-data, or a sync) and it persisted
+        - label: This is not a market holiday or a not-yet-published session
+        - label: This report contains no credential, account identifier, or real position data
+          required: true

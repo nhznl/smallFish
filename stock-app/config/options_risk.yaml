@@ -1,0 +1,22 @@
+# Risk-dashboard defaults. Values here are configuration ceilings and bands,
+# not account balances.
+options_risk:
+  # The broker-fed options dashboard covers only the Tastytrade trading account.
+  # Fidelity retirement positions are intentionally outside this risk view.
+  accounts: [TRADING]
+  cash_limit:
+    trading: 50_000
+  cash_limit_status:
+    trading: APPROVED
+  commitment_warn_ratio: 0.8
+  delta_band:
+    min: 0.0
+    max: 0.6
+  risk_free_rate: 0.04
+  rate_as_of: "2026-07-16"
+  max_vol_stale_sessions: 5
+  max_beta_stale_sessions: 5
+  near_atm_dte: 7
+  near_atm_sigma_frac: 0.5
+  beta_window_sessions: 252
+  beta_min_observations: 200

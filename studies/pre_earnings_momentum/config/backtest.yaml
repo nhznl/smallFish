@@ -1,0 +1,34 @@
+# Execution, portfolio, split, and inference settings for the historical
+# strategy study (backtest_spec.md). Candidate selection comes from
+# scan.yaml -- the live configuration -- and must not be duplicated here.
+splits:
+  development: { start: 2021-07-02, end: 2024-12-27 }
+  # no new decisions during the embargo; open positions may close
+  embargo_end: 2025-03-31
+  holdout: { start: 2025-04-04, end: 2026-06-26 }
+portfolio:
+  initial_equity: 100000
+  max_positions: 25
+  max_per_sector_open: 3
+  allocation_order: least_represented_sector # frozen LD allocation
+  position_nominal: 4000         # fixed entry base, x regime size factor; max $4k at entry
+  min_position_nominal: 500      # skip only residual orders below this dust floor
+  cost_bps_per_side: 10
+entry:
+  order_type: limit_on_open
+  limit_buffer_pct: 0.03         # decision-session close + 3%
+  require_exact_decision_bar: true
+  replace_unfilled: false        # cancel after the opening auction; no retry
+exit:
+  atr_stop_mult: 0               # frozen LD policy: no protective stop
+  max_hold_sessions: 70          # hard safety cap (spec section 6)
+  entry_max_calendar_gap_days: 7 # safety guard; LOO already requires next session
+# Empty by design: Risk-Off/Unknown entries remain eligible at their reduced
+# regime-scaled nominal rather than being blocked.
+regime_entry_block: []
+controls:
+  random_seeds: 100
+bootstrap:
+  block_mean_sessions: 21
+  draws: 10000
+  seed: 12345

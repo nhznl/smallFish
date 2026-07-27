@@ -1,0 +1,558 @@
+/* Portfolios: list table, create modal, and detail drawer.
+   Tokens, .table-shell, .data-table, .stat-strip, .badge, .banner, .range-cell,
+   and the overlays all come from styles.scss / shared/ui. Only layout that is
+   genuinely specific to this page lives here. */
+
+:host {
+  display: block;
+}
+
+/* Screen-reader-only text for status regions and unlabelled action columns. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+
+/* The snapshot chip carries the page's freshness warning, so it takes the
+   warn treatment rather than relying on the small print alone. */
+.snapshot-chip.chip-stale {
+  border-color: rgb(180 83 9 / .45);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.snapshot-chip.chip-stale strong {
+  color: var(--warn);
+}
+
+.banner {
+  margin: 0 0 16px;
+}
+
+.banner-icon {
+  flex: none;
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+
+.stat-strip {
+  margin-bottom: 18px;
+}
+
+/* ── List table ────────────────────────────────────────────────────────── */
+
+.skeleton-shell {
+  padding: 10px 12px;
+}
+
+.empty-state .btn {
+  margin-top: 6px;
+}
+
+.portfolio-table {
+  min-width: 900px;
+}
+
+.portfolio-row {
+  cursor: pointer;
+}
+
+.portfolio-table th.sortable {
+  padding: 0;
+}
+
+.portfolio-table th.sortable .sort-button {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: right;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.portfolio-table th.sortable .sort-button:hover {
+  background: var(--surface-sunken);
+  color: var(--primary);
+}
+
+.portfolio-table th.sortable .sort-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.portfolio-table th[aria-sort='ascending'] .sort-button,
+.portfolio-table th[aria-sort='descending'] .sort-button {
+  color: var(--primary);
+}
+
+.sort-icon {
+  margin-left: 5px;
+  font-size: 9px;
+}
+
+.name-cell {
+  min-width: 260px;
+  max-width: 420px;
+  white-space: normal;
+}
+
+/* The name is the row's real activation target: clicking anywhere in the row
+   is a convenience, but this is what keyboard and assistive tech reach. */
+.row-open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-open:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.row-open:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.missing-badge {
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+
+.data-table td small.row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+
+.tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Spread cells lead with the percentage-point gap; the decomposition sits
+   underneath so the comparison is never implied by a bare number. */
+.spread-cell {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.data-table td.spread-cell small {
+  margin-top: 3px;
+  font-weight: 500;
+  color: var(--text-faint);
+}
+
+.page-caveat {
+  margin: 14px 2px 0;
+  max-width: 92ch;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+/* ── Forms (create modal + drawer editing) ─────────────────────────────── */
+
+.form-grid,
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.field-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.field-label em {
+  font-style: normal;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+
+.control {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-base);
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.control:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+  border-color: var(--primary);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-banner {
+  margin-bottom: 14px;
+}
+
+/* ── Symbol chips ──────────────────────────────────────────────────────── */
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.chip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 4px 4px 9px;
+}
+
+.chip-body strong {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.chip-body small {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An unknown symbol blocks submission, so it is marked in the chip itself as
+   well as in the summary line under the field. */
+.chip-unknown {
+  border-color: var(--neg);
+  background: var(--neg-soft);
+}
+
+.chip-unknown .chip-body strong,
+.chip-unknown .chip-body small {
+  color: var(--neg);
+}
+
+.chip-remove {
+  padding: 0 8px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chip-remove:hover {
+  background: var(--neg-soft);
+  color: var(--neg);
+}
+
+.chip-remove:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.chip-error {
+  margin: 0;
+  color: var(--neg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* ── Drawer ────────────────────────────────────────────────────────────── */
+
+.drawer-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drawer-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.drawer-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawer-name {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.drawer-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* The construction rationale sits where the returns are judged, per the
+   guidance that caveats stay next to the result they qualify. */
+.drawer-description {
+  margin: 0;
+  max-width: 78ch;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.add-description {
+  align-self: flex-start;
+  padding-left: 0;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.drawer-skeleton {
+  padding: 16px 0;
+}
+
+.drawer-banner {
+  align-items: center;
+  justify-content: space-between;
+  margin: 14px 0 0;
+}
+
+.undo-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.drawer-stats {
+  margin: 16px 0 0;
+}
+
+.drawer-section {
+  margin-top: 20px;
+}
+
+/* Section label plus its own action (Copy symbols), aligned on one row. */
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+.section-heading .drawer-section-title {
+  margin: 0;
+}
+
+.drawer-section-title {
+  margin: 0 0 9px;
+  font-size: var(--text-base);
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* ── Members table ─────────────────────────────────────────────────────── */
+
+.member-table {
+  min-width: 640px;
+}
+
+.member-table .symbol-cell {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.member-table .symbol-cell a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.member-table .symbol-cell a:hover {
+  text-decoration: underline;
+}
+
+.member-table .symbol-cell .badge {
+  margin-left: 6px;
+  font-family: var(--font-ui);
+}
+
+.member-table .row-nodata td {
+  color: var(--text-faint);
+}
+
+.incep-cell {
+  white-space: nowrap;
+}
+
+.data-table td.incep-cell small.badge {
+  display: inline-flex;
+  margin-top: 4px;
+  color: var(--warn);
+  font-family: var(--font-ui);
+}
+
+.action-cell {
+  width: 44px;
+  text-align: right;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color .15s var(--ease), color .15s var(--ease),
+    border-color .15s var(--ease);
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--neg-soft);
+  border-color: var(--neg);
+  color: var(--neg);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.icon-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.empty-cell {
+  padding: 20px 10px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.add-field {
+  flex: 1 1 auto;
+}
+
+/* Chips sit under the add row exactly as they do under the create modal's
+   textarea, so the two entry points read as the same control. */
+.add-chips {
+  margin-top: 9px;
+}
+
+.add-row + .chip-error,
+.add-chips + .chip-error {
+  margin-top: 9px;
+}
+
+.add-hint {
+  margin: 7px 0 0;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.confirm-text {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.6;
+}
+
+/* ── Narrow viewport ───────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .drawer-title-row {
+    flex-direction: column;
+  }
+
+  /* Keep the sticky identity column from eating the viewport: the numbers are
+     the reason to scroll, so at least one of them must stay in view. */
+  .name-cell {
+    min-width: 190px;
+    max-width: 230px;
+  }
+}

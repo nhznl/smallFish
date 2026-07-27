@@ -1,0 +1,11 @@
+# Behavioral configuration for utilities.scraper. Cache and log roots come from app.env.
+thread_pool_size: 5
+request_delay: 0.5
+target_year: null
+audit_hook_enabled: true
+# An incrementally-tracked symbol whose fetch returns empty for more than this
+# many calendar days since its last cached date is treated as delisted (same
+# sticky retirement as a brand-new symbol's empty full-year fetch). Below the
+# threshold it's ordinary NO_NEW_DATA (a market holiday or a not-yet-back-filled
+# day) and self-heals on the next run.
+stale_after_days: 10

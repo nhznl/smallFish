@@ -1,0 +1,140 @@
+{
+  "id": "sector-relative-leadership",
+  "name": "Sector Relative Leadership",
+  "summary": "A legacy-nine sector relative-leadership study with a failed frozen primary and a separate exploratory full-period estimate.",
+  "updatedAt": "2026-07-26T00:00:00Z",
+  "defaultVariationId": "base",
+  "variations": [
+    {
+      "id": "base",
+      "name": "Legacy Nine — Study 1",
+      "thesis": "When the fixed legacy-nine rotation rule identifies a weakening source and strengthening target sector, the target would outperform the source over the next 63 sessions.",
+      "methodology": {
+        "summary": "The frozen historical study evaluates all qualifying ordered pairs from the legacy-nine ETF universe and aggregates dependent pairs by decision date.",
+        "population": "XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, and XLY on the validated SPY session calendar.",
+        "inclusionCriteria": [
+          "All nine legacy ETFs have complete adjusted-price history on the SPY calendar.",
+          "A source is weakening and losing rank while a target is strengthening and improving rank.",
+          "At least one of the 5-, 20-, or 63-session feature windows confirms."
+        ],
+        "exclusionCriteria": [
+          "XLC and XLRE are excluded because their histories do not cover the legacy study period.",
+          "Missing, conflicting, or partial price coverage fails the historical runner closed."
+        ],
+        "features": [
+          "5-, 20-, and 63-session relative leadership windows.",
+          "Top/bottom-third rank thresholds for the fixed nine-fund universe.",
+          "Every qualifying ordered pair; no top-N or best-pair selection."
+        ],
+        "endpoint": "Mean decision-date aggregate 63-session target-minus-source return before 2020.",
+        "controls": [
+          "1,000 matched random ordered-pair controls.",
+          "Plain 63-session momentum control on the same signal dates."
+        ],
+        "period": "Frozen primary: complete outcomes ending on or before 2019-12-31.",
+        "inference": "A 10,000-draw moving-block bootstrap over decision-date aggregates; the 95% lower bound had to be above zero to pass.",
+        "limitations": [
+          "This is a historical legacy-nine association, not a live trading-edge validation.",
+          "Pair events on the same date are dependent, so date aggregates are the primary inference unit.",
+          "The 11-SPDR Sectors page is a separate descriptive context."
+        ]
+      },
+      "outcome": {
+        "verdict": "FAILED",
+        "evidenceLevel": "CONFIRMATORY",
+        "summary": "The frozen pre-2020 primary mean was +0.0833% with a 95% interval from -0.4524% to +0.6362%; the interval crosses zero, so the primary failed.",
+        "whatWorked": [
+          "The fixed runner produced 81 disjoint signal decisions and 2,611 candidate-pair events."
+        ],
+        "whatDidNotWork": [
+          "The primary confidence interval includes zero.",
+          "The observed point estimate was far below the study's detectable mean threshold."
+        ],
+        "nextSteps": [
+          "Preserve the failed historical result without promoting secondary diagnostics.",
+          "Keep the product's 11-sector view descriptive."
+        ],
+        "moreData": {
+          "assessment": false,
+          "rationale": "The frozen primary has run once; adding or redefining observations would be a new study rather than more data for this result."
+        }
+      },
+      "scan": {
+        "executionSupported": false,
+        "scanType": "sector-relative-leadership-unavailable",
+        "resultSchema": "none",
+        "eligibilityExplanation": "No legacy-nine operational scan is designed for the first release; the 11-SPDR Sectors page is separate descriptive market context.",
+        "warning": "The Sectors page is descriptive context only and is not this study's predictive scan.",
+        "latestSnapshot": null
+      },
+      "caveats": [
+        "The current 11-SPDR Sectors page uses a different population and remains descriptive.",
+        "Failed historical evidence must not be presented as a predictive scan or validated edge."
+      ],
+      "artifact": {
+        "type": "sector",
+        "specificationPath": "studies/sector_rotation/sector_rotation_study_spec.md",
+        "runPath": "data/sector_rotation_study/legacy-nine-v1/runs/20260726T175459Z-f02052f2",
+        "runId": "20260726T175459Z-f02052f2",
+        "runStudyId": "legacy-nine-v1",
+        "sourceCommit": "f02052f23e204a1284500d944b00b96912a63cbc",
+        "dataCutoff": "2019-12-31"
+      },
+      "statsProfile": "sector-v1"
+    },
+    {
+      "id": "full-period",
+      "inherits": "base",
+      "name": "Full Period — Study 2",
+      "thesis": "Across every available legacy-nine decision through the frozen 2026-07-24 cutoff, estimate the rule's historical association and regime instability without treating it as a new confirmatory test.",
+      "methodology": {
+        "summary": "The v2 full-period estimate inherits the fixed legacy-nine rule but pools all 108 completed decision dates after the v1 outcome was observed.",
+        "endpoint": "Exploratory pooled full-period mean decision-date aggregate 63-session target-minus-source return.",
+        "controls": [
+          "1,000 matched random ordered-pair controls over all signal dates.",
+          "Plain momentum and rotation-minus-momentum diagnostics over all signal dates."
+        ],
+        "period": "Exploratory full history through the frozen 2026-07-24 cutoff.",
+        "inference": "A moving-block bootstrap describes the interval; no pass/fail hypothesis or fresh structural-break test is defined.",
+        "limitations": [
+          "The plan was frozen after the v1 pre-2020 and 2020+ outcomes were known.",
+          "The pooled result and regime difference are exploratory descriptive estimates only."
+        ]
+      },
+      "outcome": {
+        "verdict": "NO_VERDICT",
+        "evidenceLevel": "EXPLORATORY",
+        "summary": "The exploratory full-period pooled mean was -0.2277% with a 95% interval from -0.7320% to +0.2757%; it has no confirmatory verdict.",
+        "whatWorked": [
+          "The completed full-period run reproduced every analytical artifact and source-price hash against its manifest."
+        ],
+        "whatDidNotWork": [
+          "The pooled interval includes zero and the point estimate is negative.",
+          "The post-2020 mean was materially lower than the pre-2020 mean."
+        ],
+        "nextSteps": [
+          "Retain the result as exploratory historical context.",
+          "Do not use it to lift the descriptive gate for the 11-sector product page."
+        ],
+        "moreData": {
+          "assessment": false,
+          "rationale": "More historical pooling after the observed outcomes cannot turn this post-outcome plan into a confirmatory test."
+        }
+      },
+      "caveats": [
+        "This variation is exploratory post-outcome work and deliberately has NO_VERDICT.",
+        "It does not alter the failed frozen primary or make the 11-SPDR Sectors page predictive."
+      ],
+      "artifact": {
+        "type": "sector",
+        "specificationPath": "studies/sector_rotation/sector_rotation_study_v2_spec.md",
+        "runPath": "data/sector_rotation_study/legacy-nine-v2-full-period/runs/20260726T180827Z-ed07424d",
+        "runId": "20260726T180827Z-ed07424d",
+        "runStudyId": "legacy-nine-v2-full-period",
+        "sourceCommit": "ed07424d4d975f13841919f806d73df5f0a5a233",
+        "dataCutoff": "2026-07-24"
+      },
+      "statsProfile": "sector-v2"
+    }
+  ]
+}

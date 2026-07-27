@@ -1,0 +1,110 @@
+# Starter universe for `./commands.sh bootstrap-data`.
+#
+# This is the smallest set of symbols that makes every default route useful
+# without any API key or brokerage account. It is deliberately NOT the full
+# index universe: `./commands.sh universe` refreshes that later, and it takes
+# far longer.
+#
+# The ETF seed is pulled from utilities/config/universe.yaml#etf_seed rather
+# than duplicated here, so the two cannot drift.
+
+include_etf_seed: true
+
+# Initial individual stocks. Two well-known, long-listed large caps are enough
+# to demonstrate Stock Detail, Momentum, and Portfolios. Add your own with
+# `./commands.sh bootstrap-data --symbols NVDA AMD`, or extend this list.
+stocks:
+  - AAPL
+  - MSFT
+
+# Symbols the sector view needs. These are asserted to be present in the
+# resolved starter universe, so a future edit to the ETF seed cannot silently
+# break the Sectors route.
+required_for_sectors:
+  - SPY
+  - XLB
+  - XLC
+  - XLE
+  - XLF
+  - XLI
+  - XLK
+  - XLP
+  - XLRE
+  - XLU
+  - XLV
+  - XLY
+
+# Portfolios seeded on a first run so the Portfolios view opens with something
+# to look at rather than empty.
+#
+# Every symbol here must be in the starter universe above, or the portfolio
+# renders with unpriced rows. A test enforces that.
+#
+# Written only when data/portfolios/portfolios.csv does not exist. Portfolios
+# are user-authored, so an empty file means the user deleted theirs and a rerun
+# must not resurrect them. Skip entirely with --no-seed-portfolios.
+#
+# created_date is used when it falls inside the cached price range; otherwise
+# the earliest cached session is used, so these keep pricing correctly however
+# long from now someone bootstraps.
+portfolios:
+  enabled: true
+  items:
+    - id: "095741713ad1"
+      name: "Defensive - Concentrated"
+      description: "Large-cap S&P 500 consumer staples, healthcare, utilities companies"
+      sector: "Defensive"
+      created_date: "2026-07-25"
+      symbols: [XLP, XLU, XLV]
+
+    - id: "aa76148395ab"
+      name: "Defensive - Broad"
+      description: "Broader sector exposure across consumer staples, health care and utilities"
+      sector: "Defensive"
+      created_date: "2026-07-25"
+      symbols: [VDC, VHT, VPU]
+
+    - id: "99656a93114c"
+      name: "XLY"
+      description: >-
+        The Advisor employs a replication strategy. The fund generally invests
+        substantially all, but at least 95%, of its total assets in the securities
+        comprising the index. The index includes companies that have been identified
+        as Consumer Discretionary companies by the Global Industry Classification
+        Standard (GICS®). It is non-diversified.
+      sector: "Consumer Discretionary"
+      created_date: "2026-07-25"
+      symbols: [XLY]
+
+    - id: "92d5c4acdcbe"
+      name: "XLI"
+      description: "Industrials - Factory equipment, machinery, transportation and construction demand rise and fall with business investment"
+      sector: "Industrials"
+      created_date: "2026-07-25"
+      symbols: [XLI]
+
+    - id: "ff538e34d298"
+      name: "XLF"
+      description: >-
+        The fund generally invests substantially all, but at least 95%, of its total
+        assets in the securities comprising the index. The index includes companies
+        that have been identified as Financial companies by the Global Industry
+        Classification Standard, including securities of companies from the following
+        industries: financial services; insurance; banks; capital markets; mortgage
+        real estate investment trusts; and consumer finance. The fund is
+        non-diversified.
+      sector: "Financials"
+      created_date: "2026-07-25"
+      symbols: [XLF]
+
+# Partial-failure policy. Providers routinely drop a single symbol, and one
+# delisted or unavailable ETF must not invalidate an otherwise good run.
+#
+#   max_failure_ratio: fail the command when more than this share of requested
+#                      symbols produced no data at all.
+#   always_required:   these must succeed regardless of the ratio, because the
+#                      default routes are unusable without them.
+failure_policy:
+  max_failure_ratio: 0.20
+  always_required:
+    - SPY

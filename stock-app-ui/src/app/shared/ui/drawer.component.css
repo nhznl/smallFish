@@ -1,0 +1,87 @@
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(23 33 38 / .5);
+  animation: drawer-fade .15s var(--ease);
+}
+
+.drawer-panel {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 22px 24px;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-overlay);
+  animation: drawer-slide .18s var(--ease);
+}
+
+.drawer-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .15s var(--ease), color .15s var(--ease);
+}
+
+.drawer-close:hover {
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+}
+
+.drawer-close:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.drawer-header {
+  padding: 0 40px 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer-header:empty {
+  display: none;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.drawer-footer:empty {
+  display: none;
+}
+
+@keyframes drawer-fade {
+  from { opacity: 0; }
+}
+
+@keyframes drawer-slide {
+  from { transform: translateX(24px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer-backdrop,
+  .drawer-panel { animation: none; }
+}
+
+@media (max-width: 560px) {
+  .drawer-panel { padding: 15px; }
+}

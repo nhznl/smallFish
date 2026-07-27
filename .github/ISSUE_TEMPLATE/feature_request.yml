@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest a capability or an improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please open one of these before writing a large change — it saves
+        rework. Small self-contained fixes can go straight to a pull request.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >-
+        What are you trying to do that is hard or impossible today? Describe the
+        situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How you imagine it working, and where it would live in the UI or CLI.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including whether an existing command or view nearly does it.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Would this touch any of these?
+      description: >-
+        Not disqualifying — it just means the change needs discussion first.
+      options:
+        - label: An API path, response shape, or field name
+        - label: The price cache format or another on-disk contract
+        - label: Research methodology, study parameters, or a published verdict
+        - label: A new dependency, or either Python environment
+        - label: A new required credential or paid service
+
+  - type: markdown
+    attributes:
+      value: |
+        **Two things smallFish will not do:** give financial advice or present a
+        score as a predicted return, and require a credential for a core
+        feature. Every brokerage integration stays optional.

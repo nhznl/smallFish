@@ -1,0 +1,26 @@
+<div class="drawer-backdrop" (click)="close()">
+  <aside
+    class="drawer-panel"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="ariaLabel"
+    [style.width]="width"
+    cdkTrapFocus
+    [cdkTrapFocusAutoCapture]="true"
+    (click)="$event.stopPropagation()"
+  >
+    <button type="button" class="drawer-close" aria-label="Close details" (click)="close()">×</button>
+
+    <div class="drawer-header">
+      <ng-content select="[drawerHeader]"></ng-content>
+    </div>
+
+    <div class="drawer-body">
+      <ng-content></ng-content>
+    </div>
+
+    <div class="drawer-footer">
+      <ng-content select="[drawerFooter]"></ng-content>
+    </div>
+  </aside>
+</div>

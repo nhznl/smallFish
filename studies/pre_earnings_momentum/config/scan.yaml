@@ -1,0 +1,62 @@
+# Behavioral settings for the pre-earnings momentum scan. Paths come from app.env.
+price_min: 10
+price_max: 300
+require_upcoming_event: true
+event_min_weeks: 2
+event_max_weeks: 5
+allowed_signal_bands: ["Super High", "High"]
+max_per_sector: 10
+persistence_window_days: 10
+# Frozen holdout selection: order all gate-passers by longest lead first and
+# bypass score bands. Scores remain in reports as diagnostics only.
+selection:
+  order: days_to_event
+  use_bands: false
+liquidity:
+  min_avg_volume: 4000000
+  min_avg_dollar_volume: 10000000
+# P1.3: a candidate's last bar may lag the scan's expected session (benchmark
+# calendar) by at most this many trading sessions; beyond that it is excluded
+# and reported in the scan snapshot as stale_excluded.
+freshness:
+  max_stale_sessions: 3
+# Drop candidates whose realized earnings-date history is too irregular to
+# plan a T-1 exit around (backtest_spec.md section 4). Requires
+# data/earnings_history.csv; if the file is absent the scan proceeds ungated
+# and the snapshot flags date_consistency_unavailable.
+date_consistency:
+  enabled: true
+signals:
+  band_method: percentile
+  percentiles:
+    super_high_top_pct: 15
+    high_top_pct: 40
+  bands:
+    super_high_min: 80
+    high_min: 65
+    medium_min: 50
+market_regime:
+  benchmark: SPY
+  sma_window: 50
+  risk_on_factor: 1.0
+  neutral_factor: 0.85
+  risk_off_factor: 0.6
+  # Fail closed: Unknown regime (missing/short benchmark history) gets this
+  # factor and the risk_off throttle -- never Risk-On treatment.
+  unknown_factor: 0.6
+  throttle:
+    enabled: true
+    risk_on_shortlist_mult: 1.0
+    neutral_shortlist_mult: 0.6
+    risk_off_shortlist_mult: 0.3
+    risk_on_size: 1.0
+    neutral_size: 0.6
+    risk_off_size: 0.3
+structure:
+  higher_low_lookback: 30
+  no_higher_low_factor: 0.85
+buckets:
+  - { name: "$10-$50", min: 10, max: 50 }
+  - { name: "$50-$100", min: 50, max: 100 }
+  - { name: "$100-$150", min: 100, max: 150 }
+  - { name: "$150-$300", min: 150, max: 300 }

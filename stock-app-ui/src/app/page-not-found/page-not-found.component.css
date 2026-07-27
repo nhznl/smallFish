@@ -1,0 +1,35 @@
+.page-not-found {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  max-width: 520px;
+  margin: 8vh auto 0;
+  padding: 36px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.nf-code {
+  margin: 0;
+  color: var(--border-strong);
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-not-found h1 {
+  margin: 6px 0 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.nf-hint {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+}

@@ -1,0 +1,70 @@
+name: Setup problem
+description: setup.sh, dependencies, or first run does not work
+labels: ["setup"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Setup is meant to work from a fresh clone with no credentials. If it
+        did not, that is a bug worth reporting.
+
+        Please try [docs/TROUBLESHOOTING.md](https://github.com/nhznl/smallFish/blob/main/docs/TROUBLESHOOTING.md)
+        first — it covers the common causes.
+
+  - type: dropdown
+    id: step
+    attributes:
+      label: Which step failed
+      options:
+        - git clone
+        - ./setup.sh
+        - ./commands.sh doctor
+        - ./commands.sh bootstrap-data
+        - ./commands.sh build-ui
+        - ./commands.sh server
+        - Opening the dashboard
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command and output
+      description: >-
+        The command you ran and everything it printed, with absolute paths
+        redacted.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Output of the commands below.
+      value: |
+        uname -sm:
+        python3 -V:
+        node -v:
+        npm -v:
+        git --version:
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: ./commands.sh doctor output
+      description: If setup got far enough to run it. Already redacted.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I am on a supported platform and runtime (docs/SUPPORT_MATRIX.md)
+        - label: This was a fresh clone, not an upgrade of an older checkout
+        - label: This report contains no credential or real account data
+          required: true

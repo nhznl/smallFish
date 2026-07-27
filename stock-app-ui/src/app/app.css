@@ -1,0 +1,139 @@
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
+/* ── App header ────────────────────────────────────────────────────────── */
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  min-height: 56px;
+  padding: 0 20px;
+  background: linear-gradient(180deg, #1c2c37 0%, #16232b 100%);
+  border-bottom: 1px solid rgb(255 255 255 / .08);
+  box-shadow: 0 1px 3px rgb(16 30 40 / .18);
+}
+
+/* ── Brand ─────────────────────────────────────────────────────────────── */
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+  color: #fff;
+  text-decoration: none;
+}
+
+.brand-mark {
+  color: #64a6f0;
+  transition: transform .2s var(--ease);
+}
+
+.brand:hover .brand-mark {
+  transform: translateX(2px);
+}
+
+.brand-name {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+/* ── Nav ───────────────────────────────────────────────────────────────── */
+
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.app-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-group-label {
+  margin-right: 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / .38);
+  white-space: nowrap;
+}
+
+.nav-sep {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  background: rgb(255 255 255 / .14);
+}
+
+.app-nav a {
+  padding: 6px 11px;
+  border-radius: var(--radius-sm);
+  color: rgb(255 255 255 / .72);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color .15s var(--ease), color .15s var(--ease);
+}
+
+.app-nav a:hover {
+  background: rgb(255 255 255 / .08);
+  color: #fff;
+}
+
+.app-nav a:focus-visible {
+  outline: 2px solid #64a6f0;
+  outline-offset: 2px;
+}
+
+/* `.active-section` marks a section whose explainer page is open. */
+.app-nav a.active,
+.app-nav a.active-section {
+  background: rgb(255 255 255 / .14);
+  color: #fff;
+  box-shadow: inset 0 -2px 0 #64a6f0;
+}
+
+.app-nav a.active-section {
+  box-shadow: inset 0 -2px 0 rgb(100 166 240 / .45);
+}
+
+/* ── Page body ─────────────────────────────────────────────────────────── */
+
+main {
+  min-height: calc(100vh - 56px);
+}
+
+@media (max-width: 900px) {
+  .app-header {
+    gap: 16px;
+    padding: 0 14px;
+  }
+
+  .nav-group-label,
+  .nav-sep {
+    display: none;
+  }
+
+  .app-nav {
+    gap: 2px;
+  }
+}

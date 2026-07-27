@@ -1,0 +1,33 @@
+<div class="modal-backdrop" (click)="close()">
+  <div
+    class="modal-panel"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="dialogLabel"
+    [style.width]="width"
+    cdkTrapFocus
+    [cdkTrapFocusAutoCapture]="true"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="modal-header">
+      <div class="modal-heading">
+        @if (title) {
+          <h2>{{ title }}</h2>
+        }
+        @if (subtitle) {
+          <p>{{ subtitle }}</p>
+        }
+        <ng-content select="[modalTitle]"></ng-content>
+      </div>
+      <button type="button" class="modal-close" aria-label="Close dialog" (click)="close()">×</button>
+    </div>
+
+    <div class="modal-body">
+      <ng-content></ng-content>
+    </div>
+
+    <div class="modal-actions">
+      <ng-content select="[modalActions]"></ng-content>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,467 @@
+<header class="page-header">
+  <div>
+    <p class="page-eyebrow">Portfolio tracking</p>
+    <h1 class="page-title">Portfolios</h1>
+    <p class="page-subtitle">Named stock lists tracked equal-weighted against SPY.</p>
+  </div>
+  <div class="page-actions">
+    <div class="snapshot-chip" *ngIf="snapshot" [class.chip-stale]="snapshot.prices_stale">
+      <span>{{ snapshot.prices_stale ? 'Prices stale' : 'Prices as of' }}</span>
+      <strong>{{ date(snapshot.as_of) }}</strong>
+      <small *ngIf="snapshot.prices_stale">
+        Last expected session {{ date(snapshot.last_expected_session) }}
+      </small>
+      <small *ngIf="!snapshot.prices_stale">Latest cached close</small>
+    </div>
+    <button type="button" class="btn btn-primary" (click)="openCreate($event)">New portfolio</button>
+  </div>
+</header>
+
+<div class="banner banner-neg" *ngIf="error" role="alert">
+  <span class="banner-icon" aria-hidden="true">⚠</span>
+  <div><strong>Portfolios unavailable.</strong> {{ error }}</div>
+</div>
+
+<section class="stat-strip" *ngIf="!loading && !error && rows.length">
+  <div class="stat-card">
+    <span class="stat-label">Portfolios</span>
+    <span class="stat-value">{{ rows.length }}</span>
+    <span class="stat-delta" *ngIf="totalMissingData">{{ totalMissingData }} with missing data</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Best vs SPY</span>
+    <span class="stat-value" [class]="'stat-value ' + signClass(bestVsSpy?.inception_vs_spy)">
+      {{ pp(bestVsSpy?.inception_vs_spy) }}
+    </span>
+    <span class="stat-delta">{{ bestVsSpy?.name || '—' }} · since inception</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">SPY YTD</span>
+    <span class="stat-value" [class]="'stat-value ' + signClass(snapshot?.spy_ytd_return)">
+      {{ pct(snapshot?.spy_ytd_return) }}
+    </span>
+    <span class="stat-delta">Benchmark for every spread below</span>
+  </div>
+</section>
+
+<div class="table-shell skeleton-shell" *ngIf="loading">
+  <div class="skeleton skeleton-row" *ngFor="let row of [1,2,3,4,5]" aria-hidden="true"></div>
+  <p class="visually-hidden" role="status">Loading portfolios…</p>
+</div>
+
+<div class="empty-state" *ngIf="!loading && !error && !rows.length">
+  <span class="empty-icon" aria-hidden="true">◇</span>
+  <span class="empty-title">No portfolios yet</span>
+  <span class="empty-hint">Create one to start tracking returns against SPY.</span>
+  <button type="button" class="btn btn-primary" (click)="openCreate($event)">New portfolio</button>
+</div>
+
+<div class="table-shell" *ngIf="!loading && !error && rows.length">
+  <table class="data-table portfolio-table">
+    <thead>
+      <tr>
+        <th class="col-sticky sortable" [attr.aria-sort]="ariaSort('name')">
+          <button type="button" class="sort-button" (click)="sortBy('name')">
+            Name<span class="sort-icon" aria-hidden="true">{{ sortIcon('name') }}</span>
+          </button>
+        </th>
+        <th class="num sortable" [attr.aria-sort]="ariaSort('symbol_count')">
+          <button type="button" class="sort-button" (click)="sortBy('symbol_count')">
+            Stocks<span class="sort-icon" aria-hidden="true">{{ sortIcon('symbol_count') }}</span>
+          </button>
+        </th>
+        <th class="num">Avg price</th>
+        <th class="num">Avg price · 1 wk ago</th>
+        <th class="num sortable" [attr.aria-sort]="ariaSort('week_return')">
+          <button type="button" class="sort-button" (click)="sortBy('week_return')">
+            1 wk %<span class="sort-icon" aria-hidden="true">{{ sortIcon('week_return') }}</span>
+          </button>
+        </th>
+        <th class="num sortable" [attr.aria-sort]="ariaSort('inception_vs_spy')">
+          <button type="button" class="sort-button" (click)="sortBy('inception_vs_spy')"
+                  matTooltip="Portfolio return since its creation date minus SPY's over the same window, in percentage points."
+                  matTooltipPosition="above">
+            Incep vs SPY<span class="sort-icon" aria-hidden="true">{{ sortIcon('inception_vs_spy') }}</span>
+          </button>
+        </th>
+        <th class="num sortable" [attr.aria-sort]="ariaSort('ytd_vs_spy')">
+          <button type="button" class="sort-button" (click)="sortBy('ytd_vs_spy')"
+                  matTooltip="Portfolio return since the final close of last year minus SPY's, in percentage points."
+                  matTooltipPosition="above">
+            YTD vs SPY<span class="sort-icon" aria-hidden="true">{{ sortIcon('ytd_vs_spy') }}</span>
+          </button>
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let row of rows; trackBy: trackById" class="portfolio-row"
+          [attr.data-portfolio-id]="row.id" (click)="openDetail(row, $event)">
+        <td class="col-sticky name-cell">
+          <button type="button" class="row-open" (click)="openDetail(row, $event); $event.stopPropagation()"
+                  [matTooltip]="row.description" [matTooltipDisabled]="!row.description"
+                  matTooltipPosition="right"
+                  [attr.aria-label]="'Open ' + row.name + ' portfolio detail'">
+            {{ row.name }}
+          </button>
+          <span class="badge badge-warn missing-badge" *ngIf="row.missing_data_symbols.length"
+                [matTooltip]="missingTooltip(row)" matTooltipPosition="above">
+            {{ row.missing_data_symbols.length }} no data
+          </span>
+          <small class="row-meta">
+            Created {{ date(row.created_date) }}
+            <span class="badge badge-neutral tag" *ngIf="row.sector">{{ row.sector }}</span>
+            <span class="badge badge-neutral tag" *ngIf="row.industry">{{ row.industry }}</span>
+          </small>
+        </td>
+        <td class="num">{{ row.symbol_count }}</td>
+        <td class="num">{{ dollars(row.avg_price) }}</td>
+        <td class="num">{{ dollars(row.avg_price_prior_week) }}</td>
+        <td class="num" [class]="'num ' + signClass(row.week_return)">{{ pct(row.week_return) }}</td>
+        <td class="num spread-cell" [class]="'num spread-cell ' + signClass(row.inception_vs_spy)"
+            [matTooltip]="inceptionTooltip(row)" matTooltipPosition="above">
+          {{ pp(row.inception_vs_spy) }}
+          <small>{{ pct(row.inception_return) }} · SPY {{ pct(row.spy_inception_return) }}</small>
+        </td>
+        <td class="num spread-cell" [class]="'num spread-cell ' + signClass(row.ytd_vs_spy)"
+            [matTooltip]="ytdTooltip(row)" matTooltipPosition="above">
+          {{ pp(row.ytd_vs_spy) }}
+          <small>{{ pct(row.ytd_return) }} · SPY {{ pct(row.spy_ytd_return) }}</small>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p class="page-caveat" *ngIf="!loading && !error && rows.length">
+  Returns are equal-weighted: each portfolio's return is the mean of its members' percent returns,
+  not the change in the averaged price columns. Members added after creation are backfilled to the
+  creation date. All prices are cached closes, not live quotes.
+</p>
+
+<!-- ── Create ───────────────────────────────────────────────────────────── -->
+
+<app-modal *ngIf="createOpen" title="New portfolio" width="min(560px, 94vw)"
+           subtitle="Created today · baseline prices recorded from the latest session"
+           (closed)="closeCreate()">
+  <div class="banner banner-neg form-banner" *ngIf="createError" role="alert">{{ createError }}</div>
+
+  <div class="form-grid">
+    <label class="field">
+      <span class="field-label">Name</span>
+      <input class="control" [(ngModel)]="createName" name="createName" required
+             placeholder="AI Basket" autocomplete="off">
+    </label>
+
+    <label class="field">
+      <span class="field-label">Description <em>optional</em></span>
+      <textarea class="control" rows="3" [(ngModel)]="createDescription" name="createDescription"
+                placeholder="How was this portfolio constructed? (thesis, screen, source)"></textarea>
+    </label>
+
+    <div class="field-row">
+      <label class="field">
+        <span class="field-label">Sector <em>optional</em></span>
+        <input class="control" [(ngModel)]="createSector" name="createSector" list="portfolio-sectors"
+               placeholder="Information Technology" autocomplete="off">
+        <datalist id="portfolio-sectors">
+          <option *ngFor="let sector of sectorOptions" [value]="sector"></option>
+        </datalist>
+      </label>
+      <label class="field">
+        <span class="field-label">Industry <em>optional</em></span>
+        <input class="control" [(ngModel)]="createIndustry" name="createIndustry"
+               placeholder="Semiconductors" autocomplete="off">
+      </label>
+    </div>
+
+    <label class="field">
+      <span class="field-label">Symbols</span>
+      <textarea class="control" rows="2" [(ngModel)]="createEntry.raw" name="createSymbols"
+                (blur)="parseCreateSymbols()"
+                placeholder="NVDA AMD AVGO — commas, spaces, or newlines"></textarea>
+    </label>
+
+    <div class="chip-row" *ngIf="createEntry.chips.length">
+      <span class="chip" *ngFor="let chip of createEntry.chips" [class.chip-unknown]="!chip.known">
+        <span class="chip-body">
+          <strong>{{ chip.symbol }}</strong>
+          <small>{{ chip.known ? (chip.price != null ? price(chip.price) : 'no cached price') : 'not in universe' }}</small>
+        </span>
+        <button type="button" class="chip-remove" (click)="removeChip(createEntry, chip.symbol)"
+                [attr.aria-label]="'Remove ' + chip.symbol">×</button>
+      </span>
+    </div>
+
+    <p class="chip-error" *ngIf="createEntry.unknown.length" role="alert">
+      {{ createEntry.unknown.length }} symbol{{ createEntry.unknown.length > 1 ? 's' : '' }} not in universe:
+      {{ createEntry.unknown.join(', ') }}
+    </p>
+  </div>
+
+  <ng-container modalActions>
+    <button type="button" class="btn" (click)="closeCreate()">Cancel</button>
+    <button type="button" class="btn btn-primary" (click)="submitCreate()"
+            [disabled]="!canCreate" [attr.aria-busy]="createSaving">
+      <span class="btn-spinner" *ngIf="createSaving" aria-hidden="true"></span>
+      {{ createSaving ? 'Creating…' : 'Create portfolio' }}
+    </button>
+  </ng-container>
+</app-modal>
+
+<!-- ── Detail drawer ────────────────────────────────────────────────────── -->
+
+<app-drawer *ngIf="detail || detailLoading || detailError"
+            [ariaLabel]="(detail?.portfolio?.name || 'Portfolio') + ' portfolio detail'"
+            (closed)="onDrawerClosed()">
+  <div drawerHeader class="drawer-heading">
+    <ng-container *ngIf="detail as data">
+      <div class="drawer-title-row" *ngIf="!editing">
+        <div>
+          <h2 class="drawer-name">{{ data.portfolio.name }}</h2>
+          <p class="drawer-meta">
+            Created {{ date(data.portfolio.created_date) }} ·
+            {{ data.portfolio.symbol_count }} stock{{ data.portfolio.symbol_count === 1 ? '' : 's' }} ·
+            prices as of {{ date(data.as_of) }}
+            <span class="badge badge-neutral tag" *ngIf="data.portfolio.sector">{{ data.portfolio.sector }}</span>
+            <span class="badge badge-neutral tag" *ngIf="data.portfolio.industry">{{ data.portfolio.industry }}</span>
+          </p>
+        </div>
+        <div class="drawer-title-actions">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="startEditing()">Edit</button>
+          <button type="button" class="btn btn-danger btn-sm" (click)="confirmDelete()">Delete portfolio</button>
+        </div>
+      </div>
+
+      <p class="drawer-description"
+         *ngIf="!editing && data.portfolio.description">{{ data.portfolio.description }}</p>
+      <button type="button" class="btn btn-ghost btn-sm add-description"
+              *ngIf="!editing && !data.portfolio.description" (click)="startEditing()">
+        Add description
+      </button>
+
+      <div class="edit-form" *ngIf="editing">
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input class="control" [(ngModel)]="editName" name="editName" required>
+        </label>
+        <label class="field">
+          <span class="field-label">Description</span>
+          <textarea class="control" rows="3" [(ngModel)]="editDescription" name="editDescription"
+                    placeholder="How was this portfolio constructed? (thesis, screen, source)"></textarea>
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Sector</span>
+            <input class="control" [(ngModel)]="editSector" name="editSector" list="portfolio-sectors">
+          </label>
+          <label class="field">
+            <span class="field-label">Industry</span>
+            <input class="control" [(ngModel)]="editIndustry" name="editIndustry">
+          </label>
+        </div>
+        <div class="edit-actions">
+          <button type="button" class="btn btn-sm" (click)="cancelEditing()">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" (click)="saveEditing()"
+                  [disabled]="editSaving || !editName.trim()" [attr.aria-busy]="editSaving">
+            <span class="btn-spinner" *ngIf="editSaving" aria-hidden="true"></span>
+            {{ editSaving ? 'Saving…' : 'Save' }}
+          </button>
+        </div>
+      </div>
+    </ng-container>
+    <h2 class="drawer-name" *ngIf="!detail">Portfolio detail</h2>
+  </div>
+
+  <div class="drawer-skeleton" *ngIf="detailLoading">
+    <div class="skeleton skeleton-row" *ngFor="let row of [1,2,3,4]" aria-hidden="true"></div>
+    <p class="visually-hidden" role="status">Loading portfolio detail…</p>
+  </div>
+
+  <div class="banner banner-neg" *ngIf="detailError" role="alert">{{ detailError }}</div>
+
+  <ng-container *ngIf="detail as data">
+    <div class="banner banner-neg drawer-banner" *ngIf="memberError" role="alert">{{ memberError }}</div>
+
+    <section class="stat-strip drawer-stats">
+      <div class="stat-card">
+        <span class="stat-label">Incep vs SPY</span>
+        <span class="stat-value" [class]="'stat-value ' + signClass(data.portfolio.inception_vs_spy)">
+          {{ pp(data.portfolio.inception_vs_spy) }}
+        </span>
+        <span class="stat-delta">
+          {{ pct(data.portfolio.inception_return) }} vs {{ pct(data.portfolio.spy_inception_return) }}
+        </span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">YTD vs SPY</span>
+        <span class="stat-value" [class]="'stat-value ' + signClass(data.portfolio.ytd_vs_spy)">
+          {{ pp(data.portfolio.ytd_vs_spy) }}
+        </span>
+        <span class="stat-delta">
+          {{ pct(data.portfolio.ytd_return) }} vs {{ pct(data.portfolio.spy_ytd_return) }}
+        </span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">1 wk</span>
+        <span class="stat-value" [class]="'stat-value ' + signClass(data.portfolio.week_return)">
+          {{ pct(data.portfolio.week_return) }}
+        </span>
+        <span class="stat-delta">SPY {{ pct(data.spy_week_return) }}</span>
+      </div>
+    </section>
+
+    <div class="banner banner-warn drawer-banner" *ngIf="data.portfolio.missing_data_symbols.length">
+      <span class="banner-icon" aria-hidden="true">⚠</span>
+      <div>
+        No cached data for {{ data.portfolio.missing_data_symbols.join(', ') }}. These members are
+        excluded from every average above.
+      </div>
+    </div>
+
+    <section class="drawer-section">
+      <div class="section-heading">
+        <h3 class="drawer-section-title">Members</h3>
+        <!-- The visible label doubles as transient feedback, so the accessible
+             name is fixed and the state change is announced by the live region. -->
+        <button type="button" class="btn btn-sm" (click)="copySymbols()"
+                [disabled]="!data.members.length"
+                [attr.aria-label]="'Copy all ' + data.members.length + ' symbols to the clipboard'"
+                matTooltip="Copy every symbol, space-separated, ready to paste into the Momentum or Strategy symbol filter."
+                matTooltipPosition="above">
+          <span>{{ copyLabel }}</span>
+        </button>
+        <span class="visually-hidden" role="status" aria-live="polite">
+          {{ copyState === 'copied' ? 'Symbols copied to clipboard' : '' }}
+          {{ copyState === 'failed' ? 'Copy failed. Clipboard access was refused.' : '' }}
+        </span>
+      </div>
+      <div class="table-shell">
+        <table class="data-table member-table">
+          <thead>
+            <tr>
+              <th class="col-sticky">Symbol</th>
+              <th class="num">Price</th>
+              <th class="num">1 wk %</th>
+              <th>52-wk low · high</th>
+              <th class="num">YTD %</th>
+              <th class="num">Incep %</th>
+              <th><span class="visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let member of data.members; trackBy: trackBySymbol"
+                [class.row-nodata]="!member.has_data">
+              <td class="col-sticky symbol-cell">
+                <a [routerLink]="['/stockDetail', member.symbol]" target="_blank">{{ member.symbol }}</a>
+                <span class="badge badge-warn" *ngIf="!member.has_data"
+                      [matTooltip]="memberBaselineTooltip(member)" matTooltipPosition="above">No data</span>
+              </td>
+              <td class="num">{{ price(member.price) }}</td>
+              <td class="num" [class]="'num ' + signClass(member.week_return)">{{ pct(member.week_return) }}</td>
+              <td>
+                <div class="range-cell" *ngIf="member.fifty_two_week_low != null; else noRange"
+                     [matTooltip]="'52-week range ' + price(member.fifty_two_week_low) + ' to ' + price(member.fifty_two_week_high) + '; latest close ' + price(member.price) + '.'"
+                     matTooltipPosition="above">
+                  <span>{{ price(member.fifty_two_week_low) }}</span>
+                  <span>{{ price(member.fifty_two_week_high) }}</span>
+                  <span class="range-track" aria-hidden="true">
+                    <i class="range-marker" [style.left.%]="rangePosition(member)"></i>
+                  </span>
+                </div>
+                <ng-template #noRange>—</ng-template>
+              </td>
+              <td class="num" [class]="'num ' + signClass(member.ytd_return)">{{ pct(member.ytd_return) }}</td>
+              <td class="num incep-cell" [class]="'num incep-cell ' + signClass(member.inception_return)"
+                  [matTooltip]="memberBaselineTooltip(member)" matTooltipPosition="above">
+                {{ pct(member.inception_return) }}
+                <small class="badge badge-warn" *ngIf="member.partial_history">Partial history</small>
+              </td>
+              <td class="action-cell">
+                <button type="button" class="icon-btn" (click)="removeMember(member.symbol)"
+                        [disabled]="addBusy" [attr.aria-label]="'Remove ' + member.symbol"
+                        matTooltip="Remove from this portfolio" matTooltipPosition="above">
+                  <svg class="btn-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path d="M3 4h10M6.5 4V2.8h3V4M5 4l.6 9h4.8L11 4"/>
+                  </svg>
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="!data.members.length">
+              <td colspan="7" class="empty-cell">No symbols yet. Add one below to start tracking it.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Member-editing feedback stays in this zone, next to the controls that
+           produce it, rather than at the top of a drawer the user has scrolled
+           away from. -->
+      <div class="banner banner-pos drawer-banner" *ngIf="undoSymbol" role="status">
+        <span>Removed {{ undoSymbol }}</span>
+        <span class="undo-actions">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="undoRemove()">Undo</button>
+          <button type="button" class="btn btn-ghost btn-sm" (click)="dismissUndo()">Dismiss</button>
+        </span>
+      </div>
+
+      <div class="banner banner-neg drawer-banner" *ngIf="addError" role="alert">{{ addError }}</div>
+
+      <div class="add-row">
+        <label class="field add-field">
+          <span class="visually-hidden">Add symbols</span>
+          <input class="control" [(ngModel)]="addEntry.raw" name="addSymbols"
+                 placeholder="Add symbols…" autocomplete="off"
+                 (blur)="parseAddSymbols()" (keydown.enter)="addMembers()">
+        </label>
+        <button type="button" class="btn" (click)="addMembers()"
+                [disabled]="!canAdd" [attr.aria-busy]="addBusy">
+          <span class="btn-spinner" *ngIf="addBusy" aria-hidden="true"></span>
+          {{ addBusy ? 'Working…' : 'Add' }}
+        </button>
+      </div>
+
+      <div class="chip-row add-chips" *ngIf="addEntry.chips.length">
+        <span class="chip" *ngFor="let chip of addEntry.chips" [class.chip-unknown]="!chip.known">
+          <span class="chip-body">
+            <strong>{{ chip.symbol }}</strong>
+            <small>{{ chip.known ? (chip.price != null ? price(chip.price) : 'no cached price') : 'not in universe' }}</small>
+          </span>
+          <button type="button" class="chip-remove" (click)="removeChip(addEntry, chip.symbol)"
+                  [attr.aria-label]="'Remove ' + chip.symbol">×</button>
+        </span>
+      </div>
+
+      <p class="chip-error" *ngIf="addEntry.unknown.length" role="alert">
+        {{ addEntry.unknown.length }} symbol{{ addEntry.unknown.length > 1 ? 's' : '' }} not in universe:
+        {{ addEntry.unknown.join(', ') }} — remove {{ addEntry.unknown.length > 1 ? 'them' : 'it' }} to add the rest.
+      </p>
+
+      <p class="add-hint">
+        Universe symbols only. Added members are backfilled to
+        {{ date(data.portfolio.created_date) }}, the portfolio's creation date.
+      </p>
+    </section>
+  </ng-container>
+
+  <ng-container drawerFooter>
+    <button type="button" class="btn" (click)="closeDetail()">Close</button>
+  </ng-container>
+</app-drawer>
+
+<!-- ── Delete confirmation ──────────────────────────────────────────────── -->
+
+<app-modal *ngIf="deleteOpen" title="Delete portfolio" width="min(460px, 94vw)"
+           (closed)="cancelDelete()">
+  <p class="confirm-text">
+    Delete “{{ detail?.portfolio?.name }}”? This removes the portfolio and its member list.
+    Price history is unaffected.
+  </p>
+  <ng-container modalActions>
+    <button type="button" class="btn" (click)="cancelDelete()">Cancel</button>
+    <button type="button" class="btn btn-danger" (click)="deletePortfolio()"
+            [disabled]="deleting" [attr.aria-busy]="deleting">
+      <span class="btn-spinner" *ngIf="deleting" aria-hidden="true"></span>
+      {{ deleting ? 'Deleting…' : 'Delete portfolio' }}
+    </button>
+  </ng-container>
+</app-modal>

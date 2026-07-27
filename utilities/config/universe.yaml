@@ -1,0 +1,167 @@
+# Behavioral configuration for utilities.universe. Registry artifact paths come
+# from SFP_DATA_DIR in app.env.
+wikipedia:
+  sp500: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+  spMidCap: "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies"
+  spSmallCap: "https://en.wikipedia.org/wiki/List_of_S%26P_600_companies"
+  dow: "https://en.wikipedia.org/wiki/Dow_Jones_Industrial_Average"
+  russell1000: "https://en.wikipedia.org/wiki/Russell_1000_Index"
+russell1000:
+  # Broad-market source tier: introduces mid/large-caps (and their GICS sector)
+  # beyond the S&P 1500, e.g. Russell-listed retirement holdings. Non-exclusive
+  # overlay with the S&P tiers -- a symbol can carry both sp500 and russell1000.
+  enabled: true
+nyse100:
+  enabled: true
+  fund_page: "https://www.globalxetfs.com/funds/nysx/"
+  holdings_url_pattern: 'https://assets\.globalxetfs\.com/funds/holdings/nysx_full-holdings_\d{8}\.csv'
+  user_agent: "Mozilla/5.0 (compatible; smallFish-universe/1.0)"
+nasdaq100:
+  enabled: true
+  weighting_url: "https://indexes.nasdaqomx.com/Index/WeightingData"
+  index_id: "NDX"
+  user_agent: "Mozilla/5.0 (compatible; smallFish-universe/1.0)"
+throttle: 0.5
+validate:
+  enabled: false
+  limit: 200
+
+# Curated ETF seed (was data/etf_seed.csv). symbol: notes; every entry is
+# type=ETF. Top-liquidity US ETFs -- the avg_dollar_volume gate downstream does
+# the real liquidity filtering.
+etf_seed:
+  SPY: "S&P 500 (SPDR)"
+  VOO: "S&P 500 (Vanguard)"
+  IVV: "S&P 500 (iShares)"
+  QQQ: "Nasdaq-100"
+  QQQM: "Nasdaq-100 (lower-fee)"
+  IWM: "Russell 2000 small-cap"
+  DIA: "Dow Jones Industrial Average"
+  VTI: "Total US market"
+  RSP: "S&P 500 equal weight"
+  MDY: "S&P MidCap 400"
+  IJH: "S&P MidCap 400 (iShares)"
+  IJR: "S&P SmallCap 600 (iShares)"
+  VEA: "Developed ex-US"
+  VWO: "Emerging markets (Vanguard)"
+  EEM: "Emerging markets (iShares)"
+  EFA: "EAFE developed"
+  IEFA: "Core EAFE developed"
+  IEMG: "Core emerging markets"
+  VGK: "Europe"
+  EWJ: "Japan"
+  EWZ: "Brazil"
+  FXI: "China large-cap"
+  INDA: "India"
+  XLF: "Financials SPDR"
+  XLE: "Energy SPDR"
+  XLK: "Technology SPDR"
+  XLV: "Health Care SPDR"
+  XLI: "Industrials SPDR"
+  XLY: "Consumer Discretionary SPDR"
+  XLP: "Consumer Staples SPDR"
+  XLU: "Utilities SPDR"
+  XLB: "Materials SPDR"
+  XLRE: "Real Estate SPDR"
+  XLC: "Communication Services SPDR"
+  SMH: "Semiconductors (VanEck)"
+  SOXX: "Semiconductors (iShares)"
+  IBB: "Biotech (iShares)"
+  XBI: "Biotech (SPDR)"
+  ARKK: "ARK Innovation"
+  IYR: "US Real Estate"
+  VNQ: "Vanguard Real Estate"
+  KRE: "Regional Banks"
+  XOP: "Oil & Gas E&P"
+  GDX: "Gold Miners"
+  GDXJ: "Junior Gold Miners"
+  XME: "Metals & Mining"
+  ITB: "Home Construction"
+  XRT: "Retail"
+  IYT: "Transportation"
+  ITA: "Aerospace and defense"
+  MOO: "Agriculture businesses"
+  JETS: "Airlines"
+  TLT: "20+ Year Treasuries"
+  IEF: "7-10 Year Treasuries"
+  SHY: "1-3 Year Treasuries"
+  BIL: "1-3 Month T-Bills"
+  LQD: "Investment Grade Corp"
+  HYG: "High Yield Corp (iShares)"
+  JNK: "High Yield Corp (SPDR)"
+  AGG: "US Aggregate Bond"
+  BND: "Total Bond Market"
+  TIP: "TIPS inflation-protected"
+  MUB: "Municipal bonds"
+  EMB: "Emerging market bonds"
+  GLD: "Gold (SPDR)"
+  IAU: "Gold (iShares)"
+  SLV: "Silver"
+  USO: "Crude Oil"
+  UNG: "Natural Gas"
+  DBC: "Broad commodities"
+  PDBC: "Broad commodities (no K-1)"
+  DBB: "Industrial/base metals"
+  DBE: "Energy commodities"
+  DBO: "Crude oil"
+  DBA: "Agricultural commodities"
+  VXX: "VIX short-term futures"
+  UVXY: "1.5x VIX short-term"
+  SVXY: "-0.5x VIX short-term"
+  TQQQ: "3x Nasdaq-100 bull"
+  SQQQ: "3x Nasdaq-100 bear"
+  SPXL: "3x S&P 500 bull"
+  SPXS: "3x S&P 500 bear"
+  SSO: "2x S&P 500 bull"
+  UPRO: "3x S&P 500 bull"
+  SCHD: "Dividend equity (Schwab)"
+  VYM: "High dividend yield"
+  VIG: "Dividend appreciation"
+  DVY: "Select dividend"
+  EWY: "South Korea (iShares MSCI)"
+  FLKR: "South Korea (Franklin FTSE)"
+  NLR: "Uranium & nuclear energy (VanEck)"
+  XHB: "S&P Homebuilders ETF"
+  IDRV: "Electric vehicles and autonomous driving"
+  XSW: "Software & Services ETF"
+  VDC: "Broad Consumer Staples"
+  VHT: "Broad Healthcare"
+  VPU : "Broad Utilities"
+
+
+# Manual pins. symbol: {type, notes}; every entry is pinned=true and survives
+# EVERY refresh, forcing the symbol into universe.csv regardless of index
+# membership.
+#
+# These are project defaults: small- and micro-cap names, ADRs, and recent index
+# departures that no configured index source (S&P 1500 / nyse100 / nasdaq100 /
+# russell1000) supplies, but that are useful to keep in the price cache and on
+# the universe-only surfaces (Portfolios, Momentum). Each note states only why
+# the symbol is outside the configured index universe.
+#
+# To pin your own symbols without editing this file, create
+# `utilities/config/universe.local.yaml` (git-ignored) with the same
+# `manual_pins:` structure; its entries are merged over these defaults. Keep
+# personal holdings and options underlyings in that local file.
+manual_pins:
+  ACHR: {type: STOCK, notes: "Archer Aviation (Russell 2000, not R1000)"}
+  AP:   {type: STOCK, notes: "Ampco-Pittsburgh (micro-cap, no major index)"}
+  BE:   {type: STOCK, notes: "Bloom Energy (outside configured index universe)"}
+  BHP:  {type: STOCK, notes: "BHP Group ADR (ASX-listed, not a US index)"}
+  CRSP: {type: STOCK, notes: "CRISPR Therapeutics (Russell 2000, not R1000)"}
+  DCO:  {type: STOCK, notes: "Ducommun, aerospace & defense (outside configured index universe)"}
+  JD:   {type: STOCK, notes: "JD.com ADR (China-domiciled, not a US index)"}
+  JOBY: {type: STOCK, notes: "Joby Aviation (Russell 2000, not R1000)"}
+  KE:   {type: STOCK, notes: "Kimball Electronics, EMS manufacturing (outside configured index universe)"}
+  MNRO: {type: STOCK, notes: "Monro (dropped from S&P 600 Jun 2026)"}
+  NNBR: {type: STOCK, notes: "NN Inc, precision components (micro-cap, outside configured index universe)"}
+  OKLO: {type: STOCK, notes: "Oklo (Russell 2000, not R1000)"}
+  PKOH: {type: STOCK, notes: "Park-Ohio Holdings, specialty machinery (outside configured index universe)"}
+  RCAT: {type: STOCK, notes: "Red Cat Holdings (micro-cap, not R1000)"}
+  RGTI: {type: STOCK, notes: "Rigetti Computing (Russell 2000, not R1000)"}
+  RR:   {type: STOCK, notes: "Richtech Robotics (micro-cap, not R1000)"}
+  SHLS: {type: STOCK, notes: "Shoals Technologies (outside configured index universe)"}
+  SSII: {type: STOCK, notes: "SS Innovations Intl (OTC; self-retires if no data)"}
+  SYPR: {type: STOCK, notes: "Sypris Solutions, auto parts & electronics (micro-cap, outside configured index universe)"}
+  TPCS: {type: STOCK, notes: "TechPrecision, metal fabrication (micro-cap, outside configured index universe)"}
+  XMTR: {type: STOCK, notes: "Xometry, on-demand manufacturing marketplace (outside configured index universe)"}

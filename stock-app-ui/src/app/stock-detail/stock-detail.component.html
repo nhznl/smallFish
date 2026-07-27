@@ -1,0 +1,491 @@
+<!-- The page has two independent sources: live yfinance data (hero, company,
+     metrics, news) and the scanner's cached analysis (momentum strip, cached
+     OHLCV, slope charts). Either one alone is worth rendering, so the page is
+     gated on having *something* and each section guards its own source. -->
+@if (stock() || stockInfo()) {
+  <div class="stock-detail">
+    <a class="breadcrumb" routerLink="/momentum">← smallFish</a>
+
+    <header class="ticker-hero">
+      <div class="hero-identity">
+        <h1 class="hero-symbol">{{ symbol() }}</h1>
+        @if (stockInfo()) {
+          <p class="hero-name">{{ getCompanyName(stockInfo()) }}</p>
+          <div class="hero-chips">
+            @if (stockInfo()!.company.sector) {
+              <span class="badge badge-neutral">{{ stockInfo()!.company.sector }}</span>
+            }
+            @if (stockInfo()!.company.industry) {
+              <span class="badge badge-neutral">{{ stockInfo()!.company.industry }}</span>
+            }
+          </div>
+        }
+      </div>
+
+      @if (stockInfo()) {
+        <div class="hero-price">
+          <span class="hero-last">{{ formatPrice(stockInfo()!.price.regularMarketPrice) }}</span>
+          @if (priceDelta(); as delta) {
+            <span class="hero-delta" [class]="'hero-delta ' + signClass(delta.abs)">
+              {{ delta.abs >= 0 ? '▲' : '▼' }}
+              {{ delta.abs >= 0 ? '+' : '−' }}{{ formatNumber(abs(delta.abs)) }}
+              ({{ formatSigned(delta.pct) }})
+            </span>
+          }
+          @if (fiftyTwoWeekPosition(); as position) {
+            <div class="range-bar" role="img"
+                 [attr.aria-label]="'52-week range ' + formatPrice(stockInfo()!.price.fiftyTwoWeekLow) + ' to ' + formatPrice(stockInfo()!.price.fiftyTwoWeekHigh)">
+              <span class="range-track"><span class="range-marker" [style.left.%]="position"></span></span>
+              <span class="range-ends">
+                <small>{{ formatPrice(stockInfo()!.price.fiftyTwoWeekLow) }}</small>
+                <small>52-week range</small>
+                <small>{{ formatPrice(stockInfo()!.price.fiftyTwoWeekHigh) }}</small>
+              </span>
+            </div>
+          }
+          <div class="hero-meta">
+            <span><em>Mkt cap</em> {{ formatCompactNumber(stockInfo()!.price.marketCap) }}</span>
+            <span><em>P/E</em> {{ formatNumber(stockInfo()!.valuation.trailingPe) }}</span>
+            <span><em>Fwd P/E</em> {{ formatNumber(stockInfo()!.valuation.forwardPe) }}</span>
+            <span><em>Div yield</em> {{ formatPercent(stockInfo()!.valuation.dividendYield) }}</span>
+          </div>
+        </div>
+
+        <div class="hero-actions">
+          @if (stockInfo()!.company.website) {
+            <a class="btn btn-ghost" [href]="stockInfo()!.company.website" target="_blank" rel="noopener noreferrer">
+              Visit {{ getWebsiteDisplay(stockInfo()!.company.website) || 'website' }}
+            </a>
+          }
+          <a class="btn btn-ghost yahoo-link" [href]="yahooFinanceUrl()" target="_blank" rel="noopener noreferrer">
+            Yahoo Finance: {{ symbol() }}
+          </a>
+          <form class="symbol-jump" (submit)="jumpToSymbol($event)">
+            <input name="symbol" placeholder="Jump to symbol" aria-label="Jump to another symbol">
+          </form>
+        </div>
+      }
+    </header>
+
+    @if (stock() && stock()!.setup) {
+      <section class="momentum-strip">
+        <div class="momentum-head">
+          <span class="badge" [class]="'badge ' + setupBadgeClass(stock()!.setup)">{{ setupLabel(stock()!.setup) }}</span>
+          <span class="momentum-score">{{ formatNumber(stock()!.setupScore) }}<small>/100 setup score</small></span>
+        </div>
+        <div class="momentum-metrics">
+          <div><span>5D</span><strong [class]="signClass(stock()!.fiveDaysToDate.gainLoss)">{{ formatSigned(stock()!.fiveDaysToDate.gainLoss, 0) }}</strong></div>
+          <div><span>5W</span><strong [class]="signClass(stock()!.fiveWeeksToDate.gainLoss)">{{ formatSigned(stock()!.fiveWeeksToDate.gainLoss, 0) }}</strong></div>
+          <div><span>YTD</span><strong [class]="signClass(stock()!.yearToDate.gainLoss)">{{ formatSigned(stock()!.yearToDate.gainLoss, 0) }}</strong></div>
+          <div><span>vs SPY 1M</span><strong [class]="signClass(stock()!.relativeStrengthSpyOneMonth)">{{ formatSigned(stock()!.relativeStrengthSpyOneMonth) }}</strong></div>
+          <div><span>RSI 14</span><strong>{{ formatNumber(stock()!.trendRsi) }}</strong></div>
+          <div><span>ATR %</span><strong>{{ formatPercentValue(stock()!.atrPct) }}</strong></div>
+          <div><span>Volume 3/20D</span><strong>{{ formatNumber(stock()!.volumeRatio) }}×</strong></div>
+        </div>
+      </section>
+    }
+
+    @if (priceChart().points.length) {
+      <section class="price-chart-card">
+        <div class="price-chart-head">
+          <div class="price-chart-title">
+            <h3>Price <small>{{ priceChart().rangeLabel }}</small></h3>
+            <div class="price-chart-summary">
+              <span class="price-chart-last">{{ formatPrice(priceChart().last) }}</span>
+              <span class="price-chart-change" [class]="priceChart().rising ? 'val-pos' : 'val-neg'">
+                {{ priceChart().rising ? '▲' : '▼' }}
+                {{ formatSigned((priceChart().changePct ?? 0) * 100, 2) }}
+                <small>over {{ priceRange() }}</small>
+              </span>
+            </div>
+          </div>
+          <div class="range-tabs" role="group" aria-label="Chart range">
+            @for (range of priceRanges; track range.key) {
+              <button type="button" class="range-tab"
+                      [class.active]="priceRange() === range.key"
+                      [attr.aria-pressed]="priceRange() === range.key"
+                      (click)="setPriceRange(range.key)">{{ range.label }}</button>
+            }
+          </div>
+        </div>
+
+        <svg
+          class="price-chart-svg"
+          [attr.viewBox]="priceChart().viewBox"
+          preserveAspectRatio="none"
+          role="img"
+          [attr.aria-label]="'Closing price chart over ' + priceRange()"
+          (mousemove)="onPriceChartMove($event, priceChart())"
+          (mouseleave)="clearPriceChartHover()"
+        >
+          <defs>
+            <linearGradient id="priceAreaFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" [attr.stop-color]="priceChart().rising ? 'var(--pos)' : 'var(--neg)'" stop-opacity=".16"></stop>
+              <stop offset="100%" [attr.stop-color]="priceChart().rising ? 'var(--pos)' : 'var(--neg)'" stop-opacity="0"></stop>
+            </linearGradient>
+          </defs>
+
+          <polygon class="price-area" [attr.points]="priceChart().area"></polygon>
+
+          <g class="axes">
+            @for (tick of priceChart().ticks; track tick.value) {
+              <g class="y-tick" [attr.transform]="'translate(0,' + tick.y + ')'">
+                <line class="tick-line"
+                      [attr.x1]="priceChart().padding"
+                      [attr.x2]="priceChart().width - priceChart().padding" y1="0" y2="0"></line>
+                <text class="tick-label" [attr.x]="priceChart().padding - 10" y="4">{{ formatPrice(tick.value) }}</text>
+              </g>
+            }
+            <line class="axis axis-x"
+                  [attr.x1]="priceChart().padding" [attr.x2]="priceChart().width - priceChart().padding"
+                  [attr.y1]="priceChart().baselineY" [attr.y2]="priceChart().baselineY"></line>
+          </g>
+
+          <polyline class="price-line"
+                    [class.price-line-down]="!priceChart().rising"
+                    [attr.points]="priceChart().polyline"></polyline>
+
+          @for (label of priceChart().xLabels; track label.x) {
+            <text class="x-tick-label" [attr.x]="label.x" [attr.y]="priceChart().height - 8">{{ label.label }}</text>
+          }
+
+          @if (hoveredPricePoint) {
+            <line class="hover-line"
+                  [attr.x1]="hoveredPricePoint.x" [attr.x2]="hoveredPricePoint.x"
+                  [attr.y1]="priceChart().padding" [attr.y2]="priceChart().baselineY"></line>
+            <circle class="hover-dot" [attr.cx]="hoveredPricePoint.x" [attr.cy]="hoveredPricePoint.y" r="4"></circle>
+          }
+        </svg>
+
+        <p class="price-chart-note">
+          @if (hoveredPricePoint) {
+            <strong>{{ hoveredPricePoint.fullLabel }}</strong> · {{ formatPrice(hoveredPricePoint.value) }}
+          } @else {
+            Daily closing prices from the local price cache. Intraday (1D) is not
+            available — the cache stores one bar per session.
+          }
+        </p>
+      </section>
+    }
+
+    <section class="company-section">
+      @if (stockInfoLoading()) {
+        <p class="info-status">Loading company information…</p>
+      } @else if (stockInfoError()) {
+        <p class="info-status info-status-error">{{ stockInfoError() }}</p>
+      } @else if (stockInfo()) {
+        <div class="overview-grid">
+          <div class="info-card overview-card">
+            <h3>Company Overview</h3>
+            <div class="info-grid">
+              <div class="info-row">
+                <span class="info-label">Name</span>
+                <div class="info-value">{{ getCompanyName(stockInfo()) }}</div>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Retrieved At</span>
+                <div class="info-value">{{ formatRetrievedDate(stockInfo()!.retrievedAt) }}</div>
+              </div>
+              @if (stockInfo()!.company.sector) {
+                <div class="info-row">
+                  <span class="info-label">Sector</span>
+                  <div class="info-value">{{ stockInfo()!.company.sector }}</div>
+                </div>
+              }
+              @if (stockInfo()!.company.industry) {
+                <div class="info-row">
+                  <span class="info-label">Industry</span>
+                  <div class="info-value">{{ stockInfo()!.company.industry }}</div>
+                </div>
+              }
+              @if (getCompanyLocation(stockInfo())) {
+                <div class="info-row">
+                  <span class="info-label">Headquarters</span>
+                  <div class="info-value">{{ getCompanyLocation(stockInfo()) }}</div>
+                </div>
+              }
+              @if (stockInfo()!.company.fullTimeEmployees) {
+                <div class="info-row">
+                  <span class="info-label">Employees</span>
+                  <div class="info-value">{{ formatCompactNumber(stockInfo()!.company.fullTimeEmployees) }}</div>
+                </div>
+              }
+            </div>
+            @if (stockInfo()!.company.summary) {
+              <p class="info-summary">{{ stockInfo()!.company.summary }}</p>
+            }
+            @if (stockInfo()!.company.website) {
+              <a
+                class="info-link"
+                [href]="stockInfo()!.company.website"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Visit {{ getWebsiteDisplay(stockInfo()!.company.website) || 'Company Website' }}
+              </a>
+            }
+          </div>
+
+          <div class="info-card metrics-card">
+            <h3>Key Metrics</h3>
+            <div class="info-grid two-column">
+              <div class="info-row">
+                <span class="info-label">Price</span>
+                <div class="info-value">
+                  <span>{{ formatPrice(stockInfo()!.price.regularMarketPrice) }}</span>
+                  @if (stockInfo()!.price.currency) {
+                    <span class="info-subvalue">{{ stockInfo()!.price.currency }}</span>
+                  }
+                </div>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Previous Close</span>
+                <div class="info-value">{{ formatPrice(stockInfo()!.price.regularMarketPreviousClose) }}</div>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Market Cap</span>
+                <div class="info-value">{{ formatCompactNumber(stockInfo()!.price.marketCap) }}</div>
+              </div>
+              <div class="info-row">
+                <span class="info-label">52 Week Range</span>
+                <div class="info-value">{{ formatPrice(stockInfo()!.price.fiftyTwoWeekLow) }} – {{ formatPrice(stockInfo()!.price.fiftyTwoWeekHigh) }}</div>
+              </div>
+              <div class="info-row">
+                <span class="info-label">P/E (TTM)</span>
+                <div class="info-value">{{ formatNumber(stockInfo()!.valuation.trailingPe) }}</div>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Forward P/E</span>
+                <div class="info-value">{{ formatNumber(stockInfo()!.valuation.forwardPe) }}</div>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Dividend Yield</span>
+                <div class="info-value">{{ formatPercent(stockInfo()!.valuation.dividendYield) }}</div>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Dividend Rate</span>
+                <div class="info-value">{{ formatNumber(stockInfo()!.valuation.dividendRate) }}</div>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Payout Ratio</span>
+                <div class="info-value">{{ formatPercent(stockInfo()!.valuation.payoutRatio) }}</div>
+              </div>
+            </div>
+            <h3>Last cached session (OHLCV)</h3>
+            @if (stock()) {
+              <div class="info-grid two-column">
+                <div class="info-row">
+                  <span class="info-label">Open</span>
+                  <div class="info-value">{{ formatPrice(stock()!.lastTradeStats.open) }}</div>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Close</span>
+                  <div class="info-value">{{ formatPrice(stock()!.lastTradeStats.close) }}</div>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">High</span>
+                  <div class="info-value">{{ formatPrice(stock()!.lastTradeStats.high) }}</div>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Low</span>
+                  <div class="info-value">{{ formatPrice(stock()!.lastTradeStats.low) }}</div>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Volume</span>
+                  <div class="info-value">{{ formatCompactNumber(stock()!.lastTradeStats.volume) }}</div>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Last Trade Date</span>
+                  <div class="info-value">{{ formatDate(stock()!.lastTradeStats.tradeDate) }}</div>
+                </div>
+              </div>
+            } @else {
+              <p class="no-data">{{ stockError() }}</p>
+            }
+          </div>
+        </div>
+      }
+    </section>
+
+    @if (!stockInfoLoading() && !stockInfoError() && stockInfo()?.news?.length) {
+      <section class="news-section">
+        <h3>Recent News</h3>
+        <ul class="news-list">
+          @for (article of stockInfo()!.news; track article.link ?? article.title ?? $index) {
+            <li class="news-item">
+              <div class="news-header">
+                @if (article.link) {
+                  <a class="news-title" [href]="article.link" target="_blank" rel="noopener noreferrer">{{ article.title || 'View article' }}</a>
+                } @else {
+                  <span class="news-title">{{ article.title || 'Article' }}</span>
+                }
+                <div class="news-meta">
+                  @if (article.publisher) {
+                    <span class="news-publisher">{{ article.publisher }}</span>
+                  }
+                  @if (formatNewsDate(article.publishedAt)) {
+                    <span class="news-date">{{ formatNewsDate(article.publishedAt) }}</span>
+                  }
+                </div>
+              </div>
+              @if (article.summary) {
+                <p class="news-summary">{{ article.summary }}</p>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    } @else if (!stockInfoLoading() && !stockInfoError() && stockInfo()) {
+      <section class="news-section">
+        <h3>Recent News</h3>
+        <p class="no-data">No recent news found.</p>
+      </section>
+    }
+
+    <!-- Charts are built entirely from the cached price history. -->
+    @if (stock()) {
+    <div class="charts-section">
+      <div class="chart-card">
+        <h3>Weekly Close Prices <small>{{ weeklyCloseChart().rangeLabel }}</small></h3>
+        @if (weeklyCloseChart().points.length) {
+          <!-- One scroll container: points and their x labels can never drift. -->
+          <div class="line-chart-scroll">
+            <svg
+              class="line-chart-svg"
+              [attr.viewBox]="weeklyCloseChart().viewBox"
+              [style.width.px]="weeklyCloseChart().width"
+              [style.height.px]="weeklyCloseChart().height"
+              role="img"
+              aria-label="Weekly close prices line chart"
+              (mousemove)="onChartMove($event, weeklyCloseChart())"
+              (mouseleave)="clearChartHover()"
+            >
+              <defs>
+                <linearGradient id="lineAreaFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="var(--primary)" stop-opacity=".12"></stop>
+                  <stop offset="100%" stop-color="var(--primary)" stop-opacity="0"></stop>
+                </linearGradient>
+              </defs>
+
+              <polygon class="line-area" [attr.points]="weeklyCloseChart().area"></polygon>
+
+              <g class="axes">
+                <line class="axis axis-y"
+                      [attr.x1]="weeklyCloseChart().padding" [attr.x2]="weeklyCloseChart().padding"
+                      [attr.y1]="weeklyCloseChart().padding" [attr.y2]="weeklyCloseChart().baselineY"></line>
+                <line class="axis axis-x"
+                      [attr.x1]="weeklyCloseChart().padding" [attr.x2]="weeklyCloseChart().width - weeklyCloseChart().padding"
+                      [attr.y1]="weeklyCloseChart().baselineY" [attr.y2]="weeklyCloseChart().baselineY"></line>
+                @for (tick of weeklyCloseChart().ticks; track tick.value) {
+                  <g class="y-tick" [attr.transform]="'translate(0,' + tick.y + ')'">
+                    <line class="tick-line"
+                          [attr.x1]="weeklyCloseChart().padding - 4"
+                          [attr.x2]="weeklyCloseChart().width - weeklyCloseChart().padding" y1="0" y2="0"></line>
+                    <text class="tick-label" [attr.x]="weeklyCloseChart().padding - 10" y="4">{{ formatPrice(tick.value) }}</text>
+                  </g>
+                }
+              </g>
+
+              <!-- Year boundaries, replacing the old current-year-only filter. -->
+              @for (boundary of weeklyCloseChart().boundaries; track boundary.year) {
+                <g class="year-boundary">
+                  <line [attr.x1]="boundary.x" [attr.x2]="boundary.x"
+                        [attr.y1]="weeklyCloseChart().padding" [attr.y2]="weeklyCloseChart().baselineY"></line>
+                  <text [attr.x]="boundary.x + 4" [attr.y]="weeklyCloseChart().padding + 10">{{ boundary.year }}</text>
+                </g>
+              }
+
+              <polyline class="line-path" [attr.points]="weeklyCloseChart().polyline"></polyline>
+
+              @for (point of weeklyCloseChart().points; track point.label; let index = $index) {
+                @if (isLabelledPoint(index, weeklyCloseChart().points.length)) {
+                  <text class="x-label" [attr.x]="point.x" [attr.y]="weeklyCloseChart().baselineY + 16">{{ point.label }}</text>
+                }
+              }
+
+              @if (hoveredPoint; as hover) {
+                <g class="hover-marker">
+                  <line [attr.x1]="hover.x" [attr.x2]="hover.x"
+                        [attr.y1]="weeklyCloseChart().padding" [attr.y2]="weeklyCloseChart().baselineY"></line>
+                  <circle [attr.cx]="hover.x" [attr.cy]="hover.y" r="4.5"></circle>
+                  <text [attr.x]="hover.x" [attr.y]="hover.y - 12" text-anchor="middle">
+                    {{ hover.label }} · {{ formatPrice(hover.value) }}
+                  </text>
+                </g>
+              }
+
+              <!-- The latest point stays marked and labelled. -->
+              @if (weeklyCloseChart().points[weeklyCloseChart().points.length - 1]; as last) {
+                <g class="last-marker">
+                  <circle [attr.cx]="last.x" [attr.cy]="last.y" r="4"></circle>
+                  <text [attr.x]="last.x - 8" [attr.y]="last.y - 10" text-anchor="end">{{ formatPrice(last.value) }}</text>
+                </g>
+              }
+            </svg>
+          </div>
+        } @else {
+          <p class="no-data">No weekly close data available.</p>
+        }
+      </div>
+
+      <div class="chart-card">
+        <h3>Weekly Slopes Heat Map <small>value on hover</small></h3>
+        @if (slopeHeatmap().rows.length) {
+          <div class="heatmap-scroll">
+            <div class="heatmap">
+              <div class="heatmap-row heatmap-header">
+                <div class="heatmap-year">Year</div>
+                <div class="heatmap-cells">
+                  @for (week of weeklyColumns(); track week) {
+                    <div class="heatmap-week">{{ isLabelledWeek(week) ? 'W' + week : '' }}</div>
+                  }
+                </div>
+              </div>
+              @for (row of slopeHeatmap().rows; track row.year) {
+                <div class="heatmap-row">
+                  <div class="heatmap-year">{{ row.year }}</div>
+                  <div class="heatmap-cells">
+                    @for (cell of row.cells; track cell.week) {
+                      <div
+                        class="heatmap-cell"
+                        [style.backgroundColor]="getHeatmapColor(cell.value, slopeHeatmap().extreme)"
+                        [matTooltip]="cell.value === null ? 'Week ' + cell.week + ': no data' : 'Week ' + cell.week + ': ' + formatSlope(cell.value)"
+                        matTooltipPosition="above"
+                      ></div>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="heatmap-legend">
+            <small>−{{ formatSlope(slopeHeatmap().extreme) }}</small>
+            <span class="legend-scale">
+              @for (swatch of heatmapLegend(slopeHeatmap().extreme); track $index) {
+                <i [style.backgroundColor]="swatch"></i>
+              }
+            </span>
+            <small>+{{ formatSlope(slopeHeatmap().extreme) }}</small>
+          </div>
+        } @else {
+          <p class="no-data">No weekly slope data available.</p>
+        }
+      </div>
+    </div>
+    }
+
+  </div>
+} @else if (stockError() && stockInfoError()) {
+  <!-- Only a dead end when BOTH sources failed. -->
+  <div class="detail-unavailable">
+    <h1 class="page-title">{{ symbol() }}</h1>
+    <div class="banner banner-warn" role="alert">
+      <span aria-hidden="true">⚠</span>
+      <div>{{ stockError() }}</div>
+    </div>
+    <a class="btn" routerLink="/momentum">Back to Momentum</a>
+  </div>
+} @else {
+  <p>Loading stock details...</p>
+}

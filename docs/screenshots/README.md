@@ -1,0 +1,89 @@
+# Screenshots
+
+Feature screenshots used by the root README and the docs.
+
+**Every image here is captured from a credential-free checkout containing only
+starter market data and synthetic examples.** No real position, account name or
+number, cost basis, transaction, trade history, token, or local filesystem path
+appears in any of them. That is a hard rule, not a preference — see
+[../../CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+## Inventory
+
+Captured 2026-07-26. Data mode: `bootstrap-data` starter universe (97 ETFs plus
+AAPL and MSFT, 2025–2026), no API key, no brokerage connected. Light theme, the
+application's only theme.
+
+| File | Route | Viewport | Shows |
+|---|---|---|---|
+| `momentum-scanner.png` | `/momentum` | 1440×900 | Setup-ranked candidates from starter data. The README's lead image. |
+| `sectors.png` | `/sectors` | 1440×900 | 11-sector leadership against SPY, with its not-a-fund-flow caveat. |
+| `research-studies.png` | `/studies` | 1440×900 | The study catalog, including the `FAILED` verdict. |
+| `wheel.png` | `/wheel` | 1440×900 | Wheel candidates from the local price cache. No credential needed. |
+| `wheel-explainer.png` | `/wheelExplainer` | 1440×900 | Wheel mechanics and field definitions. |
+| `portfolios.png` | `/portfolios` | 1440×900 | The five portfolios bootstrap seeds, compared equal-weighted against SPY. Exactly what a new user sees after `bootstrap-data`. |
+| `portfolio-detail-defensive-broad.png` | `/portfolios` → detail drawer | 1440×1000 | The "Defensive - Broad" detail drawer, showing a portfolio holding more than one symbol: per-member price, weekly move, 52-week range, and YTD/inception returns. |
+| `stock-detail-aapl.png` | `/stockDetail/AAPL` | 1440×900 | Per-symbol analysis for a well-known public company. |
+| `options-ledger-unconfigured.png` | `/options` | 1440×900 | The optional-setup state with no brokerage connected. |
+| `retirement-unconfigured.png` | `/retirement` | 1440×900 | The same, for the retirement ledger. |
+| `momentum-scanner-mobile.png` | `/momentum` | 420×900 | The most table-dense screen at a narrow width. |
+
+Both Wheel screens are included because they communicate different things: the
+scan output, and the methodology behind it.
+
+## Capture procedure
+
+1. Start from a **fresh clone** with no credentials:
+
+   ```bash
+   ./setup.sh
+   ./commands.sh bootstrap-data
+   ./commands.sh wheel
+   ./commands.sh sector-rotation
+   ```
+
+2. Confirm nothing is configured — every credential must be blank:
+
+   ```bash
+   ./setup-brokerages.sh status     # both providers NOT_CONFIGURED
+   grep -E '^(FINNHUB|TT_|SNAPTRADE)' app.env
+   ```
+
+3. Nothing extra to set up for the portfolio shots — `bootstrap-data` seeds the
+   five portfolios on a first run. Confirm with `curl -s localhost:8000/portfolios`.
+
+4. Build and serve, then capture each route with headless Chrome at
+   `--force-device-scale-factor=2`, `--hide-scrollbars`, and
+   `--virtual-time-budget=8000`. Headless capture is what keeps browser chrome,
+   bookmarks, profile names, and local URLs out of the frame.
+
+5. `portfolio-detail-defensive-broad.png` needs a click, because the detail view
+   is a drawer with no URL of its own. Run Chrome with
+   `--remote-debugging-port`, then drive it over the DevTools Protocol: navigate,
+   click the element whose `aria-label` contains the portfolio name, wait for the
+   drawer, and `Page.captureScreenshot`.
+
+6. Downscale to 1800px wide so the set stays visually consistent.
+
+## Refreshing
+
+Recapture when a screen changes materially — new columns, a restructured layout,
+or changed copy. Cosmetic drift is not worth the churn.
+
+When you do, recapture the whole inventory rather than one file, so the set stays
+visually consistent, and update the capture date above.
+
+## Rules
+
+- Starter or synthetic data only. Never the maintainer's real account.
+- No browser chrome, no address bar, no OS menu bar, no notifications.
+- No local filesystem path visible in the frame.
+- Filenames are lowercase and descriptive, matching the route they show.
+- Every image referenced from a README needs meaningful alt text describing what
+  it demonstrates, not just "screenshot".
+- Verify against [`../../stock-app-ui/docs/UX_GUIDANCE.md`](../../stock-app-ui/docs/UX_GUIDANCE.md):
+  status must never be conveyed by colour alone, and risk, staleness, and
+  caveat labels must remain legible.
+
+Before committing a new screenshot, look at it at full size and read every
+value in it.

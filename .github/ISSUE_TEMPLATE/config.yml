@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/nhznl/smallFish/security/advisories/new
+    about: >-
+      Report privately. Do NOT open a public issue for a security problem, and
+      never paste a credential or real account data into any report.
+  - name: Question or discussion
+    url: https://github.com/nhznl/smallFish/discussions
+    about: >-
+      Usage questions and ideas. Please check docs/TROUBLESHOOTING.md first.

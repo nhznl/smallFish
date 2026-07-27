@@ -1,0 +1,5 @@
+symbol,name,type,memberships,source,pinned,last_seen,sector
+AAA,Alpha Corp,STOCK,sp500;dow,auto,false,2026-07-16,Technology
+BBB,Beta ETF,ETF,,curated,false,2026-07-16,
+CCC,Gamma Inc,STOCK,spMidCap,auto,false,2026-07-16,Health Care
+DDD,Delta Pinned,STOCK,,manual,true,2026-07-16,
