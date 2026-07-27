@@ -38,13 +38,25 @@ Everything here works with **no account and no API key**:
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/options-ledger-unconfigured.png" width="49%"
-       alt="The Options Ledger with no brokerage connected, showing an optional-setup card with the exact command to enable it">
   <img src="docs/screenshots/portfolios.png" width="49%"
        alt="The Portfolios view comparing five seeded portfolios equal-weighted against SPY">
+  <img src="docs/screenshots/wheel.png" width="49%"
+       alt="The Wheel screen ranking cash-secured put candidates from the local price cache">
 </p>
 
-More in [`docs/screenshots/`](docs/screenshots/README.md).
+With a brokerage connected, the ledgers show positions, group P/L, and
+portfolio risk. Both frames below use **synthetic demonstration data** — no real
+account or position:
+
+<p align="center">
+  <img src="docs/screenshots/options-ledger-connected.png" width="49%"
+       alt="The Options Ledger with Tastytrade connected, showing cash-secured put groups, per-leg risk with live IV and Greeks, and a complete portfolio-risk panel">
+  <img src="docs/screenshots/retirement-options-connected.png" width="49%"
+       alt="The Retirement Ledger options tab showing covered calls held against retirement holdings, with per-leg beta-delta and a complete risk panel">
+</p>
+
+Both ledgers show an actionable optional-setup card until a brokerage is
+connected. More in [`docs/screenshots/`](docs/screenshots/README.md).
 
 Optional, each independently:
 
