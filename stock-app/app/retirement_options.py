@@ -537,6 +537,9 @@ def snapshot(*, as_of: date | None = None, market_provider=_default_market_provi
         leg_market = market.get(row["id"]) or market.get(row["symbol"])
         out = {key: value for key, value in row.items() if not key.startswith("_")}
         out["current_underlying_price"] = leg_market.spot if leg_market else None
+        # The session the spot closed on. Without it the column reads as live,
+        # and over a weekend it can trail the page's own timestamp by days.
+        out["price_as_of"] = leg_market.price_as_of if leg_market else None
         out["dte_remaining"] = None
         out["percent_to_strike"] = None
         out["needs_settlement"] = False

@@ -141,6 +141,15 @@
   margin-left: auto;
 }
 
+/* Provenance for the price column, next to the numbers it qualifies rather
+   than in the page header where it reads as a freshness badge. */
+.price-note {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+.price-note strong { color: var(--text-primary); font-weight: 600; }
+
 /* ── Holdings table ── */
 .table-wrapper {
   overflow-x: auto;

@@ -197,6 +197,14 @@
         </button>
       </div>
 
+      <!-- The page header timestamp says when the broker was polled, which
+           reads as "these are today's prices". It is not: the marks settle on
+           the last close, so the two can be days apart over a weekend. -->
+      <p class="price-note">
+        <strong>Mkt Price/Share</strong> is the broker's mark from the last sync<ng-container *ngIf="data?.retrievedAt"> ({{ data!.retrievedAt | date:'MMM d, h:mm a' }})</ng-container>.
+        It reflects the most recent market close, not a live intraday price.
+      </p>
+
       <!-- Holdings table -->
       <div class="table-wrapper">
         <table class="holdings-table">
@@ -569,7 +577,7 @@
                 <td>{{ row.trade_type }}</td><td>{{ row.qty }}</td><td>{{ money(row.strike) }}</td>
                 <td>{{ row.expiry || '—' }}<small *ngIf="row.dte_remaining != null" [class.urgent]="row.dte_remaining <= 7">{{ row.dte_remaining }} DTE</small></td>
                 <td>{{ optionPrice(row.mark_price) }}<small>Retrieved {{ shortTs(row.mark_retrieved_at) }}</small></td>
-                <td>{{ money(row.current_underlying_price) }}<small>{{ strikeDistanceLabel(row) }}</small></td>
+                <td>{{ money(row.current_underlying_price) }}<small>{{ strikeDistanceLabel(row) }}</small><small *ngIf="row.price_as_of">Close · {{ row.price_as_of }}</small></td>
                 <td>{{ pct(optionPositionRisk(row)?.vol_annual) }}<small>{{ ivSourceLabel(optionPositionRisk(row)?.delta_source) }} · {{ shortTs(optionPositionRisk(row)?.vol_as_of) }}</small></td>
                 <td>{{ num(optionPositionRisk(row)?.delta_shares, 1) }}</td>
                 <td>{{ num(optionPositionRisk(row)?.computed_beta, 3) }}<small>Computed · {{ optionPositionRisk(row)?.computed_beta_as_of || '—' }}</small></td>

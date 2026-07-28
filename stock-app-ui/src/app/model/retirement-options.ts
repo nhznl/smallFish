@@ -19,6 +19,8 @@ export interface RetirementOptionRow {
   non_standard: boolean;
   dte_remaining?: number | null;
   current_underlying_price?: number | null;
+  /** Session the spot closed on, from the price cache. */
+  price_as_of?: string | null;
   percent_to_strike?: number | null;
   needs_settlement?: boolean;
 }
