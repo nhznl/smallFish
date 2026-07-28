@@ -108,7 +108,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `GET /portfolios/{id}` | One portfolio, with per-symbol detail. |
 | `GET /stocks/{symbol}/analysis` | Focused cached-analysis data for Stock Detail. |
 | `GET /stocks` | Legacy collection using the same focused analysis contract. |
-| `GET /momentumStocks` | Compact, setup-ranked payload for the merged Momentum Scanner. |
+| `GET /momentumStocks` | Compact, setup-ranked payload for the merged Momentum Scanner, including days to the next cached earnings date. |
 | `GET /api/studies` | Materialized Research Studies catalog. |
 | `GET /api/studies/{studyId}` | Validated materialized study detail and variations. |
 | `GET /api/studies/{studyId}/scan` | Latest materialized candidate snapshot for a scan-capable study. |
@@ -122,6 +122,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `GET /retirement/options` | Retirement option legs as editable trade groups + a broker risk-positions table. |
 | `PUT /retirement/options/groups/{symbol}` | Update the editable name/status/notes for one option group (underlying). |
 | `GET /runWheel`, `/runChains` | Run the wheel job (with best-effort upcoming-earnings refresh) and manual prospective option-quote collection. |
+| `GET /runEarningsScan` | Refresh the shared upcoming-earnings calendar (Finnhub, only when stale), then report how many scanner symbols have an upcoming report. |
 
 `GET /options?account=` returns `rows`, `wheel_groups`, `totals`, `risk`, and
 `warnings`. The optional account is `RETIREMENT` or `TRADING`; omitting it

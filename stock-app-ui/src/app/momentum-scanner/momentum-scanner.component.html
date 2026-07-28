@@ -68,6 +68,30 @@
     </label>
     <button type="button" class="reset" (click)="resetFilters()">Reset</button>
     <span class="result-count">{{ visibleCount | number }} shown</span>
+    <button
+      type="button"
+      class="btn earnings-button"
+      [disabled]="earningsRunning || loading"
+      (click)="runEarningsScan()"
+      matTooltip="Refresh the upcoming-earnings calendar from Finnhub, then reload the table. A calendar fetched within the last day that still covers the scan horizon is reused as-is, so Finnhub is contacted only when it is stale or missing. A failed refresh keeps the previous calendar."
+      matTooltipPosition="above">
+      @if (earningsRunning) {
+        <span class="btn-spinner" aria-hidden="true"></span>
+      }
+      {{ earningsRunning ? 'Running…' : 'Earnings Scan' }}
+    </button>
+    <!-- Its own wrapped line, so the status never displaces the controls above it. -->
+    @if (earningsMessage) {
+      <div class="earnings-status-row">
+        <p class="job-status earnings-status"
+          [class]="'job-status earnings-status ' + earningsStatusClass()">
+          @if (earningsMessageAt) {
+            <span class="job-time">{{ earningsMessageAt | date:'HH:mm:ss' }}</span>
+          }
+          {{ earningsMessage }}
+        </p>
+      </div>
+    }
   </div>
 
   @if (loading) {
@@ -181,8 +205,22 @@
             </td>
           </ng-container>
           <ng-container matColumnDef="trigger">
-            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="For a confirmed reversal, this shows whether the turn is upward or downward. For continuations, it shows the current trend age in sessions." matTooltipPosition="above">Trigger / Age</th>
-            <td mat-cell *matCellDef="let stock" class="trigger-cell">{{ stock.triggerLabel || '—' }}</td>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="For a confirmed reversal, this shows whether the turn is upward or downward. For continuations, it shows how long the current trend has already been in place — 'Trend 14d' means 14 sessions elapsed, not 14 remaining. Sorts by that trend age for every row." matTooltipPosition="above">Trigger / Age</th>
+            <td mat-cell *matCellDef="let stock" class="trigger-cell" [matTooltip]="trendAgeTooltip(stock)" matTooltipPosition="above">{{ stock.triggerLabel || '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="daysToEarnings">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Calendar days to the next earnings report, from the cached Finnhub calendar the Earnings Scan button refreshes. A dash means no report is known inside the fetched window. Rows with no known date sort last." matTooltipPosition="above">Earnings <small>days</small></th>
+            <td mat-cell *matCellDef="let stock" class="earnings-cell" [class.earnings-soon]="earningsSoon(stock)"
+              [matTooltip]="earningsTooltip(stock)" matTooltipPosition="above">
+              @if (stock.daysToEarnings != null) {
+                @if (earningsSoon(stock)) {
+                  <span aria-hidden="true">⚠</span>
+                }
+                {{ stock.daysToEarnings }}d
+              } @else {
+                —
+              }
+            </td>
           </ng-container>
           <ng-container matColumnDef="freshness">
             <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Complete means fresh data and every core input is present: ATR %, realized-volatility expansion, volume ratio, average dollar volume, and SPY-relative return. Partial has missing data; Check data is stale, date-mismatched, or incomplete." matTooltipPosition="above">Evidence</th>
@@ -290,7 +328,20 @@
               <span>Avg close {{ week.avgClose | currency:'USD':'symbol':'1.2-2' }}</span>
               <span>Avg range ${{ week.avgChange | number:'1.2-2' }}</span>
               <span>Avg range {{ week.relativeMomentum | number:'1.0-0' }}%</span>
-              <span>Return vol {{ week.relativeMomentumStd | number:'1.2-2' }}%</span>
+              <span>Avg volume {{ formatCompact(week.avgVolume) }}</span>
+              <span
+                class="week-volatility"
+                [class.incomplete]="!hasFullWeek(week)"
+                [matTooltip]="returnVolatilityTooltip(week)"
+                matTooltipPosition="above">
+                <span>Return Volatility <span class="info-bubble" aria-hidden="true">i</span></span>
+                <span class="week-volatility-value">{{ week.relativeMomentumStd | number:'1.2-2' }}%</span>
+                @if (!hasFullWeek(week)) {
+                  <!-- Fewer than five sessions is a data caveat, not a value:
+                  the session count is shown, not only the red color. -->
+                  <span class="week-sessions">⚠ {{ week.sessionCount }}/5 sessions</span>
+                }
+              </span>
             </div>
           }
         </div>

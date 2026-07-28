@@ -213,6 +213,57 @@ h1 {
   font-weight: 600;
 }
 
+/* The earnings refresh closes the filter row; `.result-count` already claims
+   the free space, so the button lands at the right end. */
+.earnings-button {
+  margin-left: 10px;
+}
+
+/* Its own wrapped line under the button, matching the job strip on Wheel and
+   Sectors. Full-basis so appearing never reflows the controls above it. */
+.earnings-status-row {
+  display: flex;
+  justify-content: flex-end;
+  flex-basis: 100%;
+}
+
+.earnings-status {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  max-width: 100%;
+  margin: 0;
+  padding: 4px 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.earnings-status .job-time {
+  font-variant-numeric: tabular-nums;
+  opacity: .7;
+}
+
+.earnings-status.job-running {
+  background: var(--surface-sunken);
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.earnings-status.job-ok {
+  background: var(--pos-soft);
+  border-color: rgb(27 127 59 / .22);
+  color: var(--pos);
+}
+
+.earnings-status.job-error {
+  background: var(--neg-soft);
+  border-color: rgb(192 38 38 / .22);
+  color: var(--neg);
+}
+
 .info-bubble {
   display: inline-flex;
   align-items: center;
@@ -389,6 +440,18 @@ h1 {
 
 .trigger-cell {
   color: var(--text-secondary);
+}
+
+.earnings-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Event risk near the decision: a report inside a week can break the setup
+   regardless of its score. */
+.earnings-soon {
+  color: var(--warn);
+  font-weight: 700;
 }
 
 .rsi-arrow {
@@ -601,6 +664,29 @@ h1 {
 }
 
 .week-card span { color: var(--text-secondary); }
+
+.week-volatility {
+  display: grid;
+  gap: 2px;
+  cursor: help;
+}
+
+.week-volatility-value {
+  font-weight: 700;
+}
+
+/* A week short of five sessions has fewer daily changes behind its volatility;
+   the count next to it carries the same meaning without relying on color. */
+.week-volatility.incomplete,
+.week-card span.week-volatility.incomplete {
+  color: var(--neg);
+  font-weight: 700;
+}
+
+.week-sessions {
+  color: inherit;
+  font-weight: 600;
+}
 
 @media (max-width: 900px) {
   .scanner-header { flex-direction: column; }

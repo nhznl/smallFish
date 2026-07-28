@@ -78,6 +78,9 @@ export interface MomentumStock {
     endDate: Date | null;
     avgClose: number;
     avgChange: number;
+    avgVolume: number;
+    /** Sessions behind the week's statistics; fewer than 5 means a short week. */
+    sessionCount: number;
     relativeMomentum: number;
     relativeMomentumStd: number;
   }>;
@@ -102,6 +105,10 @@ export interface MomentumStock {
   setupScoreComponents?: Record<string, number>;
   setupReason?: string;
   triggerLabel?: string;
+  /** Next cached Finnhub earnings date; null when none is known for the symbol. */
+  nextEarningsDate?: string | null;
+  /** Calendar days from today to that report; 0 means it reports today. */
+  daysToEarnings?: number | null;
   preliminaryReversal?: boolean;
   preliminaryReversalLabel?: string | null;
   advancedTrendWithVolume?: MomentumTrend | null;

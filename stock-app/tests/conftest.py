@@ -19,6 +19,10 @@ def env_fixtures(monkeypatch):
     monkeypatch.setenv("SFP_PRICE_CACHE", str(FIXTURES / "cache"))
     monkeypatch.setenv("SFP_UNIVERSE_CSV", str(FIXTURES / "universe.csv"))
     monkeypatch.setenv("SFP_RETIRED_SYMBOLS_CSV", str(FIXTURES / "retired_symbols.csv"))
+    # The fixture set deliberately ships no earnings calendar: days-to-earnings
+    # is relative to today, so a committed file would decay. Tests that need the
+    # join write their own calendar and repoint this variable.
+    monkeypatch.setenv("SFP_EVENTS_CSV", str(FIXTURES / "events-absent.csv"))
     yield FIXTURES
 
 

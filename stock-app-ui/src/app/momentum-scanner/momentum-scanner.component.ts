@@ -76,9 +76,15 @@ export class MomentumScannerComponent {
     'rsi',
     'atrPct',
     'trigger',
+    'daysToEarnings',
     'freshness',
     'details'
   ];
+
+  /** A week is complete at five sessions; fewer weakens its return volatility. */
+  private static readonly FULL_WEEK_SESSIONS = 5;
+  /** Reports inside this many days are flagged as event risk on the row. */
+  private static readonly EARNINGS_SOON_DAYS = 7;
 
   readonly setupOptions: SetupOption[] = [
     { value: 'BULLISH_CONTINUATION', label: 'Bullish', icon: '↑', tooltip: 'Established upward trend with aligned momentum. Research stock or call entries; this is a screen, not a trade recommendation.' },
@@ -106,6 +112,10 @@ export class MomentumScannerComponent {
   fiveWeekAnchor: Date | null = null;
   pageIndex = 0;
   pageSize = 50;
+  earningsRunning = false;
+  earningsStatus: 'idle' | 'ok' | 'error' = 'idle';
+  earningsMessage: string | null = null;
+  earningsMessageAt: Date | null = null;
 
   constructor() {
     this.capabilityService.get('core-data')
@@ -115,6 +125,10 @@ export class MomentumScannerComponent {
         this.cdr.markForCheck();
       });
 
+    this.loadStocks();
+  }
+
+  private loadStocks(): void {
     this.stockService.getMomentumStocks()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -217,6 +231,52 @@ export class MomentumScannerComponent {
     this.participatingVolumeOnly = false;
     this.etfsOnly = false;
     this.applyFilters();
+  }
+
+  /**
+   * Refresh the upcoming-earnings calendar, then reload the table so the
+   * days-to-earnings column reflects what was just written.
+   */
+  runEarningsScan(): void {
+    if (this.earningsRunning) return;
+    this.earningsRunning = true;
+    this.earningsStatus = 'idle';
+    this.earningsMessage = 'Checking the upcoming-earnings calendar…';
+    this.earningsMessageAt = new Date();
+    this.cdr.markForCheck();
+
+    this.stockService.runEarningsScan()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(res => {
+        this.earningsRunning = false;
+        this.earningsMessageAt = new Date();
+        const covered = res?.symbolsWithUpcomingEarnings;
+        const total = res?.scannerSymbols;
+        const coverage = covered != null && total != null
+          ? `${covered} of ${total} scanner symbols have upcoming earnings`
+          : null;
+        if (res && res.status === 'ok') {
+          this.earningsStatus = 'ok';
+          const through = res.eventsCoverageEnd ? ` through ${res.eventsCoverageEnd}` : '';
+          this.earningsMessage = `✓ Earnings calendar ready${through}`
+            + (coverage ? `. ${coverage}.` : '.');
+          this.loadStocks();
+        } else {
+          this.earningsStatus = 'error';
+          // A failed refresh keeps the previous calendar, so say what the table
+          // is still showing rather than implying the column is empty.
+          const reason = res?.message || res?.output || 'see server logs';
+          this.earningsMessage = `✗ Earnings refresh failed: ${reason}`
+            + (coverage ? ` Showing the previous calendar: ${coverage}.` : '');
+        }
+        this.cdr.markForCheck();
+      });
+  }
+
+  earningsStatusClass(): string {
+    if (this.earningsStatus === 'ok') return 'job-ok';
+    if (this.earningsStatus === 'error') return 'job-error';
+    return 'job-running';
   }
 
   openDetails(stock: MomentumStock): void {
@@ -336,6 +396,58 @@ export class MomentumScannerComponent {
     }).format(value);
   }
 
+  hasFullWeek(week: MomentumStock['recentWeeks'][number]): boolean {
+    return (week.sessionCount ?? 0) >= MomentumScannerComponent.FULL_WEEK_SESSIONS;
+  }
+
+  /** How the week's return volatility was computed, and what weakens it. */
+  returnVolatilityTooltip(week: MomentumStock['recentWeeks'][number]): string {
+    const full = MomentumScannerComponent.FULL_WEEK_SESSIONS;
+    const sessions = week.sessionCount ?? 0;
+    const base = 'Return Volatility: the standard deviation of this week\'s day-to-day '
+      + 'closing-price changes, divided by the week\'s average close, shown as a percent. '
+      + 'It measures how much the daily moves varied within the week, not their direction, '
+      + 'and it is computed only from this week\'s cached sessions.';
+    if (sessions === 0) {
+      return `${base} No cached sessions for this week, so there is nothing to measure.`;
+    }
+    if (sessions < full) {
+      return `${base} Incomplete: based on ${sessions} of ${full} sessions`
+        + `${sessions === 1 ? ' — a single session has no day-to-day change, so it reads 0.00%' : ''}`
+        + `, which is ${sessions - 1} daily change${sessions - 1 === 1 ? '' : 's'} instead of ${full - 1}. `
+        + 'A holiday-shortened or partially cached week makes this figure less reliable.';
+    }
+    return `${base} Based on all ${full} sessions of the week.`;
+  }
+
+  trendAgeTooltip(stock: MomentumStock): string {
+    const days = stock.advancedTrendWithVolume?.currentTrendDays;
+    if (days == null) return 'No trend age: the trend engine has insufficient history.';
+    return `Elapsed, not remaining: the current ${stock.advancedTrendWithVolume?.direction?.toLowerCase() || ''} `
+      + `trend has been in place for ${days} session${days === 1 ? '' : 's'} through the latest cached close. `
+      + 'It says nothing about how much longer it will last.';
+  }
+
+  earningsSoon(stock: MomentumStock): boolean {
+    const days = stock.daysToEarnings;
+    return days != null && days <= MomentumScannerComponent.EARNINGS_SOON_DAYS;
+  }
+
+  earningsTooltip(stock: MomentumStock): string {
+    const days = stock.daysToEarnings;
+    if (days == null) {
+      return 'No upcoming earnings date for this symbol in the cached Finnhub calendar. '
+        + 'That can mean no report is scheduled inside the fetched window, or that the '
+        + 'calendar has not been refreshed — run Earnings Scan to refresh it.';
+    }
+    const when = days === 0 ? 'today'
+      : days === 1 ? 'tomorrow'
+      : `in ${days} calendar days`;
+    return `Reports ${when}, on ${this.formatDate(stock.nextEarningsDate)} `
+      + '(nearest upcoming date in the cached Finnhub calendar). '
+      + 'An earnings report can break a momentum setup regardless of its score.';
+  }
+
   fiftyTwoWeekRangeTooltip(stock: MomentumStock): string {
     const { fiftyTwoWeekLow: low, fiftyTwoWeekHigh: high, fiftyTwoWeekPosition: position } = stock;
     if (low == null || high == null || position == null) {
@@ -426,7 +538,10 @@ export class MomentumScannerComponent {
       case 'volumeRatio': return stock.volumeRatio ?? null;
       case 'rsi': return stock.advancedTrendWithVolume?.rsi ?? null;
       case 'atrPct': return stock.atrPct ?? null;
-      case 'trigger': return stock.daysSinceMacdCross ?? null;
+      // The column renders trend age, so it sorts by trend age. It previously
+      // sorted by MACD cross age, which is a different number entirely.
+      case 'trigger': return stock.advancedTrendWithVolume?.currentTrendDays ?? null;
+      case 'daysToEarnings': return stock.daysToEarnings ?? null;
       case 'freshness': return stock.freshnessStatus || '';
       default: return null;
     }

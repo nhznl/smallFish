@@ -71,6 +71,8 @@ Requests go through the services in `src/app/api/` to the FastAPI backend. The
 principal endpoints are:
 
 - `GET /momentumStocks` for the compact, setup-ranked Momentum Scanner payload.
+- `GET /runEarningsScan` for the scanner's Earnings Scan button: refreshes the
+  shared upcoming-earnings calendar and reports its scanner coverage.
 - `GET /stocks/{symbol}/analysis` for Stock Detail's focused cached analysis.
 - `GET /api/studies` and `GET /api/studies/{studyId}` for materialized research.
 - `GET /api/studies/{studyId}/scan` for current materialized candidates.

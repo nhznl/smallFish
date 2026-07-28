@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from ..cache import cache
+from ..events_read import read_upcoming_earnings
 from ..serializers import momentum_stock_dict, stock_detail_dict, trade_data_dict
 
 router = APIRouter()
@@ -46,4 +47,7 @@ def get_momentum_stocks() -> JSONResponse:
         -s.setup_score(),
         s.code,
     ))
-    return JSONResponse(content=[momentum_stock_dict(s) for s in non_penny])
+    # One reading of the earnings calendar for the whole response, so every row
+    # counts its days to earnings from the same market date.
+    earnings = read_upcoming_earnings()
+    return JSONResponse(content=[momentum_stock_dict(s, earnings) for s in non_penny])

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from .dates import market_date_iso
+from .events_read import UpcomingEarnings
 from .stock_model import GainLoss, SETUP_SCORE_VERSION, Stock
 from .trend_engine import Daily, float32_json
 
@@ -128,12 +131,18 @@ def strategy_stock_dict(s: Stock) -> dict:
     }
 
 
-def momentum_stock_dict(s: Stock) -> dict:
-    """Return only fields rendered by the scanner table and evidence drawer."""
+def momentum_stock_dict(s: Stock, earnings: UpcomingEarnings | None = None) -> dict:
+    """Return only fields rendered by the scanner table and evidence drawer.
+
+    `earnings` is the shared upcoming-earnings calendar, passed in by the router
+    so the whole response is joined against one reading of that artifact. Both
+    earnings fields are null when no upcoming event is cached for the symbol.
+    """
     def metric(value: float | None, decimals: int = 4) -> float | None:
         return None if value is None else round(value, decimals)
 
     atv = s.advanced_trend_with_volume
+    next_earnings = earnings.next_date(s.code) if earnings else None
     return {
         "code": s.code,
         "type": s.type,
@@ -150,6 +159,11 @@ def momentum_stock_dict(s: Stock) -> dict:
             "endDate": market_date_iso(week.end_date) if week.end_date else None,
             "avgClose": float32_json(week.avg_close),
             "avgChange": float32_json(week.avg_change),
+            "avgVolume": week.avg_volume,
+            # Sessions actually behind the week's statistics. A holiday-shortened
+            # or partially cached week yields a return volatility computed from
+            # fewer daily changes, which the drawer marks as incomplete.
+            "sessionCount": len(week.dailies),
             "relativeMomentum": float32_json(week.relative_momentum),
             "relativeMomentumStd": float32_json(week.relative_momentum_std),
         } for week in s.recent_weeks],
@@ -170,6 +184,10 @@ def momentum_stock_dict(s: Stock) -> dict:
         "setupScoreComponents": s.setup_score_components(),
         "setupReason": s.setup_reason(),
         "triggerLabel": s.trigger_label(),
+        "nextEarningsDate": market_date_iso(
+            datetime(next_earnings.year, next_earnings.month, next_earnings.day)
+        ) if next_earnings else None,
+        "daysToEarnings": earnings.days_until(s.code) if earnings else None,
         "preliminaryReversal": s.has_preliminary_reversal_evidence(),
         "preliminaryReversalLabel": s.preliminary_reversal_label(),
         "advancedTrendWithVolume": {

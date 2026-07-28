@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from .. import config
 from ..cache import cache
+from ..events_read import read_upcoming_earnings
 
 router = APIRouter()
 
@@ -118,6 +119,42 @@ def _run_earnings_dependent_command(job: str, *, require_fresh: bool) -> dict:
             "treat Unknown (stale) earnings as incomplete."
         )
     return result
+
+
+def _earnings_coverage() -> dict:
+    """Describe the calendar the scanner now joins, never the credential.
+
+    Counts scanner rows rather than calendar rows: Finnhub returns the whole
+    market, and the only useful number here is how many of the symbols this
+    scanner shows have a known upcoming report.
+    """
+    earnings = read_upcoming_earnings()
+    scanner_symbols = [s.code for s in cache.stocks() if not s.is_penny()]
+    covered = sum(1 for code in scanner_symbols if earnings.next_date(code) is not None)
+    return {
+        "symbolsWithUpcomingEarnings": covered,
+        "scannerSymbols": len(scanner_symbols),
+        "eventsFetchedAsOf": earnings.fetched_as_of,
+        "eventsCoverageEnd": earnings.coverage_end,
+    }
+
+
+@router.get("/runEarningsScan")
+def run_earnings_scan() -> JSONResponse:
+    """Refresh the shared upcoming-earnings calendar, then report its coverage.
+
+    This is the same `ensure-events` prerequisite the live scans run: a calendar
+    fetched within a day and covering the required horizon is reused as-is, and
+    Finnhub is contacted only when it is stale or missing. A failed refresh
+    keeps the previous calendar rather than emptying it.
+
+    The stock cache does not hold events -- `/momentumStocks` reads the calendar
+    per request -- so no cache reload is needed for the table to show the
+    refreshed dates.
+    """
+    result = _run_command("ensure-events", reload_cache=False)
+    result.update(_earnings_coverage())
+    return JSONResponse(content=result)
 
 
 @router.get("/runWheel")

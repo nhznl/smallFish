@@ -1,7 +1,10 @@
+from datetime import timedelta
+
 from fastapi.testclient import TestClient
 from models.wheel import WHEEL_COLUMNS
 
 from app.cache import cache
+from app.events_read import market_today
 from app.main import app
 
 client = TestClient(app)
@@ -82,6 +85,7 @@ def test_momentum_stocks_returns_scanner_fields(env_fixtures):
         "evidenceQuality", "setup", "setupScore", "setupScoreVersion",
         "setupScoreComponents", "setupReason", "triggerLabel", "preliminaryReversal",
         "preliminaryReversalLabel", "advancedTrendWithVolume",
+        "nextEarningsDate", "daysToEarnings",
     }
     assert data[0]["type"] == "STOCK"
     assert "yearlySlopes" not in data[0]
@@ -92,6 +96,34 @@ def test_momentum_stocks_returns_scanner_fields(env_fixtures):
             "direction", "strength", "rsi", "currentTrendDays",
         }
     assert all("dailies" not in week for week in data[0]["recentWeeks"])
+    assert all(
+        set(week) == {"endDate", "avgClose", "avgChange", "avgVolume", "sessionCount",
+                      "relativeMomentum", "relativeMomentumStd"}
+        for week in data[0]["recentWeeks"]
+    )
+    # No calendar in the fixture set -> unknown earnings, not a fabricated zero.
+    assert data[0]["nextEarningsDate"] is None
+    assert data[0]["daysToEarnings"] is None
+
+
+def test_momentum_joins_the_upcoming_earnings_calendar(env_fixtures, monkeypatch, tmp_path):
+    events = tmp_path / "events.csv"
+    today = market_today()
+    events.write_text(
+        "ticker,event_type,event_date,source,fetched_as_of\n"
+        # A passed report, then the next one: only the upcoming date is joined.
+        f"AAA,earnings,{today - timedelta(days=80)},finnhub,{today}\n"
+        f"AAA,earnings,{today + timedelta(days=9)},finnhub,{today}\n"
+        f"AAA,earnings,{today + timedelta(days=99)},finnhub,{today}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SFP_EVENTS_CSV", str(events))
+
+    row = client.get("/momentumStocks").json()[0]
+
+    assert row["code"] == "AAA"
+    assert row["daysToEarnings"] == 9
+    assert row["nextEarningsDate"].startswith(str(today + timedelta(days=9)))
 
 
 def test_momentum_contract_retains_the_stale_data_state(env_fixtures, monkeypatch):

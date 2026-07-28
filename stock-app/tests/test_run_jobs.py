@@ -8,9 +8,11 @@ deterministic + offline and assert the response SHAPE + tail-lines semantics.
 from __future__ import annotations
 
 import subprocess
+from datetime import date
 
 from fastapi.testclient import TestClient
 
+from app.events_read import UpcomingEarnings
 from app.main import app
 from app.routers import run_jobs
 
@@ -203,6 +205,71 @@ def test_run_sector_rotation_does_not_rebuild_the_stock_cache(monkeypatch):
     assert called["args"][4:] == ["sector-rotation"]
     assert reloaded["n"] == 0
     assert "Sector rotation" in body["output"]
+
+
+class _FakeStock:
+    def __init__(self, code, penny=False):
+        self.code = code
+        self._penny = penny
+
+    def is_penny(self):
+        return self._penny
+
+
+def _stub_scanner_universe(monkeypatch, earnings_symbols):
+    """Scanner rows plus the calendar coverage the endpoint should report."""
+    monkeypatch.setattr(run_jobs.cache, "stocks", lambda: [
+        _FakeStock("AAA"), _FakeStock("BBB"), _FakeStock("CCC"),
+        _FakeStock("PENNY", penny=True),
+    ])
+    monkeypatch.setattr(run_jobs, "read_upcoming_earnings", lambda: UpcomingEarnings(
+        as_of=date(2026, 7, 28),
+        by_symbol={symbol: date(2026, 8, 10) for symbol in earnings_symbols},
+        fetched_as_of="2026-07-28",
+        coverage_end="2026-10-06",
+    ))
+
+
+def test_run_earnings_scan_reports_scanner_coverage(monkeypatch):
+    called: dict = {}
+    reloaded = {"n": 0}
+
+    def _run(args, **kwargs):
+        called["args"] = args
+        return _FakeProc(0, "Refreshed upcoming earnings calendar with 1492 events.")
+
+    monkeypatch.setattr(run_jobs.subprocess, "run", _run)
+    monkeypatch.setattr(run_jobs.cache, "reload",
+                        lambda: reloaded.__setitem__("n", reloaded["n"] + 1))
+    # ZZZ has an event but is not a scanner row; it must not be counted.
+    _stub_scanner_universe(monkeypatch, ["AAA", "CCC", "ZZZ"])
+
+    body = client.get("/runEarningsScan").json()
+
+    assert body["status"] == "ok"
+    assert called["args"][4:] == ["ensure-events"]
+    assert body["symbolsWithUpcomingEarnings"] == 2
+    assert body["scannerSymbols"] == 3
+    assert body["eventsFetchedAsOf"] == "2026-07-28"
+    assert body["eventsCoverageEnd"] == "2026-10-06"
+    # The calendar is read per request by /momentumStocks, so rebuilding the
+    # whole universe cache here would be pure cost.
+    assert reloaded["n"] == 0
+
+
+def test_run_earnings_scan_keeps_the_previous_calendar_visible_on_failure(monkeypatch):
+    monkeypatch.setattr(run_jobs.subprocess, "run", lambda *a, **k: _FakeProc(
+        3, "Upcoming earnings refresh failed (HTTPError); the previous cache was kept."))
+    _stub_scanner_universe(monkeypatch, ["AAA"])
+
+    body = client.get("/runEarningsScan").json()
+
+    assert body["status"] == "error"
+    assert body["exitCode"] == 3
+    # The stale-but-usable calendar is still described, so the UI can say what
+    # the table is showing rather than implying it has no earnings data.
+    assert body["symbolsWithUpcomingEarnings"] == 1
+    assert "previous cache was kept" in body["output"]
 
 
 def test_scan_job_launch_failure(monkeypatch):

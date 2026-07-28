@@ -115,6 +115,17 @@ export class StockService {
       );
   }
 
+  /**
+   * Refresh the shared upcoming-earnings calendar (Finnhub, via `ensure-events`)
+   * and report how many scanner symbols have a known upcoming report.
+   */
+  runEarningsScan(): Observable<any> {
+    return this.http.get<any>(`${this.apiBaseUrl}/runEarningsScan`)
+      .pipe(
+        catchError(this.handleError<any>('runEarningsScan', { status: 'error' }))
+      );
+  }
+
   /** Trigger the Python wheel scan on the server and reload its cache. */
   runWheel(): Observable<any> {
     return this.http.get<any>(`${this.apiBaseUrl}/runWheel`)
