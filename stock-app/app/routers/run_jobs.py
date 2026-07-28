@@ -59,8 +59,8 @@ def _run_command(job: str, args: list[str] | None = None, *,
             "status": "timeout",
             "message": f"{label} did not finish within 5 minutes.",
         }
-    except Exception as exc:  # ProcessBuilder start() failure analogue
-        return {"status": "error", "message": str(exc)}
+    except Exception:  # noqa: BLE001 - never expose launch details to the client
+        return {"status": "error", "message": "The job could not be started."}
 
     exit_code = proc.returncode
     if exit_code == 0 and reload_cache:

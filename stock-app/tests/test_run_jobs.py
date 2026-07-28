@@ -148,5 +148,6 @@ def test_scan_job_launch_failure(monkeypatch):
     monkeypatch.setattr(run_jobs.subprocess, "run", _raise)
     body = run_jobs._run_command("scan")
     assert body["status"] == "error"
-    assert "bash not found" in body["message"]
+    assert body["message"] == "The job could not be started."
+    assert "bash not found" not in body["message"]
     assert set(body) == {"status", "message"}

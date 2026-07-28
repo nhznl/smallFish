@@ -16,10 +16,9 @@ SnapTrade issues two kinds of API keys, distinguished by the client-id prefix:
 * Personal (``PERS-``): single-user. Brokerages are linked on the SnapTrade
   dashboard itself; SNAPTRADE_CLIENT_ID + SNAPTRADE_CONSUMER_KEY in ``app.env``
   are the whole setup, and ``register`` does not apply.
-* Commercial: multi-user. ``register`` creates a SnapTrade user once; its
-  printed userId/userSecret must be saved to ``app.env`` (SNAPTRADE_USER_ID /
-  SNAPTRADE_USER_SECRET), and ``connect`` prints the brokerage-linking portal
-  URL for that user.
+* Commercial: multi-user. ``register`` creates a SnapTrade user once and saves
+  its userId/userSecret directly to the mode-0600 ``app.env`` credential store;
+  ``connect`` prints the brokerage-linking portal URL for that user.
 
 CLI, run from ``stock-app/`` with the repo root on PYTHONPATH:
 
@@ -249,6 +248,74 @@ def register_user(user_id: str | None = None) -> dict[str, str]:
         "userId": _text(_value(body, "userId")) or resolved_id,
         "userSecret": _text(_value(body, "userSecret")),
     }
+
+
+def _shell_quote(value: str) -> str:
+    """Quote a credential for the POSIX shell syntax used by ``app.env``."""
+    return "'" + value.replace("'", "'\\''") + "'"
+
+
+def _validate_registration_target(env_path: Path) -> None:
+    """Fail before registration if its one-time credentials cannot be saved."""
+    if not env_path.is_file():
+        raise SnapTradeValidationError(
+            "app.env is unavailable; run ./setup.sh before registering a SnapTrade user",
+            503,
+        )
+    configured: set[str] = set()
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key, separator, value = stripped.partition("=")
+        if separator and key.strip() in {"SNAPTRADE_USER_ID", "SNAPTRADE_USER_SECRET"}:
+            if value.strip().strip("\"'"):
+                configured.add(key.strip())
+    if configured:
+        raise SnapTradeValidationError(
+            "app.env already contains SnapTrade user credentials; clear them only "
+            "if you intend to register a replacement user",
+            409,
+        )
+
+
+def _save_registration_credentials(env_path: Path, credentials: dict[str, str]) -> None:
+    """Atomically save one-time SnapTrade credentials without displaying them."""
+    updates = {
+        "SNAPTRADE_USER_ID": credentials["userId"],
+        "SNAPTRADE_USER_SECRET": credentials["userSecret"],
+    }
+    lines = env_path.read_text(encoding="utf-8").splitlines()
+    remaining = dict(updates)
+    rendered: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        key = stripped.partition("=")[0].strip()
+        if stripped and not stripped.startswith("#") and key in remaining:
+            rendered.append(f"{key}={_shell_quote(remaining.pop(key))}")
+        else:
+            rendered.append(line)
+    if remaining:
+        if rendered and rendered[-1].strip():
+            rendered.append("")
+        rendered.append("# Added by SnapTrade registration")
+        rendered.extend(f"{key}={_shell_quote(value)}" for key, value in remaining.items())
+
+    body = "\n".join(rendered).rstrip("\n") + "\n"
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{env_path.name}.", dir=env_path.parent, text=True
+    )
+    try:
+        os.chmod(temporary, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(body)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, env_path)
+    except Exception:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+    os.chmod(env_path, 0o600)
 
 
 def connection_portal_url(broker: str | None = None,
@@ -1108,7 +1175,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(prog="python -m app.snaptrade_service")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("register", help="register a SnapTrade user (prints the secret)")
+    sub.add_parser("register", help="register a SnapTrade user and save it to app.env")
     connect = sub.add_parser("connect", help="print a brokerage connection URL")
     connect.add_argument("--broker", default=None, help="e.g. FIDELITY")
     connect.add_argument("--redirect", default=None, help="custom redirect URL")
@@ -1119,13 +1186,11 @@ def _main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "register":
+            env_path = config.repo_root() / "app.env"
+            _validate_registration_target(env_path)
             creds = register_user()
-            print(json.dumps(creds, indent=2))
-            print(
-                "\nSave these to app.env:\n"
-                f"  SNAPTRADE_USER_ID={creds['userId']}\n"
-                f"  SNAPTRADE_USER_SECRET={creds['userSecret']}",
-            )
+            _save_registration_credentials(env_path, creds)
+            print("SnapTrade user registered and saved securely to app.env.")
         elif args.command == "connect":
             print(connection_portal_url(broker=args.broker, custom_redirect=args.redirect))
         elif args.command == "accounts":

@@ -19,6 +19,20 @@ def test_built_angular_assets_and_spa_routes_are_served(tmp_path: Path, monkeypa
     assert "console.log" in client.get("/main.js").text
 
 
+def test_static_asset_path_cannot_escape_the_built_ui_root(tmp_path: Path, monkeypatch):
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "index.html").write_text("<html>smallFish</html>", encoding="utf-8")
+    secret = tmp_path / "outside.txt"
+    secret.write_text("must not be served", encoding="utf-8")
+    monkeypatch.setenv("SFP_STATIC_DIR", str(static))
+    client = TestClient(app)
+
+    response = client.get("/%2e%2e/outside.txt")
+
+    assert "must not be served" not in response.text
+
+
 # ---------------------------------------------- SPA / API route collisions
 
 def test_browser_navigation_to_a_colliding_route_serves_the_app(tmp_path, monkeypatch):

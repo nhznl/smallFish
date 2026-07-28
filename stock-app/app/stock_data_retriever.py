@@ -1,22 +1,10 @@
-import json
 import math
-import sys
 from datetime import datetime, timezone
 
 import yfinance as yf
 
 
-VALID_PERIODS = {"ytd", "1d", "daterange", "info"}
 MAX_NEWS_ITEMS = 10
-
-
-def print_usage() -> None:
-    print("Usage: python stock_data_retriever.py <TICKER_SYMBOL> <PERIOD>")
-    print("Example: python stock_data_retriever.py MSFT ytd")
-    print("Example: python stock_data_retriever.py MSFT 1d")
-    print("Example: python stock_data_retriever.py MSFT daterange <START_DATE> <END_DATE>")
-    print("Example: python stock_data_retriever.py MSFT info")
-    print("Valid periods: ytd, 1d, daterange, info")
 
 
 def safe_numeric(value):
@@ -205,42 +193,3 @@ def fetch_stock_information(ticker_symbol: str):
         },
         "news": format_news_items(news),
     }
-
-
-def main():
-    if len(sys.argv) < 3:
-        print_usage()
-        sys.exit(1)
-
-    ticker_symbol = sys.argv[1].upper()
-    period = sys.argv[2].lower()
-
-    if period not in VALID_PERIODS:
-        print(f"Invalid period: {period}")
-        print(f"Valid periods: {', '.join(sorted(VALID_PERIODS))}")
-        sys.exit(1)
-
-    try:
-        if period == "info":
-            result = fetch_stock_information(ticker_symbol)
-        elif period == "daterange":
-            if len(sys.argv) != 5:
-                print("Error: daterange period requires start and end dates")
-                print("Usage: python stock_data_retriever.py <TICKER_SYMBOL> daterange <START_DATE> <END_DATE>")
-                print("Example: python stock_data_retriever.py MSFT daterange 2020-01-01 2023-01-01")
-                sys.exit(1)
-            start_date = sys.argv[3]
-            end_date = sys.argv[4]
-            result = fetch_range_history(ticker_symbol, start_date, end_date)
-        else:
-            result = fetch_period_history(ticker_symbol, period)
-
-        print(json.dumps(result, indent=2))
-        sys.exit(0)
-    except Exception as exc:  # noqa: BLE001
-        print(f"Error fetching data: {exc}")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

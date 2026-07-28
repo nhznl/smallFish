@@ -152,6 +152,45 @@ def test_register_rejected_for_personal_key(holdings_env, monkeypatch):
         snaptrade_service.register_user()
 
 
+def test_registration_credentials_are_saved_without_being_printed(
+        tmp_path, monkeypatch, capsys):
+    env_path = tmp_path / "app.env"
+    env_path.write_text(
+        "SNAPTRADE_CLIENT_ID=client\n"
+        "SNAPTRADE_USER_ID=\n"
+        "SNAPTRADE_USER_SECRET=\n",
+        encoding="utf-8",
+    )
+    env_path.chmod(0o644)
+    credentials = {"userId": "registered-user", "userSecret": "generated-secret"}
+    monkeypatch.setattr(snaptrade_service, "register_user", lambda: credentials)
+    monkeypatch.setattr(snaptrade_service.config, "repo_root", lambda: tmp_path)
+
+    assert snaptrade_service._main(["register"]) == 0
+
+    output = capsys.readouterr().out
+    assert "registered-user" not in output
+    assert "generated-secret" not in output
+    assert "saved securely" in output
+    body = env_path.read_text(encoding="utf-8")
+    assert "SNAPTRADE_USER_ID='registered-user'" in body
+    assert "SNAPTRADE_USER_SECRET='generated-secret'" in body
+    assert env_path.stat().st_mode & 0o777 == 0o600
+
+
+def test_registration_refuses_to_replace_existing_credentials(tmp_path):
+    env_path = tmp_path / "app.env"
+    env_path.write_text(
+        "SNAPTRADE_USER_ID=existing-user\nSNAPTRADE_USER_SECRET=existing-secret\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(snaptrade_service.SnapTradeValidationError) as exc:
+        snaptrade_service._validate_registration_target(env_path)
+
+    assert exc.value.status_code == 409
+
+
 # --------------------------------------------------------------------------- #
 # sync / normalization / snapshot                                              #
 # --------------------------------------------------------------------------- #

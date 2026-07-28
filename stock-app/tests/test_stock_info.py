@@ -1,17 +1,9 @@
-"""Tests for GET /stocks/{symbol}/info (StockController.getStockInfo port).
-
-The real endpoint shells the local stock_data_retriever.py bridge. Here subprocess.run is
-mocked with a canned script response so the test is deterministic + offline.
-"""
+"""Offline tests for GET /stocks/{symbol}/info."""
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from fastapi.testclient import TestClient
 
-from app import config
 from app.main import app
 from app.routers import stock_info
 
@@ -28,38 +20,34 @@ _SAMPLE = {
 }
 
 
-class _FakeProc:
-    def __init__(self, returncode, stdout):
-        self.returncode = returncode
-        self.stdout = stdout
-
-
 def test_stock_info_passthrough(monkeypatch):
-    captured = {}
+    captured: dict[str, str] = {}
 
-    def _run(cmd, *a, **k):
-        captured["cmd"] = cmd
-        return _FakeProc(0, json.dumps(_SAMPLE, indent=2))
+    def _fetch(symbol: str):
+        captured["symbol"] = symbol
+        return _SAMPLE
 
-    monkeypatch.setattr(stock_info.subprocess, "run", _run)
+    monkeypatch.setattr(stock_info, "fetch_stock_information", _fetch)
     r = client.get("/stocks/aapl/info")
     assert r.status_code == 200
     assert r.json() == _SAMPLE
-    # Symbol is upper-cased and the bridge receives the "info" operation.
-    assert captured["cmd"][-2:] == ["AAPL", "info"]
-    bridge = Path(captured["cmd"][1])
-    assert bridge == config.stockdat_script()
-    assert bridge.is_file()
-    assert bridge.is_relative_to(config.BASE_DIR)
+    assert captured["symbol"] == "AAPL"
 
 
 def test_stock_info_script_failure_is_500(monkeypatch):
-    monkeypatch.setattr(stock_info.subprocess, "run", lambda *a, **k: _FakeProc(1, "Error fetching data: boom"))
+    def _raise(_symbol: str):
+        raise RuntimeError("provider detail must stay private")
+
+    monkeypatch.setattr(stock_info, "fetch_stock_information", _raise)
     r = client.get("/stocks/NOPE/info")
     assert r.status_code == 500
+    assert r.json() == {
+        "error": "stock info fetch failed",
+        "detail": "provider request failed (RuntimeError)",
+    }
 
 
 def test_stock_info_bad_json_is_500(monkeypatch):
-    monkeypatch.setattr(stock_info.subprocess, "run", lambda *a, **k: _FakeProc(0, "not json"))
+    monkeypatch.setattr(stock_info, "fetch_stock_information", lambda _symbol: [])
     r = client.get("/stocks/AAPL/info")
     assert r.status_code == 500
