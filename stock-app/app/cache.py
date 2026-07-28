@@ -21,6 +21,7 @@ from pathlib import Path
 from models.universe import TYPE_STOCK
 
 from . import config
+from .path_security import UnsafePathError, symbol_year_path
 from .readers import read_latest_strategy_report
 from .stock_model import Stock, normalize_stock_type
 from .trend_engine import Daily, f32
@@ -67,7 +68,10 @@ def read_companies(registry_path: Path, retired_path: Path) -> list[tuple[str, s
 
 
 def _read_year(cache_root: Path, symbol: str, year: int) -> list[Daily]:
-    path = cache_root / str(year) / f"{symbol}.txt"
+    try:
+        path = symbol_year_path(cache_root, symbol, year)
+    except UnsafePathError:
+        return []
     if not path.exists():
         return []
     out: list[Daily] = []
@@ -145,7 +149,7 @@ def cached_years(cache_root: Path, symbol: str) -> list[int]:
     for child in cache_root.iterdir():
         if not child.is_dir() or not child.name.isdigit():
             continue
-        if (child / f"{symbol}.txt").is_file():
+        if symbol_year_path(cache_root, symbol, int(child.name)).is_file():
             years.append(int(child.name))
     return sorted(years)
 
@@ -174,7 +178,7 @@ def read_historical(cache_root: Path, symbol: str, year: int,
     time on the detail page, so they are derived on demand via `Cache.slopes`.
     """
     current = _read_year(cache_root, symbol, year)
-    if not current and not (cache_root / str(year) / f"{symbol}.txt").exists():
+    if not current and not symbol_year_path(cache_root, symbol, year).exists():
         return Stock.build(symbol, [], None, stock_type)
     prior = _read_year(cache_root, symbol, year - 1)
     return Stock.build(symbol, prior + current, None, stock_type)

@@ -356,9 +356,8 @@ Get your keys from https://dashboard.snaptrade.com.
 
       stock-app/.venv/bin/python -m app.snaptrade_service register
 
-  Save the printed userId and userSecret into app.env as SNAPTRADE_USER_ID and
-  SNAPTRADE_USER_SECRET, then rerun this command. The values are credentials —
-  do not paste them into an issue.""")
+  The command saves the generated user credentials directly to app.env using an
+  atomic mode-0600 write and never displays them. Then rerun this command.""")
     elif status.next_step:
         print(f"\n  Next: {status.next_step}")
     return 0

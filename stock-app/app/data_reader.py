@@ -16,11 +16,16 @@ from pathlib import Path
 
 import pandas as pd
 
+from .path_security import UnsafePathError, symbol_year_path
+
 COLUMNS = ["date", "open", "high", "low", "close", "adj_close", "volume"]
 
 
 def _read_symbol_year(cache_root: Path, symbol: str, year: int) -> pd.DataFrame | None:
-    path = cache_root / str(year) / f"{symbol}.txt"
+    try:
+        path = symbol_year_path(cache_root, symbol, year)
+    except UnsafePathError:
+        return None
     if not path.exists() or path.stat().st_size == 0:
         return None
     df = pd.read_csv(path, header=None, names=COLUMNS)

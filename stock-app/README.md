@@ -164,7 +164,7 @@ then link the brokerage through the connection portal:
 ```bash
 # Run from stock-app/ with the repo root on PYTHONPATH so `models` resolves:
 PYTHONPATH=.. .venv/bin/python -m app.snaptrade_service register            # create a user
-#   -> save the printed SNAPTRADE_USER_ID / SNAPTRADE_USER_SECRET to app.env
+#   -> credentials are saved directly to app.env and are never displayed
 PYTHONPATH=.. .venv/bin/python -m app.snaptrade_service connect --broker FIDELITY
 #   -> open the printed URL in a browser and log in to Fidelity to link it
 ```

@@ -17,6 +17,7 @@ from models.study import StudyValidationError, validate_catalog, validate_study_
 
 from . import config
 from .cache import cache
+from .path_security import UnsafePathError, contained_path
 from .serializers import strategy_stock_dict
 
 
@@ -61,10 +62,17 @@ def _read_artifact(relative: str, label: str) -> dict[str, Any]:
     contract when none does."""
     roots = _artifact_roots()
     for root in roots[:-1]:
-        candidate = root / relative
+        try:
+            candidate = contained_path(root, relative)
+        except UnsafePathError as exc:
+            raise StudyArtifactError(f"Research Studies {label} path is invalid.") from exc
         if candidate.is_file():
             return _read_json(candidate, label)
-    return _read_json(roots[-1] / relative, label)
+    try:
+        candidate = contained_path(roots[-1], relative)
+    except UnsafePathError as exc:
+        raise StudyArtifactError(f"Research Studies {label} path is invalid.") from exc
+    return _read_json(candidate, label)
 
 
 def _validated_catalog() -> dict[str, Any]:
@@ -89,11 +97,8 @@ def get_study(study_id: str) -> dict[str, Any] | None:
     catalog_item = next((item for item in catalog["studies"] if item["id"] == study_id), None)
     if catalog_item is None:
         return None
-    for root in _artifact_roots():
-        # Defensive even though the contract ID pattern cannot contain separators.
-        if root not in (root / study_id / "study.json").resolve().parents:
-            raise StudyArtifactError("Research Studies record path is invalid.")
-    record = _read_artifact(f"{study_id}/study.json", f"record {study_id!r}")
+    record_id = catalog_item["id"]
+    record = _read_artifact(f"{record_id}/study.json", f"record {record_id!r}")
     try:
         validate_study_record(record)
     except StudyValidationError as exc:

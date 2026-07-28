@@ -16,3 +16,8 @@ def test_read_prices_missing_symbol_returns_empty(fixtures_dir):
     df = data_reader.read_prices(fixtures_dir / "cache", "NOPE", [2026])
     assert df.empty
     assert "ticker" in df.columns
+
+
+def test_read_prices_rejects_a_symbol_path_traversal(fixtures_dir):
+    df = data_reader.read_prices(fixtures_dir / "cache", "../../etc/passwd", [2026])
+    assert df.empty

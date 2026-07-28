@@ -133,10 +133,9 @@ further goes in `app.env`.
 stock-app/.venv/bin/python -m app.snaptrade_service register
 ```
 
-Save the printed `userId` and `userSecret` into `app.env` as
-`SNAPTRADE_USER_ID` and `SNAPTRADE_USER_SECRET`. **These are credentials** — do
-not paste them into an issue. Then rerun `setup snaptrade` and follow the
-connection-portal link.
+The command saves the generated `userId` and `userSecret` directly to `app.env`
+using an atomic mode-0600 write; it never displays either value. Then rerun
+`setup snaptrade` and follow the connection-portal link.
 
 ### Verify
 

@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from . import capabilities, config
+from .path_security import UnsafePathError, contained_path
 from .routers import (
     options,
     portfolios,
@@ -113,9 +114,13 @@ async def serve_spa_for_browser_navigation(request, call_next):
 def angular_app(path: str) -> FileResponse:
     """Serve a built Angular bundle, with an SPA fallback for browser routes."""
     static_root = config.static_dir().resolve()
-    candidate = (static_root / path).resolve()
-    if path and static_root in candidate.parents and candidate.is_file():
-        return FileResponse(candidate)
+    if path:
+        try:
+            candidate = contained_path(static_root, path)
+        except UnsafePathError:
+            candidate = None
+        if candidate is not None and candidate.is_file():
+            return FileResponse(candidate)
     index = static_root / "index.html"
     if index.is_file():
         return FileResponse(index)
