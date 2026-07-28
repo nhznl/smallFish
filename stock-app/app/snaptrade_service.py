@@ -1120,11 +1120,14 @@ def _main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "register":
             creds = register_user()
-            print(json.dumps(creds, indent=2))
+            safe_creds = dict(creds)
+            if "userSecret" in safe_creds:
+                safe_creds["userSecret"] = "***REDACTED***"
+            print(json.dumps(safe_creds, indent=2))
             print(
                 "\nSave these to app.env:\n"
                 f"  SNAPTRADE_USER_ID={creds['userId']}\n"
-                f"  SNAPTRADE_USER_SECRET={creds['userSecret']}",
+                "  SNAPTRADE_USER_SECRET=<REDACTED>",
             )
         elif args.command == "connect":
             print(connection_portal_url(broker=args.broker, custom_redirect=args.redirect))
