@@ -438,9 +438,9 @@
                   </span>
                 </td>
                 <td><span class="pos-badge" [class.flat]="group.position_status === 'FLAT'">{{ group.position_status }}</span></td>
-                <td [class]="pnlClass(group.net_cash_flow)">{{ money(group.net_cash_flow) }}</td>
-                <td>{{ money(group.open_market_value) }}</td>
-                <td [class]="pnlClass(group.total_pnl)">
+                <td [class]="'num ' + pnlClass(group.net_cash_flow)">{{ money(group.net_cash_flow) }}</td>
+                <td class="num">{{ money(group.open_market_value) }}</td>
+                <td [class]="'num ' + pnlClass(group.total_pnl)">
                   {{ money(group.total_pnl) }}
                   <small *ngIf="group.pnl_completeness === 'COMPLETE'">realized</small>
                   <small *ngIf="group.pnl_completeness === 'INDICATIVE'">indicative</small>
@@ -448,7 +448,7 @@
                          matTooltip="An open contract left the positions feed but its closing transaction has not posted yet."
                          matTooltipPosition="above">awaiting close</small>
                 </td>
-                <td>{{ group.event_count }}</td>
+                <td class="num">{{ group.event_count }}</td>
                 <td class="notes-cell" [matTooltip]="group.notes || ''" matTooltipPosition="above">{{ group.notes || '—' }}</td>
                 <td>
                   <button type="button" class="icon-btn" (click)="openOptionGroupDetails(group)"
