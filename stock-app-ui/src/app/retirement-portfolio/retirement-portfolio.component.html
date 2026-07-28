@@ -645,6 +645,40 @@
             } @else {
               <div class="empty">No broker option events recorded for {{ group.symbol }}. This group is valued from current positions until its transaction activity syncs.</div>
             }
+            <!-- Shares behind a short call: context for "is this covered?", and
+            deliberately outside every total above, which is option cash only. -->
+            @if (group.share_cover; as cover) {
+              <h3 class="share-cover-title">Equity shares held
+                <small [class.urgent]="cover.covered_contracts < cover.short_call_contracts">
+                  {{ shares(cover.total_shares) }} shares · covers {{ cover.covered_contracts }} of
+                  {{ num(cover.short_call_contracts, 0) }} short call{{ cover.short_call_contracts === 1 ? '' : 's' }}
+                </small>
+              </h3>
+              <div class="table-wrap">
+                <table class="data-table opt-table">
+                  <thead><tr>
+                    <th>Account</th><th>Shares</th><th>Avg cost</th><th>Last price</th>
+                    <th>Cost basis</th><th>Market value</th><th>Open P/L</th>
+                  </tr></thead>
+                  <tbody>
+                    @for (lot of cover.lots; track lot) {
+                      <tr>
+                        <td><span class="account-tag">{{ lot.account }}</span></td>
+                        <td>{{ shares(lot.quantity) }}</td>
+                        <td>{{ money(lot.average_price) }}</td>
+                        <td>{{ money(lot.price) }}<small>Retrieved {{ shortTs(lot.retrieved_at) }}</small></td>
+                        <td>{{ money(lot.cost_basis) }}</td>
+                        <td>{{ money(lot.market_value) }}</td>
+                        <td [class]="pnlClass(lot.open_pnl)">{{ money(lot.open_pnl) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <p class="caveat">Shares are shown because a short call is written against this
+              underlying. They are not option events: no figure above &mdash; net credit received,
+              open marked value, or group P/L &mdash; includes them.</p>
+            }
             <p class="caveat">Imported broker events are immutable facts. Net cash is the signed broker cash flow including fees; a fully-closed group's realized P/L is their sum.</p>
             <ng-container modalActions>
               <button type="button" class="btn" (click)="closeOptionGroupDetails()" [disabled]="optionGroupSaving">Close</button>

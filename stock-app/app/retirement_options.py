@@ -28,8 +28,9 @@ import yaml
 
 from . import config, snaptrade_service
 from .options_market import build_market_inputs
-from .options_risk import (LIMIT_APPROVED, RiskConfig, apply_call_coverage,
-                           build_risk_snapshot, evaluate_position)
+from .options_risk import (COVERED_CALL, LIMIT_APPROVED, SHORT_CALL, RiskConfig,
+                           apply_call_coverage, build_risk_snapshot,
+                           evaluate_position)
 
 GROUP_HEADERS = ["symbol", "name", "status", "notes", "updated_at"]
 EVENT_HEADERS = [
@@ -139,28 +140,81 @@ def _read_groups() -> dict[str, dict[str, str]]:
 # risk rows from the SnapTrade holdings ledger                                  #
 # --------------------------------------------------------------------------- #
 
-def _share_pool(ledger: list[dict[str, Any]]) -> dict[tuple[str, str], Decimal]:
-    """Long share counts per account and ticker, for short-call coverage.
+def _read_holdings_ledger() -> list[dict[str, Any]]:
+    return snaptrade_service._read_ledger(config.snaptrade_holdings_csv())
 
-    Cash is not a deliverable share, and the ledger's non-option classes
-    (STOCK, ETF, ADR, OTHER) all settle in shares that can be called away.
-    """
+
+def _is_share_holding(row: dict[str, Any]) -> bool:
+    """Cash is not a deliverable share; every other non-option class is."""
+    asset_class = str(row.get("asset_class") or "").upper()
+    return asset_class not in {"OPTION", "CASH", ""} and bool(row.get("symbol"))
+
+
+def _share_pool(ledger: list[dict[str, Any]]) -> dict[tuple[str, str], Decimal]:
+    """Long share counts per account and ticker, for short-call coverage."""
     pool: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for row in ledger:
-        asset_class = str(row.get("asset_class") or "").upper()
-        if asset_class in {"OPTION", "CASH", ""}:
+        if not _is_share_holding(row):
             continue
         symbol = str(row.get("symbol") or "").upper().strip()
-        if not symbol:
-            continue
         pool[(str(row.get("account_name") or ""), symbol)] += _dec(row.get("quantity"))
     return dict(pool)
+
+
+def _share_cover(rows: list[dict[str, Any]],
+                 ledger: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Equity lots behind each underlying that has a short call, by symbol.
+
+    This is context for the group drill-down, never an input to it: shares are
+    not option events, so they stay out of net credit received, open marked
+    value, and group P/L. Only underlyings with a short call are included --
+    elsewhere "are these shares covering something?" is not the question.
+    """
+    calls = [row for row in rows if row["trade_type"] in {SHORT_CALL, COVERED_CALL}]
+    if not calls:
+        return {}
+    contracts: dict[str, Decimal] = defaultdict(Decimal)
+    covered: dict[str, int] = defaultdict(int)
+    for call in calls:
+        contracts[call["symbol"]] += _dec(call["qty"])
+        covered[call["symbol"]] += int(call.get("covered_contracts") or 0)
+
+    lots: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    totals: dict[str, Decimal] = defaultdict(Decimal)
+    for holding in ledger:
+        if not _is_share_holding(holding):
+            continue
+        symbol = str(holding.get("symbol") or "").upper().strip()
+        quantity = _dec(holding.get("quantity"))
+        if symbol not in contracts or quantity <= 0:
+            continue
+        totals[symbol] += quantity
+        lots[symbol].append({
+            "account": holding.get("account_name", ""),
+            "quantity": float(quantity),
+            "average_price": float(_dec(holding.get("average_purchase_price"))),
+            "price": float(_dec(holding.get("price"))),
+            "cost_basis": float(_dec(holding.get("cost_basis"))),
+            "market_value": float(_dec(holding.get("market_value"))),
+            "open_pnl": float(_dec(holding.get("open_pnl"))),
+            "retrieved_at": holding.get("retrieved_at", ""),
+        })
+
+    return {
+        symbol: {
+            "lots": sorted(symbol_lots, key=lambda lot: lot["account"]),
+            "total_shares": float(totals[symbol]),
+            "short_call_contracts": float(contracts[symbol]),
+            "covered_contracts": covered[symbol],
+        }
+        for symbol, symbol_lots in lots.items()
+    }
 
 
 def _option_rows() -> list[dict[str, Any]]:
     """Current option legs from the SnapTrade ledger, in the risk-engine row
     shape (underlying in ``symbol`` for price-cache/beta lookup)."""
-    ledger = snaptrade_service._read_ledger(config.snaptrade_holdings_csv())
+    ledger = _read_holdings_ledger()
     rows: list[dict[str, Any]] = []
     for row in ledger:
         if row.get("asset_class") != "OPTION":
@@ -537,6 +591,12 @@ def snapshot(*, as_of: date | None = None, market_provider=_default_market_provi
     # realized P/L; fall back to live legs before the first activity sync.
     groups = (_build_event_groups(events, rows, meta) if events
               else _build_groups(rows, meta))
+    # Attached after the group totals are final, so the shares can only ever be
+    # read as context for a covered call -- never as part of the premium math.
+    cover = _share_cover(rows, _read_holdings_ledger())
+    for group in groups:
+        if group["symbol"] in cover:
+            group["share_cover"] = cover[group["symbol"]]
 
     if not rows:
         # No live option legs. The risk table is empty, but any fully-closed

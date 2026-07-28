@@ -524,6 +524,12 @@ export class RetirementPortfolioComponent implements OnInit {
     return value == null ? '—' : `${(value * 100).toFixed(1)}%`;
   }
 
+  /** Share counts: whole lots stay whole, fractional lots keep their remainder. */
+  shares(value: number | null | undefined): string {
+    if (value == null) return '—';
+    return Number.isInteger(value) ? String(value) : value.toFixed(3);
+  }
+
   pnlClass(value: number | null | undefined): string {
     if (value == null || value === 0) return '';
     return value > 0 ? 'positive' : 'negative';

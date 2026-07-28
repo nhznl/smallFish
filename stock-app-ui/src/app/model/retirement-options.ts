@@ -68,6 +68,29 @@ export interface RetirementOptionGroup {
   pnl_completeness: 'COMPLETE' | 'INDICATIVE' | 'UNAVAILABLE';
   event_count: number;
   notes: string;
+  /**
+   * Equity lots behind this underlying's short calls. Context only: shares are
+   * not option events and are excluded from every total on the group.
+   */
+  share_cover?: RetirementShareCover;
+}
+
+export interface RetirementShareLot {
+  account: string;
+  quantity: number;
+  average_price: number;
+  price: number;
+  cost_basis: number;
+  market_value: number;
+  open_pnl: number;
+  retrieved_at: string;
+}
+
+export interface RetirementShareCover {
+  lots: RetirementShareLot[];
+  total_shares: number;
+  short_call_contracts: number;
+  covered_contracts: number;
 }
 
 export interface RetirementOptionEvent {

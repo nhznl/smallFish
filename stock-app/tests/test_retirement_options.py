@@ -198,6 +198,49 @@ def test_short_calls_report_share_coverage_from_the_holdings_ledger(opts_env):
     assert by_symbol["AMD"]["coverage"] == "UNCOVERED"
 
 
+def test_group_share_cover_is_context_and_changes_no_total(opts_env):
+    """The drill-down shows the shares behind a covered call; the premium math
+    stays option-only."""
+    without_shares = [_short_call("CLX")]
+    _write_rows(without_shares)
+    baseline = next(g for g in retirement_options.snapshot(
+        market_provider=lambda rows, as_of, cfg: ({}, None))["groups"]
+        if g["symbol"] == "CLX")
+
+    _write_rows(without_shares + [_holding("CLX", "150")])
+    group = next(g for g in retirement_options.snapshot(
+        market_provider=lambda rows, as_of, cfg: ({}, None))["groups"]
+        if g["symbol"] == "CLX")
+
+    assert "share_cover" not in baseline
+    cover = group["share_cover"]
+    assert cover["total_shares"] == 150.0
+    assert cover["covered_contracts"] == 1
+    assert cover["short_call_contracts"] == 1.0
+    assert [lot["account"] for lot in cover["lots"]] == ["BrokerageLink"]
+    # Adding 150 shares must not move any figure the group reports.
+    assert {key: group[key] for key in (
+        "net_cash_flow", "open_market_value", "total_pnl", "realized_pnl",
+        "event_count", "position_status", "pnl_completeness")} == {
+        key: baseline[key] for key in (
+            "net_cash_flow", "open_market_value", "total_pnl", "realized_pnl",
+            "event_count", "position_status", "pnl_completeness")}
+
+
+def test_groups_without_a_short_call_carry_no_share_cover(opts_env):
+    """Shares held against a short put are not answering a coverage question."""
+    _write_rows([
+        {**_short_call("CLX"), "option_type": "PUT", "symbol": "CLX  260821P00061000"},
+        _holding("CLX", "100"),
+    ])
+
+    group = next(g for g in retirement_options.snapshot(
+        market_provider=lambda rows, as_of, cfg: ({}, None))["groups"]
+        if g["symbol"] == "CLX")
+
+    assert "share_cover" not in group
+
+
 def test_cash_is_not_share_coverage(opts_env):
     _write_rows([_short_call("CLX"), _holding("FDRXX", "100000", asset_class="CASH")])
 
