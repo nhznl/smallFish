@@ -1,6 +1,6 @@
 # smallFish Angular dashboard
 
-Angular 20 single-page application for the smallFish FastAPI backend. It
+Angular 22 single-page application for the smallFish FastAPI backend. It
 visualizes stock analysis, research studies, wheel candidates, and the stock
 and options trade ledgers.
 
@@ -121,7 +121,7 @@ src/app/
 
 ## Dependencies and conventions
 
-- Angular 20, Angular Material/CDK, RxJS 7.8, and TypeScript 5.8.
+- Angular 22, Angular Material/CDK, RxJS 7.8, and TypeScript 6.0.
 - Follow [`docs/UX_GUIDANCE.md`](docs/UX_GUIDANCE.md) for user-facing UI work.
   Reuse the tokens and primitives in `src/styles.scss` and shared overlays in
   `src/app/shared/ui/` before adding local variants.

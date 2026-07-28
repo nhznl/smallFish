@@ -21,7 +21,7 @@ stock-app-ui/  ──HTTP──▶  stock-app/  ──reads──▶  data/  ◀
 | `utilities/` | Batch pipeline: scraper, universe, indicators, options | [utilities/README.md](utilities/README.md) |
 | `studies/` | Research studies and materialization | [studies/README.md](studies/README.md) |
 | `stock-app/` | FastAPI backend | [stock-app/README.md](stock-app/README.md) |
-| `stock-app-ui/` | Angular 20 dashboard | [stock-app-ui/README.md](stock-app-ui/README.md) |
+| `stock-app-ui/` | Angular 22 dashboard | [stock-app-ui/README.md](stock-app-ui/README.md) |
 | `tools/` | Repo tooling: preflight, doctor, brokerages, secret scan | — |
 
 **The dependency direction is a hard rule.** `models/` imports nothing from the
@@ -38,7 +38,7 @@ Three, and they are separate on purpose:
 |---|---|---|
 | utilities + studies | `utilities/.venv/bin/python` | scraper, universe, options, studies, `utilities/tests` |
 | FastAPI backend | `stock-app/.venv/bin/python` | the API and `stock-app/tests` |
-| Angular 20 | Node 20 LTS via `npm` | the dashboard |
+| Angular 22 | Node 24 LTS via `npm` | the dashboard |
 
 `tools/` is standard-library-only and runs on the system interpreter, because it
 must work *before* either virtual environment exists. Keep it that way.

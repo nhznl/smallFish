@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -68,6 +68,7 @@ interface CorrelationCluster {
   standalone: true,
   imports: [CommonModule, FormsModule, MatTooltipModule, ModalComponent, CapabilityStateComponent],
   templateUrl: './retirement-portfolio.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./retirement-portfolio.component.css']
 })
 export class RetirementPortfolioComponent implements OnInit {

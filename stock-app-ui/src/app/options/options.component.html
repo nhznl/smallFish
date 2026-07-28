@@ -29,7 +29,7 @@
       <div><h3 class="panel-title">Trade Groups</h3><small>Imported broker events stay immutable; grouping is editable and restricted to the same account and underlying symbol.</small></div>
       <div class="inline-actions">
         @if (activity?.last_sync_at) {
-          <span>Synced {{ shortTimestamp(activity?.last_sync_at) }}</span>
+          <span>Synced {{ shortTimestamp($safeNavigationMigration(activity?.last_sync_at)) }}</span>
         }
         <span class="status-filter">Status
           <label><input type="checkbox" [(ngModel)]="showActive"> Active</label>
@@ -209,14 +209,14 @@
                 }</td>
                 <td>{{ optionPrice(row.mark_price) }}<small>Retrieved {{ shortTimestamp(row.mark_retrieved_at) }}</small></td>
                 <td>{{ money(row.current_underlying_price) }}<small>{{ strikeDistanceLabel(row) }}</small></td>
-                <td>{{ percent(positionRisk(row)?.vol_annual) }}<small>{{ ivSourceLabel(positionRisk(row)?.delta_source) }} · {{ shortTimestamp(positionRisk(row)?.vol_as_of) }}</small></td>
-                <td>{{ number(positionRisk(row)?.delta_shares, 1) }}</td>
-                <td>{{ number(positionRisk(row)?.computed_beta, 3) }}<small>Computed · {{ positionRisk(row)?.computed_beta_as_of || '—' }}</small></td>
-                <td>{{ number(positionRisk(row)?.tasty_beta, 3) }}<small>Tastytrade · {{ shortTimestamp(positionRisk(row)?.tasty_beta_as_of) }}</small></td>
-                <td [class]="pnlClass(positionRisk(row)?.computed_beta_weighted_delta_dollars)">{{ money(positionRisk(row)?.computed_beta_weighted_delta_dollars) }}@if (positionRisk(row)?.computed_beta_fallback) {
+                <td>{{ percent($safeNavigationMigration(positionRisk(row)?.vol_annual)) }}<small>{{ ivSourceLabel($safeNavigationMigration(positionRisk(row)?.delta_source)) }} · {{ shortTimestamp($safeNavigationMigration(positionRisk(row)?.vol_as_of)) }}</small></td>
+                <td>{{ number($safeNavigationMigration(positionRisk(row)?.delta_shares), 1) }}</td>
+                <td>{{ number($safeNavigationMigration(positionRisk(row)?.computed_beta), 3) }}<small>Computed · {{ positionRisk(row)?.computed_beta_as_of || '—' }}</small></td>
+                <td>{{ number($safeNavigationMigration(positionRisk(row)?.tasty_beta), 3) }}<small>Tastytrade · {{ shortTimestamp($safeNavigationMigration(positionRisk(row)?.tasty_beta_as_of)) }}</small></td>
+                <td [class]="pnlClass($safeNavigationMigration(positionRisk(row)?.computed_beta_weighted_delta_dollars))">{{ money($safeNavigationMigration(positionRisk(row)?.computed_beta_weighted_delta_dollars)) }}@if (positionRisk(row)?.computed_beta_fallback) {
                   <small>Tasty fallback</small>
                 }</td>
-                <td [class]="pnlClass(positionRisk(row)?.beta_weighted_delta_dollars)">{{ money(positionRisk(row)?.beta_weighted_delta_dollars) }}</td>
+                <td [class]="pnlClass($safeNavigationMigration(positionRisk(row)?.beta_weighted_delta_dollars))">{{ money($safeNavigationMigration(positionRisk(row)?.beta_weighted_delta_dollars)) }}</td>
                 <td [class.risk-unavailable]="positionRisk(row)?.beta_weighted_delta_dollars == null">{{ riskStatus(positionRisk(row)) }}@if (positionRisk(row)?.short_gamma_warning) {
                   <small class="urgent">Short-gamma warning</small>
                 }</td>

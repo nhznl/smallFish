@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { StudiesService } from '../api/studies.service';
 import { StrategyStocksComponent } from '../strategy-stocks/strategy-stocks.component';
@@ -13,6 +13,7 @@ import {
   standalone: true,
   imports: [CommonModule, RouterLink, StrategyStocksComponent],
   templateUrl: './studies.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./studies.component.css']
 })
 export class StudiesComponent implements OnInit {

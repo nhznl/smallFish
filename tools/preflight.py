@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Keep in step with docs/SUPPORT_MATRIX.md.
 MIN_PYTHON = (3, 12)
-MIN_NODE = (20,)
+MIN_NODE = (22, 22, 3)
 MIN_NPM = (10,)
 MIN_GIT = (2, 30)
 

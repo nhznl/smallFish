@@ -7,7 +7,7 @@ Everything here works without any API key or brokerage account.
 | Tool | Minimum | Check |
 |---|---|---|
 | Python | 3.12 | `python3 -V` |
-| Node.js | 20 (LTS) | `node -v` |
+| Node.js | 22.22.3 minimum; Node 24 LTS recommended | `node -v` |
 | npm | 10 | `npm -v` |
 | Git | 2.30 | `git --version` |
 

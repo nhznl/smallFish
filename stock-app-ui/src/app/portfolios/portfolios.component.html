@@ -41,15 +41,15 @@
     </div>
     <div class="stat-card">
       <span class="stat-label">Best vs SPY</span>
-      <span class="stat-value" [class]="'stat-value ' + signClass(bestVsSpy?.inception_vs_spy)">
-        {{ pp(bestVsSpy?.inception_vs_spy) }}
+      <span class="stat-value" [class]="'stat-value ' + signClass($safeNavigationMigration(bestVsSpy?.inception_vs_spy))">
+        {{ pp($safeNavigationMigration(bestVsSpy?.inception_vs_spy)) }}
       </span>
       <span class="stat-delta">{{ bestVsSpy?.name || '—' }} · since inception</span>
     </div>
     <div class="stat-card">
       <span class="stat-label">SPY YTD</span>
-      <span class="stat-value" [class]="'stat-value ' + signClass(snapshot?.spy_ytd_return)">
-        {{ pct(snapshot?.spy_ytd_return) }}
+      <span class="stat-value" [class]="'stat-value ' + signClass($safeNavigationMigration(snapshot?.spy_ytd_return))">
+        {{ pct($safeNavigationMigration(snapshot?.spy_ytd_return)) }}
       </span>
       <span class="stat-delta">Benchmark for every spread below</span>
     </div>

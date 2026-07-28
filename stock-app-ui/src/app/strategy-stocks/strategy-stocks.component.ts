@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, inject, ViewChild } from '@angular/core';
+import { Component, Input, OnInit, inject, ViewChild, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
@@ -34,6 +34,7 @@ interface ScoreEntry {
     DrawerComponent
   ],
   templateUrl: './strategy-stocks.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./strategy-stocks.component.css']
 })
 export class StrategyStocksComponent implements OnInit {

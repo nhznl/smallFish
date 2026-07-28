@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withXhr } from '@angular/common/http';
 import { CapabilityService, CapabilitySnapshot } from './capability.service';
 
 const SNAPSHOT: CapabilitySnapshot = {
@@ -23,7 +23,7 @@ describe('CapabilityService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [CapabilityService, provideHttpClient(), provideHttpClientTesting()]
+      providers: [CapabilityService, provideHttpClient(withXhr()), provideHttpClientTesting()]
     });
     service = TestBed.inject(CapabilityService);
     http = TestBed.inject(HttpTestingController);

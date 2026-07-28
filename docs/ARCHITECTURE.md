@@ -10,7 +10,7 @@ point.
 ```
 ┌────────────────┐        ┌──────────────┐        ┌────────────────────────┐
 │ stock-app-ui/  │  HTTP  │  stock-app/  │  read  │        data/           │
-│  Angular 20    │───────▶│   FastAPI    │───────▶│  generated artifacts   │
+│  Angular 22    │───────▶│   FastAPI    │───────▶│  generated artifacts   │
 └────────────────┘        └──────────────┘        └────────────────────────┘
                                  │                             ▲
                                  │                             │ write

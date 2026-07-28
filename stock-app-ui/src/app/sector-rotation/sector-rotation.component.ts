@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -24,6 +24,7 @@ import {
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, MatTooltipModule],
   templateUrl: './sector-rotation.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./sector-rotation.component.css']
 })
 export class SectorRotationComponent implements OnInit {

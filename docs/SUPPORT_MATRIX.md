@@ -18,13 +18,11 @@ Decided: 2026-07-26.
 | Runtime | Minimum | Tested in CI | Notes |
 |---|---|---|---|
 | Python | 3.12 | 3.12 | Both virtual environments use the same interpreter version. Newer versions (3.13, 3.14) work; the pinned `pandas==3.0.0` / `numpy==2.4.2` wheels set the practical floor. |
-| Node.js | 20 (LTS) | 20 | Required by Angular 20. Recorded in `.nvmrc` and `package.json#engines`. |
-| npm | 10 | bundled with Node 20 | `npm ci` against the committed lockfile. A global Angular CLI is **not** required. |
+| Node.js | 22.22.3 | 22 and 24 | Required by Angular 22. `.nvmrc` selects Node 24 LTS; `package.json#engines` records the supported release lines. |
+| npm | 10 | 10 and 11 | `npm ci` against the committed lockfile. A global Angular CLI is **not** required. |
 | Git | 2.30 | runner default | Needed for `setup.sh` prerequisite checks. |
 
-The primary developer machine runs Python 3.14.3 and Node 25.2.1. Neither is the
-support floor: Node 25 is not an LTS release, and a build that passes there does
-not demonstrate the declared minimum. CI is the authority for what is supported.
+The preferred development runtime is Node 24 LTS. CI also verifies the minimum supported Node 22 release line. Versions outside `package.json#engines` may work but are not supported.
 
 ## Network exposure
 

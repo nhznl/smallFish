@@ -1,5 +1,5 @@
 
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
 import { Observable } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -38,6 +38,7 @@ interface ManualReconcileForm {
   standalone: true,
   imports: [FormsModule, MatTooltipModule, ModalComponent, CapabilityStateComponent],
   templateUrl: './options.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./options.component.css']
 })
 export class OptionsComponent implements OnInit {

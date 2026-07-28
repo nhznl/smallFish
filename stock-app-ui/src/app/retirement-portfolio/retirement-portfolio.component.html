@@ -705,14 +705,14 @@
                     <td>{{ money(row.current_underlying_price) }}<small>{{ strikeDistanceLabel(row) }}</small>@if (row.price_as_of) {
                     <small>Close · {{ row.price_as_of }}</small>
                   }</td>
-                  <td>{{ pct(optionPositionRisk(row)?.vol_annual) }}<small>{{ ivSourceLabel(optionPositionRisk(row)?.delta_source) }} · {{ shortTs(optionPositionRisk(row)?.vol_as_of) }}</small></td>
-                  <td>{{ num(optionPositionRisk(row)?.delta_shares, 1) }}</td>
-                  <td>{{ num(optionPositionRisk(row)?.computed_beta, 3) }}<small>Computed · {{ optionPositionRisk(row)?.computed_beta_as_of || '—' }}</small></td>
-                  <td>{{ num(optionPositionRisk(row)?.tasty_beta, 3) }}<small>Tastytrade · {{ shortTs(optionPositionRisk(row)?.tasty_beta_as_of) }}</small></td>
-                  <td [class]="pnlClass(optionPositionRisk(row)?.computed_beta_weighted_delta_dollars)">{{ money(optionPositionRisk(row)?.computed_beta_weighted_delta_dollars) }}@if (optionPositionRisk(row)?.computed_beta_fallback) {
+                  <td>{{ pct($safeNavigationMigration(optionPositionRisk(row)?.vol_annual)) }}<small>{{ ivSourceLabel($safeNavigationMigration(optionPositionRisk(row)?.delta_source)) }} · {{ shortTs($safeNavigationMigration(optionPositionRisk(row)?.vol_as_of)) }}</small></td>
+                  <td>{{ num($safeNavigationMigration(optionPositionRisk(row)?.delta_shares), 1) }}</td>
+                  <td>{{ num($safeNavigationMigration(optionPositionRisk(row)?.computed_beta), 3) }}<small>Computed · {{ optionPositionRisk(row)?.computed_beta_as_of || '—' }}</small></td>
+                  <td>{{ num($safeNavigationMigration(optionPositionRisk(row)?.tasty_beta), 3) }}<small>Tastytrade · {{ shortTs($safeNavigationMigration(optionPositionRisk(row)?.tasty_beta_as_of)) }}</small></td>
+                  <td [class]="pnlClass($safeNavigationMigration(optionPositionRisk(row)?.computed_beta_weighted_delta_dollars))">{{ money($safeNavigationMigration(optionPositionRisk(row)?.computed_beta_weighted_delta_dollars)) }}@if (optionPositionRisk(row)?.computed_beta_fallback) {
                     <small>Tasty fallback</small>
                   }</td>
-                  <td [class]="pnlClass(optionPositionRisk(row)?.beta_weighted_delta_dollars)">{{ money(optionPositionRisk(row)?.beta_weighted_delta_dollars) }}</td>
+                  <td [class]="pnlClass($safeNavigationMigration(optionPositionRisk(row)?.beta_weighted_delta_dollars))">{{ money($safeNavigationMigration(optionPositionRisk(row)?.beta_weighted_delta_dollars)) }}</td>
                   <td [class.risk-unavailable]="optionPositionRisk(row)?.beta_weighted_delta_dollars == null">{{ riskStatus(optionPositionRisk(row)) }}@if (optionPositionRisk(row)?.short_gamma_warning) {
                     <small class="urgent">Short-gamma warning</small>
                   }</td>
@@ -739,7 +739,7 @@
                 <dt>Cash limit <span class="help-dot" tabindex="0" role="img" aria-label="Cash limit explanation" matTooltip="The retirement portfolio's total current value, used as the capital base for normalized beta delta." matTooltipPosition="above">?</span></dt><dd>{{ money(entry[1].cash_limit) }} · {{ entry[1].cash_limit_status }}</dd>
                 <dt>Gross cash commitment <span class="help-dot" tabindex="0" role="img" aria-label="Gross cash commitment formula" matTooltip="Stock cash basis + sum of (short-put strike × 100 × contracts). The displayed percentage is total commitment ÷ cash limit." matTooltipPosition="above">?</span></dt><dd [class.negative]="entry[1].gross_cash_commitment.warn">{{ money(entry[1].gross_cash_commitment.total) }} · {{ pct(entry[1].gross_cash_commitment.ratio) }}</dd>
                 <dt>Risk completeness <span class="help-dot" tabindex="0" role="img" aria-label="Risk completeness formula" matTooltip="Included positions ÷ all open positions. Inclusion requires usable spot, IV, option delta, and fresh Tasty Beta inputs." matTooltipPosition="above">?</span></dt><dd>{{ entry[1].completeness }} ({{ entry[1].included_position_count }} included / {{ entry[1].excluded_position_count }} excluded)</dd>
-                <dt>SPY reference price <span class="help-dot" tabindex="0" role="img" aria-label="SPY reference price explanation" matTooltip="Latest available SPY closing price. It converts beta-delta dollars into SPY Delta Shares; it is not a portfolio-risk amount." matTooltipPosition="above">?</span></dt><dd>{{ money(optionsData?.risk?.spy_spot) }}<small>As of {{ optionsData?.risk?.spy_as_of || '—' }}</small></dd>
+                <dt>SPY reference price <span class="help-dot" tabindex="0" role="img" aria-label="SPY reference price explanation" matTooltip="Latest available SPY closing price. It converts beta-delta dollars into SPY Delta Shares; it is not a portfolio-risk amount." matTooltipPosition="above">?</span></dt><dd>{{ money($safeNavigationMigration(optionsData?.risk?.spy_spot)) }}<small>As of {{ optionsData?.risk?.spy_as_of || '—' }}</small></dd>
               </dl>
               <table class="beta-table">
                 <thead>
