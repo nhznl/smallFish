@@ -69,10 +69,10 @@ export interface RetirementOptionGroup {
   event_count: number;
   notes: string;
   /**
-   * Equity lots behind this underlying's short calls. Context only: shares are
-   * not option events and are excluded from every total on the group.
+   * Equity lots held in this underlying. Context only: shares are not option
+   * events and are excluded from every total on the group.
    */
-  share_cover?: RetirementShareCover;
+  equity_holding?: RetirementEquityHolding;
 }
 
 export interface RetirementShareLot {
@@ -86,9 +86,10 @@ export interface RetirementShareLot {
   retrieved_at: string;
 }
 
-export interface RetirementShareCover {
+export interface RetirementEquityHolding {
   lots: RetirementShareLot[];
   total_shares: number;
+  /** Zero when no call is written against these shares. */
   short_call_contracts: number;
   covered_contracts: number;
 }

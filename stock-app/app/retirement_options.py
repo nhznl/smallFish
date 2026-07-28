@@ -161,23 +161,24 @@ def _share_pool(ledger: list[dict[str, Any]]) -> dict[tuple[str, str], Decimal]:
     return dict(pool)
 
 
-def _share_cover(rows: list[dict[str, Any]],
-                 ledger: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Equity lots behind each underlying that has a short call, by symbol.
+def _equity_holdings(rows: list[dict[str, Any]],
+                     ledger: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Equity lots per underlying, with short-call coverage where calls exist.
 
     This is context for the group drill-down, never an input to it: shares are
     not option events, so they stay out of net credit received, open marked
-    value, and group P/L. Only underlyings with a short call are included --
-    elsewhere "are these shares covering something?" is not the question.
+    value, and group P/L. Every underlying with shares is included -- holding
+    the stock is worth seeing next to its options whether or not a call has
+    been written against it -- and `short_call_contracts` is zero when there is
+    no call for the shares to cover.
     """
-    calls = [row for row in rows if row["trade_type"] in {SHORT_CALL, COVERED_CALL}]
-    if not calls:
-        return {}
     contracts: dict[str, Decimal] = defaultdict(Decimal)
     covered: dict[str, int] = defaultdict(int)
-    for call in calls:
-        contracts[call["symbol"]] += _dec(call["qty"])
-        covered[call["symbol"]] += int(call.get("covered_contracts") or 0)
+    for row in rows:
+        if row["trade_type"] not in {SHORT_CALL, COVERED_CALL}:
+            continue
+        contracts[row["symbol"]] += _dec(row["qty"])
+        covered[row["symbol"]] += int(row.get("covered_contracts") or 0)
 
     lots: dict[str, list[dict[str, Any]]] = defaultdict(list)
     totals: dict[str, Decimal] = defaultdict(Decimal)
@@ -186,7 +187,7 @@ def _share_cover(rows: list[dict[str, Any]],
             continue
         symbol = str(holding.get("symbol") or "").upper().strip()
         quantity = _dec(holding.get("quantity"))
-        if symbol not in contracts or quantity <= 0:
+        if quantity <= 0:
             continue
         totals[symbol] += quantity
         lots[symbol].append({
@@ -204,8 +205,8 @@ def _share_cover(rows: list[dict[str, Any]],
         symbol: {
             "lots": sorted(symbol_lots, key=lambda lot: lot["account"]),
             "total_shares": float(totals[symbol]),
-            "short_call_contracts": float(contracts[symbol]),
-            "covered_contracts": covered[symbol],
+            "short_call_contracts": float(contracts.get(symbol, 0)),
+            "covered_contracts": covered.get(symbol, 0),
         }
         for symbol, symbol_lots in lots.items()
     }
@@ -592,11 +593,11 @@ def snapshot(*, as_of: date | None = None, market_provider=_default_market_provi
     groups = (_build_event_groups(events, rows, meta) if events
               else _build_groups(rows, meta))
     # Attached after the group totals are final, so the shares can only ever be
-    # read as context for a covered call -- never as part of the premium math.
-    cover = _share_cover(rows, _read_holdings_ledger())
+    # read as context beside the options -- never as part of the premium math.
+    holdings = _equity_holdings(rows, _read_holdings_ledger())
     for group in groups:
-        if group["symbol"] in cover:
-            group["share_cover"] = cover[group["symbol"]]
+        if group["symbol"] in holdings:
+            group["equity_holding"] = holdings[group["symbol"]]
 
     if not rows:
         # No live option legs. The risk table is empty, but any fully-closed

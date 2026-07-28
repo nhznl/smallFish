@@ -645,13 +645,17 @@
             } @else {
               <div class="empty">No broker option events recorded for {{ group.symbol }}. This group is valued from current positions until its transaction activity syncs.</div>
             }
-            <!-- Shares behind a short call: context for "is this covered?", and
+            <!-- Shares held in the underlying: context beside the options, and
             deliberately outside every total above, which is option cash only. -->
-            @if (group.share_cover; as cover) {
+            @if (group.equity_holding; as holding) {
               <h3 class="share-cover-title">Equity shares held
-                <small [class.urgent]="cover.covered_contracts < cover.short_call_contracts">
-                  {{ shares(cover.total_shares) }} shares · covers {{ cover.covered_contracts }} of
-                  {{ num(cover.short_call_contracts, 0) }} short call{{ cover.short_call_contracts === 1 ? '' : 's' }}
+                <small [class.urgent]="holding.covered_contracts < holding.short_call_contracts">
+                  {{ shares(holding.total_shares) }} shares@if (holding.short_call_contracts) {
+                    <span> · covers {{ holding.covered_contracts }} of
+                    {{ num(holding.short_call_contracts, 0) }} short call{{ holding.short_call_contracts === 1 ? '' : 's' }}</span>
+                  } @else {
+                    <span> · no call written against them</span>
+                  }
                 </small>
               </h3>
               <div class="table-wrap">
@@ -661,7 +665,7 @@
                     <th>Cost basis</th><th>Market value</th><th>Open P/L</th>
                   </tr></thead>
                   <tbody>
-                    @for (lot of cover.lots; track lot) {
+                    @for (lot of holding.lots; track lot) {
                       <tr>
                         <td><span class="account-tag">{{ lot.account }}</span></td>
                         <td>{{ shares(lot.quantity) }}</td>
@@ -675,9 +679,9 @@
                   </tbody>
                 </table>
               </div>
-              <p class="caveat">Shares are shown because a short call is written against this
-              underlying. They are not option events: no figure above &mdash; net credit received,
-              open marked value, or group P/L &mdash; includes them.</p>
+              <p class="caveat">Shares held in this underlying, shown as context for the
+              contracts above. They are not option events: no figure above &mdash; net credit
+              received, open marked value, or group P/L &mdash; includes them.</p>
             }
             <p class="caveat">Imported broker events are immutable facts. Net cash is the signed broker cash flow including fees; a fully-closed group's realized P/L is their sum.</p>
             <ng-container modalActions>

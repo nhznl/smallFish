@@ -198,26 +198,28 @@ def test_short_calls_report_share_coverage_from_the_holdings_ledger(opts_env):
     assert by_symbol["AMD"]["coverage"] == "UNCOVERED"
 
 
-def test_group_share_cover_is_context_and_changes_no_total(opts_env):
+def _group(symbol="CLX"):
+    snapshot = retirement_options.snapshot(
+        market_provider=lambda rows, as_of, cfg: ({}, None))
+    return next(g for g in snapshot["groups"] if g["symbol"] == symbol)
+
+
+def test_group_equity_holding_is_context_and_changes_no_total(opts_env):
     """The drill-down shows the shares behind a covered call; the premium math
     stays option-only."""
     without_shares = [_short_call("CLX")]
     _write_rows(without_shares)
-    baseline = next(g for g in retirement_options.snapshot(
-        market_provider=lambda rows, as_of, cfg: ({}, None))["groups"]
-        if g["symbol"] == "CLX")
+    baseline = _group()
 
     _write_rows(without_shares + [_holding("CLX", "150")])
-    group = next(g for g in retirement_options.snapshot(
-        market_provider=lambda rows, as_of, cfg: ({}, None))["groups"]
-        if g["symbol"] == "CLX")
+    group = _group()
 
-    assert "share_cover" not in baseline
-    cover = group["share_cover"]
-    assert cover["total_shares"] == 150.0
-    assert cover["covered_contracts"] == 1
-    assert cover["short_call_contracts"] == 1.0
-    assert [lot["account"] for lot in cover["lots"]] == ["BrokerageLink"]
+    assert "equity_holding" not in baseline
+    holding = group["equity_holding"]
+    assert holding["total_shares"] == 150.0
+    assert holding["covered_contracts"] == 1
+    assert holding["short_call_contracts"] == 1.0
+    assert [lot["account"] for lot in holding["lots"]] == ["BrokerageLink"]
     # Adding 150 shares must not move any figure the group reports.
     assert {key: group[key] for key in (
         "net_cash_flow", "open_market_value", "total_pnl", "realized_pnl",
@@ -227,18 +229,25 @@ def test_group_share_cover_is_context_and_changes_no_total(opts_env):
             "event_count", "position_status", "pnl_completeness")}
 
 
-def test_groups_without_a_short_call_carry_no_share_cover(opts_env):
-    """Shares held against a short put are not answering a coverage question."""
+def test_shares_appear_on_a_group_with_no_call_written_against_them(opts_env):
+    """Holding the stock is worth seeing beside its options either way; with no
+    call, there is simply nothing for the shares to cover."""
     _write_rows([
         {**_short_call("CLX"), "option_type": "PUT", "symbol": "CLX  260821P00061000"},
         _holding("CLX", "100"),
     ])
 
-    group = next(g for g in retirement_options.snapshot(
-        market_provider=lambda rows, as_of, cfg: ({}, None))["groups"]
-        if g["symbol"] == "CLX")
+    holding = _group()["equity_holding"]
 
-    assert "share_cover" not in group
+    assert holding["total_shares"] == 100.0
+    assert holding["short_call_contracts"] == 0.0
+    assert holding["covered_contracts"] == 0
+
+
+def test_groups_without_shares_carry_no_equity_holding(opts_env):
+    _write_rows([_short_call("CLX"), _holding("AMD", "500")])
+
+    assert "equity_holding" not in _group()
 
 
 def test_cash_is_not_share_coverage(opts_env):

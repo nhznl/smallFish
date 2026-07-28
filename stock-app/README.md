@@ -119,7 +119,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `GET /retirement/portfolio/live` | SnapTrade ledger + editable enrichment in the same shape; the retirement UI reads this. |
 | `POST /retirement/holdings/sync` | Pull current holdings from SnapTrade and rewrite the ledger. |
 | `PUT /retirement/enrichment/{symbol}` | Create or update the editable category/industry/note for one symbol. |
-| `GET /retirement/options` | Retirement option legs as editable trade groups + a broker risk-positions table. Short calls carry share-coverage state, and a group with one also carries the backing equity lots as context excluded from its totals. |
+| `GET /retirement/options` | Retirement option legs as editable trade groups + a broker risk-positions table. Short calls carry share-coverage state, and a group whose underlying has shares also carries those equity lots as context excluded from its totals. |
 | `PUT /retirement/options/groups/{symbol}` | Update the editable name/status/notes for one option group (underlying). |
 | `GET /runWheel`, `/runChains` | Run the wheel job (with best-effort upcoming-earnings refresh) and manual prospective option-quote collection. |
 | `GET /runEarningsScan` | Refresh the shared upcoming-earnings calendar (Finnhub, only when stale), then report how many scanner symbols have an upcoming report. |
