@@ -109,8 +109,8 @@ never touches another symbol's cache.
 | `data/wheel/`, `data/wheel_exclusions/` | Wheel screen results | `wheel` |
 | `data/premiums/` | Immutable timestamped quote archives | `chains` |
 | `data/sector_rotation/` | Sector leadership snapshots | `sector_rotation` |
-| `data/events.csv`, `data/events_history/` | Earnings calendar | `fetch` (needs Finnhub) |
-| `data/earnings_history.csv` | Historical earnings dates | `earnings-history` |
+| `data/events.csv`, `data/events_meta.json`, `data/events_history/` | Upcoming earnings calendar, freshness/coverage, and dated snapshots | `fetch` or the conditional scan prerequisite (Finnhub) |
+| `data/earnings_history.csv` | Multi-year realized earnings dates; not refreshed in the live scan path | `earnings-history` (Yahoo/yfinance) |
 | `data/backtest/`, `data/sector_rotation_study/` | Study runs and pinned evidence | study commands |
 | `data/ledger_options/`, `data/ledger_retirement/` | Broker data. **Real positions.** | brokerage syncs |
 | `data/studies/` | Materialized Research Studies JSON | `studies build` |

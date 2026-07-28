@@ -197,7 +197,8 @@ def _apply_date_consistency(events: pd.DataFrame, strategy: dict,
     history_path = data_root / "earnings_history.csv"
     if not history_path.exists():
         return events, {"date_consistency_unavailable": True}
-    realized = pd.read_csv(history_path, parse_dates=["event_date"])
+    realized = pd.read_csv(
+        history_path, parse_dates=["event_date"], keep_default_na=False)
     passing = consistent_tickers(realized, as_of)
     kept = events[events["ticker"].astype(str).isin(passing)].copy()
     dropped = sorted(set(events["ticker"].dropna().astype(str))
@@ -219,8 +220,9 @@ def run_scan(root: Path, strategy: dict, as_of: str, lookback_days: int = 90) ->
     """
     as_of_ts = pd.to_datetime(as_of)
 
-    events = pd.read_csv(_strategy_data_root(root, strategy) / "events.csv",
-                         parse_dates=["event_date"])
+    events = pd.read_csv(
+        _strategy_data_root(root, strategy) / "events.csv",
+        parse_dates=["event_date"], keep_default_na=False)
     events, consistency_fields = _apply_date_consistency(
         events, strategy, as_of_ts, _strategy_data_root(root, strategy))
 

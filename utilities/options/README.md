@@ -15,11 +15,14 @@ collection, immutable quote archives, and archive verification.
 
 | Command | Needs Tastytrade? | Produces |
 |---|---|---|
-| `./commands.sh wheel` | **No** | The Wheel candidate screen, from the local price cache alone |
+| `./commands.sh wheel` | **No** | The Wheel candidate screen from the local price cache; the UI first attempts a conditional Finnhub earnings refresh when configured |
 | `./commands.sh verify-premiums [run-id]` | **No** | Offline integrity check of an existing archive |
 | `./commands.sh chains` | **Yes** | Exact-contract discovery plus timestamped DXLink quotes |
 
-The Wheel screen is the credential-free half and is what a new user sees.
+The Wheel screen is the credential-free half and is what a new user sees. Its
+UI action reuses or conditionally refreshes the shared upcoming-earnings cache,
+but refresh failure never blocks the scan: uncovered horizons remain visibly
+`Unknown (stale)`.
 Quote collection is the credentialed half: `chains` writes every attempt
 immutably, reports complete/partial/unavailable provider coverage, and exits
 non-zero when no requested Tastytrade quote arrives. Yahoo quotes are

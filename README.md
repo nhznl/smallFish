@@ -203,8 +203,9 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh chains` | Discover Wheel contracts, archive Tastytrade quotes |
 | `./commands.sh sector-rotation` | Recompute the sector leadership snapshot |
 | `./commands.sh studies build\|validate` | Materialize or validate Research Studies JSON |
-| `./commands.sh scan [earnings]` | Run a strategy scan (needs `FINNHUB_API_KEY`) |
+| `./commands.sh scan [earnings]` | Run a strategy scan from the current earnings cache |
 | `./commands.sh fetch` | Fetch upcoming earnings (needs `FINNHUB_API_KEY`) |
+| `./commands.sh ensure-events` | Reuse a fresh upcoming-earnings cache or conditionally refresh it |
 | `./commands.sh scrape-retry` | Re-run the previous scrape's failures |
 | `./commands.sh verify-premiums [run-id]` | Offline integrity check of a quote archive |
 | `./commands.sh earnings-history` | Fetch historical earnings dates |

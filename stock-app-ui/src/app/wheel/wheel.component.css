@@ -129,6 +129,12 @@
   color: var(--pos);
 }
 
+.job-warning {
+  background: var(--warn-soft);
+  border-color: rgb(180 83 9 / .25);
+  color: var(--warn);
+}
+
 .job-error {
   background: var(--neg-soft);
   border-color: rgb(192 38 38 / .22);

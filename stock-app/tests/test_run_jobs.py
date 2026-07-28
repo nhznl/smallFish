@@ -57,7 +57,71 @@ def test_run_wheel_timeout(monkeypatch):
 
     monkeypatch.setattr(run_jobs.subprocess, "run", _raise)
     body = client.get("/runWheel").json()
-    assert body == {"status": "timeout", "message": "Wheel scan did not finish within 5 minutes."}
+    assert body["status"] == "timeout"
+    assert body["message"] == "Wheel scan did not finish within 5 minutes."
+    assert body["earningsRefresh"]["status"] == "timeout"
+
+
+def test_run_wheel_checks_earnings_before_scanning(monkeypatch):
+    calls = []
+
+    def _run(args, **kwargs):
+        job = args[4]
+        calls.append(job)
+        output = ("Upcoming earnings calendar is fresh."
+                  if job == "ensure-events" else "Wheel complete")
+        return _FakeProc(0, output)
+
+    monkeypatch.setattr(run_jobs.subprocess, "run", _run)
+    monkeypatch.setattr(run_jobs.cache, "reload", lambda: None)
+
+    body = client.get("/runWheel").json()
+
+    assert calls == ["ensure-events", "wheel"]
+    assert body["status"] == "ok"
+    assert body["earningsRefresh"]["status"] == "ok"
+    assert "warning" not in body
+
+
+def test_run_wheel_continues_with_visible_warning_when_refresh_is_unavailable(monkeypatch):
+    calls = []
+
+    def _run(args, **kwargs):
+        job = args[4]
+        calls.append(job)
+        if job == "ensure-events":
+            return _FakeProc(3, "Upcoming earnings calendar is stale and no key is configured.")
+        return _FakeProc(0, "Wheel complete")
+
+    monkeypatch.setattr(run_jobs.subprocess, "run", _run)
+    monkeypatch.setattr(run_jobs.cache, "reload", lambda: None)
+
+    body = client.get("/runWheel").json()
+
+    assert calls == ["ensure-events", "wheel"]
+    assert body["status"] == "ok"
+    assert body["earningsRefresh"]["status"] == "error"
+    assert "Unknown (stale)" in body["warning"]
+
+
+def test_required_earnings_job_fails_before_scan_when_refresh_is_unavailable(monkeypatch):
+    calls = []
+
+    def _run(args, **kwargs):
+        calls.append(args[4])
+        return _FakeProc(
+            3,
+            "Upcoming earnings calendar is stale or missing and FINNHUB_API_KEY is not configured.",
+        )
+
+    monkeypatch.setattr(run_jobs.subprocess, "run", _run)
+
+    body = run_jobs._run_earnings_dependent_command("scan", require_fresh=True)
+
+    assert calls == ["ensure-events"]
+    assert body["status"] == "error"
+    assert "FINNHUB_API_KEY" in body["message"]
+    assert body["earningsRefresh"]["status"] == "error"
 
 
 def _capture_chains(monkeypatch) -> dict:

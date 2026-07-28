@@ -6,6 +6,7 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app import config
@@ -87,15 +88,39 @@ def test_study_scan_snapshot_is_unavailable_until_a_successful_scan(tmp_path, mo
 
 def test_study_scan_uses_the_allowlisted_dispatch_and_materializes_snapshot(tmp_path, monkeypatch):
     studies_dir = _studies_dir(tmp_path, monkeypatch)
-    monkeypatch.setattr(studies.run_jobs, "_run_command", lambda job: {
-        "status": "ok", "durationMs": 1, "output": "scan complete", "job": job})
+    monkeypatch.setattr(studies.run_jobs, "_run_earnings_dependent_command",
+                        lambda job, require_fresh: {
+                            "status": "ok", "durationMs": 1,
+                            "output": "scan complete", "job": job,
+                            "requireFresh": require_fresh})
     monkeypatch.setattr(studies.studies_read, "materialize_scan_snapshot", lambda study_id: {
         "schemaName": "pre-earnings-candidates-v1", "generatedAt": "2026-07-26T00:00:00Z", "candidates": []})
     response = client.post("/api/studies/pre-earnings-momentum/scan")
     assert response.status_code == 200
     assert response.json()["job"] == "scan"
+    assert response.json()["requireFresh"] is True
     assert response.json()["status"] == "ok"
     assert studies_dir.is_dir()
+
+
+def test_study_scan_keeps_previous_snapshot_when_earnings_are_stale(tmp_path, monkeypatch):
+    _studies_dir(tmp_path, monkeypatch)
+    monkeypatch.setattr(studies.run_jobs, "_run_earnings_dependent_command",
+                        lambda job, require_fresh: {
+                            "status": "error",
+                            "message": "Fresh upcoming earnings data is required.",
+                        })
+    monkeypatch.setattr(
+        studies.studies_read,
+        "materialize_scan_snapshot",
+        lambda _study_id: pytest.fail("failed prerequisite must not publish a snapshot"),
+    )
+
+    response = client.post("/api/studies/pre-earnings-momentum/scan")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "error"
+    assert "Fresh upcoming earnings" in response.json()["message"]
 
 
 def test_study_scan_rejects_duplicate_run(tmp_path, monkeypatch):

@@ -45,8 +45,8 @@ utilities/.venv/bin/python -m utilities.scraper --help
 | `audit_price_cache.py` | Whole-history rewrite when an adjustment vintage goes stale |
 | `indicators/ta.py` | Technical indicators |
 | `sector_rotation.py` | The live 11-sector leadership snapshot against SPY |
-| `events.py` | Earnings calendar (requires `FINNHUB_API_KEY`) |
-| `fetch_earnings_history.py` | Historical earnings dates |
+| `events.py` | Validated, atomic upcoming-earnings cache plus conditional Finnhub refresh |
+| `fetch_earnings_history.py` | Separately maintained multi-year Yahoo/yfinance earnings dates |
 | `manifest.py` | Artifact manifests and provenance |
 | `options/` | Wheel screen, quote collection, archive verification |
 

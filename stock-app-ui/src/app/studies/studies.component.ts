@@ -27,6 +27,7 @@ export class StudiesComponent implements OnInit {
   loading = true;
   error = '';
   scanRunning = false;
+  scanStatus: 'idle' | 'ok' | 'error' = 'idle';
   scanMessage = '';
   scanCandidates: any[] = [];
   scanGeneratedAt = '';
@@ -80,14 +81,22 @@ export class StudiesComponent implements OnInit {
   runScan(): void {
     if (!this.study || this.scanRunning) return;
     this.scanRunning = true;
+    this.scanStatus = 'idle';
     this.scanMessage = 'Running scan…';
     this.studiesService.runScan(this.study.id).subscribe({
       next: result => {
         this.scanRunning = false;
-        this.scanMessage = result.status === 'ok' ? 'Scan complete.' : `Scan failed: ${result.message || result.output || 'see server logs'}`;
+        this.scanStatus = result.status === 'ok' ? 'ok' : 'error';
+        this.scanMessage = result.status === 'ok'
+          ? 'Scan complete with a current upcoming-earnings calendar.'
+          : `Scan not run: ${result.message || result.output || 'see server logs'}`;
         if (result.status === 'ok') this.loadScan();
       },
-      error: () => { this.scanRunning = false; this.scanMessage = 'Scan failed. See the server response for details.'; }
+      error: () => {
+        this.scanRunning = false;
+        this.scanStatus = 'error';
+        this.scanMessage = 'Scan not run. Fresh upcoming earnings data could not be verified.';
+      }
     });
   }
 
