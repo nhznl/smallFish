@@ -67,7 +67,8 @@ def run_study_scan(study_id: str) -> JSONResponse:
     if not _scan_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="A pre-earnings study scan is already running.")
     try:
-        result = run_jobs._run_command("scan")
+        result = run_jobs._run_earnings_dependent_command(
+            "scan", require_fresh=True)
         if result.get("status") == "ok":
             studies_read.materialize_scan_snapshot(study_id)
         return JSONResponse(content=result)

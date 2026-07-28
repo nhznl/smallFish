@@ -52,6 +52,7 @@ def _run_command(job: str, args: list[str] | None = None, *,
         label = {
             "scan": "Scan",
             "wheel": "Wheel scan",
+            "ensure-events": "Earnings refresh",
             "chains": "Option quote collection",
             "sector-rotation": "Sector rotation",
         }.get(job, "Job")
@@ -75,9 +76,54 @@ def _run_command(job: str, args: list[str] | None = None, *,
     return result
 
 
+def _earnings_refresh_summary(result: dict) -> dict:
+    """Expose only the small, credential-safe prerequisite result."""
+    return {
+        key: result[key]
+        for key in ("status", "exitCode", "durationMs", "output", "message")
+        if key in result
+    }
+
+
+def _run_earnings_dependent_command(job: str, *, require_fresh: bool) -> dict:
+    """Check the shared upcoming-earnings cache before a live scan.
+
+    Pre-Earnings cannot select candidates without a trustworthy upcoming event,
+    so it fails closed. Wheel analytics remain useful without Finnhub and run
+    with an explicit warning; their event cells already fail stale to UNKNOWN.
+    """
+    refresh = _run_command("ensure-events", reload_cache=False)
+    refresh_summary = _earnings_refresh_summary(refresh)
+    refresh_ok = refresh.get("status") == "ok"
+    if not refresh_ok and require_fresh:
+        reason = (refresh.get("output") or refresh.get("message")
+                  or "The earnings refresh was unavailable.")
+        return {
+            "status": "error",
+            "exitCode": refresh.get("exitCode"),
+            "durationMs": refresh.get("durationMs", 0),
+            "message": (
+                "Fresh upcoming earnings data is required before this scan. "
+                f"{reason} The previous scan snapshot was kept."
+            ),
+            "earningsRefresh": refresh_summary,
+        }
+
+    result = _run_command(job)
+    result["durationMs"] = result.get("durationMs", 0) + refresh.get("durationMs", 0)
+    result["earningsRefresh"] = refresh_summary
+    if not refresh_ok and result.get("status") == "ok":
+        result["warning"] = (
+            "Earnings could not be refreshed. Wheel used the existing cache; "
+            "treat Unknown (stale) earnings as incomplete."
+        )
+    return result
+
+
 @router.get("/runWheel")
 def run_wheel() -> JSONResponse:
-    return JSONResponse(content=_run_command("wheel"))
+    return JSONResponse(content=_run_earnings_dependent_command(
+        "wheel", require_fresh=False))
 
 
 @router.get("/runSectorRotation")

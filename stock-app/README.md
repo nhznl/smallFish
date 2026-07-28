@@ -112,7 +112,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `GET /api/studies` | Materialized Research Studies catalog. |
 | `GET /api/studies/{studyId}` | Validated materialized study detail and variations. |
 | `GET /api/studies/{studyId}/scan` | Latest materialized candidate snapshot for a scan-capable study. |
-| `POST /api/studies/{studyId}/scan` | Run an explicitly allowlisted study scan. |
+| `POST /api/studies/{studyId}/scan` | Verify/refresh upcoming earnings, then run an explicitly allowlisted study scan; fails closed when freshness is unavailable. |
 | `GET /wheelCandidates?horizon=37` | Wheel candidates with trend data. |
 | `GET /stocks/{symbol}/info` | Company information. |
 | `GET`, `POST`, `PUT /options*` | Broker activity sync, editable trade groups, group P/L, warnings, and risk data. |
@@ -121,7 +121,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `PUT /retirement/enrichment/{symbol}` | Create or update the editable category/industry/note for one symbol. |
 | `GET /retirement/options` | Retirement option legs as editable trade groups + a broker risk-positions table. |
 | `PUT /retirement/options/groups/{symbol}` | Update the editable name/status/notes for one option group (underlying). |
-| `GET /runWheel`, `/runChains` | Run the wheel job and manual prospective option-quote collection. |
+| `GET /runWheel`, `/runChains` | Run the wheel job (with best-effort upcoming-earnings refresh) and manual prospective option-quote collection. |
 
 `GET /options?account=` returns `rows`, `wheel_groups`, `totals`, `risk`, and
 `warnings`. The optional account is `RETIREMENT` or `TRADING`; omitting it

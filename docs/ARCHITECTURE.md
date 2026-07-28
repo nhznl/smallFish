@@ -82,6 +82,13 @@ Three run-job endpoints (`/runWheel`, `/runChains`, `/runSectorRotation`) let th
 UI trigger batch work. They are the only place that crosses the boundary, and
 they shell out rather than importing the pipeline.
 
+The Wheel and operational Pre-Earnings actions first shell out to the shared
+upcoming-earnings freshness check. It serializes concurrent refreshes and
+publishes validated Finnhub results atomically. Pre-Earnings requires success;
+Wheel continues without the optional credential and preserves its explicit
+`Unknown (stale)` event state. Multi-year Yahoo earnings history remains a
+separate manual maintenance artifact and is never fetched in this request path.
+
 ### Route collisions
 
 `/options` and `/portfolios` are both Angular routes and API paths. In

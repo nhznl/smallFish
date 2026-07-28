@@ -16,6 +16,7 @@
 #
 # Strategy scan:
 #   fetch         - fetch upcoming earnings events (requires FINNHUB_API_KEY)
+#   ensure-events - reuse a fresh upcoming-earnings cache or refresh it if stale
 #   scan [earnings] - run a strategy scan (defaults to pre-earnings momentum)
 #   wheel         - run the options-wheel scan (data/wheel + wheel_exclusions)
 #   chains        - discover Wheel contracts and archive Tastytrade DXLink quotes
@@ -187,6 +188,9 @@ case "$1" in
   fetch)
     cd "$ROOT" && "$UTILITIES_PYTHON" -m utilities.events "${@:2}"
     ;;
+  ensure-events)
+    cd "$ROOT" && "$UTILITIES_PYTHON" -m utilities.events --if-stale "${@:2}"
+    ;;
   scan)
     run_strategy_action scan "${@:2}"
     ;;
@@ -230,7 +234,7 @@ case "$1" in
     cd "$ROOT" && "$UTILITIES_PYTHON" -m utilities.fetch_earnings_history "${@:2}"
     ;;
   *)
-    echo "Usage: $0 {doctor|bootstrap-data|server|build-ui|studies|fetch|scan|wheel|chains|verify-premiums|universe|scrape|scrape-history|scrape-retry|sector-rotation|sector-rotation-study|sector-rotation-study-v2|backtest|event-backtest|earnings-history}"
+    echo "Usage: $0 {doctor|bootstrap-data|server|build-ui|studies|fetch|ensure-events|scan|wheel|chains|verify-premiums|universe|scrape|scrape-history|scrape-retry|sector-rotation|sector-rotation-study|sector-rotation-study-v2|backtest|event-backtest|earnings-history}"
     exit 1
     ;;
 esac

@@ -109,7 +109,7 @@ export class WheelComponent implements OnInit, OnDestroy {
 
   // Run Wheel button state (mirrors the Strategy Explainer "Run Scan Now" button)
   wheelRunning = false;
-  wheelStatus: 'idle' | 'ok' | 'error' = 'idle';
+  wheelStatus: 'idle' | 'ok' | 'warning' | 'error' = 'idle';
   wheelMessage = '';
   wheelMessageAt: Date | null = null;
   chainsRunning = false;
@@ -314,8 +314,9 @@ export class WheelComponent implements OnInit, OnDestroy {
     return 'badge-neutral';
   }
 
-  jobStatusClass(status: 'idle' | 'ok' | 'error'): string {
+  jobStatusClass(status: 'idle' | 'ok' | 'warning' | 'error'): string {
     if (status === 'ok') return 'job-ok';
+    if (status === 'warning') return 'job-warning';
     if (status === 'error') return 'job-error';
     return 'job-running';
   }
@@ -337,9 +338,12 @@ export class WheelComponent implements OnInit, OnDestroy {
     this.stockService.runWheel().subscribe(res => {
       this.wheelRunning = false;
       if (res && res.status === 'ok') {
-        this.wheelStatus = 'ok';
+        this.wheelStatus = res.warning ? 'warning' : 'ok';
         const secs = res.durationMs ? Math.round(res.durationMs / 1000) : null;
-        this.wheelMessage = `✓ Wheel scan complete${secs != null ? ' in ' + secs + 's' : ''}. Reloading candidates…`;
+        const completion = `Wheel scan complete${secs != null ? ' in ' + secs + 's' : ''}.`;
+        this.wheelMessage = res.warning
+          ? `${completion} ${res.warning}`
+          : `${completion} Reloading candidates…`;
         this.wheelMessageAt = new Date();
         this.load();
       } else {

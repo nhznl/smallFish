@@ -10,9 +10,13 @@ studies are published, verified, and frozen. Published at
 `/studies/pre-earnings-momentum` with verdict `FAILED` and evidence level
 `EXPLORATORY`.
 
-The live scan (`./commands.sh scan`) requires `FINNHUB_API_KEY`; the earnings
-calendar is the one input smallFish cannot derive from the local price cache.
-The published study record needs no credential.
+The live UI scan requires a current upcoming-earnings cache; it reuses a cache
+fetched within one day with sufficient coverage or conditionally refreshes it
+from Finnhub. If refresh is required, `FINNHUB_API_KEY` must be configured and
+the scan fails closed rather than publishing candidates from stale event data.
+The published study record needs no credential. The separate multi-year
+`earnings_history.csv` is maintained through `./commands.sh earnings-history`
+and is never fetched automatically in the live request path.
 
 ## Current status
 

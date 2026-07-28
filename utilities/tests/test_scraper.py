@@ -586,7 +586,12 @@ def test_universe_is_the_symbol_source_and_retired_excluded():
 def test_universe_excludes_java_invalid_symbols():
     with tempfile.TemporaryDirectory() as t:
         tmp = Path(t)
-        invalid = next(iter(S.INVALID_SYMBOLS))
+        # `-` is intentionally rejected by the registry model before the
+        # scraper filter runs, so choose a deterministic registry-valid member.
+        invalid = next(
+            symbol for symbol in sorted(S.INVALID_SYMBOLS)
+            if U.normalize_symbol(symbol)
+        )
         reg_path = _write_registry(tmp, [{"symbol": "AAPL"}, {"symbol": invalid}])
         retired_path = tmp / "retired_symbols.csv"
         symbols = build_scrape_universe(reg_path, retired_path)

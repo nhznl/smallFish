@@ -548,7 +548,8 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
     events_path = output_root / "events.csv"
     events_by_symbol: dict[str, list[pd.Timestamp]] = {}
     if events_path.exists():
-        events = pd.read_csv(events_path, parse_dates=["event_date"])
+        events = pd.read_csv(
+            events_path, parse_dates=["event_date"], keep_default_na=False)
         for ticker, grp in events.groupby("ticker"):
             events_by_symbol[str(ticker).upper()] = list(grp["event_date"])
     else:

@@ -54,7 +54,7 @@
       }</div><button type="button" class="btn btn-primary" [disabled]="scanRunning" [attr.aria-busy]="scanRunning" (click)="runScan()">@if (scanRunning) {
       <span class="btn-spinner"></span>
       }{{ scanRunning ? 'Running scan' : 'Run scan' }}</button></div><div class="panel-body"><p>Current candidates apply the studied selection rules. They do not change this variation’s historical evidence.</p>@if (scanMessage) {
-      <p class="scan-message" role="status">{{ scanMessage }}</p>
+      <p class="scan-message" [class.banner]="scanStatus === 'error'" [class.banner-neg]="scanStatus === 'error'" [attr.role]="scanStatus === 'error' ? 'alert' : 'status'">{{ scanMessage }}</p>
       }@if (scanCandidates.length) {
       <app-strategy-stocks [candidates]="scanCandidates"></app-strategy-stocks>
     } @else {
