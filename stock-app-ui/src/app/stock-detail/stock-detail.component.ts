@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, signal, computed, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { CommonModule } from '@angular/common';
+
 import { StockService } from '../api/stock.service';
 import { StockAnalysis, YearlySlope } from '../model/stock';
 import { StockInfo } from '../model/stock-info';
@@ -124,7 +124,7 @@ type HeatmapData = {
   selector: 'app-stock-detail',
   templateUrl: './stock-detail.component.html',
   styleUrls: ['./stock-detail.component.css'],
-  imports: [CommonModule, RouterLink, MatTooltipModule],
+  imports: [RouterLink, MatTooltipModule],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StockDetailComponent implements OnInit {

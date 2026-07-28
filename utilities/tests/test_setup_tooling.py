@@ -57,9 +57,9 @@ def test_meets_compares_field_by_field(found, minimum, ok):
 def test_declared_minimums_match_the_support_matrix():
     matrix = (REPO_ROOT / "docs/SUPPORT_MATRIX.md").read_text(encoding="utf-8")
     assert "| Python | 3.12 |" in matrix
-    assert "| Node.js | 20 (LTS) |" in matrix
+    assert "| Node.js | 22.22.3 |" in matrix
     assert P.MIN_PYTHON == (3, 12)
-    assert P.MIN_NODE == (20,)
+    assert P.MIN_NODE == (22, 22, 3)
 
 
 # ------------------------------------------------------------------- app.env

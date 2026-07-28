@@ -5,44 +5,55 @@
       <small>Immutable quote collection archive. Opening or filtering this tab never calls Tastytrade.</small>
     </div>
     <button type="button" class="btn btn-ghost" [disabled]="loading" (click)="load()">
-      <span class="btn-spinner" *ngIf="loading" aria-hidden="true"></span>
-      <svg *ngIf="!loading" class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 1 0 2 5.5"/><path d="M20 4v7h-7"/></svg>
+      @if (loading) {
+        <span class="btn-spinner" aria-hidden="true"></span>
+      }
+      @if (!loading) {
+        <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 1 0 2 5.5"/><path d="M20 4v7h-7"/></svg>
+      }
       {{ loading ? 'Loading…' : 'Refresh archive' }}
     </button>
   </div>
 
   <div class="panel-body">
-    <p *ngIf="error" class="banner banner-neg">{{ error }}</p>
+    @if (error) {
+      <p class="banner banner-neg">{{ error }}</p>
+    }
 
-    <ng-container *ngIf="!loading && !error && snapshot as data">
-      <div *ngIf="!data.available" class="empty-state">
-        <span class="empty-icon" aria-hidden="true">○</span>
-        <span class="empty-title">No archive yet</span>
-        <span class="empty-hint">{{ data.reason }}</span>
-      </div>
-
-      <ng-container *ngIf="data.available && data.summary as summary">
+    @if (!loading && !error && snapshot; as data) {
+      @if (!data.available) {
+        <div class="empty-state">
+          <span class="empty-icon" aria-hidden="true">○</span>
+          <span class="empty-title">No archive yet</span>
+          <span class="empty-hint">{{ data.reason }}</span>
+        </div>
+      }
+      @if (data.available && data.summary; as summary) {
         <div class="archive-meta">
           <span><strong>Run:</strong> {{ data.runId }}</span>
           <span><strong>As of:</strong> {{ data.asOf }}</span>
           <span><strong>Retrieved:</strong> {{ providerValue('retrieved_at') || data.generatedAtUtc || '—' }}</span>
           <span><strong>Provider:</strong> {{ providerValue('source') || '—' }} · {{ providerValue('status') || '—' }}</span>
         </div>
-
         <!-- A scoped run archives a deliberate subset; say so before any count is read. -->
-        <p *ngIf="data.collectionScope?.scoped" class="banner banner-warn scope-banner">
-          <strong>Scoped collection.</strong> {{ scopeDescription() }}
-          This archive is a deliberate subset of the configured sweep, not a full one.
-          <span *ngIf="data.collectionScope?.symbolsWithoutEntryStrikes?.length">
-            The cushion left no entry strike for
-            {{ data.collectionScope!.symbolsWithoutEntryStrikes!.join(', ') }}.
-          </span>
-          <span *ngIf="data.collectionScope?.symbolsNotInPool?.length">
-            Requested but not in the eligible pool:
-            {{ data.collectionScope!.symbolsNotInPool!.join(', ') }}.
-          </span>
-        </p>
-
+        @if (data.collectionScope?.scoped) {
+          <p class="banner banner-warn scope-banner">
+            <strong>Scoped collection.</strong> {{ scopeDescription() }}
+            This archive is a deliberate subset of the configured sweep, not a full one.
+            @if (data.collectionScope?.symbolsWithoutEntryStrikes?.length) {
+              <span>
+                The cushion left no entry strike for
+                {{ data.collectionScope!.symbolsWithoutEntryStrikes!.join(', ') }}.
+              </span>
+            }
+            @if (data.collectionScope?.symbolsNotInPool?.length) {
+              <span>
+                Requested but not in the eligible pool:
+                {{ data.collectionScope!.symbolsNotInPool!.join(', ') }}.
+              </span>
+            }
+          </p>
+        }
         <div class="stat-strip">
           <div class="stat-card">
             <span class="stat-label">Contracts</span>
@@ -65,12 +76,10 @@
             <span class="stat-value">{{ summary.entryEligibleContracts }}</span>
           </div>
         </div>
-
         <div class="caveat">
           <strong>ENTRY view</strong> means the contract was selected for the entry-analysis view; it does not mean it is trade-eligible.
           Eligibility also requires quote quality, liquidity, event, and other gate checks.
         </div>
-
         <div class="quote-filters">
           <label class="control">
             <span class="control-label">Symbol</span>
@@ -88,12 +97,13 @@
             <span class="control-label">Quote quality</span>
             <select class="control-select" [(ngModel)]="qualityFilter">
               <option value="ALL">All qualities</option>
-              <option *ngFor="let quality of qualityLabels()" [value]="quality">{{ quality }}</option>
+              @for (quality of qualityLabels(); track quality) {
+                <option [value]="quality">{{ quality }}</option>
+              }
             </select>
           </label>
           <span class="result-count">{{ rows().length | number }} shown</span>
         </div>
-
         <div class="table-shell">
           <table class="data-table quotes-table">
             <thead><tr>
@@ -103,41 +113,47 @@
               <th class="num">OI / volume</th><th class="num">Spread</th><th>Liquidity</th><th>Entry status</th><th>Reasons</th>
             </tr></thead>
             <tbody>
-              <tr *ngFor="let row of rows()">
-                <td class="col-sticky symbol-cell">
-                  <a *ngIf="row.symbol" [routerLink]="['/stockDetail', row.symbol]" target="_blank">{{ row.symbol }}</a>
-                </td>
-                <td>{{ row.expiry || '—' }}<br><small>{{ row.actualDte ?? '—' }} / {{ row.requestedDte ?? '—' }}</small></td>
-                <td>{{ row.side || '—' }}</td>
-                <td class="num">{{ row.strike != null ? ('$' + (row.strike | number:'1.2-2')) : '—' }}</td>
-                <td>{{ row.analysisView || '—' }}</td>
-                <td>{{ row.bid != null ? ('$' + (row.bid | number:'1.2-2')) : '—' }} / {{ row.ask != null ? ('$' + (row.ask | number:'1.2-2')) : '—' }}</td>
-                <td>
-                  <span class="badge" [class]="'badge ' + qualityBadgeClass(row.quoteQuality)"
-                        [matTooltip]="row.quoteQualityReasons || ''" matTooltipPosition="above">
-                    {{ row.quoteQuality || '—' }}
-                  </span>
-                </td>
-                <td>{{ row.quoteProviderStatus || '—' }}</td>
-                <td class="timestamp-cell">{{ row.quoteEventTimestamp || '—' }}</td>
-                <td class="num">{{ row.openInterest ?? '—' }} / {{ row.volume ?? '—' }}</td>
-                <td class="num">{{ row.spreadPct != null ? ((row.spreadPct * 100) | number:'1.1-1') + '%' : '—' }}</td>
-                <td>{{ row.liquidityOk == null ? '—' : (row.liquidityOk ? 'OK' : 'No') }}</td>
-                <td>
-                  <span class="badge" [class]="row.entryEligible ? 'badge badge-pos' : 'badge badge-neutral'">
-                    {{ row.entryEligible ? 'Eligible' : 'Not eligible' }}
-                  </span>
-                </td>
-                <td class="reason-cell"
+              @for (row of rows(); track row) {
+                <tr>
+                  <td class="col-sticky symbol-cell">
+                    @if (row.symbol) {
+                      <a [routerLink]="['/stockDetail', row.symbol]" target="_blank">{{ row.symbol }}</a>
+                    }
+                  </td>
+                  <td>{{ row.expiry || '—' }}<br><small>{{ row.actualDte ?? '—' }} / {{ row.requestedDte ?? '—' }}</small></td>
+                  <td>{{ row.side || '—' }}</td>
+                  <td class="num">{{ row.strike != null ? ('$' + (row.strike | number:'1.2-2')) : '—' }}</td>
+                  <td>{{ row.analysisView || '—' }}</td>
+                  <td>{{ row.bid != null ? ('$' + (row.bid | number:'1.2-2')) : '—' }} / {{ row.ask != null ? ('$' + (row.ask | number:'1.2-2')) : '—' }}</td>
+                  <td>
+                    <span class="badge" [class]="'badge ' + qualityBadgeClass(row.quoteQuality)"
+                      [matTooltip]="row.quoteQualityReasons || ''" matTooltipPosition="above">
+                      {{ row.quoteQuality || '—' }}
+                    </span>
+                  </td>
+                  <td>{{ row.quoteProviderStatus || '—' }}</td>
+                  <td class="timestamp-cell">{{ row.quoteEventTimestamp || '—' }}</td>
+                  <td class="num">{{ row.openInterest ?? '—' }} / {{ row.volume ?? '—' }}</td>
+                  <td class="num">{{ row.spreadPct != null ? ((row.spreadPct * 100) | number:'1.1-1') + '%' : '—' }}</td>
+                  <td>{{ row.liquidityOk == null ? '—' : (row.liquidityOk ? 'OK' : 'No') }}</td>
+                  <td>
+                    <span class="badge" [class]="row.entryEligible ? 'badge badge-pos' : 'badge badge-neutral'">
+                      {{ row.entryEligible ? 'Eligible' : 'Not eligible' }}
+                    </span>
+                  </td>
+                  <td class="reason-cell"
                     [matTooltip]="row.entryReason || row.gateReason || ''" matTooltipPosition="above">
-                  {{ row.entryReason || row.gateReason || '—' }}
-                </td>
-              </tr>
-              <tr *ngIf="rows().length === 0"><td colspan="14" class="no-rows">No archived contracts match these filters.</td></tr>
+                    {{ row.entryReason || row.gateReason || '—' }}
+                  </td>
+                </tr>
+              }
+              @if (rows().length === 0) {
+                <tr><td colspan="14" class="no-rows">No archived contracts match these filters.</td></tr>
+              }
             </tbody>
           </table>
         </div>
-      </ng-container>
-    </ng-container>
+      }
+    }
   </div>
 </section>

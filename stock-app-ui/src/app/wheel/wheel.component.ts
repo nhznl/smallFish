@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ViewChild, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
@@ -34,6 +34,7 @@ import { OptionQuotesTabComponent } from './option-quotes-tab.component';
     OptionQuotesTabComponent
   ],
   templateUrl: './wheel.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./wheel.component.css']
 })
 export class WheelComponent implements OnInit, OnDestroy {

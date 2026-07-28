@@ -71,7 +71,7 @@ cancels an order. See [`docs/BROKERAGES.md`](docs/BROKERAGES.md).
 
 ## Quickstart
 
-Five minutes, no credentials. Requires Python 3.12+, Node 20 LTS, and Git.
+Five minutes, no credentials. Requires Python 3.12+, Node 24 LTS, and Git.
 
 ```bash
 git clone https://github.com/nhznl/smallFish.git
@@ -179,7 +179,7 @@ the batch runtime; both depend only on `models/`.
 | [`studies/`](studies/README.md) | Research studies and their materialization. Shares the utilities environment. |
 | [`models/`](models/README.md) | Standard-library-only data contracts shared by everything. |
 | [`stock-app/`](stock-app/README.md) | FastAPI backend and API tests. Its own Python environment. |
-| [`stock-app-ui/`](stock-app-ui/README.md) | Angular 20 dashboard. |
+| [`stock-app-ui/`](stock-app-ui/README.md) | Angular 22 dashboard. |
 | `tools/` | Repository tooling: setup preflight, doctor, brokerages, secret scan. Standard library only. |
 | `data/`, `logs/` | Generated at run time and git-ignored, apart from the bundled study artifacts. |
 

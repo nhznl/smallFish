@@ -1,29 +1,35 @@
-<div class="empty-state capability-state" *ngIf="show && capability as c" role="status">
-  <span [class]="badgeClass">{{ badgeText }}</span>
-
-  <div class="empty-title">{{ title }}</div>
-
-  <p class="empty-hint">{{ c.reason }}</p>
-
-  <p class="empty-hint" *ngIf="!c.available">
-    Adds {{ c.provides }}<span *ngIf="c.provider"> via {{ c.provider }}</span>.
-  </p>
-
-  <p class="empty-hint capability-action" *ngIf="c.action">
-    <ng-container *ngIf="!c.available">
-      To enable it, run:
-      <code>{{ c.action }}</code>
-    </ng-container>
-    <ng-container *ngIf="c.available && syncLabel">
-      Use <strong>{{ syncLabel }}</strong> to import data.
-    </ng-container>
-  </p>
-
-  <p class="empty-hint capability-docs" *ngIf="c.docs">
-    Details: <code>{{ c.docs }}</code>
-  </p>
-
-  <p class="empty-hint capability-continue" *ngIf="dismissible && !c.available">
-    This is optional. Every other part of smallFish works without it.
-  </p>
-</div>
+@if (show && capability; as c) {
+  <div class="empty-state capability-state" role="status">
+    <span [class]="badgeClass">{{ badgeText }}</span>
+    <div class="empty-title">{{ title }}</div>
+    <p class="empty-hint">{{ c.reason }}</p>
+    @if (!c.available) {
+      <p class="empty-hint">
+        Adds {{ c.provides }}@if (c.provider) {
+        <span> via {{ c.provider }}</span>
+        }.
+      </p>
+    }
+    @if (c.action) {
+      <p class="empty-hint capability-action">
+        @if (!c.available) {
+          To enable it, run:
+          <code>{{ c.action }}</code>
+        }
+        @if (c.available && syncLabel) {
+          Use <strong>{{ syncLabel }}</strong> to import data.
+        }
+      </p>
+    }
+    @if (c.docs) {
+      <p class="empty-hint capability-docs">
+        Details: <code>{{ c.docs }}</code>
+      </p>
+    }
+    @if (dismissible && !c.available) {
+      <p class="empty-hint capability-continue">
+        This is optional. Every other part of smallFish works without it.
+      </p>
+    }
+  </div>
+}

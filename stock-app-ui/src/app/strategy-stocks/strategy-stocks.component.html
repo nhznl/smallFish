@@ -1,46 +1,57 @@
 <div class="strategy-container">
-  <div *ngIf="marketRegime" [class]="'banner regime-hero ' + regimeBannerClass()">
-    <span class="regime-icon" aria-hidden="true">{{ regimeIcon() }}</span>
-    <div class="regime-copy">
-      <div class="regime-headline">
-        <strong>Market regime: {{ marketRegime }}</strong>
-        <span class="badge" [class]="regimeBadgeClass()">{{ regimeSizeFactor | number:'1.1-2' }}× size</span>
+  @if (marketRegime) {
+    <div [class]="'banner regime-hero ' + regimeBannerClass()">
+      <span class="regime-icon" aria-hidden="true">{{ regimeIcon() }}</span>
+      <div class="regime-copy">
+        <div class="regime-headline">
+          <strong>Market regime: {{ marketRegime }}</strong>
+          <span class="badge" [class]="regimeBadgeClass()">{{ regimeSizeFactor | number:'1.1-2' }}× size</span>
+        </div>
+        <p class="regime-guidance">
+          @if (marketRegime === 'Risk-On') {
+            <span>
+              Broad market healthy (SPY above a rising 50-day average). Full shortlist, normal size.
+            </span>
+          }
+          @if (marketRegime === 'Neutral') {
+            <span>
+              Market flat/uncertain. Shortlist tightened; suggested size {{ regimeSizeFactor | number:'1.1-2' }}×.
+            </span>
+          }
+          @if (marketRegime === 'Risk-Off') {
+            <span>
+              Broad market weak (SPY below its 50-day average). The earnings run-up hypothesis looked much
+              weaker in Risk-Off (unvalidated — under revalidation), so the shortlist is tightened to the best
+              names and a reduced size ({{ regimeSizeFactor | number:'1.1-2' }}×) is suggested.
+            </span>
+          }
+          @if (marketRegime === 'Unknown') {
+            <span>
+              Market regime unknown (benchmark data missing or too short). The scanner fails closed:
+              Risk-Off throttle and reduced size ({{ regimeSizeFactor | number:'1.1-2' }}×) until benchmark
+              data is restored.
+            </span>
+          }
+        </p>
       </div>
-      <p class="regime-guidance">
-        <span *ngIf="marketRegime === 'Risk-On'">
-          Broad market healthy (SPY above a rising 50-day average). Full shortlist, normal size.
-        </span>
-        <span *ngIf="marketRegime === 'Neutral'">
-          Market flat/uncertain. Shortlist tightened; suggested size {{ regimeSizeFactor | number:'1.1-2' }}×.
-        </span>
-        <span *ngIf="marketRegime === 'Risk-Off'">
-          Broad market weak (SPY below its 50-day average). The earnings run-up hypothesis looked much
-          weaker in Risk-Off (unvalidated — under revalidation), so the shortlist is tightened to the best
-          names and a reduced size ({{ regimeSizeFactor | number:'1.1-2' }}×) is suggested.
-        </span>
-        <span *ngIf="marketRegime === 'Unknown'">
-          Market regime unknown (benchmark data missing or too short). The scanner fails closed:
-          Risk-Off throttle and reduced size ({{ regimeSizeFactor | number:'1.1-2' }}×) until benchmark
-          data is restored.
-        </span>
-      </p>
     </div>
-  </div>
+  }
 
   <div class="filters">
     <mat-form-field appearance="outline" class="symbol-filter" subscriptSizing="dynamic">
       <mat-label>Filter by Symbol(s)</mat-label>
       <input matInput
-             [(ngModel)]="symbolFilter"
-             (input)="applySymbolFilter()"
-             placeholder="AAPL, MSFT, GOOGL">
+        [(ngModel)]="symbolFilter"
+        (input)="applySymbolFilter()"
+        placeholder="AAPL, MSFT, GOOGL">
     </mat-form-field>
-    <button type="button"
-            *ngIf="symbolFilter"
-            class="btn btn-ghost"
-            (click)="clearSymbolFilter()">
-      Clear filter
-    </button>
+    @if (symbolFilter) {
+      <button type="button"
+        class="btn btn-ghost"
+        (click)="clearSymbolFilter()">
+        Clear filter
+      </button>
+    }
     <label class="check-filter" matTooltip="Keep only rows classified as ETF in the backend universe." matTooltipPosition="above">
       <input type="checkbox" [(ngModel)]="etfsOnly" (change)="applyEtfFilter()">
       ETFs Only
@@ -48,279 +59,285 @@
     <span class="result-count">{{ dataSource.data.length | number }} shown</span>
   </div>
 
-  <ng-container *ngIf="strategyStocks$ | async as stocks; else loading">
-    <div class="empty-state" *ngIf="!stocks.length">
-      <span class="empty-icon" aria-hidden="true">○</span>
-      <span class="empty-title">No candidates in the latest scan</span>
-      <span class="empty-hint">
-        Clear the symbol or ETF filter to show the current study candidates.
-      </span>
-    </div>
-
-    <div class="table-shell" *ngIf="stocks.length">
-      <table
-        mat-table
-        [dataSource]="dataSource"
-        matSort
-        matSortActive="scoreTotal"
-        matSortDirection="desc"
-        class="strategy-table"
-      >
-        <ng-container matColumnDef="symbol" sticky>
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
+  @if (strategyStocks$ | async; as stocks) {
+    @if (!stocks.length) {
+      <div class="empty-state">
+        <span class="empty-icon" aria-hidden="true">○</span>
+        <span class="empty-title">No candidates in the latest scan</span>
+        <span class="empty-hint">
+          Clear the symbol or ETF filter to show the current study candidates.
+        </span>
+      </div>
+    }
+    @if (stocks.length) {
+      <div class="table-shell">
+        <table
+          mat-table
+          [dataSource]="dataSource"
+          matSort
+          matSortActive="scoreTotal"
+          matSortDirection="desc"
+          class="strategy-table"
+          >
+          <ng-container matColumnDef="symbol" sticky>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header
               matTooltip="Ticker symbol. Select it to open the full stock research page in a new tab."
-              matTooltipPosition="above">Symbol</th>
-          <td mat-cell *matCellDef="let stock" class="symbol-cell">
-            <a [routerLink]="['/stockDetail', stock.code]" target="_blank">{{ stock.code }}</a>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="price">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
+            matTooltipPosition="above">Symbol</th>
+            <td mat-cell *matCellDef="let stock" class="symbol-cell">
+              <a [routerLink]="['/stockDetail', stock.code]" target="_blank">{{ stock.code }}</a>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="price">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header
               matTooltip="Latest cached closing price. It is not a live quote."
-              matTooltipPosition="above">Price</th>
-          <td mat-cell *matCellDef="let stock">
-            {{ stock.lastTradeStats?.close ? ('$' + (stock.lastTradeStats.close | number:'1.2-2')) : 'N/A' }}
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="fiftyTwoWeekRange">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
+            matTooltipPosition="above">Price</th>
+            <td mat-cell *matCellDef="let stock">
+              {{ stock.lastTradeStats?.close ? ('$' + (stock.lastTradeStats.close | number:'1.2-2')) : 'N/A' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="fiftyTwoWeekRange">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header
               matTooltip="Rolling 252-session high/low from the same cached data as Price. The dot is the latest cached close, positioned from low to high."
               matTooltipPosition="above">52W <small>range</small></th>
-          <td mat-cell *matCellDef="let stock">
-            <div *ngIf="stock.fiftyTwoWeekLow != null && stock.fiftyTwoWeekHigh != null && stock.fiftyTwoWeekPosition != null; else noRange"
-                 class="range-cell" [matTooltip]="fiftyTwoWeekRangeTooltip(stock)" matTooltipPosition="above">
-              <span>{{ formatRangePrice(stock.fiftyTwoWeekLow) }}</span>
-              <span>{{ formatRangePrice(stock.fiftyTwoWeekHigh) }}</span>
-              <span class="range-track" aria-hidden="true">
-                <i class="range-marker" [style.left.%]="stock.fiftyTwoWeekPosition"></i>
-              </span>
-            </div>
-            <ng-template #noRange>—</ng-template>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="signalBand">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
-              matTooltip="Total-score band across this scan's gated candidates: Super High / High / Medium / Low."
-              matTooltipPosition="above">Band</th>
-          <td mat-cell *matCellDef="let stock">
-            <span class="badge" [class]="bandBadgeClass(stock.strategyReport?.signalBand)">
-              {{ stock.strategyReport?.signalBand }}
-            </span>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="scoreTotal">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
-              matTooltip="Decorrelated, capped: trend(25)+momentum(20)+extension(10)+event(30)+tradability(10), max 95"
-              matTooltipPosition="above">Total Score</th>
-          <td mat-cell *matCellDef="let stock" class="score-cell">
-            {{ stock.strategyReport?.scoreTotal | number:'1.0-1' }}
-            <small>/95</small>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="scorePct">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
-              matTooltip="Percentile of total score among this scan's gated candidates"
-              matTooltipPosition="above">Pct</th>
-          <td mat-cell *matCellDef="let stock">
-            {{ stock.strategyReport?.scorePct | number:'1.0-0' }}%
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="shiftLabel">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
-              matTooltip="Entry-timing state of the momentum shift: fresh and confirmed, still developing, or mature and weakening."
-              matTooltipPosition="above">Shift</th>
-          <td mat-cell *matCellDef="let stock">
-            <span *ngIf="stock.strategyReport?.shiftLabel" class="badge" [class]="shiftBadgeClass(stock.strategyReport?.shiftLabel)">
-              {{ stock.strategyReport?.shiftLabel }}
-            </span>
-            <span *ngIf="!stock.strategyReport?.shiftLabel">—</span>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="trendSignal">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
-              matTooltip="Trend-analysis signal. A REVERSAL flag means the trend may be tiring — consider a tighter stop."
-              matTooltipPosition="above">Trend Signal</th>
-          <td mat-cell *matCellDef="let stock">
-            <span *ngIf="(stock.signal || '').includes('REVERSAL'); else plainSignal"
-                  class="badge badge-warn"
-                  matTooltip="Trend analysis flagged a reversal / exhaustion signal — trend may be tiring. Consider a tighter stop."
-                  matTooltipPosition="above">
-              ⚠ {{ stock.signal }}
-            </span>
-            <ng-template #plainSignal>{{ stock.signal || 'N/A' }}</ng-template>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="relStrengthSpy">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
-              matTooltip="Trailing three-month return minus SPY's over the same window."
-              matTooltipPosition="above">vs SPY (3m)</th>
-          <td mat-cell *matCellDef="let stock"
-              [class]="(stock.strategyReport?.relStrengthSpy ?? 0) >= 0 ? 'positive' : 'negative'">
-            {{ stock.strategyReport?.relStrengthSpy != null
-                ? ((stock.strategyReport.relStrengthSpy * 100) | number:'1.1-1') + '%' : 'N/A' }}
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="atrPct">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
-              matTooltip="14-session Average True Range divided by price — the stock's normal daily movement."
-              matTooltipPosition="above">ATR %</th>
-          <td mat-cell *matCellDef="let stock">
-            {{ stock.strategyReport?.atrPct != null
-                ? ((stock.strategyReport.atrPct * 100) | number:'1.1-1') + '%' : 'N/A' }}
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="event">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
-              matTooltip="Next known catalyst, its date, and the calendar days until it. Sorted by days to event."
-              matTooltipPosition="above">Event</th>
-          <td mat-cell *matCellDef="let stock" class="event-cell">
-            <ng-container *ngIf="stock.strategyReport?.eventType; else noEvent">
-              <span class="event-type">{{ stock.strategyReport?.eventType }}</span>
-              <span class="event-meta">
-                {{ formatEventDate(stock.strategyReport?.eventDate) }}
-                <ng-container *ngIf="stock.strategyReport?.daysToEvent != null">
-                  · {{ stock.strategyReport?.daysToEvent }}d
-                </ng-container>
-              </span>
+              <td mat-cell *matCellDef="let stock">
+                @if (stock.fiftyTwoWeekLow != null && stock.fiftyTwoWeekHigh != null && stock.fiftyTwoWeekPosition != null) {
+                  <div
+                    class="range-cell" [matTooltip]="fiftyTwoWeekRangeTooltip(stock)" matTooltipPosition="above">
+                    <span>{{ formatRangePrice(stock.fiftyTwoWeekLow) }}</span>
+                    <span>{{ formatRangePrice(stock.fiftyTwoWeekHigh) }}</span>
+                    <span class="range-track" aria-hidden="true">
+                      <i class="range-marker" [style.left.%]="stock.fiftyTwoWeekPosition"></i>
+                    </span>
+                  </div>
+                } @else {
+                  —
+                }
+              </td>
             </ng-container>
-            <ng-template #noEvent>—</ng-template>
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="sector">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header
-              matTooltip="GICS sector of the underlying."
+            <ng-container matColumnDef="signalBand">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header
+                matTooltip="Total-score band across this scan's gated candidates: Super High / High / Medium / Low."
+              matTooltipPosition="above">Band</th>
+              <td mat-cell *matCellDef="let stock">
+                <span class="badge" [class]="bandBadgeClass($safeNavigationMigration(stock.strategyReport?.signalBand))">
+                  {{ stock.strategyReport?.signalBand }}
+                </span>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="scoreTotal">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header
+                matTooltip="Decorrelated, capped: trend(25)+momentum(20)+extension(10)+event(30)+tradability(10), max 95"
+              matTooltipPosition="above">Total Score</th>
+              <td mat-cell *matCellDef="let stock" class="score-cell">
+                {{ $safeNavigationMigration(stock.strategyReport?.scoreTotal) | number:'1.0-1' }}
+                <small>/95</small>
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="scorePct">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header
+                matTooltip="Percentile of total score among this scan's gated candidates"
+              matTooltipPosition="above">Pct</th>
+              <td mat-cell *matCellDef="let stock">
+                {{ $safeNavigationMigration(stock.strategyReport?.scorePct) | number:'1.0-0' }}%
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="shiftLabel">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header
+                matTooltip="Entry-timing state of the momentum shift: fresh and confirmed, still developing, or mature and weakening."
+              matTooltipPosition="above">Shift</th>
+              <td mat-cell *matCellDef="let stock">
+                @if (stock.strategyReport?.shiftLabel) {
+                  <span class="badge" [class]="shiftBadgeClass($safeNavigationMigration(stock.strategyReport?.shiftLabel))">
+                    {{ stock.strategyReport?.shiftLabel }}
+                  </span>
+                }
+                @if (!stock.strategyReport?.shiftLabel) {
+                  <span>—</span>
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="trendSignal">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header
+                matTooltip="Trend-analysis signal. A REVERSAL flag means the trend may be tiring — consider a tighter stop."
+              matTooltipPosition="above">Trend Signal</th>
+              <td mat-cell *matCellDef="let stock">
+                @if ((stock.signal || '').includes('REVERSAL')) {
+                  <span
+                    class="badge badge-warn"
+                    matTooltip="Trend analysis flagged a reversal / exhaustion signal — trend may be tiring. Consider a tighter stop."
+                    matTooltipPosition="above">
+                    ⚠ {{ stock.signal }}
+                  </span>
+                } @else {
+                  {{ stock.signal || 'N/A' }}
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="relStrengthSpy">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header
+                matTooltip="Trailing three-month return minus SPY's over the same window."
+              matTooltipPosition="above">vs SPY (3m)</th>
+              <td mat-cell *matCellDef="let stock"
+                [class]="(stock.strategyReport?.relStrengthSpy ?? 0) >= 0 ? 'positive' : 'negative'">
+                {{ stock.strategyReport?.relStrengthSpy != null
+                ? ((stock.strategyReport.relStrengthSpy * 100) | number:'1.1-1') + '%' : 'N/A' }}
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="atrPct">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header
+                matTooltip="14-session Average True Range divided by price — the stock's normal daily movement."
+              matTooltipPosition="above">ATR %</th>
+              <td mat-cell *matCellDef="let stock">
+                {{ stock.strategyReport?.atrPct != null
+                ? ((stock.strategyReport.atrPct * 100) | number:'1.1-1') + '%' : 'N/A' }}
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="event">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header
+                matTooltip="Next known catalyst, its date, and the calendar days until it. Sorted by days to event."
+              matTooltipPosition="above">Event</th>
+              <td mat-cell *matCellDef="let stock" class="event-cell">
+                @if (stock.strategyReport?.eventType) {
+                  <span class="event-type">{{ stock.strategyReport?.eventType }}</span>
+                  <span class="event-meta">
+                    {{ formatEventDate($safeNavigationMigration(stock.strategyReport?.eventDate)) }}
+                    @if (stock.strategyReport?.daysToEvent != null) {
+                      · {{ stock.strategyReport?.daysToEvent }}d
+                    }
+                  </span>
+                } @else {
+                  —
+                }
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="sector">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header
+                matTooltip="GICS sector of the underlying."
               matTooltipPosition="above">Sector</th>
-          <td mat-cell *matCellDef="let stock" class="sector-cell">
-            {{ stock.strategyReport?.sector }}
-          </td>
-        </ng-container>
-
-        <ng-container matColumnDef="details">
-          <th mat-header-cell *matHeaderCellDef
-              matTooltip="Open the score decomposition, timing diagnostics, and the full scan reason."
+              <td mat-cell *matCellDef="let stock" class="sector-cell">
+                {{ stock.strategyReport?.sector }}
+              </td>
+            </ng-container>
+            <ng-container matColumnDef="details">
+              <th mat-header-cell *matHeaderCellDef
+                matTooltip="Open the score decomposition, timing diagnostics, and the full scan reason."
               matTooltipPosition="above">Details</th>
-          <td mat-cell *matCellDef="let stock">
-            <button type="button" class="btn btn-ghost btn-sm" (click)="openDetails(stock)">Inspect</button>
-          </td>
-        </ng-container>
+              <td mat-cell *matCellDef="let stock">
+                <button type="button" class="btn btn-ghost btn-sm" (click)="openDetails(stock)">Inspect</button>
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+          </table>
+        </div>
+      }
+    } @else {
+      <div class="table-shell skeleton-shell">
+        @for (row of skeletonRows; track row) {
+          <div class="skeleton skeleton-row"></div>
+        }
+      </div>
+    }
 
-        <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-      </table>
-    </div>
-  </ng-container>
-
-  <ng-template #loading>
-    <div class="table-shell skeleton-shell">
-      <div class="skeleton skeleton-row" *ngFor="let row of skeletonRows"></div>
-    </div>
-  </ng-template>
-</div>
-
-<app-drawer *ngIf="selectedStock as stock" [ariaLabel]="stock.code + ' strategy evidence'" (closed)="closeDetails()">
-  <div drawerHeader class="drawer-heading">
-    <span class="badge" [class]="bandBadgeClass(stock.strategyReport?.signalBand)">
-      {{ stock.strategyReport?.signalBand }}
-    </span>
-    <span *ngIf="stock.strategyReport?.shiftLabel" class="badge" [class]="shiftBadgeClass(stock.strategyReport?.shiftLabel)">
-      {{ stock.strategyReport?.shiftLabel }}
-    </span>
-    <h2 class="drawer-symbol">
-      {{ stock.code }}
-      <small>{{ stock.lastTradeStats.close ? ('$' + (stock.lastTradeStats.close | number:'1.2-2')) : 'N/A' }}</small>
-    </h2>
-    <p class="drawer-sector">
-      {{ stock.strategyReport?.sector }} · {{ stock.signal || 'N/A' }}
-    </p>
   </div>
 
-  <section class="drawer-section score-summary">
-    <div class="score-number">
-      <strong>{{ stock.strategyReport?.scoreTotal | number:'1.0-1' }}</strong>
-      <span>Total score / 95</span>
-    </div>
-    <div class="score-components">
-      <div class="component" *ngFor="let component of scoreEntries(stock)">
-        <div class="component-line">
-          <span>{{ component.label }}</span>
-          <strong>{{ component.value | number:'1.0-1' }} <small>/ {{ component.cap }}</small></strong>
+  @if (selectedStock; as stock) {
+    <app-drawer [ariaLabel]="stock.code + ' strategy evidence'" (closed)="closeDetails()">
+      <div drawerHeader class="drawer-heading">
+        <span class="badge" [class]="bandBadgeClass($safeNavigationMigration(stock.strategyReport?.signalBand))">
+          {{ stock.strategyReport?.signalBand }}
+        </span>
+        @if (stock.strategyReport?.shiftLabel) {
+          <span class="badge" [class]="shiftBadgeClass($safeNavigationMigration(stock.strategyReport?.shiftLabel))">
+            {{ stock.strategyReport?.shiftLabel }}
+          </span>
+        }
+        <h2 class="drawer-symbol">
+          {{ stock.code }}
+          <small>{{ stock.lastTradeStats.close ? ('$' + (stock.lastTradeStats.close | number:'1.2-2')) : 'N/A' }}</small>
+        </h2>
+        <p class="drawer-sector">
+          {{ stock.strategyReport?.sector }} · {{ stock.signal || 'N/A' }}
+        </p>
+      </div>
+      <section class="drawer-section score-summary">
+        <div class="score-number">
+          <strong>{{ $safeNavigationMigration(stock.strategyReport?.scoreTotal) | number:'1.0-1' }}</strong>
+          <span>Total score / 95</span>
         </div>
-        <div class="bar"><span [style.width.%]="component.width"></span></div>
-      </div>
-    </div>
-    <p class="score-footnote">
-      Caps are the scan's own component maxima (25/20/10/30/10, total 95).
-      Persistence is informational and is not part of the total.
-    </p>
-  </section>
-
-  <section class="drawer-section">
-    <h3 class="drawer-section-title">Timing &amp; diagnostics</h3>
-    <dl class="metric-grid">
-      <div>
-        <dt>Shift score</dt>
-        <dd>{{ stock.strategyReport?.scoreShift | number:'1.0-0' }}</dd>
-        <small>Entry timing, 0–100 — separate from total score</small>
-      </div>
-      <div>
-        <dt>Days since cross</dt>
-        <dd>{{ stock.strategyReport?.daysSinceMacdCross ?? 'N/A' }}</dd>
-        <small>Sessions since the MACD bullish cross</small>
-      </div>
-      <div>
-        <dt>Days stable</dt>
-        <dd>{{ stock.strategyReport?.daysInBand }}</dd>
-        <small>Days inside the technical band</small>
-      </div>
-      <div>
-        <dt>RSI 14</dt>
-        <dd>{{ stock.strategyReport?.rsi14 | number:'1.1-1' }}</dd>
-      </div>
-      <div>
-        <dt>Price bucket</dt>
-        <dd>{{ stock.strategyReport?.bucket }}</dd>
-      </div>
-      <div>
-        <dt>Vol spike</dt>
-        <dd>{{ stock.strategyReport?.volSpike ? 'Yes' : 'No' }}</dd>
-        <small>Volume expansion flag from the scan</small>
-      </div>
-      <div>
-        <dt>Market regime</dt>
+        <div class="score-components">
+          @for (component of scoreEntries(stock); track component) {
+            <div class="component">
+              <div class="component-line">
+                <span>{{ component.label }}</span>
+                <strong>{{ component.value | number:'1.0-1' }} <small>/ {{ component.cap }}</small></strong>
+              </div>
+              <div class="bar"><span [style.width.%]="component.width"></span></div>
+            </div>
+          }
+        </div>
+        <p class="score-footnote">
+          Caps are the scan's own component maxima (25/20/10/30/10, total 95).
+          Persistence is informational and is not part of the total.
+        </p>
+      </section>
+      <section class="drawer-section">
+        <h3 class="drawer-section-title">Timing &amp; diagnostics</h3>
+        <dl class="metric-grid">
+          <div>
+            <dt>Shift score</dt>
+            <dd>{{ $safeNavigationMigration(stock.strategyReport?.scoreShift) | number:'1.0-0' }}</dd>
+            <small>Entry timing, 0–100 — separate from total score</small>
+          </div>
+          <div>
+            <dt>Days since cross</dt>
+            <dd>{{ stock.strategyReport?.daysSinceMacdCross ?? 'N/A' }}</dd>
+            <small>Sessions since the MACD bullish cross</small>
+          </div>
+          <div>
+            <dt>Days stable</dt>
+            <dd>{{ stock.strategyReport?.daysInBand }}</dd>
+            <small>Days inside the technical band</small>
+          </div>
+          <div>
+            <dt>RSI 14</dt>
+            <dd>{{ $safeNavigationMigration(stock.strategyReport?.rsi14) | number:'1.1-1' }}</dd>
+          </div>
+          <div>
+            <dt>Price bucket</dt>
+            <dd>{{ stock.strategyReport?.bucket }}</dd>
+          </div>
+          <div>
+            <dt>Vol spike</dt>
+            <dd>{{ stock.strategyReport?.volSpike ? 'Yes' : 'No' }}</dd>
+            <small>Volume expansion flag from the scan</small>
+          </div>
+          <div>
+            <dt>Market regime</dt>
         <dd [class]="(stock.strategyReport?.marketRegime === 'Risk-Off') ? 'negative'
                      : (stock.strategyReport?.marketRegime === 'Risk-On') ? 'positive' : ''">
-          {{ stock.strategyReport?.marketRegime }}
-        </dd>
-        <small>Soft-penalises shift score in weak tapes</small>
-      </div>
-      <div>
-        <dt>Event</dt>
-        <dd>{{ stock.strategyReport?.eventType }} {{ stock.strategyReport?.eventDate }}</dd>
-        <small *ngIf="stock.strategyReport?.daysToEvent != null">
-          {{ stock.strategyReport?.daysToEvent }} days away
-        </small>
-      </div>
-    </dl>
-  </section>
-
-  <section class="drawer-section">
-    <h3 class="drawer-section-title">Scan reason</h3>
-    <p class="reason-full">{{ stock.strategyReport?.reasonSummary }}</p>
-  </section>
-
-  <ng-container drawerFooter>
-    <a class="btn btn-ghost" [routerLink]="['/stockDetail', stock.code]" target="_blank">Open full stock page</a>
-    <button type="button" class="btn" (click)="closeDetails()">Close</button>
-  </ng-container>
-</app-drawer>
+              {{ stock.strategyReport?.marketRegime }}
+            </dd>
+            <small>Soft-penalises shift score in weak tapes</small>
+          </div>
+          <div>
+            <dt>Event</dt>
+            <dd>{{ stock.strategyReport?.eventType }} {{ stock.strategyReport?.eventDate }}</dd>
+            @if (stock.strategyReport?.daysToEvent != null) {
+              <small>
+                {{ stock.strategyReport?.daysToEvent }} days away
+              </small>
+            }
+          </div>
+        </dl>
+      </section>
+      <section class="drawer-section">
+        <h3 class="drawer-section-title">Scan reason</h3>
+        <p class="reason-full">{{ stock.strategyReport?.reasonSummary }}</p>
+      </section>
+      <ng-container drawerFooter>
+        <a class="btn btn-ghost" [routerLink]="['/stockDetail', stock.code]" target="_blank">Open full stock page</a>
+        <button type="button" class="btn" (click)="closeDetails()">Close</button>
+      </ng-container>
+    </app-drawer>
+  }

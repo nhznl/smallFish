@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, OnChanges, OnInit, SimpleChanges, inject } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -11,6 +11,7 @@ import { OptionQuoteRow, OptionQuoteSnapshot } from '../model/option-quotes';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, MatTooltipModule],
   templateUrl: './option-quotes-tab.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./option-quotes-tab.component.css']
 })
 export class OptionQuotesTabComponent implements OnInit, OnChanges {
