@@ -1,42 +1,42 @@
 <div class="explainer-container">
   <div class="doc-layout">
-  <div class="doc-body">
-  <h2>📗 Wheel Explainer</h2>
-  <p class="description">
-    Reference for the <a routerLink="/wheel">Wheel Scan</a> tab. It explains what every historical-scan column
-    means, the terminal-vs-touch distinction, why these numbers are <strong>descriptive, not predictive</strong>,
-    and how to read the sample counts. It also distinguishes the scan from the separate Option Quotes archive.
-    Source of truth:
-    <code>models/wheel.py</code> (<code>WHEEL_COLUMNS</code>),
-    <code>utilities/options/config/wheel.yaml</code>, and <code>Requirements.md</code>.
-  </p>
+    <div class="doc-body">
+      <h2>📗 Wheel Explainer</h2>
+      <p class="description">
+        Reference for the <a routerLink="/wheel">Wheel Scan</a> tab. It explains what every historical-scan column
+        means, the terminal-vs-touch distinction, why these numbers are <strong>descriptive, not predictive</strong>,
+        and how to read the sample counts. It also distinguishes the scan from the separate Option Quotes archive.
+        Source of truth:
+        <code>models/wheel.py</code> (<code>WHEEL_COLUMNS</code>),
+        <code>utilities/options/config/wheel.yaml</code>, and <code>Requirements.md</code>.
+      </p>
 
-  <section class="caveat-box">
-    <h3 id="sec-read-this-first-analytics-tooling-not-tr">⚠ Read this first — analytics tooling, not trade selection</h3>
-    <p>
-      Every frequency on this tab is computed over <strong>historical overlapping windows</strong> spanning
-      mixed market regimes. Overlapping windows are <strong>autocorrelated</strong>, so these are
-      <strong>not confidence-interval-grade probabilities</strong> — they describe what the stock did, not what
-      it will do. The Wheel Scan makes <strong>no claim about actual option premiums, fills, or assignment odds</strong>:
-      realized-vol percentile is only underlying-volatility context. The separate <strong>Collect Option Quotes</strong>
-      action discovers exact contracts and archives Tastytrade quotes under its own quality contract. There are no
-      trade recommendations here.
-    </p>
-  </section>
+      <section class="caveat-box">
+        <h3 id="sec-read-this-first-analytics-tooling-not-tr">⚠ Read this first — analytics tooling, not trade selection</h3>
+        <p>
+          Every frequency on this tab is computed over <strong>historical overlapping windows</strong> spanning
+          mixed market regimes. Overlapping windows are <strong>autocorrelated</strong>, so these are
+          <strong>not confidence-interval-grade probabilities</strong> — they describe what the stock did, not what
+          it will do. The Wheel Scan makes <strong>no claim about actual option premiums, fills, or assignment odds</strong>:
+          realized-vol percentile is only underlying-volatility context. The separate <strong>Collect Option Quotes</strong>
+          action discovers exact contracts and archives Tastytrade quotes under its own quality contract. There are no
+          trade recommendations here.
+        </p>
+      </section>
 
-  <section>
-    <h3 id="sec-1-what-good-for-wheeling-decomposes-into">1. What "good for wheeling" decomposes into</h3>
-    <ul>
-      <li><strong>Am I OK owning this at the strike?</strong> — the trend/structure classification.
-        The swing scan's <em>Swing Score</em> is shown only as <strong>context</strong>; it ranks an earnings
-        run-up setup, it is <em>not</em> an ownership-quality score. A missing score means
-        <strong>not evaluated</strong>, never "failed".</li>
-      <li><strong>Is underlying realized volatility elevated relative to itself?</strong> — RV and its 252-day
+      <section>
+        <h3 id="sec-1-what-good-for-wheeling-decomposes-into">1. What "good for wheeling" decomposes into</h3>
+        <ul>
+          <li><strong>Am I OK owning this at the strike?</strong> — the trend/structure classification.
+          The swing scan's <em>Swing Score</em> is shown only as <strong>context</strong>; it ranks an earnings
+          run-up setup, it is <em>not</em> an ownership-quality score. A missing score means
+          <strong>not evaluated</strong>, never "failed".</li>
+          <li><strong>Is underlying realized volatility elevated relative to itself?</strong> — RV and its 252-day
         percentile. A high percentile is only context; the separate quote collection records actual contract quotes.</li>
-      <li><strong>How often did price historically finish beyond a comparable hypothetical strike?</strong> — the
+        <li><strong>How often did price historically finish beyond a comparable hypothetical strike?</strong> — the
         1σ terminal move and historical <strong>expiry-ITM frequency</strong>. This is not an assignment probability.</li>
-      <li><strong>Is a known earnings event inside the window?</strong> — shown with
-        explicit freshness (the tri-state Earnings column).</li>
+        <li><strong>Is a known earnings event inside the window?</strong> — shown with
+      explicit freshness (the tri-state Earnings column).</li>
     </ul>
   </section>
 
@@ -52,166 +52,170 @@
       <tr>
         <td><strong>Expiry-ITM</strong> (terminal)</td>
         <td>The <em>terminal close</em> at expiry breaches the strike (put: final close ≤ put strike; call:
-          final close ≥ call strike).</td>
-        <td>Historical terminal-close breach frequency</td>
-      </tr>
-      <tr>
-        <td><strong>Touch</strong></td>
-        <td>Price breaches the strike <em>any time</em> in the window — put side uses the minimum future daily
-          <strong>low</strong>; call side uses the maximum future daily <strong>high</strong> (never closes).</td>
-        <td>Historical intrawindow breach frequency</td>
-      </tr>
-    </table>
-    <p class="note">
-      Both are reported. Touch is always ≥ terminal, but <strong>no fixed "touch ≈ 2× terminal" ratio is
-      claimed</strong> — the relationship varies by name and horizon. American options can also be assigned
-      early, which is why the honest label is "expiry-ITM frequency", not "assignment odds".
-    </p>
-  </section>
+      final close ≥ call strike).</td>
+      <td>Historical terminal-close breach frequency</td>
+    </tr>
+    <tr>
+      <td><strong>Touch</strong></td>
+      <td>Price breaches the strike <em>any time</em> in the window — put side uses the minimum future daily
+      <strong>low</strong>; call side uses the maximum future daily <strong>high</strong> (never closes).</td>
+      <td>Historical intrawindow breach frequency</td>
+    </tr>
+  </table>
+  <p class="note">
+    Both are reported. Touch is always ≥ terminal, but <strong>no fixed "touch ≈ 2× terminal" ratio is
+  claimed</strong> — the relationship varies by name and horizon. American options can also be assigned
+  early, which is why the honest label is "expiry-ITM frequency", not "assignment odds".
+</p>
+</section>
 
-  <section>
-    <h3 id="sec-3-sample-count-guidance">3. Sample-count guidance</h3>
-    <p>
-      Every frequency ships with two sample counts: all <strong>overlapping</strong> windows and a
-      <strong>disjoint</strong> subset selected at one-horizon strides. Hover the table frequency to compare both
-      estimates. The disjoint diagnostic removes direct window overlap but does not eliminate market-regime or
-      repeated-symbol dependence, so neither figure is a forecast or confidence guarantee. Treat small counts as
-      noisy. In the table, overlapping counts below <strong>60</strong> are highlighted.
-    </p>
-  </section>
+<section>
+  <h3 id="sec-3-sample-count-guidance">3. Sample-count guidance</h3>
+  <p>
+    Every frequency ships with two sample counts: all <strong>overlapping</strong> windows and a
+    <strong>disjoint</strong> subset selected at one-horizon strides. Hover the table frequency to compare both
+    estimates. The disjoint diagnostic removes direct window overlap but does not eliminate market-regime or
+    repeated-symbol dependence, so neither figure is a forecast or confidence guarantee. Treat small counts as
+    noisy. In the table, overlapping counts below <strong>60</strong> are highlighted.
+  </p>
+</section>
 
-  <section>
-    <h3 id="sec-4-volatility-expected-move-conventions">4. Volatility &amp; expected-move conventions</h3>
-    <ul>
-      <li><strong>RV (realized volatility)</strong> is stored as <strong>daily</strong> σ. Two estimators are
-        computed: close-to-close (sample std of log returns) and Parkinson (a high/low range estimator that
-        misses overnight gaps). The scan uses <code>rv_used = max(σ_cc, σ_park)</code> — the conservative
-        convention.</li>
-      <li><strong>RV %ile</strong> is today's 21-day RV as a percentile of its own trailing 252 sessions —
-        a percentile, not a "vol rank".</li>
-      <li><strong>1σ move</strong> = <code>spot × rv_daily × √N</code> (N = exchange sessions in the horizon,
-        <code>N = round(DTE × 252/365)</code>). Labelled a <em>historical-vol, normal-model approximation</em> —
-        <strong>not a 68% guarantee</strong>.</li>
-      <li><strong>ATR14%</strong> is a range heuristic only — ATR is not a standard deviation, so it is never used
-        as an expected move.</li>
-    </ul>
-  </section>
+<section>
+  <h3 id="sec-4-volatility-expected-move-conventions">4. Volatility &amp; expected-move conventions</h3>
+  <ul>
+    <li><strong>RV (realized volatility)</strong> is stored as <strong>daily</strong> σ. Two estimators are
+    computed: close-to-close (sample std of log returns) and Parkinson (a high/low range estimator that
+    misses overnight gaps). The scan uses <code>rv_used = max(σ_cc, σ_park)</code> — the conservative
+  convention.</li>
+  <li><strong>RV %ile</strong> is today's 21-day RV as a percentile of its own trailing 252 sessions —
+a percentile, not a "vol rank".</li>
+<li><strong>1σ move</strong> = <code>spot × rv_daily × √N</code> (N = exchange sessions in the horizon,
+<code>N = round(DTE × 252/365)</code>). Labelled a <em>historical-vol, normal-model approximation</em> —
+<strong>not a 68% guarantee</strong>.</li>
+<li><strong>ATR14%</strong> is a range heuristic only — ATR is not a standard deviation, so it is never used
+as an expected move.</li>
+</ul>
+</section>
 
-  <section>
-    <h3 id="sec-5-earnings-freshness-the-tri-state">5. Earnings freshness — the tri-state</h3>
-    <p>
-      A blank "no earnings" is dangerous when the events file is stale, so the Earnings column is a tri-state,
-      evaluated per horizon (a horizon counts as covered only when the events coverage reaches
-      <code>price_as_of + horizon</code> calendar days):
-    </p>
-    <table class="def-table">
-      <tr><th>State</th><th>Meaning</th></tr>
-      <tr><td class="earn-known_event">⚠ Known event</td><td>An earnings date falls inside this horizon's window.</td></tr>
-      <tr><td class="earn-no_event_in_fetched_range">None in range</td><td>No earnings in the window <em>and</em> the events data freshly covers it.</td></tr>
-      <tr><td class="earn-unknown_stale">Unknown (stale)</td><td>The events file does not cover this horizon — treat as unknown, never as "no earnings".</td></tr>
-    </table>
-  </section>
+<section>
+  <h3 id="sec-5-earnings-freshness-the-tri-state">5. Earnings freshness — the tri-state</h3>
+  <p>
+    A blank "no earnings" is dangerous when the events file is stale, so the Earnings column is a tri-state,
+    evaluated per horizon (a horizon counts as covered only when the events coverage reaches
+    <code>price_as_of + horizon</code> calendar days):
+  </p>
+  <table class="def-table">
+    <tr><th>State</th><th>Meaning</th></tr>
+    <tr><td class="earn-known_event">⚠ Known event</td><td>An earnings date falls inside this horizon's window.</td></tr>
+    <tr><td class="earn-no_event_in_fetched_range">None in range</td><td>No earnings in the window <em>and</em> the events data freshly covers it.</td></tr>
+    <tr><td class="earn-unknown_stale">Unknown (stale)</td><td>The events file does not cover this horizon — treat as unknown, never as "no earnings".</td></tr>
+  </table>
+</section>
 
-  <section>
-    <h3 id="sec-6-null-rendering">6. Null rendering</h3>
-    <p>
-      Several fields are legitimately absent and render as <strong>"—"</strong>, never 0 or "failed":
-    </p>
-    <ul>
-      <li><strong>Swing Score / Band / Sector</strong> — "swing scan context". Null = <em>not evaluated</em>
-        (the symbol wasn't in the latest swing scan), not a failing score.</li>
-      <li><strong>Trend</strong> — symbols with insufficient history have no trend result; the field is "—",
-        which is expected, not an error.</li>
-      <li><strong>Days to Event / RV %ile</strong> — may be blank when the underlying data isn't available.</li>
-    </ul>
-    <p class="note">
-      <strong>Hide-bearish toggle:</strong> default-on, it hides a row <em>only</em> when the trend direction
-      is <code>BEARISH</code>. A null/absent trend ("not evaluated") is <strong>never</strong> hidden.
-    </p>
-  </section>
+<section>
+  <h3 id="sec-6-null-rendering">6. Null rendering</h3>
+  <p>
+    Several fields are legitimately absent and render as <strong>"—"</strong>, never 0 or "failed":
+  </p>
+  <ul>
+    <li><strong>Swing Score / Band / Sector</strong> — "swing scan context". Null = <em>not evaluated</em>
+  (the symbol wasn't in the latest swing scan), not a failing score.</li>
+  <li><strong>Trend</strong> — symbols with insufficient history have no trend result; the field is "—",
+which is expected, not an error.</li>
+<li><strong>Days to Event / RV %ile</strong> — may be blank when the underlying data isn't available.</li>
+</ul>
+<p class="note">
+  <strong>Hide-bearish toggle:</strong> default-on, it hides a row <em>only</em> when the trend direction
+  is <code>BEARISH</code>. A null/absent trend ("not evaluated") is <strong>never</strong> hidden.
+</p>
+</section>
 
-  <section>
-    <h3 id="sec-7-column-dictionary">7. Column dictionary</h3>
-    <p class="note">Columns shown in the main Wheel table are marked ● ; the rest live in the CSV report and are
-      documented here for the column-sync rule (§5).</p>
-    <table class="def-table">
-      <tr><th>Column</th><th>In table</th><th>Meaning / units</th></tr>
-      <tr><td>Symbol</td><td>●</td><td>Ticker; links to the stock detail view.</td></tr>
-      <tr><td>DTE / horizon_sessions</td><td>●</td><td>Horizon in calendar days; sessions = <code>round(DTE × 252/365)</code>.</td></tr>
-      <tr><td>Last close</td><td>●</td><td>Latest close (dollars), as of <code>price_as_of</code>.</td></tr>
-      <tr><td>RV %ile (rv_percentile_252)</td><td>●</td><td>21-day RV as a percentile of its trailing-year values.</td></tr>
-      <tr><td>1σ move (sigma_move_pct / _dollars)</td><td>●</td><td>Expected 1σ move as % of spot (and dollars in the CSV).</td></tr>
-      <tr><td>Put ITM / Call ITM (put/call_expiry_itm @ cushion)</td><td>●</td><td>Historical expiry-ITM (terminal-close) frequency at the selected OTM cushion. Fraction → shown %.</td></tr>
-      <tr><td>Put Touch / Call Touch (put/call_touch @ cushion)</td><td>●</td><td>Historical touch frequency (min low / max high) at the selected cushion. Fraction → shown %.</td></tr>
-      <tr><td>Min cushion ≤20% ITM (min_cushion_20pct_itm)</td><td>●</td><td>Smallest tested cushion whose put expiry-ITM ≤ 20%; <code>&gt;10%</code> if none. A display string — nothing is "safe".</td></tr>
-      <tr><td>Samples (sample_count / nonoverlap_sample_count)</td><td>●</td><td>All overlapping windows and the one-horizon-stride disjoint subset.</td></tr>
-      <tr><td>Non-overlap frequency grid</td><td></td><td>Disjoint-window put/call terminal-ITM and touch frequencies for every configured cushion.</td></tr>
-      <tr><td>Avg $Vol 20d (avg_dollar_volume_20)</td><td>●</td><td>20-day average dollar volume of the underlying. This is not option liquidity; collected contracts receive separate open-interest and spread checks.</td></tr>
-      <tr><td>Days to Event (days_to_event)</td><td>●</td><td>Calendar days to the next known earnings date; blank → "—".</td></tr>
-      <tr><td>Earnings (earnings_window_state)</td><td>●</td><td>Tri-state per §5.</td></tr>
-      <tr><td>Swing Score (score_total)</td><td>●</td><td>Swing scan context only. Null = not evaluated.</td></tr>
-      <tr><td>Band (signal_band)</td><td>●</td><td>Swing scan band (Super High / High / Medium / Low). Context only.</td></tr>
-      <tr><td>Sector</td><td>●</td><td>Swing scan sector. Context only.</td></tr>
-      <tr><td>Trend (trend_direction)</td><td>●</td><td>BULLISH / BEARISH / SIDEWAYS / NEUTRAL, or "—" when unavailable. Drives the hide toggle.</td></tr>
-      <tr><td>5d / 31d range (high/low/width%/close-pos)</td><td></td><td>Recent price range over ~1 week and ~1.5 months, band width %, and where the close sits in the band.</td></tr>
-      <tr><td>RV7 / RV21 / RV37 (cc / park / used)</td><td></td><td>Both estimators and the used max, per window (daily σ). Horizon→window mapping: 7→RV7, 14/30/37→RV21, 45→RV37.</td></tr>
-      <tr><td>ATR14% (atr14_pct)</td><td></td><td>Range heuristic only — never an expected move.</td></tr>
-      <tr><td>swing_low_20 / dist_sma50_pct / bb_lower</td><td></td><td>20-day swing low, distance to SMA50, lower Bollinger — downside-structure context.</td></tr>
-      <tr><td>worst / p10 min-close % (worst_min_close_pct / p10_min_close_pct)</td><td></td><td>Worst and 10th-percentile lowest close over the window vs entry — historical drawdown context.</td></tr>
-      <tr><td>data_quality / quality_reasons</td><td>●</td><td>Underlying price state: OK, STALE, UNKNOWN, or INVALID, plus stable reason codes. Only OK rows are shown by default or can enter the live chain shortlist.</td></tr>
-      <tr><td>schema_version / run_mode</td><td></td><td>Versioned Wheel contract and context mode. <code>CURRENT_CONTEXT_ONLY</code> bars the output from point-in-time validation claims.</td></tr>
-      <tr><td>price_as_of / expected_price_as_of / price_age_sessions</td><td></td><td>Observed and expected benchmark-session dates, plus the exchange-session age used for freshness.</td></tr>
-      <tr><td>history_start / events_fetched_as_of</td><td></td><td>Bounds the historical sample and identifies the event-data fetch vintage.</td></tr>
-    </table>
-  </section>
+<section>
+  <h3 id="sec-7-column-dictionary">7. Column dictionary</h3>
+  <p class="note">Columns shown in the main Wheel table are marked ● ; the rest live in the CSV report and are
+  documented here for the column-sync rule (§5).</p>
+  <table class="def-table">
+    <tr><th>Column</th><th>In table</th><th>Meaning / units</th></tr>
+    <tr><td>Symbol</td><td>●</td><td>Ticker; links to the stock detail view.</td></tr>
+    <tr><td>DTE / horizon_sessions</td><td>●</td><td>Horizon in calendar days; sessions = <code>round(DTE × 252/365)</code>.</td></tr>
+    <tr><td>Last close</td><td>●</td><td>Latest close (dollars), as of <code>price_as_of</code>.</td></tr>
+    <tr><td>RV %ile (rv_percentile_252)</td><td>●</td><td>21-day RV as a percentile of its trailing-year values.</td></tr>
+    <tr><td>1σ move (sigma_move_pct / _dollars)</td><td>●</td><td>Expected 1σ move as % of spot (and dollars in the CSV).</td></tr>
+    <tr><td>Put ITM / Call ITM (put/call_expiry_itm @ cushion)</td><td>●</td><td>Historical expiry-ITM (terminal-close) frequency at the selected OTM cushion. Fraction → shown %.</td></tr>
+    <tr><td>Put Touch / Call Touch (put/call_touch @ cushion)</td><td>●</td><td>Historical touch frequency (min low / max high) at the selected cushion. Fraction → shown %.</td></tr>
+    <tr><td>Min cushion ≤20% ITM (min_cushion_20pct_itm)</td><td>●</td><td>Smallest tested cushion whose put expiry-ITM ≤ 20%; <code>&gt;10%</code> if none. A display string — nothing is "safe".</td></tr>
+    <tr><td>Samples (sample_count / nonoverlap_sample_count)</td><td>●</td><td>All overlapping windows and the one-horizon-stride disjoint subset.</td></tr>
+    <tr><td>Non-overlap frequency grid</td><td></td><td>Disjoint-window put/call terminal-ITM and touch frequencies for every configured cushion.</td></tr>
+    <tr><td>Avg $Vol 20d (avg_dollar_volume_20)</td><td>●</td><td>20-day average dollar volume of the underlying. This is not option liquidity; collected contracts receive separate open-interest and spread checks.</td></tr>
+    <tr><td>Days to Event (days_to_event)</td><td>●</td><td>Calendar days to the next known earnings date; blank → "—".</td></tr>
+    <tr><td>Earnings (earnings_window_state)</td><td>●</td><td>Tri-state per §5.</td></tr>
+    <tr><td>Swing Score (score_total)</td><td>●</td><td>Swing scan context only. Null = not evaluated.</td></tr>
+    <tr><td>Band (signal_band)</td><td>●</td><td>Swing scan band (Super High / High / Medium / Low). Context only.</td></tr>
+    <tr><td>Sector</td><td>●</td><td>Swing scan sector. Context only.</td></tr>
+    <tr><td>Trend (trend_direction)</td><td>●</td><td>BULLISH / BEARISH / SIDEWAYS / NEUTRAL, or "—" when unavailable. Drives the hide toggle.</td></tr>
+    <tr><td>5d / 31d range (high/low/width%/close-pos)</td><td></td><td>Recent price range over ~1 week and ~1.5 months, band width %, and where the close sits in the band.</td></tr>
+    <tr><td>RV7 / RV21 / RV37 (cc / park / used)</td><td></td><td>Both estimators and the used max, per window (daily σ). Horizon→window mapping: 7→RV7, 14/30/37→RV21, 45→RV37.</td></tr>
+    <tr><td>ATR14% (atr14_pct)</td><td></td><td>Range heuristic only — never an expected move.</td></tr>
+    <tr><td>swing_low_20 / dist_sma50_pct / bb_lower</td><td></td><td>20-day swing low, distance to SMA50, lower Bollinger — downside-structure context.</td></tr>
+    <tr><td>worst / p10 min-close % (worst_min_close_pct / p10_min_close_pct)</td><td></td><td>Worst and 10th-percentile lowest close over the window vs entry — historical drawdown context.</td></tr>
+    <tr><td>data_quality / quality_reasons</td><td>●</td><td>Underlying price state: OK, STALE, UNKNOWN, or INVALID, plus stable reason codes. Only OK rows are shown by default or can enter the live chain shortlist.</td></tr>
+    <tr><td>schema_version / run_mode</td><td></td><td>Versioned Wheel contract and context mode. <code>CURRENT_CONTEXT_ONLY</code> bars the output from point-in-time validation claims.</td></tr>
+    <tr><td>price_as_of / expected_price_as_of / price_age_sessions</td><td></td><td>Observed and expected benchmark-session dates, plus the exchange-session age used for freshness.</td></tr>
+    <tr><td>history_start / events_fetched_as_of</td><td></td><td>Bounds the historical sample and identifies the event-data fetch vintage.</td></tr>
+  </table>
+</section>
 
-  <section>
-    <h3 id="sec-8-what-the-wheel-scan-does-not-do">8. What the Wheel Scan does NOT do</h3>
-    <ul>
-      <li>No actual option premiums, bids, asks, or IV in this report — the separate quote collection archives exact-contract Tastytrade observations.</li>
-      <li>No option-liquidity gate in this report — only the underlying's dollar volume is visible here.</li>
-      <li>No trade recommendations, no auto-trading — this is analytics and journaling only.</li>
-    </ul>
-  </section>
+<section>
+  <h3 id="sec-8-what-the-wheel-scan-does-not-do">8. What the Wheel Scan does NOT do</h3>
+  <ul>
+    <li>No actual option premiums, bids, asks, or IV in this report — the separate quote collection archives exact-contract Tastytrade observations.</li>
+    <li>No option-liquidity gate in this report — only the underlying's dollar volume is visible here.</li>
+    <li>No trade recommendations, no auto-trading — this is analytics and journaling only.</li>
+  </ul>
+</section>
 
-  <section>
-    <h3 id="sec-9-wheel-scan-vs-option-quotes">9. Wheel Scan vs Option Quotes</h3>
-    <table class="def-table">
-      <tr><th>View</th><th>What it contains</th><th>What it does not mean</th></tr>
-      <tr>
-        <td><strong>Wheel Scan</strong></td>
-        <td>Local OHLCV-derived history across the displayed 7, 14, 30, 37, and 45 DTE horizons.</td>
-        <td>A selected contract, live premium, fill, assignment probability, or recommendation.</td>
-      </tr>
-      <tr>
-        <td><strong>Option Quotes</strong></td>
-        <td>The latest immutable archive of exact contracts and Tastytrade bid/ask observations, including timestamps, quality, OI/spread checks, and entry gates.</td>
-        <td>A live refresh when opened: opening, filtering, and refreshing this tab only reads the archive.</td>
-      </tr>
-    </table>
-    <p class="note">
-      <strong>Collect Option Quotes</strong> is the only UI action here that contacts Tastytrade. It uses the
-      configured collection policy, not the Wheel page's Horizon, OTM cushion, or text filters. In the quote
-      archive, <strong>ENTRY</strong> is a strike-selection view; it is not the same as <code>entry_eligible</code>.
-    </p>
-  </section>
+<section>
+  <h3 id="sec-9-wheel-scan-vs-option-quotes">9. Wheel Scan vs Option Quotes</h3>
+  <table class="def-table">
+    <tr><th>View</th><th>What it contains</th><th>What it does not mean</th></tr>
+    <tr>
+      <td><strong>Wheel Scan</strong></td>
+      <td>Local OHLCV-derived history across the displayed 7, 14, 30, 37, and 45 DTE horizons.</td>
+      <td>A selected contract, live premium, fill, assignment probability, or recommendation.</td>
+    </tr>
+    <tr>
+      <td><strong>Option Quotes</strong></td>
+      <td>The latest immutable archive of exact contracts and Tastytrade bid/ask observations, including timestamps, quality, OI/spread checks, and entry gates.</td>
+      <td>A live refresh when opened: opening, filtering, and refreshing this tab only reads the archive.</td>
+    </tr>
+  </table>
+  <p class="note">
+    <strong>Collect Option Quotes</strong> is the only UI action here that contacts Tastytrade. It uses the
+    configured collection policy, not the Wheel page's Horizon, OTM cushion, or text filters. In the quote
+    archive, <strong>ENTRY</strong> is a strike-selection view; it is not the same as <code>entry_eligible</code>.
+  </p>
+</section>
 </div>
 
-  <nav class="doc-toc" aria-label="On this page">
-    <p class="doc-toc-title">On this page</p>
-    <ol>
-      <li *ngFor="let item of sections">
+<nav class="doc-toc" aria-label="On this page">
+  <p class="doc-toc-title">On this page</p>
+  <ol>
+    @for (item of sections; track item) {
+      <li>
         <a [href]="'#' + item.id" (click)="jumpTo($event, item.id)">{{ item.label }}</a>
       </li>
-    </ol>
-  </nav>
+    }
+  </ol>
+</nav>
 
-  <label class="doc-jump">
-    <span>Jump to section</span>
-    <select (change)="jumpToValue($any($event.target).value)">
-      <option value="">Choose a section…</option>
-      <option *ngFor="let item of sections" [value]="item.id">{{ item.label }}</option>
-    </select>
-  </label>
-  </div>
+<label class="doc-jump">
+  <span>Jump to section</span>
+  <select (change)="jumpToValue($any($event.target).value)">
+    <option value="">Choose a section…</option>
+    @for (item of sections; track item) {
+      <option [value]="item.id">{{ item.label }}</option>
+    }
+  </select>
+</label>
+</div>
 </div>

@@ -6,7 +6,7 @@ import {
   ElementRef,
   inject
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -60,13 +60,12 @@ class SymbolEntry {
   selector: 'app-portfolios',
   standalone: true,
   imports: [
-    CommonModule,
     FormsModule,
     RouterLink,
     MatTooltipModule,
     DrawerComponent,
     ModalComponent
-  ],
+],
   templateUrl: './portfolios.component.html',
   styleUrl: './portfolios.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush

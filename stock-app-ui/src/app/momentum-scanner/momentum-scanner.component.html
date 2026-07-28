@@ -8,7 +8,9 @@
     <div class="snapshot" [class.has-warning]="staleCount > 0">
       <span>Data as of</span>
       <strong>{{ formatDate(dataAsOf) }}</strong>
-      <small *ngIf="staleCount">{{ staleCount }} rows have stale, mismatched, or incomplete data</small>
+      @if (staleCount) {
+        <small>{{ staleCount }} rows have stale, mismatched, or incomplete data</small>
+      }
     </div>
   </header>
 
@@ -20,18 +22,19 @@
   </div>
 
   <nav class="setup-tabs" aria-label="Momentum setup">
-    <button
-      type="button"
-      *ngFor="let option of setupOptions"
-      [class.active]="selectedSetup === option.value"
-      (click)="selectSetup(option.value)"
-      [matTooltip]="option.tooltip"
-      matTooltipPosition="above"
-    >
-      <span class="setup-icon">{{ option.icon }}</span>
-      {{ option.label }}
-      <span class="count">{{ countFor(option.value) }}</span>
-    </button>
+    @for (option of setupOptions; track option) {
+      <button
+        type="button"
+        [class.active]="selectedSetup === option.value"
+        (click)="selectSetup(option.value)"
+        [matTooltip]="option.tooltip"
+        matTooltipPosition="above"
+        >
+        <span class="setup-icon">{{ option.icon }}</span>
+        {{ option.label }}
+        <span class="count">{{ countFor(option.value) }}</span>
+      </button>
+    }
   </nav>
 
   <div class="filters">
@@ -67,228 +70,234 @@
     <span class="result-count">{{ visibleCount | number }} shown</span>
   </div>
 
-  <div *ngIf="loading" class="state">Loading momentum candidates…</div>
-  <div *ngIf="error" class="state error">{{ error }}</div>
+  @if (loading) {
+    <div class="state">Loading momentum candidates…</div>
+  }
+  @if (error) {
+    <div class="state error">{{ error }}</div>
+  }
 
-  <div class="table-shell" *ngIf="!loading && !error">
-    <table
-      mat-table
-      [dataSource]="visibleRows"
-      matSort
-      matSortActive="setupScore"
-      matSortDirection="desc"
-      matSortDisableClear
-      (matSortChange)="onSort($event)"
-      class="scanner-table"
-    >
-      <ng-container matColumnDef="setup" sticky>
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="The mutually exclusive research setup. Bullish/Bearish are continuing trends. Bullish Reversal means a bullish trend turning bearish; Bearish Reversal means a bearish trend turning bullish. Preliminary evidence remains in the current trend with a warning and score penalty." matTooltipPosition="above">Setup</th>
-        <td mat-cell *matCellDef="let stock">
-          <div class="setup-cell">
-            <span class="setup-badge" [class]="'setup-badge setup-' + (stock.setup || 'watch').toLowerCase().replaceAll('_', '-')">
-              {{ setupIcon(stock.setup) }} {{ setupLabel(stock.setup) }}
-            </span>
-            <span *ngIf="stock.preliminaryReversal" class="reversal-warning" [matTooltip]="'Preliminary only: this row remains ' + setupLabel(stock.setup) + ', receives a setup-score penalty, and is excluded from Actionable until confirmed or cleared.'" matTooltipPosition="above">
-              ⚠ {{ stock.preliminaryReversalLabel }}
-            </span>
-          </div>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="symbol" sticky>
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Ticker symbol. Select it to open the full stock research page in a new tab." matTooltipPosition="above">Symbol</th>
-        <td mat-cell *matCellDef="let stock" class="symbol-cell">
-          <a [routerLink]="['/stockDetail', stock.code]" target="_blank">{{ stock.code }}</a>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="price" sticky>
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Latest cached closing price. It is not a live quote." matTooltipPosition="above">Price</th>
-        <td mat-cell *matCellDef="let stock">{{ stock.lastTradeStats?.close | currency:'USD':'symbol':'1.2-2' }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="fiftyTwoWeekRange">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header
+  @if (!loading && !error) {
+    <div class="table-shell">
+      <table
+        mat-table
+        [dataSource]="visibleRows"
+        matSort
+        matSortActive="setupScore"
+        matSortDirection="desc"
+        matSortDisableClear
+        (matSortChange)="onSort($event)"
+        class="scanner-table"
+        >
+        <ng-container matColumnDef="setup" sticky>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="The mutually exclusive research setup. Bullish/Bearish are continuing trends. Bullish Reversal means a bullish trend turning bearish; Bearish Reversal means a bearish trend turning bullish. Preliminary evidence remains in the current trend with a warning and score penalty." matTooltipPosition="above">Setup</th>
+          <td mat-cell *matCellDef="let stock">
+            <div class="setup-cell">
+              <span class="setup-badge" [class]="'setup-badge setup-' + (stock.setup || 'watch').toLowerCase().replaceAll('_', '-')">
+                {{ setupIcon(stock.setup) }} {{ setupLabel(stock.setup) }}
+              </span>
+              @if (stock.preliminaryReversal) {
+                <span class="reversal-warning" [matTooltip]="'Preliminary only: this row remains ' + setupLabel(stock.setup) + ', receives a setup-score penalty, and is excluded from Actionable until confirmed or cleared.'" matTooltipPosition="above">
+                  ⚠ {{ stock.preliminaryReversalLabel }}
+                </span>
+              }
+            </div>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="symbol" sticky>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Ticker symbol. Select it to open the full stock research page in a new tab." matTooltipPosition="above">Symbol</th>
+          <td mat-cell *matCellDef="let stock" class="symbol-cell">
+            <a [routerLink]="['/stockDetail', stock.code]" target="_blank">{{ stock.code }}</a>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="price" sticky>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Latest cached closing price. It is not a live quote." matTooltipPosition="above">Price</th>
+          <td mat-cell *matCellDef="let stock">{{ stock.lastTradeStats?.close | currency:'USD':'symbol':'1.2-2' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="fiftyTwoWeekRange">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header
             matTooltip="Rolling 252-session high/low from the same cached data as Price. The dot is the latest cached close, positioned from low to high."
             matTooltipPosition="above">52W <small>range</small></th>
-        <td mat-cell *matCellDef="let stock">
-          <div *ngIf="stock.fiftyTwoWeekLow != null && stock.fiftyTwoWeekHigh != null && stock.fiftyTwoWeekPosition != null; else noRange"
-               class="range-cell" [matTooltip]="fiftyTwoWeekRangeTooltip(stock)" matTooltipPosition="above">
-            <span>{{ formatRangePrice(stock.fiftyTwoWeekLow) }}</span>
-            <span>{{ formatRangePrice(stock.fiftyTwoWeekHigh) }}</span>
-            <span class="range-track" aria-hidden="true">
-              <i class="range-marker" [style.left.%]="stock.fiftyTwoWeekPosition"></i>
-            </span>
+            <td mat-cell *matCellDef="let stock">
+              @if (stock.fiftyTwoWeekLow != null && stock.fiftyTwoWeekHigh != null && stock.fiftyTwoWeekPosition != null) {
+                <div
+                  class="range-cell" [matTooltip]="fiftyTwoWeekRangeTooltip(stock)" matTooltipPosition="above">
+                  <span>{{ formatRangePrice(stock.fiftyTwoWeekLow) }}</span>
+                  <span>{{ formatRangePrice(stock.fiftyTwoWeekHigh) }}</span>
+                  <span class="range-track" aria-hidden="true">
+                    <i class="range-marker" [style.left.%]="stock.fiftyTwoWeekPosition"></i>
+                  </span>
+                </div>
+              } @else {
+                <span class="range-unavailable"
+                [matTooltip]="fiftyTwoWeekRangeTooltip(stock)" matTooltipPosition="above">—</span>
+              }
+              <!-- The blank cell carries the same explanatory tooltip as a populated
+              one, so an em dash is never an unexplained gap. -->
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="setupScore" sticky>
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="A 0–100 transparent ranking within this setup, not a probability or universal confidence score. For reversals, a higher score means stronger evidence of a turn away from the named source trend. Compare only rows with the same Setup." matTooltipPosition="above">Setup Score</th>
+            <td mat-cell *matCellDef="let stock" class="score-cell">
+              {{ stock.setupScore | number:'1.0-1' }}
+              <small>/100</small>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="fiveDay">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Percent return from the displayed anchor date to the latest close. Positive supports Bullish continuation; negative supports Bearish continuation." matTooltipPosition="above">5D <small>{{ formatHeaderDate(fiveDayAnchor) }}</small></th>
+            <td mat-cell *matCellDef="let stock" [class]="metricClass(stock.fiveDaysToDate?.gainLoss)">
+              {{ stock.fiveDaysToDate?.gainLoss != null ? (stock.fiveDaysToDate.gainLoss | number:'1.0-1') + '%' : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="fiveWeek">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Percent return from the displayed five-week anchor date to the latest close. It gives medium-short trend context." matTooltipPosition="above">5W <small>{{ formatHeaderDate(fiveWeekAnchor) }}</small></th>
+            <td mat-cell *matCellDef="let stock" [class]="metricClass(stock.fiveWeeksToDate?.gainLoss)">
+              {{ stock.fiveWeeksToDate?.gainLoss != null ? (stock.fiveWeeksToDate.gainLoss | number:'1.0-1') + '%' : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="relativeStrength">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Stock's roughly one-month return minus SPY's return over aligned dates. Positive means outperformed SPY; negative means underperformed." matTooltipPosition="above">vs SPY <small>1M</small></th>
+            <td mat-cell *matCellDef="let stock" [class]="metricClass(stock.relativeStrengthSpyOneMonth)">
+              {{ stock.relativeStrengthSpyOneMonth != null ? (stock.relativeStrengthSpyOneMonth | number:'1.1-1') + '%' : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="volumeRatio">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Recent average volume (last 3 sessions) divided by the prior non-overlapping 20-session average. 1.0× is normal participation; above 1.0× is increased participation." matTooltipPosition="above">Volume <small>3/20D</small></th>
+            <td mat-cell *matCellDef="let stock" [class.participating]="(stock.volumeRatio || 0) >= 1">
+              {{ stock.volumeRatio != null ? (stock.volumeRatio | number:'1.2-2') + '×' : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="rsi">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="14-session Relative Strength Index. The arrow shows its five-session change: up, down, or flat. It is an input to timing, not a standalone signal." matTooltipPosition="above">RSI 14</th>
+            <td mat-cell *matCellDef="let stock">
+              {{ stock.advancedTrendWithVolume?.rsi != null ? (stock.advancedTrendWithVolume.rsi | number:'1.0-0') : '—' }}
+              <span class="rsi-arrow" [class]="metricClass(stock.rsiChangeFiveDay)">{{ rsiArrow(stock) }}</span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="atrPct">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="14-session Wilder Average True Range divided by price. It approximates the stock's normal daily movement as a percentage; higher is not automatically better." matTooltipPosition="above">ATR %</th>
+            <td mat-cell *matCellDef="let stock">
+              {{ stock.atrPct != null ? (stock.atrPct | number:'1.1-1') + '%' : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="trigger">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="For a confirmed reversal, this shows whether the turn is upward or downward. For continuations, it shows the current trend age in sessions." matTooltipPosition="above">Trigger / Age</th>
+            <td mat-cell *matCellDef="let stock" class="trigger-cell">{{ stock.triggerLabel || '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="freshness">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Complete means fresh data and every core input is present: ATR %, realized-volatility expansion, volume ratio, average dollar volume, and SPY-relative return. Partial has missing data; Check data is stale, date-mismatched, or incomplete." matTooltipPosition="above">Evidence</th>
+            <td mat-cell *matCellDef="let stock">
+              <span class="quality-badge" [class]="'quality-badge quality-' + (stock.evidenceQuality || 'partial').toLowerCase().replaceAll('_', '-')">
+                {{ stock.evidenceQuality === 'COMPLETE' ? 'Complete' : stock.evidenceQuality === 'PARTIAL' ? 'Partial' : 'Check data' }}
+              </span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="details">
+            <th mat-header-cell *matHeaderCellDef matTooltip="Open the score components, raw evidence, and five-week diagnostics without leaving the scanner." matTooltipPosition="above">Details</th>
+            <td mat-cell *matCellDef="let stock">
+              <button mat-button type="button" class="details-button" (click)="openDetails(stock)">Inspect</button>
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns" [class]="rowClass(row)"></tr>
+        </table>
+        @if (!visibleCount) {
+          <!-- A first-run user has no data at all; that is a different problem
+          from a filter matching nothing, and needs a different answer. -->
+          @if (coreData && !coreData.available) {
+            <app-capability-state [capability]="coreData">
+            </app-capability-state>
+          }
+          @if (!coreData || coreData.available) {
+            <div class="empty">No stocks match the selected setup and filters.</div>
+          }
+        }
+        @if (visibleCount) {
+          <div class="pagination">
+            <span>{{ pageStart }}–{{ pageEnd }} of {{ visibleCount | number }}</span>
+            <label>Rows
+              <select [(ngModel)]="pageSize" (change)="changePageSize()" aria-label="Rows per page">
+                <option [ngValue]="25">25</option>
+                <option [ngValue]="50">50</option>
+                <option [ngValue]="100">100</option>
+              </select>
+            </label>
+            <button type="button" (click)="changePage(-1)" [disabled]="pageIndex === 0" aria-label="Previous page">‹</button>
+            <span>Page {{ pageIndex + 1 }} / {{ totalPages }}</span>
+            <button type="button" (click)="changePage(1)" [disabled]="pageIndex >= totalPages - 1" aria-label="Next page">›</button>
           </div>
-          <!-- The blank cell carries the same explanatory tooltip as a populated
-               one, so an em dash is never an unexplained gap. -->
-          <ng-template #noRange>
-            <span class="range-unavailable"
-                  [matTooltip]="fiftyTwoWeekRangeTooltip(stock)" matTooltipPosition="above">—</span>
-          </ng-template>
-        </td>
-      </ng-container>
+        }
+      </div>
+    }
+  </section>
 
-      <ng-container matColumnDef="setupScore" sticky>
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="A 0–100 transparent ranking within this setup, not a probability or universal confidence score. For reversals, a higher score means stronger evidence of a turn away from the named source trend. Compare only rows with the same Setup." matTooltipPosition="above">Setup Score</th>
-        <td mat-cell *matCellDef="let stock" class="score-cell">
-          {{ stock.setupScore | number:'1.0-1' }}
-          <small>/100</small>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="fiveDay">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Percent return from the displayed anchor date to the latest close. Positive supports Bullish continuation; negative supports Bearish continuation." matTooltipPosition="above">5D <small>{{ formatHeaderDate(fiveDayAnchor) }}</small></th>
-        <td mat-cell *matCellDef="let stock" [class]="metricClass(stock.fiveDaysToDate?.gainLoss)">
-          {{ stock.fiveDaysToDate?.gainLoss != null ? (stock.fiveDaysToDate.gainLoss | number:'1.0-1') + '%' : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="fiveWeek">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Percent return from the displayed five-week anchor date to the latest close. It gives medium-short trend context." matTooltipPosition="above">5W <small>{{ formatHeaderDate(fiveWeekAnchor) }}</small></th>
-        <td mat-cell *matCellDef="let stock" [class]="metricClass(stock.fiveWeeksToDate?.gainLoss)">
-          {{ stock.fiveWeeksToDate?.gainLoss != null ? (stock.fiveWeeksToDate.gainLoss | number:'1.0-1') + '%' : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="relativeStrength">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Stock's roughly one-month return minus SPY's return over aligned dates. Positive means outperformed SPY; negative means underperformed." matTooltipPosition="above">vs SPY <small>1M</small></th>
-        <td mat-cell *matCellDef="let stock" [class]="metricClass(stock.relativeStrengthSpyOneMonth)">
-          {{ stock.relativeStrengthSpyOneMonth != null ? (stock.relativeStrengthSpyOneMonth | number:'1.1-1') + '%' : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="volumeRatio">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Recent average volume (last 3 sessions) divided by the prior non-overlapping 20-session average. 1.0× is normal participation; above 1.0× is increased participation." matTooltipPosition="above">Volume <small>3/20D</small></th>
-        <td mat-cell *matCellDef="let stock" [class.participating]="(stock.volumeRatio || 0) >= 1">
-          {{ stock.volumeRatio != null ? (stock.volumeRatio | number:'1.2-2') + '×' : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="rsi">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="14-session Relative Strength Index. The arrow shows its five-session change: up, down, or flat. It is an input to timing, not a standalone signal." matTooltipPosition="above">RSI 14</th>
-        <td mat-cell *matCellDef="let stock">
-          {{ stock.advancedTrendWithVolume?.rsi != null ? (stock.advancedTrendWithVolume.rsi | number:'1.0-0') : '—' }}
-          <span class="rsi-arrow" [class]="metricClass(stock.rsiChangeFiveDay)">{{ rsiArrow(stock) }}</span>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="atrPct">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="14-session Wilder Average True Range divided by price. It approximates the stock's normal daily movement as a percentage; higher is not automatically better." matTooltipPosition="above">ATR %</th>
-        <td mat-cell *matCellDef="let stock">
-          {{ stock.atrPct != null ? (stock.atrPct | number:'1.1-1') + '%' : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="trigger">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="For a confirmed reversal, this shows whether the turn is upward or downward. For continuations, it shows the current trend age in sessions." matTooltipPosition="above">Trigger / Age</th>
-        <td mat-cell *matCellDef="let stock" class="trigger-cell">{{ stock.triggerLabel || '—' }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="freshness">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header matTooltip="Complete means fresh data and every core input is present: ATR %, realized-volatility expansion, volume ratio, average dollar volume, and SPY-relative return. Partial has missing data; Check data is stale, date-mismatched, or incomplete." matTooltipPosition="above">Evidence</th>
-        <td mat-cell *matCellDef="let stock">
-          <span class="quality-badge" [class]="'quality-badge quality-' + (stock.evidenceQuality || 'partial').toLowerCase().replaceAll('_', '-')">
-            {{ stock.evidenceQuality === 'COMPLETE' ? 'Complete' : stock.evidenceQuality === 'PARTIAL' ? 'Partial' : 'Check data' }}
+  @if (selectedStock; as stock) {
+    <app-drawer [ariaLabel]="stock.code + ' momentum evidence'" (closed)="closeDetails()">
+      <div drawerHeader class="drawer-heading">
+        <span class="setup-badge" [class]="'setup-badge setup-' + (stock.setup || 'watch').toLowerCase().replaceAll('_', '-')">
+          {{ setupIcon(stock.setup) }} {{ setupLabel(stock.setup) }}
+        </span>
+        @if (stock.preliminaryReversal) {
+          <span class="reversal-warning drawer-warning">
+            ⚠ {{ stock.preliminaryReversalLabel }}
           </span>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="details">
-        <th mat-header-cell *matHeaderCellDef matTooltip="Open the score components, raw evidence, and five-week diagnostics without leaving the scanner." matTooltipPosition="above">Details</th>
-        <td mat-cell *matCellDef="let stock">
-          <button mat-button type="button" class="details-button" (click)="openDetails(stock)">Inspect</button>
-        </td>
-      </ng-container>
-
-      <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns" [class]="rowClass(row)"></tr>
-    </table>
-
-    <ng-container *ngIf="!visibleCount">
-      <!-- A first-run user has no data at all; that is a different problem
-           from a filter matching nothing, and needs a different answer. -->
-      <app-capability-state *ngIf="coreData && !coreData.available" [capability]="coreData">
-      </app-capability-state>
-      <div class="empty" *ngIf="!coreData || coreData.available">No stocks match the selected setup and filters.</div>
-    </ng-container>
-    <div class="pagination" *ngIf="visibleCount">
-      <span>{{ pageStart }}–{{ pageEnd }} of {{ visibleCount | number }}</span>
-      <label>Rows
-        <select [(ngModel)]="pageSize" (change)="changePageSize()" aria-label="Rows per page">
-          <option [ngValue]="25">25</option>
-          <option [ngValue]="50">50</option>
-          <option [ngValue]="100">100</option>
-        </select>
-      </label>
-      <button type="button" (click)="changePage(-1)" [disabled]="pageIndex === 0" aria-label="Previous page">‹</button>
-      <span>Page {{ pageIndex + 1 }} / {{ totalPages }}</span>
-      <button type="button" (click)="changePage(1)" [disabled]="pageIndex >= totalPages - 1" aria-label="Next page">›</button>
-    </div>
-  </div>
-</section>
-
-<app-drawer *ngIf="selectedStock as stock" [ariaLabel]="stock.code + ' momentum evidence'" (closed)="closeDetails()">
-  <div drawerHeader class="drawer-heading">
-    <span class="setup-badge" [class]="'setup-badge setup-' + (stock.setup || 'watch').toLowerCase().replaceAll('_', '-')">
-      {{ setupIcon(stock.setup) }} {{ setupLabel(stock.setup) }}
-    </span>
-    <span *ngIf="stock.preliminaryReversal" class="reversal-warning drawer-warning">
-      ⚠ {{ stock.preliminaryReversalLabel }}
-    </span>
-    <h2 class="drawer-symbol">{{ stock.code }} <small>{{ stock.lastTradeStats.close | currency:'USD':'symbol':'1.2-2' }}</small></h2>
-    <p class="drawer-reason">{{ stock.setupReason }}</p>
-  </div>
-
-  <section class="drawer-section score-summary">
-      <div class="score-number">
-        <strong>{{ stock.setupScore | number:'1.0-1' }}</strong>
-        <span>Setup Score / 100</span>
+        }
+        <h2 class="drawer-symbol">{{ stock.code }} <small>{{ stock.lastTradeStats.close | currency:'USD':'symbol':'1.2-2' }}</small></h2>
+        <p class="drawer-reason">{{ stock.setupReason }}</p>
       </div>
-      <div class="score-components">
-        <div class="component" *ngFor="let component of scoreEntries(stock)" [class.penalty]="component.value < 0">
-          <div><span>{{ component.label }}</span><strong>{{ component.value | number:'1.0-1' }}</strong></div>
-          <div class="bar"><span [style.width.%]="component.width"></span></div>
+      <section class="drawer-section score-summary">
+        <div class="score-number">
+          <strong>{{ stock.setupScore | number:'1.0-1' }}</strong>
+          <span>Setup Score / 100</span>
         </div>
-      </div>
-    </section>
-
-  <section class="drawer-section">
-    <h3 class="drawer-section-title">Decision evidence</h3>
-      <dl class="metric-grid">
-        <div><dt>5D return</dt><dd [class]="metricClass(stock.fiveDaysToDate.gainLoss)">{{ stock.fiveDaysToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.fiveDaysToDate.startDate) }} at {{ stock.fiveDaysToDate.startPrice | currency }}</small></div>
-        <div><dt>5W return</dt><dd [class]="metricClass(stock.fiveWeeksToDate.gainLoss)">{{ stock.fiveWeeksToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.fiveWeeksToDate.startDate) }} at {{ stock.fiveWeeksToDate.startPrice | currency }}</small></div>
-        <div><dt>YTD</dt><dd [class]="metricClass(stock.yearToDate.gainLoss)">{{ stock.yearToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.yearToDate.startDate) }}</small></div>
-        <div><dt>Midpoint</dt><dd [class]="metricClass(stock.midPointToDate.gainLoss)">{{ stock.midPointToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.midPointToDate.startDate) }}</small></div>
-        <div><dt>vs SPY (1M)</dt><dd [class]="metricClass(stock.relativeStrengthSpyOneMonth)">{{ stock.relativeStrengthSpyOneMonth != null ? (stock.relativeStrengthSpyOneMonth | number:'1.1-1') + '%' : '—' }}</dd></div>
-        <div><dt>Volume (3/20D)</dt><dd>{{ stock.volumeRatio != null ? (stock.volumeRatio | number:'1.2-2') + '×' : '—' }}</dd><small>Non-overlapping windows</small></div>
-        <div><dt>Avg $ volume 20D</dt><dd>{{ formatCompact(stock.averageDollarVolume20) }}</dd></div>
-        <div><dt>ATR 14</dt><dd>{{ stock.atrPct != null ? (stock.atrPct | number:'1.2-2') + '%' : '—' }}</dd><small>Wilder smoothing</small></div>
-        <div><dt>RV expansion</dt><dd>{{ stock.realizedVolatilityExpansion != null ? (stock.realizedVolatilityExpansion | number:'1.2-2') + '×' : '—' }}</dd><small>5D / prior 20D</small></div>
-        <div><dt>RSI 14</dt><dd>{{ stock.advancedTrendWithVolume?.rsi | number:'1.1-1' }}</dd><small>5D change {{ stock.rsiChangeFiveDay | number:'1.1-1' }}</small></div>
-        <div><dt>MACD histogram Δ</dt><dd [class]="metricClass(stock.macdHistogramChange)">{{ stock.macdHistogramChange | number:'1.3-3' }}</dd><small>Cross age {{ stock.daysSinceMacdCross ?? '—' }} sessions</small></div>
-        <div><dt>Trend</dt><dd>{{ stock.advancedTrendWithVolume?.direction }} · {{ stock.advancedTrendWithVolume?.strength }}</dd><small>{{ stock.advancedTrendWithVolume?.currentTrendDays }} sessions active</small></div>
-        <div *ngIf="stock.preliminaryReversal" class="warning-metric"><dt>Reversal warning</dt><dd>{{ stock.preliminaryReversalLabel }}</dd><small>Preliminary evidence only; score penalized and excluded from Actionable</small></div>
-        <div><dt>Distance from SMA20</dt><dd [class]="metricClass(stock.distanceSma20Pct)">{{ stock.distanceSma20Pct != null ? (stock.distanceSma20Pct | number:'1.1-1') + '%' : '—' }}</dd><small>Used for entry-room scoring</small></div>
-        <div><dt>Freshness</dt><dd>{{ stock.freshnessStatus }}</dd><small>{{ formatDate(stock.lastTradeStats.tradeDate) }}</small></div>
-      </dl>
-    </section>
-
-  <section class="drawer-section">
-    <h3 class="drawer-section-title">Five-week diagnostics</h3>
-      <div class="weekly-grid">
-        <div class="week-card" *ngFor="let week of stock.recentWeeks">
-          <strong>{{ formatDate(week.endDate) }}</strong>
-          <span>Avg close {{ week.avgClose | currency:'USD':'symbol':'1.2-2' }}</span>
-          <span>Avg range ${{ week.avgChange | number:'1.2-2' }}</span>
-          <span>Avg range {{ week.relativeMomentum | number:'1.0-0' }}%</span>
-          <span>Return vol {{ week.relativeMomentumStd | number:'1.2-2' }}%</span>
+        <div class="score-components">
+          @for (component of scoreEntries(stock); track component) {
+            <div class="component" [class.penalty]="component.value < 0">
+              <div><span>{{ component.label }}</span><strong>{{ component.value | number:'1.0-1' }}</strong></div>
+              <div class="bar"><span [style.width.%]="component.width"></span></div>
+            </div>
+          }
         </div>
-      </div>
-    </section>
-
-  <ng-container drawerFooter>
-    <a class="btn btn-ghost" [routerLink]="['/stockDetail', stock.code]" target="_blank">Open full stock page</a>
-    <button type="button" class="btn" (click)="closeDetails()">Close</button>
-  </ng-container>
-</app-drawer>
+      </section>
+      <section class="drawer-section">
+        <h3 class="drawer-section-title">Decision evidence</h3>
+        <dl class="metric-grid">
+          <div><dt>5D return</dt><dd [class]="metricClass(stock.fiveDaysToDate.gainLoss)">{{ stock.fiveDaysToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.fiveDaysToDate.startDate) }} at {{ stock.fiveDaysToDate.startPrice | currency }}</small></div>
+          <div><dt>5W return</dt><dd [class]="metricClass(stock.fiveWeeksToDate.gainLoss)">{{ stock.fiveWeeksToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.fiveWeeksToDate.startDate) }} at {{ stock.fiveWeeksToDate.startPrice | currency }}</small></div>
+          <div><dt>YTD</dt><dd [class]="metricClass(stock.yearToDate.gainLoss)">{{ stock.yearToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.yearToDate.startDate) }}</small></div>
+          <div><dt>Midpoint</dt><dd [class]="metricClass(stock.midPointToDate.gainLoss)">{{ stock.midPointToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.midPointToDate.startDate) }}</small></div>
+          <div><dt>vs SPY (1M)</dt><dd [class]="metricClass(stock.relativeStrengthSpyOneMonth)">{{ stock.relativeStrengthSpyOneMonth != null ? (stock.relativeStrengthSpyOneMonth | number:'1.1-1') + '%' : '—' }}</dd></div>
+          <div><dt>Volume (3/20D)</dt><dd>{{ stock.volumeRatio != null ? (stock.volumeRatio | number:'1.2-2') + '×' : '—' }}</dd><small>Non-overlapping windows</small></div>
+          <div><dt>Avg $ volume 20D</dt><dd>{{ formatCompact(stock.averageDollarVolume20) }}</dd></div>
+          <div><dt>ATR 14</dt><dd>{{ stock.atrPct != null ? (stock.atrPct | number:'1.2-2') + '%' : '—' }}</dd><small>Wilder smoothing</small></div>
+          <div><dt>RV expansion</dt><dd>{{ stock.realizedVolatilityExpansion != null ? (stock.realizedVolatilityExpansion | number:'1.2-2') + '×' : '—' }}</dd><small>5D / prior 20D</small></div>
+          <div><dt>RSI 14</dt><dd>{{ stock.advancedTrendWithVolume?.rsi | number:'1.1-1' }}</dd><small>5D change {{ stock.rsiChangeFiveDay | number:'1.1-1' }}</small></div>
+          <div><dt>MACD histogram Δ</dt><dd [class]="metricClass(stock.macdHistogramChange)">{{ stock.macdHistogramChange | number:'1.3-3' }}</dd><small>Cross age {{ stock.daysSinceMacdCross ?? '—' }} sessions</small></div>
+          <div><dt>Trend</dt><dd>{{ stock.advancedTrendWithVolume?.direction }} · {{ stock.advancedTrendWithVolume?.strength }}</dd><small>{{ stock.advancedTrendWithVolume?.currentTrendDays }} sessions active</small></div>
+          @if (stock.preliminaryReversal) {
+            <div class="warning-metric"><dt>Reversal warning</dt><dd>{{ stock.preliminaryReversalLabel }}</dd><small>Preliminary evidence only; score penalized and excluded from Actionable</small></div>
+          }
+          <div><dt>Distance from SMA20</dt><dd [class]="metricClass(stock.distanceSma20Pct)">{{ stock.distanceSma20Pct != null ? (stock.distanceSma20Pct | number:'1.1-1') + '%' : '—' }}</dd><small>Used for entry-room scoring</small></div>
+          <div><dt>Freshness</dt><dd>{{ stock.freshnessStatus }}</dd><small>{{ formatDate(stock.lastTradeStats.tradeDate) }}</small></div>
+        </dl>
+      </section>
+      <section class="drawer-section">
+        <h3 class="drawer-section-title">Five-week diagnostics</h3>
+        <div class="weekly-grid">
+          @for (week of stock.recentWeeks; track week) {
+            <div class="week-card">
+              <strong>{{ formatDate(week.endDate) }}</strong>
+              <span>Avg close {{ week.avgClose | currency:'USD':'symbol':'1.2-2' }}</span>
+              <span>Avg range ${{ week.avgChange | number:'1.2-2' }}</span>
+              <span>Avg range {{ week.relativeMomentum | number:'1.0-0' }}%</span>
+              <span>Return vol {{ week.relativeMomentumStd | number:'1.2-2' }}%</span>
+            </div>
+          }
+        </div>
+      </section>
+      <ng-container drawerFooter>
+        <a class="btn btn-ghost" [routerLink]="['/stockDetail', stock.code]" target="_blank">Open full stock page</a>
+        <button type="button" class="btn" (click)="closeDetails()">Close</button>
+      </ng-container>
+    </app-drawer>
+  }

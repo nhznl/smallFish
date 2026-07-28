@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnInit, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { FormsModule } from '@angular/forms';
@@ -36,7 +36,7 @@ interface ManualReconcileForm {
 @Component({
   selector: 'app-options',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatTooltipModule, ModalComponent, CapabilityStateComponent],
+  imports: [FormsModule, MatTooltipModule, ModalComponent, CapabilityStateComponent],
   templateUrl: './options.component.html',
   styleUrls: ['./options.component.css']
 })

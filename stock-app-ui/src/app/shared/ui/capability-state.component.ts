@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { NgIf } from '@angular/common';
+
 import { Capability } from '../../api/capability.service';
 
 /**
@@ -28,7 +28,7 @@ import { Capability } from '../../api/capability.service';
 @Component({
   selector: 'app-capability-state',
   standalone: true,
-  imports: [NgIf],
+  imports: [],
   templateUrl: './capability-state.component.html',
   styleUrl: './capability-state.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush

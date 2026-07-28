@@ -26,318 +26,324 @@
 
   <div class="tab-bar" role="tablist" aria-label="Wheel views">
     <button type="button" role="tab" class="tab" [attr.aria-selected]="activeTab === 'scan'"
-            [class.active]="activeTab === 'scan'" (click)="activeTab = 'scan'">Wheel Scan</button>
+    [class.active]="activeTab === 'scan'" (click)="activeTab = 'scan'">Wheel Scan</button>
     <button type="button" role="tab" class="tab" [attr.aria-selected]="activeTab === 'quotes'"
-            [class.active]="activeTab === 'quotes'" (click)="activeTab = 'quotes'">Option Quotes</button>
+    [class.active]="activeTab === 'quotes'" (click)="activeTab = 'quotes'">Option Quotes</button>
   </div>
 
-  <ng-container *ngIf="activeTab === 'scan'; else quotesTab">
-  <div *ngIf="currentRunMode === 'CURRENT_CONTEXT_ONLY'" class="banner banner-warn context-warning">
-    <span aria-hidden="true">&#9888;</span>
-    <div>
-      <strong>Current-context analysis:</strong> price calculations are as-of the report date,
-      but universe and event context use the available current snapshots. This run is not
-      point-in-time validation evidence.
+  @if (activeTab === 'scan') {
+    @if (currentRunMode === 'CURRENT_CONTEXT_ONLY') {
+      <div class="banner banner-warn context-warning">
+        <span aria-hidden="true">&#9888;</span>
+        <div>
+          <strong>Current-context analysis:</strong> price calculations are as-of the report date,
+          but universe and event context use the available current snapshots. This run is not
+          point-in-time validation evidence.
+        </div>
+      </div>
+    }
+    <div class="job-bar">
+      <div class="job">
+        <button type="button" class="btn btn-primary"
+          [attr.aria-busy]="wheelRunning"
+          [disabled]="wheelRunning || chainsRunning" (click)="runWheel()">
+          @if (wheelRunning) {
+            <span class="btn-spinner" aria-hidden="true"></span>
+          }
+          @if (!wheelRunning) {
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 11 7-11 7V5Z" fill="currentColor" stroke="none"/></svg>
+          }
+          {{ wheelRunning ? 'Running…' : 'Run Wheel' }}
+        </button>
+        @if (wheelMessage) {
+          <span class="job-status" [class]="'job-status ' + jobStatusClass(wheelStatus)">
+            @if (wheelMessageAt) {
+              <span class="job-time">{{ wheelMessageAt | date:'HH:mm:ss' }}</span>
+            }
+            {{ wheelMessage }}
+          </span>
+        }
+      </div>
+      <div class="job">
+        <button type="button" class="btn"
+          [attr.aria-busy]="chainsRunning"
+          [disabled]="chainsRunning || wheelRunning || !!scopeBlockReason()" (click)="runChains()"
+          matTooltip="Discover exact Wheel contracts, then archive timestamped Tastytrade DXLink bid/ask quotes. Yahoo fallback remains diagnostic-only."
+          matTooltipPosition="above">
+          @if (chainsRunning) {
+            <span class="btn-spinner" aria-hidden="true"></span>
+          }
+          @if (!chainsRunning) {
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 11 7-11 7V5Z" fill="currentColor" stroke="none"/></svg>
+          }
+          {{ chainsRunning ? 'Collecting…' : 'Collect Option Quotes' }}
+        </button>
+        <label class="check-filter"
+          matTooltip="Collect only the horizon, symbols, and cushion shown below. Scope can only narrow a run — it never widens collection or relaxes a quality gate."
+          matTooltipPosition="above">
+          <input type="checkbox" [(ngModel)]="scopeCollection" [disabled]="chainsRunning">
+          Scope collection to this view
+        </label>
+        @if (chainsMessage) {
+          <span class="job-status" [class]="'job-status ' + jobStatusClass(chainsStatus)">
+            @if (chainsMessageAt) {
+              <span class="job-time">{{ chainsMessageAt | date:'HH:mm:ss' }}</span>
+            }
+            {{ chainsMessage }}
+          </span>
+        }
+      </div>
+      <p class="scope-summary" [class.scope-blocked]="!!scopeBlockReason()">
+        {{ scopeBlockReason() || scopeSummary() }}
+      </p>
     </div>
-  </div>
-
-  <div class="job-bar">
-    <div class="job">
-      <button type="button" class="btn btn-primary"
-              [attr.aria-busy]="wheelRunning"
-              [disabled]="wheelRunning || chainsRunning" (click)="runWheel()">
-        <span class="btn-spinner" *ngIf="wheelRunning" aria-hidden="true"></span>
-        <svg *ngIf="!wheelRunning" class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 11 7-11 7V5Z" fill="currentColor" stroke="none"/></svg>
-        {{ wheelRunning ? 'Running…' : 'Run Wheel' }}
-      </button>
-      <span *ngIf="wheelMessage" class="job-status" [class]="'job-status ' + jobStatusClass(wheelStatus)">
-        <span class="job-time" *ngIf="wheelMessageAt">{{ wheelMessageAt | date:'HH:mm:ss' }}</span>
-        {{ wheelMessage }}
-      </span>
-    </div>
-
-    <div class="job">
-      <button type="button" class="btn"
-              [attr.aria-busy]="chainsRunning"
-              [disabled]="chainsRunning || wheelRunning || !!scopeBlockReason()" (click)="runChains()"
-              matTooltip="Discover exact Wheel contracts, then archive timestamped Tastytrade DXLink bid/ask quotes. Yahoo fallback remains diagnostic-only."
-              matTooltipPosition="above">
-        <span class="btn-spinner" *ngIf="chainsRunning" aria-hidden="true"></span>
-        <svg *ngIf="!chainsRunning" class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 11 7-11 7V5Z" fill="currentColor" stroke="none"/></svg>
-        {{ chainsRunning ? 'Collecting…' : 'Collect Option Quotes' }}
-      </button>
-      <label class="check-filter"
-             matTooltip="Collect only the horizon, symbols, and cushion shown below. Scope can only narrow a run — it never widens collection or relaxes a quality gate."
-             matTooltipPosition="above">
-        <input type="checkbox" [(ngModel)]="scopeCollection" [disabled]="chainsRunning">
-        Scope collection to this view
+    <div class="filters">
+      <label class="control">
+        <span class="control-label">Horizon (DTE)</span>
+        <select [(ngModel)]="horizon" (ngModelChange)="applyFilters()" class="control-select">
+          @for (h of horizons; track h) {
+            <option [ngValue]="h">{{ h }}</option>
+          }
+        </select>
       </label>
-      <span *ngIf="chainsMessage" class="job-status" [class]="'job-status ' + jobStatusClass(chainsStatus)">
-        <span class="job-time" *ngIf="chainsMessageAt">{{ chainsMessageAt | date:'HH:mm:ss' }}</span>
-        {{ chainsMessage }}
-      </span>
+      <label class="control">
+        <span class="control-label">OTM cushion</span>
+        <select [(ngModel)]="cushion" (ngModelChange)="applyFilters()" class="control-select">
+          @for (c of cushions; track c) {
+            <option [ngValue]="c">{{ c }}%</option>
+          }
+        </select>
+      </label>
+      <label class="check-filter">
+        <input type="checkbox" [(ngModel)]="hideBearish" (ngModelChange)="applyFilters()">
+        Hide bearish
+      </label>
+      <label class="check-filter">
+        <input type="checkbox" [(ngModel)]="showUnavailable" (ngModelChange)="applyFilters()">
+        Show stale/unknown
+      </label>
+      <label class="check-filter" matTooltip="Keep only rows classified as ETF in the backend universe." matTooltipPosition="above">
+        <input type="checkbox" [(ngModel)]="etfsOnly" (ngModelChange)="applyFilters()">
+        ETFs Only
+      </label>
+      <input class="symbol-input"
+        type="text"
+        [(ngModel)]="symbolFilter"
+        (input)="applySymbolFilter()"
+        placeholder="Filter symbol(s), e.g. AAPL, MSFT">
+      @if (symbolFilter) {
+        <button type="button" class="btn btn-ghost" (click)="clearSymbolFilter()">Clear</button>
+      }
+      <span class="result-count">{{ dataSource.data.length | number }} shown</span>
     </div>
-    <p class="scope-summary" [class.scope-blocked]="!!scopeBlockReason()">
-      {{ scopeBlockReason() || scopeSummary() }}
-    </p>
-  </div>
-
-  <div class="filters">
-    <label class="control">
-      <span class="control-label">Horizon (DTE)</span>
-      <select [(ngModel)]="horizon" (ngModelChange)="applyFilters()" class="control-select">
-        <option *ngFor="let h of horizons" [ngValue]="h">{{ h }}</option>
-      </select>
-    </label>
-
-    <label class="control">
-      <span class="control-label">OTM cushion</span>
-      <select [(ngModel)]="cushion" (ngModelChange)="applyFilters()" class="control-select">
-        <option *ngFor="let c of cushions" [ngValue]="c">{{ c }}%</option>
-      </select>
-    </label>
-
-    <label class="check-filter">
-      <input type="checkbox" [(ngModel)]="hideBearish" (ngModelChange)="applyFilters()">
-      Hide bearish
-    </label>
-
-    <label class="check-filter">
-      <input type="checkbox" [(ngModel)]="showUnavailable" (ngModelChange)="applyFilters()">
-      Show stale/unknown
-    </label>
-
-    <label class="check-filter" matTooltip="Keep only rows classified as ETF in the backend universe." matTooltipPosition="above">
-      <input type="checkbox" [(ngModel)]="etfsOnly" (ngModelChange)="applyFilters()">
-      ETFs Only
-    </label>
-
-    <input class="symbol-input"
-           type="text"
-           [(ngModel)]="symbolFilter"
-           (input)="applySymbolFilter()"
-           placeholder="Filter symbol(s), e.g. AAPL, MSFT">
-    <button *ngIf="symbolFilter" type="button" class="btn btn-ghost" (click)="clearSymbolFilter()">Clear</button>
-
-    <span class="result-count">{{ dataSource.data.length | number }} shown</span>
-  </div>
-
-  <div class="caveat">
-    Put/Call <strong>ITM</strong> and <strong>Touch</strong> columns are shown at the selected
-    <strong>{{ cushion }}%</strong> OTM cushion. ITM = historical terminal-close breach;
-    Touch = historical intraday low/high breach during the window. These are descriptive price
-    observations, not assignment probabilities. Hover a frequency to compare the overlapping
-    estimate with the disjoint-window diagnostic.
-  </div>
-
-  <ng-container *ngIf="!loadingData; else loading">
-    <div *ngIf="loadError" class="load-error">
-      Could not load wheel candidates. Is the API running, and has the wheel scan produced a report?
+    <div class="caveat">
+      Put/Call <strong>ITM</strong> and <strong>Touch</strong> columns are shown at the selected
+      <strong>{{ cushion }}%</strong> OTM cushion. ITM = historical terminal-close breach;
+      Touch = historical intraday low/high breach during the window. These are descriptive price
+      observations, not assignment probabilities. Hover a frequency to compare the overlapping
+      estimate with the disjoint-window diagnostic.
     </div>
-
-    <div class="table-shell">
-    <table
-      mat-table
-      [dataSource]="dataSource"
-      matSort
-      matSortActive="rvPercentile252"
-      matSortDirection="desc"
-      class="wheel-table"
-    >
-      <!-- Grouped header band over the cushion-dependent columns. -->
-      <ng-container matColumnDef="groupLead">
-        <th mat-header-cell *matHeaderCellDef [attr.colspan]="5" class="group-blank"></th>
-      </ng-container>
-      <ng-container matColumnDef="groupPut">
-        <th mat-header-cell *matHeaderCellDef [attr.colspan]="2" class="group-band group-put">Put @ {{ cushion }}%</th>
-      </ng-container>
-      <ng-container matColumnDef="groupCall">
-        <th mat-header-cell *matHeaderCellDef [attr.colspan]="2" class="group-band group-call">Call @ {{ cushion }}%</th>
-      </ng-container>
-      <ng-container matColumnDef="groupTail">
-        <th mat-header-cell *matHeaderCellDef [attr.colspan]="10" class="group-blank"></th>
-      </ng-container>
-
-      <ng-container matColumnDef="symbol">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Symbol</th>
-        <td mat-cell *matCellDef="let c" class="symbol-cell">
-          <a [routerLink]="['/stockDetail', c.wheel.symbol]" target="_blank">{{ c.wheel.symbol }}</a>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="horizonDte">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>DTE</th>
-        <td mat-cell *matCellDef="let c" matTooltip="Horizon in calendar days ({{ c.wheel.horizonSessions }} sessions)" matTooltipPosition="above">
-          {{ c.wheel.horizonDte }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="lastClose">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Last</th>
-        <td mat-cell *matCellDef="let c">
-          {{ c.wheel.lastClose != null ? ('$' + (c.wheel.lastClose | number:'1.2-2')) : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="rvPercentile252">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>RV %ile</th>
-        <td mat-cell *matCellDef="let c" class="rv-cell"
-            matTooltip="Today's realized vol (21d) as a percentile of its own trailing 252 sessions. High ⇒ premiums likely elevated." matTooltipPosition="above">
-          <span class="rv-value">{{ c.wheel.rvPercentile252 != null ? ((c.wheel.rvPercentile252 * 100) | number:'1.0-0') + '%' : '—' }}</span>
-          <span class="meter" *ngIf="c.wheel.rvPercentile252 != null" aria-hidden="true">
-            <span [style.width.%]="c.wheel.rvPercentile252 * 100"></span>
-          </span>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="sigmaMovePct">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>1σ move</th>
-        <td mat-cell *matCellDef="let c"
-            matTooltip="1σ move — historical-vol, normal-model approximation. Not a 68% guarantee." matTooltipPosition="above">
-          {{ c.wheel.sigmaMovePct != null ? ((c.wheel.sigmaMovePct * 100) | number:'1.1-1') + '%' : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="putExpiryItm">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Put ITM</th>
-        <td mat-cell *matCellDef="let c"
-            matTooltip="Historical put terminal-ITM frequency at {{ cushion }}% OTM. Overlapping: {{ fmtPct(putItm(c)) }} across {{ c.wheel.sampleCount }} windows. Disjoint diagnostic: {{ fmtPct(putItmNonoverlap(c)) }} across {{ c.wheel.nonoverlapSampleCount != null ? c.wheel.nonoverlapSampleCount : 'unavailable' }} windows. Not assignment odds." matTooltipPosition="above">
-          {{ fmtPct(putItm(c)) }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="putTouch">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Put Touch</th>
-        <td mat-cell *matCellDef="let c"
-            matTooltip="Historical put-touch frequency at {{ cushion }}% OTM. Overlapping: {{ fmtPct(putTouchVal(c)) }} across {{ c.wheel.sampleCount }} windows. Disjoint diagnostic: {{ fmtPct(putTouchNonoverlap(c)) }} across {{ c.wheel.nonoverlapSampleCount != null ? c.wheel.nonoverlapSampleCount : 'unavailable' }} windows." matTooltipPosition="above">
-          {{ fmtPct(putTouchVal(c)) }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="callExpiryItm">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Call ITM</th>
-        <td mat-cell *matCellDef="let c"
-            matTooltip="Historical call terminal-ITM frequency at {{ cushion }}% OTM. Overlapping: {{ fmtPct(callItm(c)) }} across {{ c.wheel.sampleCount }} windows. Disjoint diagnostic: {{ fmtPct(callItmNonoverlap(c)) }} across {{ c.wheel.nonoverlapSampleCount != null ? c.wheel.nonoverlapSampleCount : 'unavailable' }} windows. Not assignment odds." matTooltipPosition="above">
-          {{ fmtPct(callItm(c)) }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="callTouch">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Call Touch</th>
-        <td mat-cell *matCellDef="let c"
-            matTooltip="Historical call-touch frequency at {{ cushion }}% OTM. Overlapping: {{ fmtPct(callTouchVal(c)) }} across {{ c.wheel.sampleCount }} windows. Disjoint diagnostic: {{ fmtPct(callTouchNonoverlap(c)) }} across {{ c.wheel.nonoverlapSampleCount != null ? c.wheel.nonoverlapSampleCount : 'unavailable' }} windows." matTooltipPosition="above">
-          {{ fmtPct(callTouchVal(c)) }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="minCushion20pctItm">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Min cushion ≤20% ITM</th>
-        <td mat-cell *matCellDef="let c"
-            matTooltip="Smallest tested cushion whose put expiry-ITM frequency ≤ 20%; '>10%' if none qualifies. Nothing here is 'safe'." matTooltipPosition="above">
-          {{ c.wheel.minCushion20pctItm || '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="sampleCount">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Samples all/disjoint</th>
-        <td mat-cell *matCellDef="let c" class="samples-cell"
-            [class.low-sample]="c.wheel.sampleCount != null && c.wheel.sampleCount < 60"
-            matTooltip="Overlapping-window count followed by the count after selecting disjoint windows at one-horizon strides. The disjoint count is a dependence diagnostic, not a confidence guarantee." matTooltipPosition="above">
-          {{ c.wheel.sampleCount != null ? c.wheel.sampleCount : '—' }} /
-          {{ c.wheel.nonoverlapSampleCount != null ? c.wheel.nonoverlapSampleCount : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="dataQuality">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Quality</th>
-        <td mat-cell *matCellDef="let c"
-            matTooltip="{{ c.wheel.qualityReasons || 'Validated and current on the benchmark calendar.' }}" matTooltipPosition="above">
-          <span class="badge" [class]="'badge ' + qualityBadgeClass(c.wheel.dataQuality)">
-            {{ c.wheel.dataQuality || 'UNKNOWN' }}
-          </span>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="avgDollarVolume20">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Avg $Vol (20d)</th>
-        <td mat-cell *matCellDef="let c"
-            matTooltip="20-day average dollar volume of the underlying. This scan does not measure option liquidity; collected contracts receive separate OI/spread checks." matTooltipPosition="above">
-          {{ c.wheel.avgDollarVolume20 != null ? ('$' + (c.wheel.avgDollarVolume20 / 1000000 | number:'1.0-1') + 'M') : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="daysToEvent">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Days to Event</th>
-        <td mat-cell *matCellDef="let c">
-          {{ c.wheel.daysToEvent != null ? (c.wheel.daysToEvent | number:'1.0-0') : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="earningsWindowState">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Earnings</th>
-        <td mat-cell *matCellDef="let c"
-            matTooltip="KNOWN_EVENT = earnings in this window; NO_EVENT_IN_FETCHED_RANGE = none in a fresh-covered range; UNKNOWN_STALE = events file too stale to say." matTooltipPosition="above">
-          <span class="badge" [class]="'badge ' + earningsBadgeClass(c.wheel.earningsWindowState)"
-                [ngSwitch]="c.wheel.earningsWindowState">
-            <span *ngSwitchCase="'KNOWN_EVENT'">⚠ Known event</span>
-            <span *ngSwitchCase="'NO_EVENT_IN_FETCHED_RANGE'">None in range</span>
-            <span *ngSwitchCase="'UNKNOWN_STALE'">Unknown (stale)</span>
-            <span *ngSwitchDefault>—</span>
-          </span>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="scoreTotal">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Swing Score</th>
-        <td mat-cell *matCellDef="let c" class="score-cell"
-            matTooltip="Swing scan context only — ranks an earnings run-up setup, NOT ownership quality. Null = not evaluated." matTooltipPosition="above">
-          {{ c.wheel.scoreTotal != null ? (c.wheel.scoreTotal | number:'1.0-1') : '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="signalBand">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Band</th>
-        <td mat-cell *matCellDef="let c" [class]="bandClass(c.wheel.signalBand)">
-          {{ c.wheel.signalBand || '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="sector">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Sector</th>
-        <td mat-cell *matCellDef="let c">
-          {{ c.wheel.sector || '—' }}
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="trendDirection">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Trend</th>
-        <td mat-cell *matCellDef="let c" [class]="trendClass(c)"
-            matTooltip="Trend direction. Symbols without enough price history are not evaluated (—)." matTooltipPosition="above">
-          {{ trendLabel(c) }}
-        </td>
-      </ng-container>
-
-      <tr mat-header-row *matHeaderRowDef="groupHeaderColumns; sticky: true" class="group-header-row"></tr>
-      <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
-    </table>
-    </div>
-
-    <div *ngIf="dataSource.data.length === 0 && !loadError" class="empty-state">
-      <span class="empty-icon" aria-hidden="true">&#9675;</span>
-      <span class="empty-title">No wheel candidates</span>
-      <span class="empty-hint">Nothing matches {{ horizon }} DTE with the current filters.</span>
-    </div>
-  </ng-container>
-
-  <ng-template #loading>
-    <div class="table-shell skeleton-shell">
-      <div class="skeleton skeleton-row" *ngFor="let row of skeletonRows"></div>
-    </div>
-  </ng-template>
-  </ng-container>
-
-  <ng-template #quotesTab>
+    @if (!loadingData) {
+      @if (loadError) {
+        <div class="load-error">
+          Could not load wheel candidates. Is the API running, and has the wheel scan produced a report?
+        </div>
+      }
+      <div class="table-shell">
+        <table
+          mat-table
+          [dataSource]="dataSource"
+          matSort
+          matSortActive="rvPercentile252"
+          matSortDirection="desc"
+          class="wheel-table"
+          >
+          <!-- Grouped header band over the cushion-dependent columns. -->
+          <ng-container matColumnDef="groupLead">
+            <th mat-header-cell *matHeaderCellDef [attr.colspan]="5" class="group-blank"></th>
+          </ng-container>
+          <ng-container matColumnDef="groupPut">
+            <th mat-header-cell *matHeaderCellDef [attr.colspan]="2" class="group-band group-put">Put @ {{ cushion }}%</th>
+          </ng-container>
+          <ng-container matColumnDef="groupCall">
+            <th mat-header-cell *matHeaderCellDef [attr.colspan]="2" class="group-band group-call">Call @ {{ cushion }}%</th>
+          </ng-container>
+          <ng-container matColumnDef="groupTail">
+            <th mat-header-cell *matHeaderCellDef [attr.colspan]="10" class="group-blank"></th>
+          </ng-container>
+          <ng-container matColumnDef="symbol">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Symbol</th>
+            <td mat-cell *matCellDef="let c" class="symbol-cell">
+              <a [routerLink]="['/stockDetail', c.wheel.symbol]" target="_blank">{{ c.wheel.symbol }}</a>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="horizonDte">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>DTE</th>
+            <td mat-cell *matCellDef="let c" matTooltip="Horizon in calendar days ({{ c.wheel.horizonSessions }} sessions)" matTooltipPosition="above">
+              {{ c.wheel.horizonDte }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="lastClose">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Last</th>
+            <td mat-cell *matCellDef="let c">
+              {{ c.wheel.lastClose != null ? ('$' + (c.wheel.lastClose | number:'1.2-2')) : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="rvPercentile252">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>RV %ile</th>
+            <td mat-cell *matCellDef="let c" class="rv-cell"
+              matTooltip="Today's realized vol (21d) as a percentile of its own trailing 252 sessions. High ⇒ premiums likely elevated." matTooltipPosition="above">
+              <span class="rv-value">{{ c.wheel.rvPercentile252 != null ? ((c.wheel.rvPercentile252 * 100) | number:'1.0-0') + '%' : '—' }}</span>
+              @if (c.wheel.rvPercentile252 != null) {
+                <span class="meter" aria-hidden="true">
+                  <span [style.width.%]="c.wheel.rvPercentile252 * 100"></span>
+                </span>
+              }
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="sigmaMovePct">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>1σ move</th>
+            <td mat-cell *matCellDef="let c"
+              matTooltip="1σ move — historical-vol, normal-model approximation. Not a 68% guarantee." matTooltipPosition="above">
+              {{ c.wheel.sigmaMovePct != null ? ((c.wheel.sigmaMovePct * 100) | number:'1.1-1') + '%' : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="putExpiryItm">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Put ITM</th>
+            <td mat-cell *matCellDef="let c"
+              matTooltip="Historical put terminal-ITM frequency at {{ cushion }}% OTM. Overlapping: {{ fmtPct(putItm(c)) }} across {{ c.wheel.sampleCount }} windows. Disjoint diagnostic: {{ fmtPct(putItmNonoverlap(c)) }} across {{ c.wheel.nonoverlapSampleCount != null ? c.wheel.nonoverlapSampleCount : 'unavailable' }} windows. Not assignment odds." matTooltipPosition="above">
+              {{ fmtPct(putItm(c)) }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="putTouch">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Put Touch</th>
+            <td mat-cell *matCellDef="let c"
+              matTooltip="Historical put-touch frequency at {{ cushion }}% OTM. Overlapping: {{ fmtPct(putTouchVal(c)) }} across {{ c.wheel.sampleCount }} windows. Disjoint diagnostic: {{ fmtPct(putTouchNonoverlap(c)) }} across {{ c.wheel.nonoverlapSampleCount != null ? c.wheel.nonoverlapSampleCount : 'unavailable' }} windows." matTooltipPosition="above">
+              {{ fmtPct(putTouchVal(c)) }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="callExpiryItm">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Call ITM</th>
+            <td mat-cell *matCellDef="let c"
+              matTooltip="Historical call terminal-ITM frequency at {{ cushion }}% OTM. Overlapping: {{ fmtPct(callItm(c)) }} across {{ c.wheel.sampleCount }} windows. Disjoint diagnostic: {{ fmtPct(callItmNonoverlap(c)) }} across {{ c.wheel.nonoverlapSampleCount != null ? c.wheel.nonoverlapSampleCount : 'unavailable' }} windows. Not assignment odds." matTooltipPosition="above">
+              {{ fmtPct(callItm(c)) }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="callTouch">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Call Touch</th>
+            <td mat-cell *matCellDef="let c"
+              matTooltip="Historical call-touch frequency at {{ cushion }}% OTM. Overlapping: {{ fmtPct(callTouchVal(c)) }} across {{ c.wheel.sampleCount }} windows. Disjoint diagnostic: {{ fmtPct(callTouchNonoverlap(c)) }} across {{ c.wheel.nonoverlapSampleCount != null ? c.wheel.nonoverlapSampleCount : 'unavailable' }} windows." matTooltipPosition="above">
+              {{ fmtPct(callTouchVal(c)) }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="minCushion20pctItm">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Min cushion ≤20% ITM</th>
+            <td mat-cell *matCellDef="let c"
+              matTooltip="Smallest tested cushion whose put expiry-ITM frequency ≤ 20%; '>10%' if none qualifies. Nothing here is 'safe'." matTooltipPosition="above">
+              {{ c.wheel.minCushion20pctItm || '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="sampleCount">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Samples all/disjoint</th>
+            <td mat-cell *matCellDef="let c" class="samples-cell"
+              [class.low-sample]="c.wheel.sampleCount != null && c.wheel.sampleCount < 60"
+              matTooltip="Overlapping-window count followed by the count after selecting disjoint windows at one-horizon strides. The disjoint count is a dependence diagnostic, not a confidence guarantee." matTooltipPosition="above">
+              {{ c.wheel.sampleCount != null ? c.wheel.sampleCount : '—' }} /
+              {{ c.wheel.nonoverlapSampleCount != null ? c.wheel.nonoverlapSampleCount : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="dataQuality">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Quality</th>
+            <td mat-cell *matCellDef="let c"
+              matTooltip="{{ c.wheel.qualityReasons || 'Validated and current on the benchmark calendar.' }}" matTooltipPosition="above">
+              <span class="badge" [class]="'badge ' + qualityBadgeClass(c.wheel.dataQuality)">
+                {{ c.wheel.dataQuality || 'UNKNOWN' }}
+              </span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="avgDollarVolume20">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Avg $Vol (20d)</th>
+            <td mat-cell *matCellDef="let c"
+              matTooltip="20-day average dollar volume of the underlying. This scan does not measure option liquidity; collected contracts receive separate OI/spread checks." matTooltipPosition="above">
+              {{ c.wheel.avgDollarVolume20 != null ? ('$' + (c.wheel.avgDollarVolume20 / 1000000 | number:'1.0-1') + 'M') : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="daysToEvent">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Days to Event</th>
+            <td mat-cell *matCellDef="let c">
+              {{ c.wheel.daysToEvent != null ? (c.wheel.daysToEvent | number:'1.0-0') : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="earningsWindowState">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Earnings</th>
+            <td mat-cell *matCellDef="let c"
+              matTooltip="KNOWN_EVENT = earnings in this window; NO_EVENT_IN_FETCHED_RANGE = none in a fresh-covered range; UNKNOWN_STALE = events file too stale to say." matTooltipPosition="above">
+              <span class="badge" [class]="'badge ' + earningsBadgeClass(c.wheel.earningsWindowState)"
+                >
+                @switch (c.wheel.earningsWindowState) {
+                  @case ('KNOWN_EVENT') {
+                    <span>⚠ Known event</span>
+                  }
+                  @case ('NO_EVENT_IN_FETCHED_RANGE') {
+                    <span>None in range</span>
+                  }
+                  @case ('UNKNOWN_STALE') {
+                    <span>Unknown (stale)</span>
+                  }
+                  @default {
+                    <span>—</span>
+                  }
+                }
+              </span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="scoreTotal">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Swing Score</th>
+            <td mat-cell *matCellDef="let c" class="score-cell"
+              matTooltip="Swing scan context only — ranks an earnings run-up setup, NOT ownership quality. Null = not evaluated." matTooltipPosition="above">
+              {{ c.wheel.scoreTotal != null ? (c.wheel.scoreTotal | number:'1.0-1') : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="signalBand">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Band</th>
+            <td mat-cell *matCellDef="let c" [class]="bandClass(c.wheel.signalBand)">
+              {{ c.wheel.signalBand || '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="sector">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Sector</th>
+            <td mat-cell *matCellDef="let c">
+              {{ c.wheel.sector || '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="trendDirection">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Trend</th>
+            <td mat-cell *matCellDef="let c" [class]="trendClass(c)"
+              matTooltip="Trend direction. Symbols without enough price history are not evaluated (—)." matTooltipPosition="above">
+              {{ trendLabel(c) }}
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="groupHeaderColumns; sticky: true" class="group-header-row"></tr>
+          <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+      </div>
+      @if (dataSource.data.length === 0 && !loadError) {
+        <div class="empty-state">
+          <span class="empty-icon" aria-hidden="true">&#9675;</span>
+          <span class="empty-title">No wheel candidates</span>
+          <span class="empty-hint">Nothing matches {{ horizon }} DTE with the current filters.</span>
+        </div>
+      }
+    } @else {
+      <div class="table-shell skeleton-shell">
+        @for (row of skeletonRows; track row) {
+          <div class="skeleton skeleton-row"></div>
+        }
+      </div>
+    }
+  } @else {
     <app-option-quotes-tab [refreshToken]="quoteArchiveRefreshToken"></app-option-quotes-tab>
-  </ng-template>
+  }
+
 </div>
