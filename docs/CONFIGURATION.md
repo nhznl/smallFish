@@ -93,6 +93,7 @@ specific artifact.
 | `SFP_OPTIONS_GREEKS` | `$SFP_DATA_DIR/ledger_options/options_greeks.csv` |
 | `SFP_OPTIONS_BETAS` | `$SFP_DATA_DIR/ledger_options/options_betas.csv` |
 | `SFP_SNAPTRADE_HOLDINGS` | `$SFP_DATA_DIR/ledger_retirement/snaptrade_holdings.csv` |
+| `SFP_HOLDINGS_GL_SNAPSHOTS` | `$SFP_DATA_DIR/ledger_retirement/holdings_gain_loss_snapshots.csv` |
 | `SFP_STATIC_DIR` | `stock-app/static` |
 
 Research Studies are a special case. `SFP_STUDIES_DIR` is the *mutable* root —

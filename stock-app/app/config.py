@@ -144,6 +144,16 @@ def holdings_trend_csv() -> Path:
     )
 
 
+def holdings_gain_loss_snapshots_csv() -> Path:
+    """User-captured holding G/L percentages, retained for the three newest
+    Fidelity sync dates and kept separate from the broker holdings ledger."""
+    return _under(
+        "SFP_HOLDINGS_GL_SNAPSHOTS",
+        data_dir(),
+        "ledger_retirement/holdings_gain_loss_snapshots.csv",
+    )
+
+
 def holdings_enrichment_csv() -> Path:
     """Editable symbol classifications (category/industry/note) merged onto
     imported broker holdings; kept separate from broker facts like the options

@@ -14,12 +14,12 @@
         <strong *ngIf="!syncedAt && data?.retrievedAt">{{ data!.retrievedAt | date:'MMM d, h:mm a' }}</strong>
       </span>
       <button type="button" class="btn btn-primary" (click)="sync()"
-              [attr.aria-busy]="syncing" [disabled]="loading || syncing">
+              [attr.aria-busy]="syncing" [disabled]="loading || syncing || snapshotting">
         <span class="btn-spinner" *ngIf="syncing" aria-hidden="true"></span>
         <svg *ngIf="!syncing" class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m7 7 3-3 3 3"/><path d="M10 4v12"/><path d="m17 17-3 3-3-3"/><path d="M14 20V8"/></svg>
         {{ syncing ? 'Syncing…' : 'Sync from Fidelity' }}
       </button>
-      <button type="button" class="btn btn-ghost" (click)="load()" [disabled]="loading || syncing">
+      <button type="button" class="btn btn-ghost" (click)="load()" [disabled]="loading || syncing || snapshotting">
         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 1 0 2 5.5"/><path d="M20 4v7h-7"/></svg>
         Refresh
       </button>
@@ -188,6 +188,15 @@
           ▼ Declining only ({{ alertCount }})
         </label>
         <span class="filter-count">{{ filteredHoldings.length }} rows</span>
+        <button type="button" class="btn snapshot-btn" (click)="captureGainLossSnapshot()"
+                [attr.aria-busy]="snapshotting"
+                [disabled]="loading || syncing || snapshotting || !data.retrievedAt"
+                matTooltip="Save the current G/L % values for this Fidelity sync date; up to three dates are retained."
+                matTooltipPosition="above">
+          <span class="btn-spinner" *ngIf="snapshotting" aria-hidden="true"></span>
+          <svg *ngIf="!snapshotting" class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3"/></svg>
+          {{ snapshotting ? 'Saving…' : 'Snapshot G/L %' }}
+        </button>
         <button type="button" class="btn copy-btn" (click)="copySymbols()" [class.copy-success]="copySuccess">
           <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path *ngIf="!copySuccess" d="M9 8h10v12H9z"/><path *ngIf="!copySuccess" d="M5 16H4V4h10v1"/>
@@ -219,9 +228,12 @@
               <th class="sortable num" [attr.aria-sort]="ariaSort('marketPrice')"><button type="button" class="sort-button" (click)="sortBy('marketPrice')">Mkt Price/Share<span class="sort-icon" aria-hidden="true">{{ sortIcon('marketPrice') }}</span></button></th>
               <th class="sortable num" [attr.aria-sort]="ariaSort('initialInvestment')"><button type="button" class="sort-button" (click)="sortBy('initialInvestment')">Invested<span class="sort-icon" aria-hidden="true">{{ sortIcon('initialInvestment') }}</span></button></th>
               <th class="sortable num" [attr.aria-sort]="ariaSort('currentValue')"><button type="button" class="sort-button" (click)="sortBy('currentValue')">Current<span class="sort-icon" aria-hidden="true">{{ sortIcon('currentValue') }}</span></button></th>
+              <th class="sortable num" [attr.aria-sort]="ariaSort('pctOfTotal')"><button type="button" class="sort-button" (click)="sortBy('pctOfTotal')">% Port<span class="sort-icon" aria-hidden="true">{{ sortIcon('pctOfTotal') }}</span></button></th>
               <th class="sortable num" [attr.aria-sort]="ariaSort('gainLoss')"><button type="button" class="sort-button" (click)="sortBy('gainLoss')">G/L $<span class="sort-icon" aria-hidden="true">{{ sortIcon('gainLoss') }}</span></button></th>
               <th class="sortable num" [attr.aria-sort]="ariaSort('gainLossPct')"><button type="button" class="sort-button" (click)="sortBy('gainLossPct')">G/L %<span class="sort-icon" aria-hidden="true">{{ sortIcon('gainLossPct') }}</span></button></th>
-              <th class="sortable num" [attr.aria-sort]="ariaSort('pctOfTotal')"><button type="button" class="sort-button" (click)="sortBy('pctOfTotal')">% Port<span class="sort-icon" aria-hidden="true">{{ sortIcon('pctOfTotal') }}</span></button></th>
+              <th *ngFor="let snapshot of data.gainLossSnapshots" class="num snapshot-col">
+                G/L % <span class="snapshot-date">as of {{ snapshotDateLabel(snapshot.syncDate) }}</span>
+              </th>
               <th class="note-col">Note</th>
             </tr>
           </thead>
@@ -243,6 +255,7 @@
               <td class="num">${{ h.marketPrice | number:'1.2-2' }}</td>
               <td class="num">${{ h.initialInvestment | number:'1.0-0' }}</td>
               <td class="num current-val">${{ h.currentValue | number:'1.0-0' }}</td>
+              <td class="num pct-col">{{ h.pctOfTotal | number:'1.2-2' }}%</td>
               <td class="num" [class]="gainLossClass(h.gainLoss)">
                 {{ h.gainLoss >= 0 ? '+' : '' }}${{ h.gainLoss | number:'1.0-0' }}
               </td>
@@ -250,7 +263,13 @@
                 {{ h.gainLossPct >= 0 ? '+' : '' }}{{ h.gainLossPct | number:'1.1-1' }}%
                 <span *ngIf="h.trend.alert" class="trend-alert" [matTooltip]="trendTooltip(h)" matTooltipPosition="above">▼&nbsp;{{ h.trend.dropPct | number:'1.0-0' }}%</span>
               </td>
-              <td class="num pct-col">{{ h.pctOfTotal | number:'1.2-2' }}%</td>
+              <td *ngFor="let snapshot of data.gainLossSnapshots" class="num snapshot-col"
+                  [class]="gainLossClass(h.gainLossSnapshots[snapshot.syncDate])">
+                <ng-container *ngIf="h.gainLossSnapshots[snapshot.syncDate] !== undefined; else missingSnapshot">
+                  {{ h.gainLossSnapshots[snapshot.syncDate] >= 0 ? '+' : '' }}{{ h.gainLossSnapshots[snapshot.syncDate] | number:'1.1-1' }}%
+                </ng-container>
+                <ng-template #missingSnapshot>—</ng-template>
+              </td>
               <td class="note-cell" (click)="openEditor(h)"
                   [matTooltip]="h.note || 'Add note / classify ' + (h.enrichmentSymbol || h.symbol)" matTooltipPosition="above">
                 <span *ngIf="h.note" class="note-text">{{ h.note }}</span>

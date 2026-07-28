@@ -55,3 +55,13 @@ def post_holdings_sync() -> dict:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 — surface upstream failure as 502
         raise HTTPException(status_code=502, detail="SnapTrade sync failed") from exc
+
+
+@router.post("/retirement/holdings/gain-loss-snapshots")
+def post_gain_loss_snapshot() -> dict:
+    """Capture current holding G/L percentages for the latest sync date."""
+    try:
+        snapshot = snaptrade_service.capture_gain_loss_snapshot()
+        return {"snapshot": snapshot, "portfolio": snaptrade_service.portfolio()}
+    except snaptrade_service.SnapTradeValidationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

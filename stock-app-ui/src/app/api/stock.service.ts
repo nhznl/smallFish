@@ -3,7 +3,11 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
 import { catchError, tap, shareReplay, finalize } from 'rxjs/operators';
 import { StockInfo } from '../model/stock-info';
-import { RetirementHoldingsSyncReport, RetirementPortfolioData } from '../model/retirement';
+import {
+  RetirementGainLossSnapshotResponse,
+  RetirementHoldingsSyncReport,
+  RetirementPortfolioData,
+} from '../model/retirement';
 import { RetirementOptionsData } from '../model/retirement-options';
 import { WheelCandidate } from '../model/wheel-candidate';
 import { CollectionScopeRequest, OptionQuoteSnapshot } from '../model/option-quotes';
@@ -244,6 +248,13 @@ export class StockService {
    *  Errors propagate to the caller so the UI can show why a sync failed. */
   syncRetirementHoldings(): Observable<RetirementHoldingsSyncReport> {
     return this.http.post<RetirementHoldingsSyncReport>(`${this.apiBaseUrl}/retirement/holdings/sync`, {});
+  }
+
+  /** Save or replace the G/L percentages for the current Fidelity sync date. */
+  captureRetirementGainLossSnapshot(): Observable<RetirementGainLossSnapshotResponse> {
+    return this.http.post<RetirementGainLossSnapshotResponse>(
+      `${this.apiBaseUrl}/retirement/holdings/gain-loss-snapshots`, {}
+    );
   }
 
   /** Create or update the editable category/industry/note for one symbol.

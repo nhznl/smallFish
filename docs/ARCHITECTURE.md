@@ -107,7 +107,7 @@ A deliberate split in the ledgers:
 |---|---|
 | `options_activity.csv` — broker transactions | `options_groups.csv` — your grouping and notes |
 | `options_greeks.csv`, `options_betas.csv` — timestamped observations | group status (active/archived) |
-| `snaptrade_holdings.csv` — normalized holdings | holding enrichment metadata |
+| `snaptrade_holdings.csv` — normalized holdings | holding enrichment metadata and user-captured G/L snapshots |
 
 Broker facts are never edited in place; syncs upsert by provider id. Your
 metadata lives in separate files keyed to those facts, so a resync never

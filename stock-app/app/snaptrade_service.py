@@ -650,6 +650,12 @@ TREND_HEADERS = [
     "alert_drop_pct", "alert_at",
 ]
 
+GAIN_LOSS_SNAPSHOT_HEADERS = [
+    "sync_date", "retrieved_at", "captured_at",
+    "account_id", "account_name", "asset_class", "symbol", "gain_loss_pct",
+]
+MAX_GAIN_LOSS_SNAPSHOTS = 3
+
 
 def _trend_threshold() -> Decimal:
     """Relative adverse move that trips an alert, as a fraction (default 0.10 =
@@ -677,6 +683,111 @@ def _read_trend() -> dict[tuple[str, str], dict[str, str]]:
     with path.open("r", newline="", encoding="utf-8") as handle:
         rows = [{key: row.get(key, "") for key in TREND_HEADERS} for row in csv.DictReader(handle)]
     return {(row["account_id"], row["symbol"].upper()): row for row in rows}
+
+
+def _read_gain_loss_snapshots() -> list[dict[str, str]]:
+    path = config.holdings_gain_loss_snapshots_csv()
+    if not path.is_file():
+        return []
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        return [
+            {key: row.get(key, "") for key in GAIN_LOSS_SNAPSHOT_HEADERS}
+            for row in csv.DictReader(handle)
+            if row.get("sync_date")
+        ]
+
+
+def _gain_loss_snapshot_catalog(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Return the retained snapshot dates newest-first for dynamic UI columns."""
+    by_date: dict[str, dict[str, str]] = {}
+    for row in rows:
+        sync_date = row.get("sync_date", "")
+        if not sync_date:
+            continue
+        current = by_date.get(sync_date)
+        if current is None or row.get("captured_at", "") > current.get("capturedAt", ""):
+            by_date[sync_date] = {
+                "syncDate": sync_date,
+                "retrievedAt": row.get("retrieved_at", ""),
+                "capturedAt": row.get("captured_at", ""),
+            }
+    return [
+        by_date[sync_date]
+        for sync_date in sorted(by_date, reverse=True)[:MAX_GAIN_LOSS_SNAPSHOTS]
+    ]
+
+
+def _gain_loss_snapshot_date(retrieved_at: str) -> str:
+    try:
+        # smallFish runs locally, so use the server machine's calendar date just
+        # as Angular does when it displays the same retrievedAt timestamp.
+        return datetime.fromisoformat(
+            retrieved_at.replace("Z", "+00:00")
+        ).astimezone().date().isoformat()
+    except (AttributeError, ValueError) as exc:
+        raise SnapTradeValidationError(
+            "Current holdings do not have a valid Fidelity sync timestamp; sync first.",
+            409,
+        ) from exc
+
+
+def capture_gain_loss_snapshot() -> dict[str, Any]:
+    """Persist the visible holdings' current G/L percentages for their sync date.
+
+    A repeat capture replaces the entire date, rather than leaving stale rows for
+    holdings removed between same-day syncs. Only the newest three distinct sync
+    dates are retained.
+    """
+    with _lock:
+        ledger_rows = [
+            row for row in _read_ledger(config.snaptrade_holdings_csv())
+            if row.get("asset_class") != "OPTION"
+        ]
+        if not ledger_rows:
+            raise SnapTradeValidationError(
+                "There are no retirement holdings to snapshot; sync from Fidelity first.",
+                409,
+            )
+
+        retrieved_at = _text(ledger_rows[0].get("retrieved_at"))
+        sync_date = _gain_loss_snapshot_date(retrieved_at)
+        captured_at = _now()
+        previous = _read_gain_loss_snapshots()
+        replaced = any(row.get("sync_date") == sync_date for row in previous)
+        rows = [row for row in previous if row.get("sync_date") != sync_date]
+        rows.extend({
+            "sync_date": sync_date,
+            "retrieved_at": retrieved_at,
+            "captured_at": captured_at,
+            "account_id": _text(row.get("account_id")),
+            "account_name": _text(row.get("account_name")),
+            "asset_class": _text(row.get("asset_class")),
+            "symbol": _text(row.get("symbol")),
+            "gain_loss_pct": _num(_decimal(row.get("open_pnl_pct"))),
+        } for row in ledger_rows)
+
+        retained_dates = sorted(
+            {row["sync_date"] for row in rows if row.get("sync_date")},
+            reverse=True,
+        )[:MAX_GAIN_LOSS_SNAPSHOTS]
+        retained = [row for row in rows if row.get("sync_date") in retained_dates]
+        retained.sort(key=lambda row: (
+            row.get("sync_date", ""), row.get("account_id", ""),
+            row.get("asset_class", ""), row.get("symbol", ""),
+        ), reverse=True)
+        _atomic_write(
+            config.holdings_gain_loss_snapshots_csv(),
+            GAIN_LOSS_SNAPSHOT_HEADERS,
+            retained,
+        )
+
+    return {
+        "syncDate": sync_date,
+        "retrievedAt": retrieved_at,
+        "capturedAt": captured_at,
+        "replaced": replaced,
+        "snapshotCount": len(retained_dates),
+    }
 
 
 def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[str, str], dict[str, str]]:
@@ -806,7 +917,8 @@ def _trend_display(state: dict[str, str] | None, current_pct: Decimal) -> dict[s
 
 def _sheet_holding(row: dict[str, Any], tags: dict[str, str],
                    total_current: Decimal,
-                   trend_state: dict[str, str] | None = None) -> dict[str, Any]:
+                   trend_state: dict[str, str] | None = None,
+                   gain_loss_snapshots: dict[str, float] | None = None) -> dict[str, Any]:
     """Project one ledger row onto the sheet-era RetirementHolding shape."""
     quantity = _decimal(row.get("quantity"))
     market_value = _decimal(row.get("market_value"))
@@ -830,6 +942,7 @@ def _sheet_holding(row: dict[str, Any], tags: dict[str, str],
         "pctOfTotal": _round2(market_value / total_current * 100) if total_current else 0.0,
         "gainLossPct": _round2(_decimal(row.get("open_pnl_pct"))),
         "gainLoss": _round2(open_pnl),
+        "gainLossSnapshots": gain_loss_snapshots or {},
         "note": tags["note"],
         "trend": _trend_display(trend_state, _decimal(row.get("open_pnl_pct"))),
     }
@@ -874,10 +987,23 @@ def portfolio() -> dict[str, Any]:
     ]
     enrichment = _read_enrichment()
     trend = _read_trend()
+    snapshot_rows = _read_gain_loss_snapshots()
+    snapshots_by_holding: dict[tuple[str, str, str], dict[str, float]] = {}
+    for snapshot_row in snapshot_rows:
+        key = _holding_key(snapshot_row)
+        snapshots_by_holding.setdefault(key, {})[snapshot_row["sync_date"]] = _round2(
+            _decimal(snapshot_row.get("gain_loss_pct"))
+        )
     total_current = sum(_decimal(row.get("market_value")) for row in rows)
 
     holdings = [
-        _sheet_holding(row, _classify(row, enrichment), total_current, trend.get(_trend_key(row)))
+        _sheet_holding(
+            row,
+            _classify(row, enrichment),
+            total_current,
+            trend.get(_trend_key(row)),
+            snapshots_by_holding.get(_holding_key(row)),
+        )
         for row in rows
     ]
     total_initial = sum(h["initialInvestment"] for h in holdings)
@@ -899,6 +1025,7 @@ def portfolio() -> dict[str, Any]:
         "byIndustry": _sheet_summary(holdings, float(total_current), "industry"),
         "byAccountType": _sheet_summary(holdings, float(total_current), "accountType"),
         "topPositions": top_positions,
+        "gainLossSnapshots": _gain_loss_snapshot_catalog(snapshot_rows),
         "retrievedAt": rows[0].get("retrieved_at", "") if rows else "",
         "source": SOURCE,
     }

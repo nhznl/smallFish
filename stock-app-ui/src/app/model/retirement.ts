@@ -27,8 +27,26 @@ export interface RetirementHolding {
   pctOfTotal: number;
   gainLossPct: number;
   gainLoss: number;
+  /** User-captured G/L percentages keyed by Fidelity sync date (YYYY-MM-DD). */
+  gainLossSnapshots: Record<string, number>;
   note: string;
   trend: RetirementHoldingTrend;
+}
+
+export interface RetirementGainLossSnapshot {
+  syncDate: string;
+  retrievedAt: string;
+  capturedAt: string;
+}
+
+export interface RetirementGainLossSnapshotResult extends RetirementGainLossSnapshot {
+  replaced: boolean;
+  snapshotCount: number;
+}
+
+export interface RetirementGainLossSnapshotResponse {
+  snapshot: RetirementGainLossSnapshotResult;
+  portfolio: RetirementPortfolioData;
 }
 
 export interface RetirementGroupSummary {
@@ -49,6 +67,8 @@ export interface RetirementPortfolioData {
   byIndustry: Record<string, RetirementGroupSummary>;
   byAccountType: Record<string, RetirementGroupSummary>;
   topPositions: RetirementHolding[];
+  /** Newest-first metadata for the three retained snapshot columns. */
+  gainLossSnapshots: RetirementGainLossSnapshot[];
   /** Broker observation time of the SnapTrade ledger backing this view. */
   retrievedAt?: string;
   source?: string;

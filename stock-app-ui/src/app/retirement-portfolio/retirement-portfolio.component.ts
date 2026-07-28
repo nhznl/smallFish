@@ -82,6 +82,7 @@ export class RetirementPortfolioComponent implements OnInit {
   data: RetirementPortfolioData | null = null;
   loading = false;
   syncing = false;
+  snapshotting = false;
   syncedAt: Date | null = null;
   error: string | null = null;
   syncMessage = '';
@@ -175,15 +176,7 @@ export class RetirementPortfolioComponent implements OnInit {
     this.error = null;
     this.stockService.getRetirementPortfolio().subscribe({
       next: (d) => {
-        this.data = d;
-        this.categoryEntries = Object.entries(d.byCategory);
-        this.industryEntries = Object.entries(d.byIndustry);
-        this.accountEntries = Object.entries(d.byAccountType);
-        this.computeWarnings(d);
-        this.computeRecommendations(d);
-        this.computeCorrelationClusters(d);
-        this.computeCharts(d);
-        this.applyFilters();
+        this.applyPortfolioData(d);
         this.loading = false;
       },
       error: () => {
@@ -191,6 +184,22 @@ export class RetirementPortfolioComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  private applyPortfolioData(d: RetirementPortfolioData): void {
+    // Additive API fields default cleanly when the UI is briefly paired with an
+    // older backend process during a local restart.
+    d.gainLossSnapshots ??= [];
+    d.holdings.forEach(holding => holding.gainLossSnapshots ??= {});
+    this.data = d;
+    this.categoryEntries = Object.entries(d.byCategory);
+    this.industryEntries = Object.entries(d.byIndustry);
+    this.accountEntries = Object.entries(d.byAccountType);
+    this.computeWarnings(d);
+    this.computeRecommendations(d);
+    this.computeCorrelationClusters(d);
+    this.computeCharts(d);
+    this.applyFilters();
   }
 
   /** Pull fresh holdings from the broker via SnapTrade, then reload the view. */
@@ -213,6 +222,38 @@ export class RetirementPortfolioComponent implements OnInit {
         this.syncing = false;
       }
     });
+  }
+
+  /** Capture the current column using the broker sync date as its identity. */
+  captureGainLossSnapshot(): void {
+    this.snapshotting = true;
+    this.error = null;
+    this.syncMessage = '';
+    this.stockService.captureRetirementGainLossSnapshot().subscribe({
+      next: ({ snapshot, portfolio }) => {
+        this.snapshotting = false;
+        this.applyPortfolioData(portfolio);
+        const action = snapshot.replaced ? 'replaced' : 'saved';
+        this.flashSyncMessage(
+          `G/L % snapshot for ${this.snapshotDateLabel(snapshot.syncDate)} ${action}. ` +
+          `${snapshot.snapshotCount} of 3 snapshot dates retained.`
+        );
+      },
+      error: (err) => {
+        this.error = 'G/L % snapshot failed: '
+          + (err?.error?.detail ?? err?.message ?? 'unknown error');
+        this.snapshotting = false;
+      },
+    });
+  }
+
+  snapshotDateLabel(syncDate: string): string {
+    const parsed = new Date(`${syncDate}T00:00:00Z`);
+    return Number.isNaN(parsed.getTime())
+      ? syncDate
+      : parsed.toLocaleDateString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+        });
   }
 
   private fidelitySyncMessage(report: { sync?: {
