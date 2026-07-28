@@ -83,3 +83,27 @@ def put_options_event_group(event_id: str, request: dict) -> dict:
         return options_activity.assign_event(event_id, request.get("group_id"))
     except options_activity.ActivityValidationError as exc:
         _raise_activity_validation(exc)
+
+
+@router.post("/options/activity/manual")
+def post_options_manual_event(request: dict) -> dict:
+    try:
+        return options_activity.create_manual_event(request)
+    except options_activity.ActivityValidationError as exc:
+        _raise_activity_validation(exc)
+
+
+@router.put("/options/activity/manual/{event_id:path}")
+def put_options_manual_event(event_id: str, request: dict) -> dict:
+    try:
+        return options_activity.update_manual_event(event_id, request)
+    except options_activity.ActivityValidationError as exc:
+        _raise_activity_validation(exc)
+
+
+@router.delete("/options/activity/manual/{event_id:path}")
+def delete_options_manual_event(event_id: str) -> dict:
+    try:
+        return options_activity.delete_manual_event(event_id)
+    except options_activity.ActivityValidationError as exc:
+        _raise_activity_validation(exc)

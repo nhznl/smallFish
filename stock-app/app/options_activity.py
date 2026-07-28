@@ -26,6 +26,11 @@ from . import config
 SCHEMA_NAME = "smallfish.options-activity"
 SCHEMA_VERSION = 1
 SOURCE = "TASTYTRADE"
+# Manual reconciliation rows live in their own event-id namespace. `sync()`
+# merges broker events by id, so a `manual:` row can never be overwritten or
+# dropped by a Tastytrade import no matter how far back the sync window reaches.
+MANUAL_SOURCE = "MANUAL"
+MANUAL_ID_PREFIX = "manual:"
 
 ACTIVITY_HEADERS = [
     "schema_version", "id", "source", "source_transaction_id", "account",
@@ -736,6 +741,37 @@ def _event_positions(events: list[dict[str, str]]) -> dict[str, Decimal]:
     return {key: qty for key, qty in positions.items() if qty != 0}
 
 
+def _reconciliation_detail(key: str, activity_qty: Decimal, broker_qty: Decimal,
+                            key_events: list[dict[str, str]], mark: dict[str, str] | None,
+                            membership: dict[str, str], group_names: dict[str, str]) -> dict[str, Any]:
+    key_events = sorted(key_events, key=lambda row: row["executed_at"])
+    last_event = key_events[-1] if key_events else None
+    group_id = next((membership[row["id"]] for row in key_events if membership.get(row["id"])), None)
+    return {
+        "contract_key": key,
+        "underlying_symbol": key_events[0]["underlying_symbol"] if key_events
+            else (mark["underlying_symbol"] if mark else key),
+        "account": key_events[0]["account"] if key_events else (mark["account"] if mark else None),
+        "instrument_type": key_events[0]["instrument_type"] if key_events
+            else (mark["instrument_type"] if mark else None),
+        "activity_quantity": float(activity_qty),
+        "broker_quantity": float(broker_qty),
+        "difference": float(activity_qty - broker_qty),
+        "event_count": len(key_events),
+        # A gap between when the account plausibly opened this symbol and
+        # first_execution is the clue that an assignment/transfer predating
+        # the imported broker history is missing from the ledger.
+        "first_execution": key_events[0]["executed_at"] if key_events else None,
+        "last_execution": last_event["executed_at"] if last_event else None,
+        "last_event_summary": (
+            f"{last_event['transaction_sub_type'] or last_event['transaction_type']} "
+            f"{last_event['quantity']} {last_event['contract_symbol']} on {last_event['transaction_date']}"
+        ) if last_event else None,
+        "group_id": group_id,
+        "group_name": group_names.get(group_id) if group_id else None,
+    }
+
+
 def _group_summary(group: dict[str, str], events: list[dict[str, str]],
                    marks_by_key: dict[str, dict[str, str]],
                    unreconciled_keys: set[str] | None = None) -> dict[str, Any]:
@@ -806,11 +842,16 @@ def snapshot(account: str | None = None) -> dict[str, Any]:
     membership = {row["event_id"]: row["group_id"] for row in members}
     group_names = {row["group_id"]: row["name"] for row in groups}
     marks_by_key = {row["contract_key"]: row for row in marks}
+    events_by_key: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for event in events:
+        events_by_key[event["contract_key"]].append(event)
     activity_positions = _event_positions(events)
     broker_positions = {row["contract_key"]: _decimal(row["signed_quantity"]) for row in marks}
     reconciliation_issues = [
-        {"contract_key": key, "activity_quantity": float(activity_positions.get(key, Decimal("0"))),
-         "broker_quantity": float(broker_positions.get(key, Decimal("0")))}
+        _reconciliation_detail(
+            key, activity_positions.get(key, Decimal("0")), broker_positions.get(key, Decimal("0")),
+            events_by_key.get(key, []), marks_by_key.get(key), membership, group_names,
+        )
         for key in sorted(set(activity_positions) | set(broker_positions))
         if activity_positions.get(key, Decimal("0")) != broker_positions.get(key, Decimal("0"))
     ]
@@ -840,8 +881,12 @@ def snapshot(account: str | None = None) -> dict[str, Any]:
         "schema_name": SCHEMA_NAME, "schema_version": SCHEMA_VERSION,
         "account_filter": account_filter, "events": output_events, "groups": output_groups,
         "ungrouped_event_count": sum(1 for row in events if row["id"] not in membership),
-        "last_sync_at": max((row["retrieved_at"] for row in events), default=None),
+        # A manual row's retrieved_at is its entry time, not a broker fetch, so
+        # it must not masquerade as the last successful sync.
+        "last_sync_at": max((row["retrieved_at"] for row in events
+                             if row["source"] != MANUAL_SOURCE), default=None),
         "reconciliation_issues": reconciliation_issues,
+        "manual_events": [row for row in output_events if row["source"] == MANUAL_SOURCE],
         "pnl_definition": "Net broker cash flows (including fees) plus signed broker position marks. Flat groups are realized P/L; open-group marks are indicative because the provider mark-observation timestamp is unavailable.",
     }
 
@@ -992,3 +1037,119 @@ def assign_event(event_id: str, group_id: str | None) -> dict[str, Any]:
             members.append({"event_id": event_id, "group_id": group["group_id"], "assigned_at": _now()})
         _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS, members)
         return {"event_id": event_id, "group_id": group["group_id"] if group else None}
+
+
+def _manual_value_fields(request: dict[str, Any], contract_symbol: str) -> dict[str, str]:
+    """Validates the fields a user controls on a manual row. Shared by create
+    and edit so both paths apply identical rules and derivations."""
+    quantity = _decimal(request.get("quantity"))
+    if quantity == 0:
+        raise ActivityValidationError("quantity must be a non-zero signed position delta")
+    try:
+        transaction_date = date.fromisoformat(_text(request.get("transaction_date")).strip())
+    except ValueError:
+        raise ActivityValidationError("transaction_date must be YYYY-MM-DD") from None
+    net_value = _decimal(request.get("net_cash"))
+    fees = _decimal(request.get("fees"))
+    # `fee_effect` is derived as net_value - value everywhere else in the
+    # ledger, so store the gross value that makes the entered fees consistent.
+    return {
+        "executed_at": f"{transaction_date.isoformat()}T21:00:00+00:00",
+        "transaction_date": transaction_date.isoformat(),
+        "quantity": str(abs(quantity)),
+        "position_delta": str(quantity),
+        "price": str(_decimal(request.get("price"))),
+        "value": str(net_value - fees),
+        "net_value": str(net_value),
+        "fee_effect": str(fees),
+        "description": " ".join(_text(request.get("description")).split())
+            or f"Manual reconciliation {quantity:+f} {contract_symbol}",
+    }
+
+
+def create_manual_event(request: dict[str, Any]) -> dict[str, Any]:
+    """Records a user-entered correction for a broker event the sync never
+    delivered — typically an assignment or transfer that predates the imported
+    history and leaves the ledger position disagreeing with the broker.
+
+    The row is a first-class broker event: it carries a signed `position_delta`
+    so `_event_positions` counts it, and its cash flows land in group P/L.
+    """
+    account = _text(request.get("account") or "TRADING").upper()
+    if account not in {"RETIREMENT", "TRADING"}:
+        raise ActivityValidationError("account must be RETIREMENT or TRADING")
+    contract_symbol = _contract_key(request.get("contract_key") or request.get("contract_symbol"))
+    if not contract_symbol:
+        raise ActivityValidationError("contract_key is required")
+    option_type, expiry, strike = _option_terms(contract_symbol)
+    underlying = _text(request.get("underlying_symbol")).upper().strip() \
+        or contract_symbol.split(maxsplit=1)[0]
+    now = _now()
+    event = {
+        "schema_version": str(SCHEMA_VERSION),
+        "id": f"{MANUAL_ID_PREFIX}{account}:{uuid.uuid4()}",
+        "source": MANUAL_SOURCE,
+        "source_transaction_id": "",
+        "account": account,
+        "transaction_type": "Manual Reconciliation",
+        "transaction_sub_type": _text(request.get("reason")).strip() or "Manual Adjustment",
+        "instrument_type": _text(request.get("instrument_type")).strip()
+            or ("Equity Option" if option_type else "Equity"),
+        "contract_symbol": contract_symbol,
+        "contract_key": contract_symbol,
+        "underlying_symbol": underlying,
+        "action": "Manual Adjustment",
+        "commission": "0", "regulatory_fees": "0", "clearing_fees": "0",
+        "proprietary_index_option_fees": "0", "other_charge": "0",
+        "order_id": "", "reverses_id": "",
+        "option_type": option_type, "expiry": expiry, "strike": strike,
+        "imported_at": now, "retrieved_at": now,
+        **_manual_value_fields(request, contract_symbol),
+    }
+    group_id = _text(request.get("group_id")).strip()
+    with _lock:
+        events = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
+        events.append(event)
+        events.sort(key=lambda row: (row["executed_at"], row["id"]))
+        _atomic_write(config.options_activity_csv(), ACTIVITY_HEADERS, events)
+    if group_id:
+        assign_event(event["id"], group_id)
+    return {"event_id": event["id"], "group_id": group_id or None}
+
+
+def update_manual_event(event_id: str, request: dict[str, Any]) -> dict[str, Any]:
+    """Edits the user-entered values on a manual row. The contract identity and
+    account stay fixed — those tie the row to the mismatch it corrects, so
+    changing them would silently move the correction to a different position."""
+    with _lock:
+        events = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
+        event = next((row for row in events if row["id"] == event_id), None)
+        if event is None:
+            raise ActivityValidationError("broker event not found", 404)
+        if event["source"] != MANUAL_SOURCE:
+            raise ActivityValidationError("only manual reconciliation rows can be edited")
+        event.update(_manual_value_fields(request, event["contract_key"]))
+        if "reason" in request:
+            event["transaction_sub_type"] = _text(request.get("reason")).strip() or "Manual Adjustment"
+        event["retrieved_at"] = _now()
+        events.sort(key=lambda row: (row["executed_at"], row["id"]))
+        _atomic_write(config.options_activity_csv(), ACTIVITY_HEADERS, events)
+    return {"event_id": event_id, "updated": True}
+
+
+def delete_manual_event(event_id: str) -> dict[str, Any]:
+    """Removes a manual reconciliation row. Broker-imported events are
+    immutable facts and are never deletable through this path."""
+    with _lock:
+        events = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
+        event = next((row for row in events if row["id"] == event_id), None)
+        if event is None:
+            raise ActivityValidationError("broker event not found", 404)
+        if event["source"] != MANUAL_SOURCE:
+            raise ActivityValidationError("only manual reconciliation rows can be deleted")
+        _atomic_write(config.options_activity_csv(), ACTIVITY_HEADERS,
+                      [row for row in events if row["id"] != event_id])
+        members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
+        _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS,
+                      [row for row in members if row["event_id"] != event_id])
+    return {"event_id": event_id, "deleted": True}

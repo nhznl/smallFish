@@ -33,6 +33,61 @@ input, select, textarea {
   color: var(--text-secondary); font-size: var(--text-sm);
 }
 .activity-summary strong { color: var(--text-primary); font-size: var(--text-lg); margin-right: 4px; }
+/* The mismatch counter is a control, not a stat. Colour alone does not say
+   "clickable" — especially in the urgent red — so it carries a dashed
+   underline and an explicit affordance label. */
+.activity-summary .link-btn {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer;
+  border-bottom: 1px dashed currentColor;
+}
+/* Outlined so both the border and the text ride `currentColor` — the pill
+   picks up the urgent red automatically. A filled pill cannot work here:
+   `background: currentColor` resolves against the element's own colour, so
+   setting a contrasting text colour would repaint the fill to match it. */
+.activity-summary .link-btn .link-cue {
+  margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+  border: 1px solid currentColor; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px;
+}
+.activity-summary .link-btn:not(:disabled):hover { border-bottom-style: solid; }
+.activity-summary .link-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.activity-summary .link-btn:disabled { cursor: default; border-bottom: 0; }
+.activity-summary .link-btn:disabled .link-cue { display: none; }
+
+/* The evidence column is the long one; let it wrap so the Fix action stays on
+   screen instead of sitting past a horizontal scroll. */
+.mismatch-table td.wrap { white-space: normal; min-width: 210px; }
+.mismatch-table td.wrap small { display: block; color: var(--text-secondary); }
+
+/* Save feedback belongs in the modal footer: the activity-panel toast renders
+   behind the modal, so a save there reads as having done nothing. `margin-right`
+   holds it left while the footer keeps the buttons flush right. */
+.modal-status {
+  margin-right: auto; align-self: center;
+  font-size: var(--text-sm); color: var(--text-faint);
+}
+.modal-status.ok { color: var(--pos); font-weight: 600; }
+.modal-status.error { color: var(--neg); font-weight: 600; }
+
+/* Manual rows sit among immutable broker facts, so they are marked as such. */
+.manual-row { background: var(--primary-soft); }
+.manual-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 4px;
+  border: 1px solid var(--primary); color: var(--primary);
+  font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+}
+.row-actions { display: flex; gap: 6px; }
+
+/* Read-only context at the top of the manual reconciliation form. */
+.manual-context {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+  margin: 0 0 4px; padding: 10px 12px;
+  background: var(--surface-sunken); border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.manual-context dt { color: var(--text-secondary); font-weight: 600; }
+.manual-context dd { margin: 0; font-weight: 600; }
+.manual-context dd small { margin-left: 4px; color: var(--text-faint); font-weight: 400; }
 
 /* Sync/save confirmation, auto-dismissed by the component. */
 .sync-toast {
@@ -146,6 +201,8 @@ th.col-account { z-index: 3; background: var(--surface-sunken); }
 /* ── Modal content ─────────────────────────────────────────────────────── */
 
 .create-form { display: grid; gap: 14px; }
+/* Field hints sit under their input and must not read as another label. */
+.create-form label small { font-weight: 400; color: var(--text-faint); }
 .group-card { display: grid; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; background: var(--surface-card); }
 .group-card.archived { opacity: .65; background: var(--surface-sunken); }
 .group-title { display: flex; justify-content: space-between; align-items: center; font-size: var(--text-lg); }

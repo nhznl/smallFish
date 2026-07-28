@@ -173,6 +173,7 @@ export interface OptionsActivityEvent {
   transaction_sub_type: string;
   instrument_type: string;
   contract_symbol: string;
+  contract_key: string;
   underlying_symbol: string;
   action: string;
   quantity: number | null;
@@ -222,6 +223,22 @@ export interface OptionsTradeGroup {
   mark_retrieved_at: string | null;
 }
 
+export interface OptionsReconciliationIssue {
+  contract_key: string;
+  underlying_symbol: string;
+  account: OptionsAccount | null;
+  instrument_type: string | null;
+  activity_quantity: number;
+  broker_quantity: number;
+  difference: number;
+  event_count: number;
+  first_execution: string | null;
+  last_execution: string | null;
+  last_event_summary: string | null;
+  group_id: string | null;
+  group_name: string | null;
+}
+
 export interface OptionsActivitySnapshot {
   schema_name: string;
   schema_version: number;
@@ -229,9 +246,9 @@ export interface OptionsActivitySnapshot {
   events: OptionsActivityEvent[];
   groups: OptionsTradeGroup[];
   ungrouped_event_count: number;
-  reconciliation_issues: {
-    contract_key: string; activity_quantity: number; broker_quantity: number;
-  }[];
+  reconciliation_issues: OptionsReconciliationIssue[];
+  /** User-entered ledger corrections; preserved across Tastytrade syncs. */
+  manual_events: OptionsActivityEvent[];
   last_sync_at: string | null;
   pnl_definition: string;
 }

@@ -38,7 +38,25 @@
         <span><strong>{{ activity.events.length }}</strong> imported events</span>
         <span><strong>{{ activity.groups.length }}</strong> groups</span>
         <span [class.urgent]="activity.ungrouped_event_count"><strong>{{ activity.ungrouped_event_count }}</strong> ungrouped</span>
-        <span [class.urgent]="activity.reconciliation_issues.length"><strong>{{ activity.reconciliation_issues.length }}</strong> position mismatches</span>
+        <!-- A count of zero mismatches is not worth a slot in the summary. Once
+             everything reconciles the chip renames itself to the manual rows it
+             still needs to expose, and disappears entirely when there are none. -->
+        <button type="button" class="link-btn" *ngIf="hasReconciliationDetail()"
+                [class.urgent]="activity.reconciliation_issues.length"
+                (click)="reconciliationOpen = true"
+                [matTooltip]="activity.reconciliation_issues.length
+                  ? 'Review mismatches and manual reconciliations'
+                  : 'Review, edit or remove manual reconciliations'" matTooltipPosition="above">
+          <ng-container *ngIf="activity.reconciliation_issues.length; else manualOnly">
+            <strong>{{ activity.reconciliation_issues.length }}</strong>
+            position {{ activity.reconciliation_issues.length === 1 ? 'mismatch' : 'mismatches' }}
+          </ng-container>
+          <ng-template #manualOnly>
+            <strong>{{ manualEvents().length }}</strong>
+            manual {{ manualEvents().length === 1 ? 'reconciliation' : 'reconciliations' }}
+          </ng-template>
+          <span class="link-cue" aria-hidden="true">Review</span>
+        </button>
       </div>
       <div class="table-wrap" *ngIf="filteredGroups().length; else emptyGroups">
         <table class="group-table">
@@ -248,7 +266,7 @@
 </div>
 
 <app-modal *ngIf="detailGroup as group" width="min(1400px, 94vw)"
-           [ariaLabel]="group.symbol + ' group details'" (closed)="detailGroup = null">
+           [ariaLabel]="group.symbol + ' group details'" (closed)="closeGroupDetails()">
   <div modalTitle>
     <h2>{{ group.symbol }}<span *ngIf="groupSpot(group.symbol) != null"> — {{ money(groupSpot(group.symbol)) }}</span> · {{ group.name }}</h2>
     <p>Group details and same-symbol broker events</p>
@@ -274,27 +292,150 @@
 
     <div class="details-events-heading">
       <h4>Broker Events for {{ group.symbol }}</h4>
-      <small>Use Group to reassign an event to another {{ group.symbol }} group.</small>
+      <small>Only manual rows are editable — broker events are immutable. Regrouping and manual-row edits save immediately; Save Group applies just the name, notes and status above.</small>
     </div>
     <div class="table-wrap" *ngIf="detailEvents().length; else emptyDetailEvents">
       <table>
-        <thead><tr><th>Date</th><th>Symbol</th><th>Contract</th><th>Action</th><th>Qty</th><th>Price</th><th>Net cash</th><th>Fees</th><th>Group</th></tr></thead>
-        <tbody><tr *ngFor="let event of detailEvents()">
+        <thead><tr><th>Date</th><th>Symbol</th><th>Contract</th><th>Action</th><th>Qty</th><th>Price</th><th>Net cash</th><th>Fees</th><th>Group</th><th>Edit</th></tr></thead>
+        <tbody><tr *ngFor="let event of detailEvents()" [class.manual-row]="isManualEvent(event)">
           <td>{{ shortTimestamp(event.executed_at) }}</td>
           <td><strong>{{ event.underlying_symbol }}</strong><small>{{ event.instrument_type }}</small></td>
           <td>{{ event.contract_symbol }}<small>{{ event.option_type }} {{ event.strike == null ? '' : event.strike }} {{ event.expiry }}</small></td>
-          <td>{{ event.action || event.transaction_sub_type }}</td>
+          <td>
+            {{ event.action || event.transaction_sub_type }}
+            <small *ngIf="isManualEvent(event)" class="manual-tag">Manual</small>
+          </td>
           <td>{{ event.quantity }}</td><td>{{ money(event.price) }}</td>
           <td [class]="pnlClass(event.net_value)">{{ money(event.net_value) }}</td><td>{{ money(event.fee_effect) }}</td>
           <td><select [ngModel]="event.group_id || ''" (ngModelChange)="assignEvent(event, $event)"><option value="">Ungrouped</option><option *ngFor="let candidate of groupsForEvent(event)" [value]="candidate.group_id">{{ candidate.name }}</option></select></td>
+          <td>
+            <button type="button" class="icon-btn" *ngIf="isManualEvent(event)" (click)="openManualEdit(event)"
+                    [attr.aria-label]="'Edit manual reconciliation for ' + event.underlying_symbol"
+                    matTooltip="Edit this manual reconciliation" matTooltipPosition="above">✎</button>
+            <span *ngIf="!isManualEvent(event)" class="text-faint">—</span>
+          </td>
         </tr></tbody>
       </table>
     </div>
     <ng-template #emptyDetailEvents><div class="empty">No broker events for {{ group.symbol }}.</div></ng-template>
 
   <ng-container modalActions>
-    <button type="button" class="btn" (click)="detailGroup = null">Close</button>
-    <button type="button" class="btn btn-primary" (click)="saveGroup(group)">Save Group</button>
+    <span class="modal-status error" *ngIf="detailError">{{ detailError }}</span>
+    <span class="modal-status ok" *ngIf="detailSavedFlash">✓ Saved</span>
+    <span class="modal-status" *ngIf="!detailError && !detailSavedFlash && !groupDirty()">No unsaved changes</span>
+    <button type="button" class="btn" (click)="closeGroupDetails()">Close</button>
+    <button type="button" class="btn btn-primary" (click)="saveGroup(group)"
+            [disabled]="!groupDirty() || detailSaving"
+            matTooltip="Saves the name, notes and status above" matTooltipPosition="above">{{ detailSaving ? 'Saving…' : 'Save Group' }}</button>
+  </ng-container>
+</app-modal>
+
+<app-modal *ngIf="reconciliationOpen" width="min(900px, 94vw)"
+           ariaLabel="Position mismatches" (closed)="reconciliationOpen = false">
+  <div modalTitle>
+    <h2>Position Reconciliation</h2>
+    <p>Ledger position, computed from every imported broker event, disagrees with the broker's current reported position. This usually means an event — a transfer, assignment, or exercise — happened before the imported history starts, or was never synced.</p>
+  </div>
+  <div class="table-wrap" *ngIf="activity?.reconciliation_issues?.length; else noMismatches">
+    <table class="mismatch-table">
+      <thead><tr>
+        <th>Symbol</th><th>Account</th><th class="num">Ledger says</th><th class="num">Broker says</th>
+        <th class="num">Difference</th><th>Imported events</th><th>Fix</th>
+      </tr></thead>
+      <tbody>
+        <tr *ngFor="let issue of activity?.reconciliation_issues ?? []">
+          <td>
+            <strong>{{ issue.underlying_symbol }}</strong>
+            <small>{{ issue.instrument_type }}<ng-container *ngIf="issue.group_name"> · {{ issue.group_name }}</ng-container></small>
+          </td>
+          <td>{{ issue.account }}</td>
+          <td class="num">{{ issue.activity_quantity }}</td>
+          <td class="num">{{ issue.broker_quantity }}</td>
+          <td class="num" [class]="'num ' + pnlClass(issue.difference)">{{ issue.difference > 0 ? '+' : '' }}{{ issue.difference }}</td>
+          <td class="wrap">
+            <span *ngIf="issue.event_count">{{ issue.event_count }} event(s), {{ shortTimestamp(issue.first_execution) }} – {{ shortTimestamp(issue.last_execution) }}</span>
+            <span *ngIf="!issue.event_count">No events imported for this contract.</span>
+            <small *ngIf="issue.last_event_summary">Last: {{ issue.last_event_summary }}</small>
+          </td>
+          <td><button type="button" class="btn btn-sm" (click)="openManualReconcile(issue)">Manual Reconcile</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <ng-template #noMismatches><div class="empty">Every contract's ledger position agrees with the broker.</div></ng-template>
+  <p class="caveat">The gap between when this symbol was actually acquired and "Imported events" first execution date is usually the missing event to look for in the broker's transaction history.</p>
+
+  <div class="details-events-heading">
+    <h4>Manual Reconciliations</h4>
+    <small>User-entered corrections. These are kept across Tastytrade syncs and can be removed here.</small>
+  </div>
+  <div class="table-wrap" *ngIf="manualEvents().length; else noManualEvents">
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Symbol</th><th class="num">Qty</th><th class="num">Price</th>
+        <th class="num">Net cash</th><th class="num">Fees</th><th>Note</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+        <tr *ngFor="let event of manualEvents()">
+          <td>{{ event.transaction_date }}</td>
+          <td><strong>{{ event.underlying_symbol }}</strong><small>{{ event.contract_key }}</small></td>
+          <td class="num">{{ event.position_delta! > 0 ? '+' : '' }}{{ event.position_delta }}</td>
+          <td class="num">{{ money(event.price) }}</td>
+          <td class="num" [class]="'num ' + pnlClass(event.net_value)">{{ money(event.net_value) }}</td>
+          <td class="num">{{ money(event.fee_effect) }}</td>
+          <td>{{ event.description }}</td>
+          <td class="row-actions">
+            <button type="button" class="icon-btn" (click)="openManualEdit(event)"
+                    [attr.aria-label]="'Edit manual reconciliation for ' + event.underlying_symbol"
+                    matTooltip="Edit this manual row" matTooltipPosition="above">✎</button>
+            <button type="button" class="icon-btn" (click)="deleteManualEvent(event)"
+                    [attr.aria-label]="'Remove manual reconciliation for ' + event.underlying_symbol"
+                    matTooltip="Remove this manual row" matTooltipPosition="above">✕</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <ng-template #noManualEvents><div class="empty">No manual reconciliations recorded.</div></ng-template>
+  <ng-container modalActions>
+    <button type="button" class="btn" (click)="reconciliationOpen = false">Close</button>
+  </ng-container>
+</app-modal>
+
+<app-modal *ngIf="manualForm as form" width="min(560px, 94vw)"
+           ariaLabel="Manual reconciliation" (closed)="manualForm = null">
+  <div modalTitle>
+    <h2>{{ form.mode === 'edit' ? 'Edit Manual Reconciliation' : 'Manual Reconcile' }} · {{ form.underlyingSymbol }}</h2>
+    <p>{{ form.mode === 'edit'
+        ? 'Updates the stored correction in place. The contract and account stay fixed.'
+        : 'Records the missing broker event so the ledger position matches the broker. Kept across Tastytrade syncs.' }}</p>
+  </div>
+  <div class="create-form">
+    <dl class="manual-context">
+      <dt>Symbol</dt><dd>{{ form.contractKey }} <small>{{ form.instrumentType }}</small></dd>
+      <dt>Group</dt><dd>{{ form.groupName || 'Ungrouped' }}</dd>
+      <dt>Account</dt><dd>{{ form.account }}</dd>
+    </dl>
+    <label>Quantity (signed position change)
+      <input type="number" step="any" [(ngModel)]="manualQuantity">
+      <small *ngIf="form.ledgerQuantity != null">Ledger {{ form.ledgerQuantity }} → broker {{ form.brokerQuantity }} needs {{ form.brokerQuantity! - form.ledgerQuantity! > 0 ? '+' : '' }}{{ form.brokerQuantity! - form.ledgerQuantity! }}.</small>
+    </label>
+    <label>Date<input type="date" [(ngModel)]="manualDate"></label>
+    <label>Price<input type="number" step="any" [(ngModel)]="manualPrice" placeholder="13.00"></label>
+    <label>Net cash
+      <input type="number" step="any" [(ngModel)]="manualNetCash" placeholder="-1300.00">
+      <small>Negative when cash left the account.</small>
+    </label>
+    <label>Fees
+      <input type="number" step="any" [(ngModel)]="manualFees" placeholder="-0.50">
+      <small>Negative for a cost, matching the broker's fee sign.</small>
+    </label>
+    <label>Note<input [(ngModel)]="manualDescription" placeholder="e.g. Nov 2025 assignment missing from sync"></label>
+    <div class="modal-error" *ngIf="manualError">{{ manualError }}</div>
+  </div>
+  <ng-container modalActions>
+    <button type="button" class="btn" (click)="manualForm = null">Cancel</button>
+    <button type="button" class="btn btn-primary" (click)="saveManualReconcile()" [disabled]="manualSaving">{{ manualSaving ? 'Saving…' : (form.mode === 'edit' ? 'Save Changes' : 'Save Reconciliation') }}</button>
   </ng-container>
 </app-modal>
 

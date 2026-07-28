@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
+import { Observable } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ModalComponent } from '../shared/ui/modal.component';
@@ -8,9 +9,29 @@ import { Capability, CapabilityService } from '../api/capability.service';
 import { StockService } from '../api/stock.service';
 import {
   OptionsActivityEvent, OptionsActivitySnapshot,
-  OptionsGroupPosition, OptionsLedgerRow, OptionsPositionRisk, OptionsRiskAccount, OptionsSnapshot,
-  OptionsTradeGroup
+  OptionsGroupPosition, OptionsLedgerRow, OptionsPositionRisk, OptionsReconciliationIssue,
+  OptionsRiskAccount, OptionsSnapshot, OptionsTradeGroup
 } from '../model/options-ledger';
+
+/**
+ * Context for the manual reconciliation dialog. Both entry points fill this in
+ * — a mismatch row being corrected, or an existing manual row being edited —
+ * so the form itself does not care which one opened it.
+ */
+interface ManualReconcileForm {
+  mode: 'create' | 'edit';
+  /** Set only when editing an existing manual row. */
+  eventId: string | null;
+  account: string;
+  contractKey: string;
+  underlyingSymbol: string;
+  instrumentType: string | null;
+  groupId: string | null;
+  groupName: string | null;
+  /** Mismatch context behind the seeded quantity; absent when editing. */
+  ledgerQuantity: number | null;
+  brokerQuantity: number | null;
+}
 
 @Component({
   selector: 'app-options',
@@ -46,6 +67,23 @@ export class OptionsComponent implements OnInit {
   groupName = '';
   groupNotes = '';
   detailGroup: OptionsTradeGroup | null = null;
+  detailSaving = false;
+  detailSavedFlash = false;
+  detailError: string | null = null;
+  /** Serialized editable fields as last saved; drives the dirty check. */
+  private detailBaseline = '';
+  private detailFlashTimer?: ReturnType<typeof setTimeout>;
+  reconciliationOpen = false;
+
+  manualForm: ManualReconcileForm | null = null;
+  manualSaving = false;
+  manualError: string | null = null;
+  manualQuantity = 0;
+  manualDate = '';
+  manualPrice: number | null = null;
+  manualNetCash: number | null = null;
+  manualFees: number | null = null;
+  manualDescription = '';
   strikeSortDirection: 'asc' | 'desc' = 'asc';
   readonly nearStrikeThresholdPercent = 5;
 
@@ -87,6 +125,7 @@ export class OptionsComponent implements OnInit {
       next: activity => {
         this.activity = activity ?? null;
         if (!activity) this.activityError = 'Failed to load broker activity.';
+        this.refreshDetailGroup(activity?.groups ?? []);
         this.activityLoading = false;
       },
       error: () => {
@@ -162,19 +201,34 @@ export class OptionsComponent implements OnInit {
   }
 
   saveGroup(group: OptionsTradeGroup): void {
+    if (!this.groupDirty() || this.detailSaving) return;
+    this.detailSaving = true;
+    this.detailError = null;
+    this.detailSavedFlash = false;
     this.stockService.updateOptionsGroup(group.group_id, {
       name: group.name, notes: group.notes, status: group.status
     }).subscribe({
       next: saved => {
-        if (!saved) this.activityError = `Could not save ${group.name}.`;
-        else {
-          // The bound group already contains the saved editable fields. Avoid
-          // tearing down and rebuilding the entire group grid, which moves the
-          // user away from the card they just saved.
-          this.flashMessage(`${saved.name} saved.`);
+        this.detailSaving = false;
+        if (!saved) {
+          this.detailError = `Could not save ${group.name}.`;
+          return;
         }
+        // The bound group already contains the saved editable fields. Avoid
+        // tearing down and rebuilding the entire group grid, which moves the
+        // user away from the card they just saved.
+        this.detailBaseline = this.groupFingerprint(group);
+        // Confirmation has to live inside the modal: the activity-panel toast
+        // renders behind it, so a save looked like it did nothing.
+        this.detailSavedFlash = true;
+        clearTimeout(this.detailFlashTimer);
+        this.detailFlashTimer = setTimeout(() => (this.detailSavedFlash = false), 4000);
+        this.flashMessage(`${saved.name} saved.`);
       },
-      error: err => this.activityError = err?.error?.detail ?? `Could not save ${group.name}.`
+      error: err => {
+        this.detailSaving = false;
+        this.detailError = err?.error?.detail ?? `Could not save ${group.name}.`;
+      }
     });
   }
 
@@ -246,6 +300,164 @@ export class OptionsComponent implements OnInit {
 
   openGroupDetails(group: OptionsTradeGroup): void {
     this.detailGroup = group;
+    this.detailBaseline = this.groupFingerprint(group);
+    this.detailSavedFlash = false;
+    this.detailError = null;
+  }
+
+  closeGroupDetails(): void {
+    this.detailGroup = null;
+    this.detailSavedFlash = false;
+    this.detailError = null;
+    clearTimeout(this.detailFlashTimer);
+  }
+
+  /** Only the three editable fields decide whether Save Group has work to do;
+   *  everything else on the group is computed and cannot be edited here. */
+  private groupFingerprint(group: OptionsTradeGroup): string {
+    return JSON.stringify([group.name.trim(), group.notes.trim(), group.status]);
+  }
+
+  groupDirty(): boolean {
+    return !!this.detailGroup
+      && this.groupFingerprint(this.detailGroup) !== this.detailBaseline;
+  }
+
+  /** Jumps from a reconciliation issue straight to its trade group, if the
+   *  mismatched contract is linked to one. */
+  openGroupFromReconciliation(issue: OptionsReconciliationIssue): void {
+    const group = (this.activity?.groups ?? []).find(g => g.group_id === issue.group_id);
+    if (!group) return;
+    this.reconciliationOpen = false;
+    this.openGroupDetails(group);
+  }
+
+  manualEvents(): OptionsActivityEvent[] {
+    return this.activity?.manual_events ?? [];
+  }
+
+  /** True while the mismatch panel has anything worth showing — an outstanding
+   *  mismatch, or a manual row the user may want to review or undo. */
+  hasReconciliationDetail(): boolean {
+    return !!(this.activity?.reconciliation_issues.length || this.manualEvents().length);
+  }
+
+  isManualEvent(event: OptionsActivityEvent): boolean {
+    return event.source === 'MANUAL';
+  }
+
+  /** After a reload, repoint an open details modal at the refreshed group so a
+   *  manual edit made from inside it shows the new P/L. Name, notes, and status
+   *  are left alone — they are bound to the inputs and may hold unsaved edits. */
+  private refreshDetailGroup(groups: OptionsTradeGroup[]): void {
+    if (!this.detailGroup) return;
+    const fresh = groups.find(group => group.group_id === this.detailGroup!.group_id);
+    if (!fresh) return;
+    const { name, notes, status } = this.detailGroup;
+    Object.assign(this.detailGroup, fresh, { name, notes, status });
+  }
+
+  /** Seeds the entry form with the correction that closes the gap: applying a
+   *  delta of (broker − ledger) makes the ledger agree with the broker. */
+  openManualReconcile(issue: OptionsReconciliationIssue): void {
+    this.manualForm = {
+      mode: 'create', eventId: null,
+      account: issue.account ?? this.account,
+      contractKey: issue.contract_key,
+      underlyingSymbol: issue.underlying_symbol,
+      instrumentType: issue.instrument_type,
+      groupId: issue.group_id, groupName: issue.group_name,
+      ledgerQuantity: issue.activity_quantity, brokerQuantity: issue.broker_quantity,
+    };
+    this.manualError = null;
+    this.manualQuantity = issue.broker_quantity - issue.activity_quantity;
+    this.manualDate = '';
+    this.manualPrice = null;
+    this.manualNetCash = null;
+    this.manualFees = null;
+    this.manualDescription = '';
+  }
+
+  /** Reopens the same form over an existing manual row's stored values. */
+  openManualEdit(event: OptionsActivityEvent): void {
+    this.manualForm = {
+      mode: 'edit', eventId: event.id,
+      account: event.account,
+      contractKey: event.contract_key,
+      underlyingSymbol: event.underlying_symbol,
+      instrumentType: event.instrument_type,
+      groupId: event.group_id, groupName: event.group_name,
+      ledgerQuantity: null, brokerQuantity: null,
+    };
+    this.manualError = null;
+    this.manualQuantity = event.position_delta ?? 0;
+    this.manualDate = event.transaction_date;
+    this.manualPrice = event.price;
+    this.manualNetCash = event.net_value;
+    this.manualFees = event.fee_effect;
+    this.manualDescription = event.description;
+  }
+
+  saveManualReconcile(): void {
+    const form = this.manualForm;
+    if (!form) return;
+    if (!this.manualDate) {
+      this.manualError = 'Date is required.';
+      return;
+    }
+    if (!this.manualQuantity) {
+      this.manualError = 'Quantity must be a non-zero position change.';
+      return;
+    }
+    const values = {
+      quantity: this.manualQuantity,
+      transaction_date: this.manualDate,
+      price: this.manualPrice,
+      net_cash: this.manualNetCash,
+      fees: this.manualFees,
+      description: this.manualDescription.trim(),
+    };
+    // Widened because create and edit resolve to differently-shaped payloads;
+    // neither response is used beyond signalling success.
+    const request$: Observable<unknown> = form.mode === 'edit'
+      ? this.stockService.updateManualOptionsEvent(form.eventId!, values)
+      : this.stockService.createManualOptionsEvent({
+          ...values,
+          account: form.account,
+          contract_key: form.contractKey,
+          underlying_symbol: form.underlyingSymbol,
+          instrument_type: form.instrumentType ?? undefined,
+          group_id: form.groupId,
+        });
+    this.manualSaving = true;
+    this.manualError = null;
+    request$.subscribe({
+      next: () => {
+        this.manualSaving = false;
+        this.manualForm = null;
+        this.flashMessage(form.mode === 'edit'
+          ? `Manual reconciliation updated for ${form.underlyingSymbol}.`
+          : `Manual reconciliation added for ${form.underlyingSymbol}.`);
+        this.loadActivity();
+      },
+      error: (err: any) => {
+        this.manualSaving = false;
+        this.manualError = err?.error?.detail
+          ?? 'Reconciliation could not be saved.';
+      }
+    });
+  }
+
+  deleteManualEvent(event: OptionsActivityEvent): void {
+    this.stockService.deleteManualOptionsEvent(event.id).subscribe({
+      next: () => {
+        this.flashMessage(`Manual reconciliation removed for ${event.underlying_symbol}.`);
+        this.loadActivity();
+      },
+      error: err => {
+        this.activityError = err?.error?.detail ?? 'Manual row could not be removed.';
+      }
+    });
   }
 
   detailEvents(): OptionsActivityEvent[] {

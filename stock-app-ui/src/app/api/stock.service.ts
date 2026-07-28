@@ -202,6 +202,36 @@ export class StockService {
     ).pipe(catchError(this.handleError<any>('assignOptionsEvent')));
   }
 
+  /** Manual reconciliation rows deliberately skip `handleError` so a rejected
+   *  entry surfaces the server's validation detail instead of failing silently. */
+  createManualOptionsEvent(request: {
+    account: string; contract_key: string; underlying_symbol?: string;
+    instrument_type?: string; quantity: number; transaction_date: string;
+    price?: number | null; net_cash?: number | null; fees?: number | null;
+    description?: string; group_id?: string | null;
+  }): Observable<{ event_id: string; group_id: string | null }> {
+    return this.http.post<{ event_id: string; group_id: string | null }>(
+      `${this.apiBaseUrl}/options/activity/manual`, request
+    );
+  }
+
+  updateManualOptionsEvent(eventId: string, request: {
+    quantity: number; transaction_date: string;
+    price?: number | null; net_cash?: number | null; fees?: number | null;
+    description?: string;
+  }): Observable<{ event_id: string; updated: boolean }> {
+    return this.http.put<{ event_id: string; updated: boolean }>(
+      `${this.apiBaseUrl}/options/activity/manual/${eventId.split('/').map(encodeURIComponent).join('/')}`,
+      request
+    );
+  }
+
+  deleteManualOptionsEvent(eventId: string): Observable<{ event_id: string; deleted: boolean }> {
+    return this.http.delete<{ event_id: string; deleted: boolean }>(
+      `${this.apiBaseUrl}/options/activity/manual/${eventId.split('/').map(encodeURIComponent).join('/')}`
+    );
+  }
+
   /** Fetch retirement holdings (SnapTrade ledger + editable enrichment). */
   getRetirementPortfolio(): Observable<RetirementPortfolioData> {
     return this.http.get<RetirementPortfolioData>(`${this.apiBaseUrl}/retirement/portfolio/live`)

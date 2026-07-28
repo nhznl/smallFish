@@ -363,3 +363,141 @@ def test_remove_symbols_cleans_events_groups_memberships_marks_greeks_and_betas(
     assert {row["underlying_symbol"] for row in snap["events"]} == {"XYZ"}
     assert {row["symbol"] for row in snap["groups"]} == {"XYZ"}
     assert snap["reconciliation_issues"] == []
+
+
+def _joby_provider(_start, _end):
+    """A ledger whose imported history is missing the opening assignment: the
+    equity events sum to -100 shares while the broker reports the account flat.
+
+    The expired option leg is what pulls the equity executions into the options
+    ledger at all (see `_select_transactions`) and nets to no position itself.
+    """
+    return (
+        [
+            _tx(1, symbol="JOBY  260417C00016000", underlying="JOBY",
+                instrument="Equity Option", transaction_type="Receive Deliver",
+                sub_type="Expiration", action="Sell to Close"),
+            _tx(2, symbol="JOBY", underlying="JOBY", instrument="Equity",
+                action="Sell to Close", quantity="100", value="-900", net_value="-900"),
+        ],
+        [],
+        {"environment": "live"},
+    )
+
+
+def test_manual_event_resolves_a_position_mismatch(activity_env):
+    options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
+    issue = options_activity.snapshot()["reconciliation_issues"][0]
+    assert issue["contract_key"] == "JOBY"
+    assert (issue["activity_quantity"], issue["broker_quantity"]) == (-100.0, 0.0)
+
+    created = options_activity.create_manual_event({
+        "account": "TRADING", "contract_key": "JOBY", "quantity": 100,
+        "transaction_date": "2025-11-21", "price": "13.00",
+        "net_cash": "-1300.00", "fees": "-0.50",
+    })
+    snap = options_activity.snapshot()
+    assert snap["reconciliation_issues"] == []
+    assert [row["id"] for row in snap["manual_events"]] == [created["event_id"]]
+
+    options_activity.delete_manual_event(created["event_id"])
+    restored = options_activity.snapshot()
+    assert restored["manual_events"] == []
+    assert restored["reconciliation_issues"][0]["activity_quantity"] == -100.0
+
+
+def test_manual_events_survive_a_tastytrade_sync(activity_env):
+    options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
+    created = options_activity.create_manual_event({
+        "account": "TRADING", "contract_key": "JOBY", "quantity": 100,
+        "transaction_date": "2025-11-21", "net_cash": "-1300.00", "fees": "-0.50",
+    })
+    options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
+    snap = options_activity.snapshot()
+    assert [row["id"] for row in snap["manual_events"]] == [created["event_id"]]
+    assert snap["reconciliation_issues"] == []
+
+
+def test_manual_event_records_signed_delta_and_derived_fee_effect(activity_env):
+    created = options_activity.create_manual_event({
+        "account": "TRADING", "contract_key": "JOBY", "quantity": -3,
+        "transaction_date": "2025-11-21", "net_cash": "-1300.00", "fees": "-0.50",
+    })
+    event = next(row for row in options_activity.snapshot()["events"]
+                 if row["id"] == created["event_id"])
+    assert event["source"] == "MANUAL"
+    assert (event["position_delta"], event["quantity"]) == (-3.0, 3.0)
+    # fee_effect must stay net_value - value so group P/L math is unchanged.
+    assert event["net_value"] - event["value"] == pytest.approx(event["fee_effect"])
+
+
+def test_broker_events_cannot_be_deleted_through_the_manual_path(activity_env):
+    options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
+    broker_id = next(row["id"] for row in options_activity.snapshot()["events"]
+                     if row["source"] == "TASTYTRADE")
+    with pytest.raises(options_activity.ActivityValidationError):
+        options_activity.delete_manual_event(broker_id)
+
+
+def test_manual_event_rejects_zero_quantity_and_bad_date(activity_env):
+    with pytest.raises(options_activity.ActivityValidationError):
+        options_activity.create_manual_event({
+            "contract_key": "JOBY", "quantity": 0, "transaction_date": "2025-11-21"})
+    with pytest.raises(options_activity.ActivityValidationError):
+        options_activity.create_manual_event({
+            "contract_key": "JOBY", "quantity": 100, "transaction_date": "11/21/2025"})
+
+
+def test_manual_event_edit_updates_values_and_keeps_identity(activity_env):
+    options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
+    created = options_activity.create_manual_event({
+        "account": "TRADING", "contract_key": "JOBY", "quantity": 100,
+        "transaction_date": "2025-11-21", "net_cash": "-1300.00", "fees": "-0.50",
+    })
+    options_activity.update_manual_event(created["event_id"], {
+        "quantity": 250, "transaction_date": "2025-11-24",
+        "price": "12.00", "net_cash": "-3000.00", "fees": "-1.25",
+        "description": "corrected assignment",
+    })
+    event = next(row for row in options_activity.snapshot()["events"]
+                 if row["id"] == created["event_id"])
+    assert event["id"] == created["event_id"]          # identity survives the edit
+    assert event["source"] == "MANUAL"
+    assert event["contract_key"] == "JOBY"
+    assert (event["position_delta"], event["quantity"]) == (250.0, 250.0)
+    assert event["transaction_date"] == "2025-11-24"
+    assert event["net_value"] == pytest.approx(-3000.0)
+    assert event["net_value"] - event["value"] == pytest.approx(event["fee_effect"])
+    assert event["description"] == "corrected assignment"
+
+
+def test_manual_event_edit_keeps_its_group_membership(activity_env):
+    options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
+    group_id = options_activity.snapshot()["groups"][0]["group_id"]
+    created = options_activity.create_manual_event({
+        "account": "TRADING", "contract_key": "JOBY", "quantity": 100,
+        "transaction_date": "2025-11-21", "net_cash": "-1300.00", "fees": "-0.50",
+        "group_id": group_id,
+    })
+    options_activity.update_manual_event(created["event_id"], {
+        "quantity": 100, "transaction_date": "2025-11-24", "net_cash": "-1300.00", "fees": "-0.50",
+    })
+    event = next(row for row in options_activity.snapshot()["events"]
+                 if row["id"] == created["event_id"])
+    assert event["group_id"] == group_id
+
+
+def test_manual_event_edit_rejects_broker_rows_and_bad_values(activity_env):
+    options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
+    broker_id = next(row["id"] for row in options_activity.snapshot()["events"]
+                     if row["source"] == "TASTYTRADE")
+    with pytest.raises(options_activity.ActivityValidationError):
+        options_activity.update_manual_event(broker_id, {
+            "quantity": 1, "transaction_date": "2025-11-21"})
+    created = options_activity.create_manual_event({
+        "account": "TRADING", "contract_key": "JOBY", "quantity": 100,
+        "transaction_date": "2025-11-21", "net_cash": "0", "fees": "0",
+    })
+    with pytest.raises(options_activity.ActivityValidationError):
+        options_activity.update_manual_event(created["event_id"], {
+            "quantity": 0, "transaction_date": "2025-11-21"})
