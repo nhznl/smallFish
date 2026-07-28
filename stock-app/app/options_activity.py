@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import config
+from .options_risk import apply_call_coverage
 
 SCHEMA_NAME = "smallfish.options-activity"
 SCHEMA_VERSION = 1
@@ -966,6 +967,13 @@ def risk_rows(account: str | None = None) -> list[dict[str, Any]]:
             "non_standard": False,
             "notes": f"Imported broker position {contract_key}",
         })
+    # Shares are held as their own broker position, so coverage can only be
+    # decided once every row for the account is built.
+    shares: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for row in rows:
+        if row["trade_type"] == "STOCK":
+            shares[(row["account"], row["symbol"].upper())] += _decimal(row["qty"])
+    apply_call_coverage(rows, dict(shares))
     return rows
 
 

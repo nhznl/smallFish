@@ -273,6 +273,11 @@
 .positive { color: #2e7d32; font-weight: 600; }
 .negative { color: #c62828; font-weight: 600; }
 
+/* Time-critical and partially-covered notes. The template already marked these
+   `urgent` -- near expiry, awaiting close, partial share cover -- but only the
+   options ledger styled the class, so here they rendered as ordinary grey text. */
+.urgent { color: var(--neg); font-weight: 650; }
+
 /* ── Analysis tab ── */
 .analysis-tab {
   display: flex;

@@ -547,6 +547,17 @@ export class OptionsComponent implements OnInit {
     });
   }
 
+  /**
+   * Short calls only: how many contracts long shares in the same account back.
+   * Offsetting option legs (a call spread) are not coverage and not counted.
+   */
+  coverageLabel(row: OptionsLedgerRow): string {
+    if (row.coverage === 'PARTIAL') {
+      return `⚠ ${row.covered_contracts ?? 0} of ${row.qty} share-covered`;
+    }
+    return row.coverage === 'UNCOVERED' ? 'No share cover' : '';
+  }
+
   strikeRiskDistance(row: OptionsLedgerRow): number | null {
     const distance = row.percent_to_strike;
     if (distance == null) return null;

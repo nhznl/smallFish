@@ -28,8 +28,8 @@ import yaml
 
 from . import config, snaptrade_service
 from .options_market import build_market_inputs
-from .options_risk import (LIMIT_APPROVED, RiskConfig, build_risk_snapshot,
-                           evaluate_position)
+from .options_risk import (LIMIT_APPROVED, RiskConfig, apply_call_coverage,
+                           build_risk_snapshot, evaluate_position)
 
 GROUP_HEADERS = ["symbol", "name", "status", "notes", "updated_at"]
 EVENT_HEADERS = [
@@ -139,6 +139,24 @@ def _read_groups() -> dict[str, dict[str, str]]:
 # risk rows from the SnapTrade holdings ledger                                  #
 # --------------------------------------------------------------------------- #
 
+def _share_pool(ledger: list[dict[str, Any]]) -> dict[tuple[str, str], Decimal]:
+    """Long share counts per account and ticker, for short-call coverage.
+
+    Cash is not a deliverable share, and the ledger's non-option classes
+    (STOCK, ETF, ADR, OTHER) all settle in shares that can be called away.
+    """
+    pool: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for row in ledger:
+        asset_class = str(row.get("asset_class") or "").upper()
+        if asset_class in {"OPTION", "CASH", ""}:
+            continue
+        symbol = str(row.get("symbol") or "").upper().strip()
+        if not symbol:
+            continue
+        pool[(str(row.get("account_name") or ""), symbol)] += _dec(row.get("quantity"))
+    return dict(pool)
+
+
 def _option_rows() -> list[dict[str, Any]]:
     """Current option legs from the SnapTrade ledger, in the risk-engine row
     shape (underlying in ``symbol`` for price-cache/beta lookup)."""
@@ -181,6 +199,7 @@ def _option_rows() -> list[dict[str, Any]]:
             "_cost_basis": float(_dec(row.get("cost_basis"))),
             "_open_pnl": float(_dec(row.get("open_pnl"))),
         })
+    apply_call_coverage(rows, _share_pool(ledger))
     return rows
 
 

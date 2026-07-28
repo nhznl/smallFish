@@ -143,6 +143,50 @@ def test_risk_rows_are_current_broker_positions(activity_env):
     assert all(row["mark_retrieved_at"] for row in rows)
 
 
+def test_risk_rows_report_share_coverage_for_short_calls(activity_env):
+    """Shares and the call against them arrive as separate broker positions."""
+    transactions = [
+        _tx(1, symbol="ABC", underlying="ABC", action="Buy to Open",
+            quantity="100", instrument="Equity", net_value="-8000", value="-8000"),
+        _tx(2, symbol="ABC   260821C00060000", action="Sell to Open",
+            net_value="150", value="151"),
+    ]
+    marks = [
+        _mark(symbol="ABC", quantity="100", direction="Long", mark_price="80",
+              multiplier="1") | {"instrument_type": "Equity"},
+        _mark(symbol="ABC   260821C00060000", direction="Short", mark_price="1.60"),
+    ]
+    options_activity.sync(
+        date(2026, 1, 1), date(2026, 7, 20),
+        provider=lambda _start, _end: (transactions, marks, {"environment": "live"}),
+    )
+
+    rows = {row["trade_type"]: row for row in options_activity.risk_rows()}
+
+    assert "COVERED_CALL" in rows, "100 shares back the single short call"
+    assert rows["COVERED_CALL"]["coverage"] == "COVERED"
+    assert rows["COVERED_CALL"]["covered_contracts"] == 1
+    assert rows["STOCK"]["qty"] == 100.0
+
+
+def test_risk_rows_mark_a_short_call_without_shares_uncovered(activity_env):
+    options_activity.sync(
+        date(2026, 1, 1), date(2026, 7, 20),
+        provider=lambda _start, _end: (
+            [_tx(1, symbol="ABC   260821C00060000", action="Sell to Open")],
+            [_mark(symbol="ABC   260821C00060000", direction="Short")],
+            {"environment": "live"},
+        ),
+    )
+
+    row = next(row for row in options_activity.risk_rows()
+               if row["trade_type"] in {"SHORT_CALL", "COVERED_CALL"})
+
+    assert row["trade_type"] == "SHORT_CALL"
+    assert row["coverage"] == "UNCOVERED"
+    assert row["covered_contracts"] == 0
+
+
 def test_sync_persists_exact_timestamped_tastytrade_iv_and_beta(activity_env):
     report = options_activity.sync(
         date(2026, 1, 1), date(2026, 7, 20),

@@ -98,6 +98,9 @@ export class RetirementPortfolioComponent implements OnInit {
   optionGroupSaving = false;
   optionGroupMessage = '';
   strikeSortDirection: 'asc' | 'desc' = 'asc';
+  /** Which risk column is sorted. Strike distance stays the default view. */
+  riskSortKey: 'strikeDistance' | 'expiry' = 'strikeDistance';
+  expirySortDirection: 'asc' | 'desc' = 'asc';
   readonly nearStrikeThresholdPercent = 5;
 
   // Enrichment editor (category/industry/note live in an editable CSV,
@@ -406,20 +409,59 @@ export class RetirementPortfolioComponent implements OnInit {
   }
 
   toggleStrikeSort(): void {
-    this.strikeSortDirection = this.strikeSortDirection === 'asc' ? 'desc' : 'asc';
+    if (this.riskSortKey === 'strikeDistance') {
+      this.strikeSortDirection = this.strikeSortDirection === 'asc' ? 'desc' : 'asc';
+    }
+    this.riskSortKey = 'strikeDistance';
+  }
+
+  /** Sort by time left, so what is closest to expiration surfaces first. */
+  toggleExpirySort(): void {
+    if (this.riskSortKey === 'expiry') {
+      this.expirySortDirection = this.expirySortDirection === 'asc' ? 'desc' : 'asc';
+    }
+    this.riskSortKey = 'expiry';
+  }
+
+  riskSortIndicator(key: 'strikeDistance' | 'expiry'): string {
+    if (this.riskSortKey !== key) return '';
+    const direction = key === 'expiry' ? this.expirySortDirection : this.strikeSortDirection;
+    return direction === 'asc' ? '▲' : '▼';
   }
 
   sortedRiskRows(): RetirementOptionRow[] {
     const rows = [...(this.optionsData?.rows ?? [])];
-    const direction = this.strikeSortDirection === 'asc' ? 1 : -1;
+    const byExpiry = this.riskSortKey === 'expiry';
+    const direction = (byExpiry ? this.expirySortDirection : this.strikeSortDirection) === 'asc' ? 1 : -1;
     return rows.sort((left, right) => {
-      const ld = this.strikeRiskDistance(left);
-      const rd = this.strikeRiskDistance(right);
+      const ld = byExpiry ? this.expirySortValue(left) : this.strikeRiskDistance(left);
+      const rd = byExpiry ? this.expirySortValue(right) : this.strikeRiskDistance(right);
+      // A leg with no expiry or no distance sorts last in either direction:
+      // it is missing data, not the nearest or the furthest position.
       if (ld == null && rd == null) return 0;
       if (ld == null) return 1;
       if (rd == null) return -1;
       return direction * (ld - rd);
     });
+  }
+
+  /** Days to expiration, falling back to the date when DTE is absent. */
+  private expirySortValue(row: RetirementOptionRow): number | null {
+    if (row.dte_remaining != null) return row.dte_remaining;
+    if (!row.expiry) return null;
+    const parsed = Date.parse(row.expiry);
+    return Number.isNaN(parsed) ? null : parsed / 86_400_000;
+  }
+
+  /**
+   * Short calls only: how many contracts long shares in the same account back.
+   * Offsetting option legs (a call spread) are not coverage and not counted.
+   */
+  coverageLabel(row: { trade_type: string; qty: number; coverage?: string; covered_contracts?: number }): string {
+    if (row.coverage === 'PARTIAL') {
+      return `⚠ ${row.covered_contracts ?? 0} of ${row.qty} share-covered`;
+    }
+    return row.coverage === 'UNCOVERED' ? 'No share cover' : '';
   }
 
   strikeRiskDistance(row: RetirementOptionRow): number | null {

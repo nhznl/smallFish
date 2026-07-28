@@ -136,6 +136,76 @@ def test_option_rows_map_trade_type_and_underlying(opts_env):
     assert by_symbol["SPCX"]["symbol"] == "SPCX"            # underlying, not contract
 
 
+def _holding(symbol, quantity, *, asset_class="STOCK", account_name="BrokerageLink"):
+    return {
+        "schema_version": "1", "source": "SNAPTRADE",
+        "retrieved_at": "2026-07-23T22:00:00+00:00", "imported_at": "2026-07-23T22:00:05+00:00",
+        "account_id": "acct-1", "account_name": account_name, "account_number": "652",
+        "institution": "Fidelity", "asset_class": asset_class,
+        "symbol": symbol, "description": symbol, "underlying_symbol": "",
+        "option_type": "", "strike": "", "expiry": "", "currency": "USD",
+        "quantity": str(quantity), "price": "10", "average_purchase_price": "10",
+        "cost_basis": "0", "market_value": "0", "open_pnl": "0", "open_pnl_pct": "0",
+    }
+
+
+def _short_call(symbol, quantity="-1", *, strike="61", account_name="BrokerageLink"):
+    return {
+        "schema_version": "1", "source": "SNAPTRADE",
+        "retrieved_at": "2026-07-23T22:00:00+00:00", "imported_at": "2026-07-23T22:00:05+00:00",
+        "account_id": "acct-1", "account_name": account_name, "account_number": "652",
+        "institution": "Fidelity", "asset_class": "OPTION",
+        "symbol": f"{symbol}  260821C000{strike}000", "description": f"{symbol} {strike} Call",
+        "underlying_symbol": symbol, "option_type": "CALL", "strike": strike,
+        "expiry": "2026-08-21", "currency": "USD",
+        "quantity": quantity, "price": "2.70", "average_purchase_price": "270",
+        "cost_basis": "-270", "market_value": "-270", "open_pnl": "0", "open_pnl_pct": "0",
+    }
+
+
+def _write_rows(rows):
+    path = config.snaptrade_holdings_csv()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=snaptrade_service.HOLDINGS_HEADERS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def test_short_calls_report_share_coverage_from_the_holdings_ledger(opts_env):
+    """The retirement wheel is written against shares held in the same account."""
+    _write_rows([
+        _short_call("CLX"),                       # 1 contract, 100 shares held
+        _holding("CLX", "100"),
+        _short_call("OKLO", "-2", strike="62"),   # 2 contracts, only 100 shares
+        _holding("OKLO", "125"),
+        _short_call("BHP", strike="63"),          # no shares at all
+        _short_call("FLKR", strike="64"),         # fractional share lot
+        _holding("FLKR", "100.077"),
+        _short_call("AMD", strike="65"),          # shares sit in another account
+        _holding("AMD", "500", account_name="ROTH IRA"),
+    ])
+
+    by_symbol = {row["symbol"]: row for row in retirement_options._option_rows()}
+
+    assert by_symbol["CLX"]["trade_type"] == "COVERED_CALL"
+    assert by_symbol["CLX"]["coverage"] == "COVERED"
+    assert by_symbol["OKLO"]["trade_type"] == "SHORT_CALL"
+    assert by_symbol["OKLO"]["coverage"] == "PARTIAL"
+    assert by_symbol["OKLO"]["covered_contracts"] == 1
+    assert by_symbol["FLKR"]["coverage"] == "COVERED"
+    assert by_symbol["BHP"]["coverage"] == "UNCOVERED"
+    assert by_symbol["AMD"]["coverage"] == "UNCOVERED"
+
+
+def test_cash_is_not_share_coverage(opts_env):
+    _write_rows([_short_call("CLX"), _holding("FDRXX", "100000", asset_class="CASH")])
+
+    rows = retirement_options._option_rows()
+
+    assert rows[0]["coverage"] == "UNCOVERED"
+
+
 def test_build_groups_net_credit_from_cost_basis(opts_env):
     _write_ledger(opts_env)
     groups = retirement_options._build_groups(retirement_options._option_rows(), {})

@@ -1,14 +1,14 @@
 // Retirement options: trade groups + broker risk positions, sourced from
 // SnapTrade legs and the broker-agnostic options risk engine.
 
-import { OptionsRiskAccount } from './options-ledger';
+import { OptionsCoverage, OptionsRiskAccount } from './options-ledger';
 
 export interface RetirementOptionRow {
   id: string;
   account: string;
   wheel_id: string;
   symbol: string;              // underlying
-  trade_type: string;         // SHORT_PUT | SHORT_CALL | LONG_PUT | LONG_CALL
+  trade_type: string;         // SHORT_PUT | SHORT_CALL | COVERED_CALL | LONG_PUT | LONG_CALL
   qty: number;
   strike: number | null;
   expiry: string;
@@ -23,6 +23,9 @@ export interface RetirementOptionRow {
   price_as_of?: string | null;
   percent_to_strike?: number | null;
   needs_settlement?: boolean;
+  /** Short calls only: whether long shares in the same account back the call. */
+  coverage?: OptionsCoverage;
+  covered_contracts?: number;
 }
 
 export interface RetirementOptionRisk {

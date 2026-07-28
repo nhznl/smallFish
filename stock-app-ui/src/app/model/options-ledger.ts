@@ -1,6 +1,8 @@
 export type OptionsAccount = string;
 export type OptionsTradeType = 'SHORT_PUT' | 'COVERED_CALL' | 'SHORT_CALL' | 'LONG_PUT' | 'LONG_CALL' | 'STOCK' | 'OTHER';
 export type OptionsStatus = 'OPEN' | 'CLOSED' | 'EXPIRED' | 'ASSIGNED';
+/** Share coverage of a short call. It ignores offsetting option legs. */
+export type OptionsCoverage = 'COVERED' | 'PARTIAL' | 'UNCOVERED';
 
 export interface OptionsLedgerRow {
   id: string;
@@ -26,6 +28,9 @@ export interface OptionsLedgerRow {
   current_underlying_price?: number | null;
   percent_to_strike?: number | null;
   needs_settlement?: boolean;
+  /** Short calls only: whether long shares in the same account back the call. */
+  coverage?: OptionsCoverage;
+  covered_contracts?: number;
   wheel_combined_pnl?: number | null;
   wheel_pending_open_credit?: number | null;
   wheel_running_break_even?: number | null;
