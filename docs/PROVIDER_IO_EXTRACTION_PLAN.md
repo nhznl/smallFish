@@ -450,7 +450,7 @@ Pause and ask the owner before proceeding if:
 
 | Phase | Scope | Status | Next action / blocker | Evidence |
 |---|---|---|---|---|
-| 0 | Boundary characterization and two corrective fixes | COMPLETE | Phase 1 can begin | 32 backend + 39 utilities targeted tests; secret scan and diff check clean |
+| 0 | Boundary characterization and two corrective fixes | COMPLETE | Phase 1 can begin | 32 backend + 40 utilities targeted tests; secret scan and diff check clean |
 | 1 | Shared Tastytrade I/O for backend | NOT STARTED | Phase 0 passed | — |
 | 2 | Shared SnapTrade I/O for backend | NOT STARTED | Phase 1 must pass | — |
 | 3 | Utilities and verification migration | NOT STARTED | Phase 2 must pass | — |
@@ -461,7 +461,7 @@ Pause and ask the owner before proceeding if:
 | Date | Phase | Status | Evidence / decision | Next action |
 |---|---|---|---|---|
 | 2026-07-29 | Planning | COMPLETE | Current SDK imports, runtime manifests, consumer injection seams, CI gates, and security boundaries audited; focused plan prepared. No implementation code changed. | Owner review, then hand off Phase 0 to Terra |
-| 2026-07-29 | 0 | COMPLETE | Corrected the retirement beta/Greeks three-value credential unpack; fake SDK regression coverage proves the default fetchers stay offline and close sessions/streamers. Provider reports and verification output now expose only exception type plus stable remediation, with token/account sentinel coverage. 32 backend and 39 utilities targeted tests passed. | Phase 1 |
+| 2026-07-29 | 0 | COMPLETE | Corrected the retirement beta/Greeks three-value credential unpack; fake SDK regression coverage proves the default fetchers stay offline and close sessions/streamers. Provider reports, verification output, and quote metadata now expose only exception type plus stable remediation, with token/account sentinel coverage. 32 backend and 40 utilities targeted tests passed. | Phase 1 |
 
 ## Terra kickoff prompt
 

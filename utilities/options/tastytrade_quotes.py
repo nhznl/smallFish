@@ -112,12 +112,12 @@ def _epoch_ms_iso(value: Any) -> str | None:
         return None
 
 
-def _safe_error(exc: Exception, sensitive: tuple[str, ...] = ()) -> str:
-    message = f"{type(exc).__name__}: {exc}"
-    for value in sensitive:
-        if value:
-            message = message.replace(value, "[REDACTED]")
-    return message[:300]
+def _safe_error(exc: Exception) -> str:
+    """Return a stable metadata-safe error for a provider call."""
+    return (
+        f"{type(exc).__name__}: Tastytrade quote collection is unavailable; "
+        "check the brokerage setup and retry the collection."
+    )
 
 
 def normalize_quote(event: Any, contract_symbol: str) -> dict[str, Any]:
@@ -151,8 +151,7 @@ def normalize_quote(event: Any, contract_symbol: str) -> dict[str, Any]:
 
 
 async def _fetch_batch(session: Any, symbols: dict[str, str], *,
-                       timeout_seconds: float,
-                       sensitive: tuple[str, ...] = ()) -> tuple[dict[str, dict[str, Any]], str | None]:
+                       timeout_seconds: float) -> tuple[dict[str, dict[str, Any]], str | None]:
     from tastytrade import DXLinkStreamer
     from tastytrade.dxfeed import Quote
 
@@ -189,7 +188,7 @@ async def _fetch_batch(session: Any, symbols: dict[str, str], *,
                 if event_order >= prior_order:
                     latest[event_symbol] = event
     except Exception as exc:  # noqa: BLE001 - partial batches remain useful
-        error = _safe_error(exc, sensitive)
+        error = _safe_error(exc)
     else:
         error = None
     return {
@@ -222,11 +221,7 @@ async def fetch_quotes_async(contract_symbols: list[str], *,
             is_test=creds.environment != "live",
         )
     except Exception as exc:  # noqa: BLE001 - surfaced as provider metadata
-        sensitive = (
-            creds.client_secret if creds is not None else "",
-            creds.refresh_token if creds is not None else "",
-        )
-        batch.errors.append(_safe_error(exc, sensitive))
+        batch.errors.append(_safe_error(exc))
         batch.retrieved_at = datetime.now(timezone.utc).isoformat()
         return batch
 
@@ -248,7 +243,6 @@ async def fetch_quotes_async(contract_symbols: list[str], *,
         batch.batches += 1
         quotes, error = await _fetch_batch(
             session, mapping, timeout_seconds=timeout_seconds,
-            sensitive=(creds.client_secret, creds.refresh_token),
         )
         batch.quotes.update(quotes)
         if error:
