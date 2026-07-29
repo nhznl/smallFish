@@ -6,7 +6,6 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { BrokerageService } from '../../api/brokerage.service';
 import {
   ArchiveCreatedResponse,
-  ArchiveSummary,
   BrokerageComponent,
   BrokerageId,
   LedgerEvent,
@@ -19,7 +18,7 @@ import {
 } from '../../model/brokerage';
 import { ModalComponent } from '../ui/modal.component';
 
-type StateFilter = 'active' | 'archived' | 'all';
+type StateFilter = 'active' | 'closed' | 'all';
 
 /**
  * One durable row per underlying symbol — the replacement for Trade Groups.
@@ -60,6 +59,10 @@ export class SymbolLedgerComponent implements OnChanges {
   eventHistoryLoading = false;
   eventHistoryLoadingMore = false;
   eventHistoryError = '';
+  archiveEventHistory: LedgerEventsResponse | null = null;
+  archiveEventHistoryLoading = false;
+  archiveEventHistoryLoadingMore = false;
+  archiveEventHistoryError = '';
   selectedArchiveId = '';
 
   archiveConfirmation: SymbolLedgerDetail | null = null;
@@ -75,7 +78,8 @@ export class SymbolLedgerComponent implements OnChanges {
 
   private requestSequence = 0;
   private detailSequence = 0;
-  private eventHistorySequence = 0;
+  private currentHistorySequence = 0;
+  private archiveHistorySequence = 0;
 
   constructor(private readonly api: BrokerageService) {}
 
@@ -140,7 +144,7 @@ export class SymbolLedgerComponent implements OnChanges {
         this.detail = body.symbol;
         this.noteDraft = body.symbol.notes;
         this.detailLoading = false;
-        this.loadEventHistory('current');
+        this.loadCurrentEventHistory();
       },
       error: err => {
         if (request !== this.detailSequence) return;
@@ -186,33 +190,49 @@ export class SymbolLedgerComponent implements OnChanges {
 
   // ------------------------------------------------------------- history ---
 
-  selectEventPeriod(period: 'current' | 'all' | string): void {
-    if (period === this.eventHistory?.period && !this.eventHistoryLoading) return;
-    this.selectedArchiveId = period !== 'current' && period !== 'all' ? period : '';
-    this.loadEventHistory(period);
+  selectArchive(archiveId: string): void {
+    if (archiveId === this.selectedArchiveId) {
+      this.clearArchiveHistory();
+      return;
+    }
+    this.selectedArchiveId = archiveId;
+    this.loadArchiveEventHistory(archiveId);
   }
 
   loadMoreEvents(): void {
     if (!this.eventHistory?.has_more || !this.eventHistory.next_cursor) return;
-    this.loadEventHistory(this.eventHistory.period, this.eventHistory.next_cursor);
+    this.loadCurrentEventHistory(this.eventHistory.next_cursor);
   }
 
-  private loadEventHistory(period: string, cursor?: string | null): void {
+  loadMoreArchiveEvents(): void {
+    if (!this.archiveEventHistory?.has_more || !this.archiveEventHistory.next_cursor) return;
+    this.loadArchiveEventHistory(this.selectedArchiveId, this.archiveEventHistory.next_cursor);
+  }
+
+  retryCurrentEventHistory(): void {
+    this.loadCurrentEventHistory();
+  }
+
+  retryArchiveEventHistory(): void {
+    if (this.selectedArchiveId) this.loadArchiveEventHistory(this.selectedArchiveId);
+  }
+
+  private loadCurrentEventHistory(cursor?: string | null): void {
     const symbol = this.expandedSymbol;
     if (!symbol) return;
-    const append = !!cursor && this.eventHistory?.period === period;
+    const append = !!cursor && this.eventHistory?.period === 'current';
     if (append) this.eventHistoryLoadingMore = true;
     else {
       this.eventHistoryLoading = true;
       this.eventHistoryError = '';
       if (!cursor) this.eventHistory = null;
     }
-    const request = ++this.eventHistorySequence;
+    const request = ++this.currentHistorySequence;
     this.api.getSymbolEvents(this.brokerageId, symbol, {
-      period, cursor: cursor ?? undefined, limit: 25,
+      period: 'current', cursor: cursor ?? undefined, limit: 25,
     }).subscribe({
       next: body => {
-        if (request !== this.eventHistorySequence || symbol !== this.expandedSymbol) return;
+        if (request !== this.currentHistorySequence || symbol !== this.expandedSymbol) return;
         this.eventHistory = append && this.eventHistory
           ? { ...body, items: [...this.eventHistory.items, ...body.items] }
           : body;
@@ -220,10 +240,43 @@ export class SymbolLedgerComponent implements OnChanges {
         this.eventHistoryLoadingMore = false;
       },
       error: err => {
-        if (request !== this.eventHistorySequence || symbol !== this.expandedSymbol) return;
+        if (request !== this.currentHistorySequence || symbol !== this.expandedSymbol) return;
         this.eventHistoryLoading = false;
         this.eventHistoryLoadingMore = false;
         this.eventHistoryError = this.message(err, 'The event history could not be loaded.');
+      },
+    });
+  }
+
+  private loadArchiveEventHistory(archiveId: string, cursor?: string | null): void {
+    const symbol = this.expandedSymbol;
+    if (!symbol || !archiveId) return;
+    const append = !!cursor && this.archiveEventHistory?.period === archiveId;
+    if (append) this.archiveEventHistoryLoadingMore = true;
+    else {
+      this.archiveEventHistoryLoading = true;
+      this.archiveEventHistoryError = '';
+      if (!cursor) this.archiveEventHistory = null;
+    }
+    const request = ++this.archiveHistorySequence;
+    this.api.getSymbolEvents(this.brokerageId, symbol, {
+      period: archiveId, cursor: cursor ?? undefined, limit: 25,
+    }).subscribe({
+      next: body => {
+        if (request !== this.archiveHistorySequence || symbol !== this.expandedSymbol
+          || archiveId !== this.selectedArchiveId) return;
+        this.archiveEventHistory = append && this.archiveEventHistory
+          ? { ...body, items: [...this.archiveEventHistory.items, ...body.items] }
+          : body;
+        this.archiveEventHistoryLoading = false;
+        this.archiveEventHistoryLoadingMore = false;
+      },
+      error: err => {
+        if (request !== this.archiveHistorySequence || symbol !== this.expandedSymbol
+          || archiveId !== this.selectedArchiveId) return;
+        this.archiveEventHistoryLoading = false;
+        this.archiveEventHistoryLoadingMore = false;
+        this.archiveEventHistoryError = this.message(err, 'The archived event history could not be loaded.');
       },
     });
   }
@@ -233,8 +286,17 @@ export class SymbolLedgerComponent implements OnChanges {
     this.eventHistoryLoading = false;
     this.eventHistoryLoadingMore = false;
     this.eventHistoryError = '';
+    this.clearArchiveHistory();
+    this.currentHistorySequence++;
+  }
+
+  private clearArchiveHistory(): void {
+    this.archiveEventHistory = null;
+    this.archiveEventHistoryLoading = false;
+    this.archiveEventHistoryLoadingMore = false;
+    this.archiveEventHistoryError = '';
     this.selectedArchiveId = '';
-    this.eventHistorySequence++;
+    this.archiveHistorySequence++;
   }
 
   eventLabel(event: LedgerEvent): string {
@@ -247,10 +309,6 @@ export class SymbolLedgerComponent implements OnChanges {
     if (event.instrument === 'EQUITY') return '—';
     const strike = event.strike == null ? '—' : `$${event.strike}`;
     return `${strike} · ${event.expiry ?? '—'}`;
-  }
-
-  selectedArchive(): ArchiveSummary | null {
-    return this.detail?.archives.find(row => row.archive_id === this.selectedArchiveId) ?? null;
   }
 
   // -------------------------------------------------------------- archive ---
@@ -302,6 +360,8 @@ export class SymbolLedgerComponent implements OnChanges {
     this.statusMessage = `${created.symbol.symbol} completed history archived.`;
     this.detail = created.symbol;
     this.noteDraft = created.symbol.notes;
+    this.clearArchiveHistory();
+    this.loadCurrentEventHistory();
     const row = this.data?.items.find(item => item.symbol === created.symbol.symbol);
     if (row) Object.assign(row, created.symbol);
     this.load();

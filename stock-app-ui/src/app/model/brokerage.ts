@@ -12,7 +12,7 @@
 export type BrokerageId = 'tastytrade' | 'fidelity';
 
 export type PnlCompleteness = 'COMPLETE' | 'INDICATIVE' | 'UNAVAILABLE';
-export type LedgerState = 'ACTIVE' | 'ARCHIVED';
+export type LedgerState = 'ACTIVE' | 'CLOSED';
 export type ReconciliationStatus = 'RECONCILED' | 'UNRECONCILED';
 export type Exposure = 'EQUITY' | 'OPTIONS' | 'EQUITY_AND_OPTIONS';
 export type AvailabilityStatus = 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE';
@@ -247,7 +247,7 @@ export interface SymbolLedgerDetail extends SymbolLedgerSummary {
 export interface SymbolLedgerListSummary {
   symbol_count: number;
   active_count: number;
-  archived_count: number;
+  closed_count: number;
   needs_review_count: number;
   lifetime_pnl: number | null;
 }

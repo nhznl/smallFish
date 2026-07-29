@@ -8,7 +8,7 @@ lands.
 Three rules do the real work here:
 
 * **Lifecycle is derived, never set.** Open exposure makes a symbol Active;
-  only proven flatness makes it Archived.
+  only proven flatness makes it Closed.
 * **Uncertainty fails toward Active.** If flatness cannot be established —
   missing activity, a delayed close, a reconciliation gap — the symbol stays
   Active with an explained, unavailable P/L rather than being presented as a
@@ -35,7 +35,7 @@ DETAIL_SCHEMA_NAME = "smallfish.symbol-ledger"
 
 ZERO = Decimal("0")
 
-#: The reason a symbol that looks closed has not archived.
+#: The reason a symbol that looks closed cannot yet be archived.
 NOT_RECONCILED = "Imported activity does not reconcile with the broker position."
 INCOMPLETE_HISTORY = "Some cash flows, marks, or history are unavailable."
 UNCONFIRMED_LIFECYCLE = (
@@ -207,7 +207,7 @@ def _lifecycle(components: list[Component]) -> tuple[str, str, list[str]]:
         # Flat-looking but unproven. Presenting this as a completed archive
         # would be the one error this design exists to prevent.
         return "ACTIVE", "UNAVAILABLE", reasons
-    return "ARCHIVED", "COMPLETE", reasons
+    return "CLOSED", "COMPLETE", reasons
 
 
 def _exposure(components: list[Component]) -> str:
@@ -331,7 +331,7 @@ class SymbolLedger:
         """Reset seals a completed period. Every one of these must hold."""
         return (
             self.current_period["event_count"] > 0
-            and self.state == "ARCHIVED"
+            and self.state == "CLOSED"
             and self.reconciliation_status == "RECONCILED"
             and self.pnl_completeness == "COMPLETE"
             and self.current_period["realized_pnl"] is not None
@@ -341,7 +341,7 @@ class SymbolLedger:
         blockers = []
         if self.current_period["event_count"] == 0:
             blockers.append("PERIOD_EMPTY")
-        if self.state != "ARCHIVED":
+        if self.state != "CLOSED":
             blockers.append("SYMBOL_NOT_FLAT")
         if self.reconciliation_status != "RECONCILED":
             blockers.append("SYMBOL_NOT_RECONCILED")
@@ -407,7 +407,7 @@ def build(snapshot: BrokerageSnapshot, *, archives: list[ArchiveBoundary],
 def list_response(snapshot: BrokerageSnapshot, ledgers: list[SymbolLedger], *,
                   state: str = "active", exposure: str = "all") -> dict[str, Any]:
     wanted = str(state or "active").strip().lower()
-    if wanted not in {"active", "archived", "all"}:
+    if wanted not in {"active", "closed", "all"}:
         wanted = "active"
     wanted_exposure = str(exposure or "all").strip().lower()
     if wanted_exposure not in {"all", "options"}:
@@ -424,7 +424,7 @@ def list_response(snapshot: BrokerageSnapshot, ledgers: list[SymbolLedger], *,
     summary = {
         "symbol_count": len(selected),
         "active_count": sum(1 for row in eligible if row.state == "ACTIVE"),
-        "archived_count": sum(1 for row in eligible if row.state == "ARCHIVED"),
+        "closed_count": sum(1 for row in eligible if row.state == "CLOSED"),
         "needs_review_count": sum(1 for row in eligible if row.warnings),
         "lifetime_pnl": (
             None if any(value is None for value in lifetime) else sum(lifetime)

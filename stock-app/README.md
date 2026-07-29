@@ -212,7 +212,7 @@ holdings absent on an older date display `—` rather than zero.
 
 ### Symbol Ledger
 
-Options are one durable ledger per symbol. Active and Archived are derived from
+Options are one durable ledger per symbol. Active and Closed are derived from
 open exposure and reconciliation, not edited by hand. Imported events are
 immutable; detail provides current/all/archive history, cursor pagination,
 archive verification warnings, and an idempotent completed-period archive when

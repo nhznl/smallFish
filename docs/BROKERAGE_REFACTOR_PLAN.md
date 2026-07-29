@@ -68,7 +68,7 @@ reading the reasoning.
 
 - Phase 5 checkpoint: the owner confirmed the corrected symbol/P-L behaviour on
   the Trading ledger after `754bb09`. Explicit approval covering navigation,
-  Active/Archived filtering, symbol detail, and notes across **both** `/options`
+  Active/Closed filtering, symbol detail, and notes across **both** `/options`
   and `/retirement` has not been recorded. Phase 6 must not begin until it is.
 - The owner confirmed on 2026-07-29 that legacy brokerage routes are not
   externally consumable. Phase 7 retains read-only internal compatibility
@@ -106,7 +106,7 @@ Speed is intentional:
 Replace user-managed option trade groups with one durable ledger per symbol.
 The ledger retains every imported stock and option event available to
 smallFish, reports a running economic P/L, becomes Active when the symbol has
-open exposure, and becomes Archived when the symbol is confidently flat.
+open exposure, and becomes Closed when the symbol is confidently flat.
 
 Calendar years, option expirations, rolls, assignments, and later re-entry do
 not create new groups. A user may deliberately reset a flat symbol to begin a
@@ -132,14 +132,14 @@ and migration. It does not authorize implementation by itself.
    identified by its normalized underlying. There are no ungrouped events and
    no second group for the same symbol.
 5. **Lifecycle state is derived.** Users do not manually set Active or
-   Archived. A new open position makes the symbol Active. A symbol becomes
-   Archived only after all of its account-level equity and option positions are
+   Closed. A new open position makes the symbol Active. A symbol becomes
+   Closed only after all of its account-level equity and option positions are
    flat and the activity reconciles with the broker snapshot.
 6. **Uncertainty fails toward Active.** If smallFish cannot prove that a symbol
    is flat because a close is delayed, activity is missing, or reconciliation
    fails, the symbol remains Active with a visible warning and unavailable P/L.
    It must not be presented as a completed archive.
-7. **Normal reopening preserves the tally.** A new trade in an Archived symbol
+7. **Normal reopening preserves the tally.** A new trade in a Closed symbol
    returns that same ledger to Active and continues the current-period and
    lifetime totals. It does not create a new group or implicit reset.
 8. **Reset is explicit and flat-only.** A user can archive the completed current
@@ -196,10 +196,10 @@ reconciliation fields:
 | Condition | `state` | P/L behavior |
 |---|---|---|
 | At least one current equity or option position is nonzero | `ACTIVE` | Marked P/L is normally `INDICATIVE` |
-| Every component is flat and activity reconciles | `ARCHIVED` | Current-period P/L can be `COMPLETE` |
+| Every component is flat and activity reconciles | `CLOSED` | Current-period P/L can be `COMPLETE` |
 | Flatness cannot be established safely | `ACTIVE` | P/L is `UNAVAILABLE` and warnings explain why |
 
-This preserves simple Active/Archived filtering without hiding incomplete
+This preserves simple Active/Closed filtering without hiding incomplete
 positions. Detailed fields such as `reconciliation_status`,
 `pnl_completeness`, and `warnings` explain why an apparently closing symbol has
 not archived yet.
@@ -269,7 +269,7 @@ history cannot be reset because its current-period P/L is not complete.
 A reset is valid only when all of the following are true:
 
 - the current period contains at least one event;
-- the symbol is `ARCHIVED` because every component is flat;
+- the symbol is `CLOSED` because every component is flat;
 - reconciliation is `RECONCILED`;
 - current-period P/L is `COMPLETE`; and
 - the period has not changed since the user loaded it.
@@ -328,7 +328,7 @@ After reset:
 
 - the archive appears in the symbol's archive collection;
 - the current period has zero events and zero P/L;
-- the symbol remains Archived until a new position opens;
+- the symbol remains Closed until a new position opens;
 - lifetime P/L remains unchanged; and
 - the next broker event for the symbol enters the new current period and makes
   the symbol Active when it creates open exposure.
@@ -577,7 +577,7 @@ account numbers, or raw provider exception details.
 
 ```text
 GET /api/brokerages/{brokerage_id}/symbols
-    ?state=active|archived|all
+    ?state=active|closed|all
     &exposure=all|options
 ```
 
@@ -845,7 +845,7 @@ old endpoint or component is removed merely because a replacement exists.
 1. Inventory existing groups by `(account scope, symbol)` without changing
    artifacts.
 2. If a symbol has exactly one group, migrate its notes into symbol metadata.
-   The generated name and manual Active/Archived value are not authoritative.
+   The generated name and manual lifecycle value are not authoritative.
 3. If duplicate same-symbol groups exist, stop and produce a migration report.
    Combine their immutable events automatically by symbol, but require an
    explicit metadata decision when their notes conflict. Never discard either
@@ -873,14 +873,14 @@ them as identity.
   provenance. They never select behavior by brokerage ID.
 - Rename **Trade Groups** to **Symbol Ledger**.
 - Show one row per underlying symbol, never one row per year or strategy.
-- Default to Active; retain Active, Archived, and All filters.
+- Default to Active; retain Active, Closed, and All filters.
 - Derive the badge from API state; remove editable status and group name.
 - Keep notes editable.
 - The detail view shows current positions, current-period totals, lifetime
   totals, archived-period summaries, immutable events, provenance, and
   reconciliation warnings.
 - Show **Archive completed history** only for a nonempty, complete, reconciled,
-  Archived current period.
+  Closed current period.
 - Confirm the reset by naming the symbol, event count, date range, and realized
   P/L that will become an archived period.
 - After reset, show the archive and an empty current period without implying
@@ -912,7 +912,7 @@ them as identity.
   membership record or user action.
 - A cross-year option open and close appears in the same symbol and period.
 - Closing one of several contracts does not archive the symbol.
-- A fully flat, reconciled symbol becomes Archived without a metadata write.
+- A fully flat, reconciled symbol becomes Closed without a metadata write.
 - A new opening event returns the same symbol to Active and preserves its
   current-period and lifetime tally.
 - Missing activity, marks, or reconciliation prevents false completion and
@@ -928,7 +928,7 @@ them as identity.
 - Trading and Retirement become thin page shells over shared brokerage UI
   components and one brokerage-agnostic Angular API client.
 - Backend tests use fake providers and no network; UI verification includes
-  Trading and Retirement routes, Active/Archived filters, detail history, and
+  Trading and Retirement routes, Active/Closed filters, detail history, and
   reset confirmation.
 
 ## Settled API decisions
@@ -945,7 +945,7 @@ The owner approved the brokerage-agnostic direction on 2026-07-28:
 5. The same resource has identical request and response shapes across
    brokerages. Missing values use `null`, coverage, and stable reasons rather
    than provider-specific fields.
-6. Symbol lists default to `active`; callers may request `archived` or `all`.
+6. Symbol lists default to `active`; callers may request `closed` or `all`.
 7. Symbol detail returns compact archive summaries inline; event bodies remain
    paginated through the events resource.
 8. Version 1 has no reset undo operation.
@@ -998,7 +998,7 @@ The owner has settled the following product direction:
 - multiple groups for the same symbol are not permitted;
 - all retained supported trades for the symbol remain visible;
 - normal close and reopen preserve a running tally;
-- Active/Archived is derived from exposure rather than a user label; and
+- Active/Closed is derived from exposure rather than a user label; and
 - the user may explicitly reset completed history into an archived period; and
 - the **Settled API decisions** above govern the new backend and UI contracts.
 
@@ -1165,7 +1165,7 @@ Implementation checklist:
 
 - Add the common Symbol Ledger projection keyed only by
   `(brokerage_id, normalized_symbol)`.
-- Derive Active/Archived, current-period/lifetime P/L, coverage, and
+- Derive Active/Closed, current-period/lifetime P/L, coverage, and
   reconciliation without event-to-group membership.
 - Add versioned config paths and strict schemas for symbol metadata and archive
   boundaries.
@@ -1228,7 +1228,7 @@ Implementation checklist:
 - Reuse shared UI primitives and tokens; do not fork separate Trading and
   Retirement implementations.
 - Mount the same Symbol Ledger component on `/options` and `/retirement`.
-- Show one row per symbol, Active/Archived/All filters, coverage start,
+- Show one row per symbol, Active/Closed/All filters, coverage start,
   current-period/lifetime P/L, completeness, accounts, notes, components,
   immutable event counts, and visible reconciliation warnings.
 - Remove editable group name/status and all event reassignment controls from
@@ -1264,7 +1264,7 @@ Suggested commit: `feat: add shared symbol ledger UI`
 Required owner checkpoint after the commit:
 
 1. Pause and ask the owner to inspect `/options` and `/retirement`.
-2. Ask whether navigation, Active/Archived filtering, symbol details, notes,
+2. Ask whether navigation, Active/Closed filtering, symbol details, notes,
    warnings, and P/L presentation appear broken or materially confusing.
 3. Record the owner's response in the progress log.
 4. If problems are reported, fix them, rerun Phase 5 automated checks, and
@@ -1378,7 +1378,7 @@ Implementation checklist:
 - Start services only through documented `commands.sh`/npm commands.
 - Load `/options` and `/retirement` with representative synthetic or safely
   materialized data.
-- Verify Active, Archived, and All; symbol detail; account components; complete,
+- Verify Active, Closed, and All; symbol detail; account components; complete,
   indicative, and unavailable P/L; notes; event pagination; reset eligibility;
   reset confirmation; successful reset; reopen; late-event warning; empty;
   loading; error; and narrow-width behavior.
@@ -1469,6 +1469,8 @@ Append entries; never rewrite older evidence to make progress look cleaner.
 | 2026-07-29 | 8 | BLOCKED — non-mutating checks complete | Re-ran the full automated gate: backend 461, Angular build, Angular 55, docs, secret scan, and diff check. After checking owners of ports 8000 and 4200, did not trust their noncanonical development processes. Built the UI with `./commands.sh build-ui`, served an isolated backend through `./commands.sh server --no-reload --port 8001`, and inspected both `/options` and `/retirement`. Both expose the common Holdings, Options, and Option-Adjusted Basis tabs; Options uses Symbol Ledger with Active, Archived, and All filters and an immutable-event detail, without Trade Groups or Broker Risk UI. Retirement also fit a narrow viewport. No archive/reset/reopen was performed against real brokerage data. | Owner: authorize a synthetic-copy lifecycle browser check, or a real-symbol reset/archive and reopen, before Phase 8 is marked COMPLETE |
 | 2026-07-29 | Adjusted-basis follow-up | COMPLETE | Replaced the last legacy combined UI projection with the brokerage-neutral Option-Adjusted Basis endpoint. The Retirement data has seven matched rows, but only two are genuinely unavailable, both because option P/L cannot be allocated safely across accounts. The shared table now presents the actual per-symbol basis reason instead of a provider-wide lifecycle warning. Focused test and full Angular suite (55) passed; build was clean. An isolated documented server confirmed the Retirement card reads 2 with the cross-account reason visible, and both Basis tabs request their brokerage-neutral endpoint. Docs, secrets, and diff checks passed. | Phase 8 remains blocked only on the separately authorized archive/reset/reopen lifecycle check |
 | 2026-07-29 | 8 completion | COMPLETE | Used a fresh synthetic-only data root and an isolated documented server; no brokerage artifact was read or written. In the browser, archived a flat reconciled symbol through the normal confirmation dialog, added a synthetic reopening event and confirmed exactly one active current period while the completed archive remained, then added a synthetic backdated event and confirmed the changed-archive warning. Removed the temporary fixture by moving it to Trash. Final full automated gate passed: backend 461, Angular build, Angular 55, docs, secret scan, and diff check. | No further action |
+| 2026-07-29 | Lifecycle vocabulary follow-up | COMPLETE | Owner clarified that a flat derived symbol is `CLOSED`, reserving archive terminology for explicitly sealed historical periods. The common Symbol Ledger projection, list filter (`state=closed`), summary (`closed_count`), Angular contract, badges, and filters now use Closed; archive-period data remains explicitly archived. Full backend suite 461 passed; Angular suite 61 passed; build, docs, secret, diff, and live Trading/Retirement verification recorded after their final gates. | No further action |
+| 2026-07-29 | History empty-state follow-up | COMPLETE | Owner removed the current-period empty message as needless visual space. Empty current event history now renders no card or text; archived-period empty states remain explicit because they appear only after the user selects an archive. Focused Symbol Ledger component suite 27 passed; Angular build, docs, and diff checks clean. | No further action |
 
 ## Opus new-session kickoff prompt
 

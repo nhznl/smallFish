@@ -218,10 +218,10 @@ other textual state.
   columns, snapshot columns, and deliberate modal editing for classification
   and notes.
 - Options uses the shared Symbol Ledger on both brokerage pages. It includes
-  only option-capable symbols, derives Active or Archived lifecycle state from
-  immutable broker facts, and keeps imported events read-only. Show current,
-  all-history, and archived periods on demand; retain account-aware option and
-  equity components as reconciliation context. Notes are the only editable
+  only option-capable symbols, derives Active or Closed lifecycle state from
+  immutable broker facts, and keeps imported events read-only. Show current
+  events directly and archived periods one at a time on demand; retain
+  account-aware option and equity components as reconciliation context. Notes are the only editable
   ledger metadata. Do not expose Trade Groups, manual lifecycle status, event
   reassignment, or broker-risk tables in this surface.
 - Option-Adjusted Basis includes only symbols with open long-equity positions
@@ -233,13 +233,15 @@ other textual state.
   basis. Calculate that basis from equity cost less option P/L only; do not
   include equity P/L. A `Basis unavailable` summary counts only genuinely
   unavailable calculations, not the normal indicative state of live marks.
-- Symbol Ledger history is immutable broker evidence. Default its paginated
-  history to the current period, allow an all-history view and an archived
-  period on demand, and surface a changed-archive warning beside the affected
-  summary. Offer Archive completed history only when the API marks the period
-  eligible; the confirmation must name the symbol, event count, period, and
-  realized P/L. A stale-period conflict refreshes facts, while an uncertain
-  retry reuses its request identity so it cannot create a second archive.
+- Symbol Ledger history is immutable broker evidence. Show current-period
+  events directly, and let each archived-period summary expand its own events;
+  only one archived period is expanded at a time. Surface a changed-archive
+  warning beside the affected summary. Hide the archive control when the
+  current period has no events; when current activity exists, show the archive
+  action or its blockers. The confirmation must name the symbol, event count,
+  period, and realized P/L. A stale-period conflict refreshes facts, while an
+  uncertain retry reuses its request identity so it cannot create a second
+  archive.
 - Retain warnings for breaches, near-strike positions, missing marks, stale
   data, and incomplete transaction history.
 - Editing should be deliberate. Prefer readable ledger rows with focused modal

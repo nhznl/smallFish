@@ -61,7 +61,7 @@ function listResponse(
       reasons: ['Closed equity activity is not imported for this brokerage.'],
     },
     summary: {
-      symbol_count: items.length, active_count: 1, archived_count: 0,
+      symbol_count: items.length, active_count: 1, closed_count: 0,
       needs_review_count: items.filter(row => row.warnings.length).length, lifetime_pnl: 1425,
     },
     items,
@@ -148,7 +148,7 @@ function archiveCreatedResponse(
       created_at: '2026-07-28T16:01:00Z', note: '', warnings: [],
     },
     symbol: {
-      ...detail, state: 'ARCHIVED', reset_eligible: false,
+      ...detail, state: 'CLOSED', reset_eligible: false,
       reset_blockers: ['PERIOD_EMPTY'], archived_period_count: 1,
       archives: [{
         archive_id: 'archive-1', symbol: 'DEMO', period_started_at: '2026-01-15T15:30:00Z',
@@ -257,6 +257,42 @@ describe('SymbolLedgerComponent', () => {
         expect(body).toContain(brokerage.institution);
         expect(body).toContain('not brokerage tax-lot or taxable realized P/L');
       });
+
+      it('hides archive controls when the current period has no events', async () => {
+        const api = spyApi();
+        const emptyPeriod = {
+          ...summary().current_period,
+          started_at: null,
+          event_count: 0,
+          first_event_at: null,
+          last_event_at: null,
+          net_cash_flow: 0,
+          realized_pnl: 0,
+        };
+        api.listSymbols.and.returnValue(of(listResponse(brokerage, [summary({ current_period: emptyPeriod })])));
+        api.getSymbol.and.returnValue(of(detailResponse(brokerage, { current_period: emptyPeriod })));
+        const fixture = await mount(api, brokerage.id);
+
+        (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.archive-control')).toBeNull();
+        expect(text(fixture)).not.toContain('Not ready to archive');
+      });
+
+      it('shows archive blockers when the current period has activity', async () => {
+        const api = spyApi();
+        api.listSymbols.and.returnValue(of(listResponse(brokerage)));
+        api.getSymbol.and.returnValue(of(detailResponse(brokerage)));
+        const fixture = await mount(api, brokerage.id);
+
+        (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.querySelector('.archive-control')).toBeTruthy();
+        expect(text(fixture)).toContain('Not ready to archive');
+        expect(text(fixture)).toContain('Open exposure remains, so this symbol is still active.');
+      });
     });
   }
 
@@ -288,14 +324,14 @@ describe('SymbolLedgerComponent', () => {
     api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0], [])));
     const fixture = await mount(api, 'tastytrade');
 
-    const archived = Array.from(
+    const closed = Array.from(
       fixture.nativeElement.querySelectorAll('.tab-bar .tab') as NodeListOf<HTMLButtonElement>
-    ).find(tab => tab.textContent?.includes('Archived'))!;
-    archived.click();
+    ).find(tab => tab.textContent?.includes('Closed'))!;
+    closed.click();
     fixture.detectChanges();
 
     expect(api.listSymbols).toHaveBeenCalledWith(
-      'tastytrade', { state: 'archived', exposure: 'options' }
+      'tastytrade', { state: 'closed', exposure: 'options' }
     );
     expect(text(fixture)).toContain('No symbol is confidently flat yet.');
   });
@@ -372,6 +408,24 @@ describe('SymbolLedgerComponent', () => {
     expect(fixture.componentInstance.eventHistory?.items.length).toBe(2);
   });
 
+  it('does not render an empty-state card for an empty current period', async () => {
+    const api = spyApi();
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0])));
+    api.getSymbol.and.returnValue(of(detailResponse(BROKERAGES[0])));
+    api.getSymbolEvents.and.returnValue(of(eventsResponse(BROKERAGES[0], {
+      total_event_count: 0, items: [],
+    })));
+    const fixture = await mount(api, 'tastytrade');
+
+    (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.history-empty-compact')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.history-empty')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.history-tabs')).toBeNull();
+    expect(api.getSymbolEvents).toHaveBeenCalledTimes(1);
+  });
+
   it('shows changed archive warnings and loads their history on demand', async () => {
     const api = spyApi();
     const detail = detailResponse(BROKERAGES[0]);
@@ -400,7 +454,54 @@ describe('SymbolLedgerComponent', () => {
     expect(api.getSymbolEvents).toHaveBeenCalledWith(
       'tastytrade', 'DEMO', { period: 'archive-changed', cursor: undefined, limit: 25 }
     );
-    expect(text(fixture)).toContain('Archived period selected');
+    expect(fixture.nativeElement.querySelector('.archive-events')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.archive-summary')?.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('keeps current events visible while one archived period expands at a time', async () => {
+    const api = spyApi();
+    const detail = detailResponse(BROKERAGES[0]);
+    detail.symbol.archives = [
+      {
+        archive_id: 'archive-one', symbol: 'DEMO', period_started_at: '2026-01-15T15:30:00Z',
+        period_ended_at: '2026-06-01T16:00:00Z', event_count: 2, realized_pnl: 100,
+        pnl_completeness: 'COMPLETE', verification_status: 'VERIFIED',
+        created_at: '2026-06-01T16:01:00Z', note: '', warnings: [],
+      },
+      {
+        archive_id: 'archive-two', symbol: 'DEMO', period_started_at: '2026-06-02T15:30:00Z',
+        period_ended_at: '2026-07-01T16:00:00Z', event_count: 3, realized_pnl: 200,
+        pnl_completeness: 'COMPLETE', verification_status: 'VERIFIED',
+        created_at: '2026-07-01T16:01:00Z', note: '', warnings: [],
+      },
+    ];
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0])));
+    api.getSymbol.and.returnValue(of(detail));
+    api.getSymbolEvents.and.returnValues(
+      of(eventsResponse()),
+      of(eventsResponse(BROKERAGES[0], { period: 'archive-one' })),
+      of(eventsResponse(BROKERAGES[0], { period: 'archive-two' })),
+    );
+    const fixture = await mount(api, 'tastytrade');
+
+    (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Current period');
+    expect(fixture.nativeElement.querySelectorAll('.event-table').length).toBe(1);
+
+    const archiveButtons = fixture.nativeElement.querySelectorAll('.archive-summary') as NodeListOf<HTMLButtonElement>;
+    archiveButtons[0].click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.archive-events').length).toBe(1);
+    expect(fixture.nativeElement.querySelectorAll('.event-table').length).toBe(2);
+    expect(archiveButtons[0].getAttribute('aria-expanded')).toBe('true');
+
+    archiveButtons[1].click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.archive-events').length).toBe(1);
+    expect(archiveButtons[0].getAttribute('aria-expanded')).toBe('false');
+    expect(archiveButtons[1].getAttribute('aria-expanded')).toBe('true');
+    expect(fixture.nativeElement.querySelectorAll('.event-table').length).toBe(2);
   });
 
   it('confirms and archives only a reset-eligible completed period', async () => {

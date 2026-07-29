@@ -66,7 +66,7 @@ export class BrokerageService {
   listSymbols(
     brokerageId: BrokerageId,
     options: {
-      state?: 'active' | 'archived' | 'all';
+      state?: 'active' | 'closed' | 'all';
       exposure?: 'options' | 'all';
       accountId?: string;
     } = {}

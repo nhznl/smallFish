@@ -214,7 +214,7 @@ def test_a_flat_reconciled_symbol_archives_without_a_metadata_write(adapter_env,
                                                                     brokerage_id):
     write_closed_cycle(brokerage_id)
     ledger = _symbol(brokerage_id)
-    assert ledger["state"] == "ARCHIVED"
+    assert ledger["state"] == "CLOSED"
     assert ledger["reconciliation_status"] == "RECONCILED"
     assert ledger["pnl_completeness"] == "COMPLETE"
     assert ledger["current_period"]["realized_pnl"] == pytest.approx(150)
@@ -269,11 +269,11 @@ def test_an_unconfirmed_provider_lifecycle_blocks_completion(adapter_env):
 def test_state_filter_defaults_to_active(adapter_env, brokerage_id):
     write_closed_cycle(brokerage_id)
     assert _symbols(brokerage_id)["items"] == []                 # default active
-    assert len(_symbols(brokerage_id, state="archived")["items"]) == 1
+    assert len(_symbols(brokerage_id, state="closed")["items"]) == 1
     assert len(_symbols(brokerage_id, state="all")["items"]) == 1
     summary = _symbols(brokerage_id, state="all")["summary"]
     assert summary["active_count"] == 0
-    assert summary["archived_count"] == 1
+    assert summary["closed_count"] == 1
 
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
@@ -315,7 +315,7 @@ def test_options_exposure_filter_excludes_equity_only_ledgers(adapter_env,
     assert [row["symbol"] for row in options["items"]] == ["ABC"]
     assert options["summary"]["symbol_count"] == 1
     assert options["summary"]["active_count"] == 1
-    assert options["summary"]["archived_count"] == 0
+    assert options["summary"]["closed_count"] == 0
 
 
 # ------------------------------------------------------------ cross-year ---
@@ -355,7 +355,7 @@ def test_notes_are_the_only_editable_field(adapter_env, brokerage_id):
     assert ok.json()["symbol"]["notes"] == "watch assignment history"
     assert _symbol(brokerage_id)["notes"] == "watch assignment history"
 
-    for payload in ({"state": "ARCHIVED"}, {"symbol": "XYZ"},
+    for payload in ({"state": "CLOSED"}, {"symbol": "XYZ"},
                     {"lifetime_pnl": 100}, {}):
         rejected = client.patch(
             f"/api/brokerages/{brokerage_id}/symbols/ABC", json=payload
@@ -365,7 +365,7 @@ def test_notes_are_the_only_editable_field(adapter_env, brokerage_id):
             "UNSUPPORTED_FIELD", "NOTHING_TO_UPDATE"
         }
     # The rejected patches changed nothing.
-    assert _symbol(brokerage_id)["state"] == "ARCHIVED"
+    assert _symbol(brokerage_id)["state"] == "CLOSED"
 
 
 def test_notes_do_not_leak_between_brokerages(adapter_env):
@@ -474,7 +474,7 @@ def test_reset_seals_the_period_and_leaves_broker_events_alone(adapter_env,
     assert refreshed["archived_period_count"] == 1
     assert refreshed["archived_pnl"] == pytest.approx(150)
     assert refreshed["lifetime_pnl"] == pytest.approx(150)
-    assert refreshed["state"] == "ARCHIVED"
+    assert refreshed["state"] == "CLOSED"
 
     # Broker history is untouched: every event is still readable.
     after = client.get(
@@ -927,7 +927,7 @@ def test_a_share_round_trip_inside_retained_history_is_complete(adapter_env):
     ledger = _symbol("tastytrade")
     assert ledger["reconciliation_status"] == "RECONCILED"
     assert ledger["pnl_completeness"] == "COMPLETE"
-    assert ledger["state"] == "ARCHIVED"
+    assert ledger["state"] == "CLOSED"
     assert ledger["warnings"] == []
     assert ledger["current_period"]["realized_pnl"] == pytest.approx(400)
     equity = next(row for row in ledger["components"] if row["instrument"] == "EQUITY")
@@ -960,7 +960,7 @@ def test_an_unbalanced_share_lot_is_a_reconciliation_gap_a_manual_row_can_close(
     after = _symbol("tastytrade")
     assert after["reconciliation_status"] == "RECONCILED"
     assert after["pnl_completeness"] == "COMPLETE"
-    assert after["state"] == "ARCHIVED"
+    assert after["state"] == "CLOSED"
     assert after["warnings"] == []
     # -900 share sale plus the -1300 opening cost the manual row supplies.
     assert after["current_period"]["realized_pnl"] == pytest.approx(-2200)

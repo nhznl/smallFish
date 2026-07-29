@@ -44,8 +44,8 @@ describe('BrokerageService', () => {
     service.listSymbols('tastytrade').subscribe();
     http.expectOne(`${base}/api/brokerages/tastytrade/symbols`).flush({});
 
-    service.listSymbols('tastytrade', { state: 'archived' }).subscribe();
-    http.expectOne(`${base}/api/brokerages/tastytrade/symbols?state=archived`).flush({});
+    service.listSymbols('tastytrade', { state: 'closed' }).subscribe();
+    http.expectOne(`${base}/api/brokerages/tastytrade/symbols?state=closed`).flush({});
 
     service.listSymbols('tastytrade', { state: 'active', exposure: 'options' }).subscribe();
     http.expectOne(
