@@ -129,10 +129,12 @@ def _one_ledger(brokerage_id: str, symbol: str,
     return snapshot, ledger
 
 
-def list_symbols(brokerage_id: str, *, state: str = "active",
+def list_symbols(brokerage_id: str, *, state: str = "active", exposure: str = "all",
                  account_id: str | None = None) -> dict[str, Any]:
     snapshot, ledgers = _ledgers(brokerage_id, account_id=account_id)
-    return symbol_ledger.list_response(snapshot, ledgers, state=state)
+    return symbol_ledger.list_response(
+        snapshot, ledgers, state=state, exposure=exposure
+    )
 
 
 def get_symbol(brokerage_id: str, symbol: str, *,

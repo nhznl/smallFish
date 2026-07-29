@@ -140,7 +140,9 @@ describe('SymbolLedgerComponent', () => {
         api.listSymbols.and.returnValue(of(listResponse(brokerage)));
         const fixture = await mount(api, brokerage.id);
 
-        expect(api.listSymbols).toHaveBeenCalledWith(brokerage.id, { state: 'active' });
+        expect(api.listSymbols).toHaveBeenCalledWith(
+          brokerage.id, { state: 'active', exposure: 'options' }
+        );
         const body = text(fixture);
         expect(body).toContain('Symbol Ledger');
         expect(body).toContain('DEMO');
@@ -152,6 +154,26 @@ describe('SymbolLedgerComponent', () => {
         expect(body).not.toContain('Ungrouped');
         // Nor may a component name the provider behind the brokerage.
         expect(body.toLowerCase()).not.toContain('snaptrade');
+      });
+
+      it('shows option symbols and option symbols with equity, but not equity-only holdings', async () => {
+        const api = spyApi();
+        api.listSymbols.and.returnValue(of(listResponse(brokerage, [
+          summary({ symbol: 'OPTION_ONLY', exposure: 'OPTIONS' }),
+          summary({ symbol: 'OPTION_WITH_EQUITY', exposure: 'EQUITY_AND_OPTIONS' }),
+          summary({ symbol: 'EQUITY_ONLY', exposure: 'EQUITY' }),
+        ])));
+        const fixture = await mount(api, brokerage.id);
+
+        expect(fixture.componentInstance.rows().map(row => row.symbol)).toEqual([
+          'OPTION_ONLY', 'OPTION_WITH_EQUITY',
+        ]);
+        const body = text(fixture);
+        expect(body).toContain('OPTION_ONLY');
+        expect(body).toContain('OPTION_WITH_EQUITY');
+        expect(body).not.toContain('EQUITY_ONLY');
+        expect(fixture.nativeElement.querySelector('.result-count')?.textContent)
+          .toContain('2 of 2');
       });
 
       it('shows retained-history coverage next to lifetime P/L', async () => {
@@ -219,7 +241,9 @@ describe('SymbolLedgerComponent', () => {
     archived.click();
     fixture.detectChanges();
 
-    expect(api.listSymbols).toHaveBeenCalledWith('tastytrade', { state: 'archived' });
+    expect(api.listSymbols).toHaveBeenCalledWith(
+      'tastytrade', { state: 'archived', exposure: 'options' }
+    );
     expect(text(fixture)).toContain('No symbol is confidently flat yet.');
   });
 

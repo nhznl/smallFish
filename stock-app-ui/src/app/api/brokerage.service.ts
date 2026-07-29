@@ -64,10 +64,16 @@ export class BrokerageService {
 
   listSymbols(
     brokerageId: BrokerageId,
-    options: { state?: 'active' | 'archived' | 'all'; accountId?: string } = {}
+    options: {
+      state?: 'active' | 'archived' | 'all';
+      exposure?: 'options' | 'all';
+      accountId?: string;
+    } = {}
   ): Observable<SymbolLedgerListResponse> {
     return this.http.get<SymbolLedgerListResponse>(`${this.base(brokerageId)}/symbols`, {
-      params: this.params({ state: options.state, account_id: options.accountId }),
+      params: this.params({
+        state: options.state, exposure: options.exposure, account_id: options.accountId,
+      }),
     });
   }
 

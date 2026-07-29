@@ -68,12 +68,15 @@ export class SymbolLedgerComponent implements OnChanges {
     const request = ++this.requestSequence;
     this.loading = true;
     this.error = '';
-    this.api.listSymbols(this.brokerageId, { state: this.state }).subscribe({
+    this.api.listSymbols(
+      this.brokerageId, { state: this.state, exposure: 'options' }
+    ).subscribe({
       next: data => {
         if (request !== this.requestSequence) return;
         this.data = data;
         this.loading = false;
-        if (this.expandedSymbol && !data.items.some(row => row.symbol === this.expandedSymbol)) {
+        if (this.expandedSymbol
+          && !this.optionItems().some(row => row.symbol === this.expandedSymbol)) {
           this.collapse();
         }
       },
@@ -156,8 +159,15 @@ export class SymbolLedgerComponent implements OnChanges {
 
   // -------------------------------------------------------------- render ---
 
+  /** The component is mounted in the Options tab, where equity-only holdings
+   * already have their own view. Equity remains visible when it is part of a
+   * symbol that also has option activity or positions. */
+  optionItems(): SymbolLedgerSummary[] {
+    return (this.data?.items ?? []).filter(row => row.exposure !== 'EQUITY');
+  }
+
   rows(): SymbolLedgerSummary[] {
-    const items = this.data?.items ?? [];
+    const items = this.optionItems();
     const term = this.search.trim().toUpperCase();
     if (!term) return items;
     return items.filter(row =>

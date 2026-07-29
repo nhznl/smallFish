@@ -276,6 +276,48 @@ def test_state_filter_defaults_to_active(adapter_env, brokerage_id):
     assert summary["archived_count"] == 1
 
 
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_options_exposure_filter_excludes_equity_only_ledgers(adapter_env,
+                                                              brokerage_id):
+    if brokerage_id == "tastytrade":
+        _write_tastytrade(
+            positions=[
+                {"instrument_type": "Equity Option", "contract_symbol": CONTRACT,
+                 "underlying_symbol": "ABC", "quantity": "1", "direction": "Short",
+                 "signed_quantity": "-1", "multiplier": "100", "mark_price": "0.75",
+                 "average_open_price": "6"},
+                {"instrument_type": "Equity", "contract_symbol": "XYZ",
+                 "underlying_symbol": "XYZ", "quantity": "10", "direction": "Long",
+                 "signed_quantity": "10", "multiplier": "1", "mark_price": "55",
+                 "average_open_price": "50"},
+            ],
+            activity=[_tastytrade_event("1")],
+        )
+    else:
+        _write_snaptrade(
+            holdings=[
+                {"asset_class": "OPTION", "symbol": CONTRACT,
+                 "underlying_symbol": "ABC", "option_type": "PUT", "strike": "50",
+                 "expiry": "2026-08-21", "quantity": "-1", "price": "0.75",
+                 "average_purchase_price": "6", "cost_basis": "-600",
+                 "market_value": "-75"},
+                {"asset_class": "STOCK", "symbol": "XYZ", "quantity": "10",
+                 "price": "55", "average_purchase_price": "50",
+                 "cost_basis": "500", "market_value": "550"},
+            ],
+            events=[_snaptrade_event("a1")],
+        )
+
+    unfiltered = _symbols(brokerage_id, state="all")
+    assert [row["symbol"] for row in unfiltered["items"]] == ["ABC", "XYZ"]
+
+    options = _symbols(brokerage_id, state="all", exposure="options")
+    assert [row["symbol"] for row in options["items"]] == ["ABC"]
+    assert options["summary"]["symbol_count"] == 1
+    assert options["summary"]["active_count"] == 1
+    assert options["summary"]["archived_count"] == 0
+
+
 # ------------------------------------------------------------ cross-year ---
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)

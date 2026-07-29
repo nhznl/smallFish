@@ -405,20 +405,27 @@ def build(snapshot: BrokerageSnapshot, *, archives: list[ArchiveBoundary],
 
 
 def list_response(snapshot: BrokerageSnapshot, ledgers: list[SymbolLedger], *,
-                  state: str = "active") -> dict[str, Any]:
+                  state: str = "active", exposure: str = "all") -> dict[str, Any]:
     wanted = str(state or "active").strip().lower()
     if wanted not in {"active", "archived", "all"}:
         wanted = "active"
-    selected = [
+    wanted_exposure = str(exposure or "all").strip().lower()
+    if wanted_exposure not in {"all", "options"}:
+        wanted_exposure = "all"
+    eligible = [
         ledger for ledger in ledgers
+        if wanted_exposure != "options" or _exposure(ledger.components) != "EQUITY"
+    ]
+    selected = [
+        ledger for ledger in eligible
         if wanted == "all" or ledger.state == wanted.upper()
     ]
     lifetime = [ledger.lifetime_pnl for ledger in selected]
     summary = {
         "symbol_count": len(selected),
-        "active_count": sum(1 for row in ledgers if row.state == "ACTIVE"),
-        "archived_count": sum(1 for row in ledgers if row.state == "ARCHIVED"),
-        "needs_review_count": sum(1 for row in ledgers if row.warnings),
+        "active_count": sum(1 for row in eligible if row.state == "ACTIVE"),
+        "archived_count": sum(1 for row in eligible if row.state == "ARCHIVED"),
+        "needs_review_count": sum(1 for row in eligible if row.warnings),
         "lifetime_pnl": (
             None if any(value is None for value in lifetime) else sum(lifetime)
         ),

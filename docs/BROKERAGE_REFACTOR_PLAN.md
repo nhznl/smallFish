@@ -22,10 +22,11 @@ says where the work actually is.
 | `3917d77` | 5 fix — spent option leg reading as unreconciled |
 | `754bb09` | 5 fix — reconcile share lots rather than declaring closed equity unknowable |
 
-**Current totals:** backend `stock-app/tests` 458 passing; Angular
-`npm run test:ci` 55 passing; `npm run build` clean. All 14 settled
+**Current totals:** backend `stock-app/tests` 460 passing; Angular
+`npm run test:ci` 57 passing; `npm run build` clean. All 14 settled
 `/api/brokerages` routes are served and all 21 frozen legacy brokerage routes
-still answer. Worktree clean, all work committed on `main`, nothing pushed.
+still answer. Worktree clean and all work committed on `main`; the latest Phase
+5 correction is not pushed.
 
 **Next action:** Phase 6, once the owner's Phase 5 checkpoint is explicitly
 approved. See the dashboard row for what remains open.
@@ -572,12 +573,16 @@ account numbers, or raw provider exception details.
 ### List symbol ledgers
 
 ```text
-GET /api/brokerages/{brokerage_id}/symbols?state=active|archived|all
+GET /api/brokerages/{brokerage_id}/symbols
+    ?state=active|archived|all
+    &exposure=all|options
 ```
 
-`state` defaults to `active`. The list is a compact summary suitable for the
-main table. Search and sorting remain client-side initially because the local
-ledger is small.
+`state` defaults to `active` and `exposure` defaults to `all`. The Options tabs
+request `exposure=options`, which includes `OPTIONS` and `EQUITY_AND_OPTIONS`
+ledgers but excludes `EQUITY` ledgers already presented under Holdings. The
+list is a compact summary suitable for the main table. Search and sorting
+remain client-side initially because the local ledger is small.
 
 Example response:
 
@@ -1451,6 +1456,7 @@ Append entries; never rewrite older evidence to make progress look cleaner.
 | 2026-07-29 | 5 (fix) | COMPLETE — automated checks passed; browser verification pending | Owner reported a symbol reading Unreconciled despite a manual reconciliation row. Reproduced with synthetic data and found three defects, all mine, none in the manual-reconciliation path: (1) an expiration whose opening trade predates the retained window was treated as an unexplained blank delta instead of a removal that closes zero, producing a mismatch no manual row could ever clear; (2) equity components were reconciled against retained share executions and could take a cash basis from them, though those cover only the fetch window — equity now always uses the broker cost basis, matching the compatibility view; (3) events with no surviving component — a closed share lot, a manual correction — were dropped from the symbol's history entirely, so the user's own correction was invisible. The Symbol Ledger now retains every event for the symbol for counts and history while money still comes from components. Added a `CLOSED_EQUITY_UNSUPPORTED` reason so a symbol whose shares closed reports an unavailable total with a stated cause rather than presenting its option-only figure as complete; such a symbol stays Active and cannot be reset. Six regression tests added. Full backend suite 457 passed; `npm run build` clean, `npm run test:ci` 55 passed; docs, secrets, `git diff --check` clean | Owner checkpoint still open |
 | 2026-07-29 | 5 (fix 2) | COMPLETE — automated checks passed; browser verification pending | Owner reported the previous fix's `CLOSED_EQUITY_UNSUPPORTED` message firing on many symbols. It was the wrong rule: Tastytrade *does* import share executions for option-traded underlyings, so "closed equity is not imported" was false for that brokerage, and treating every closed share lot as unknowable also made the manual reconciliation row meaningless in the new ledger. Replaced it with the evidence that actually settles the question — reconciliation. Equity components are built again even with no current position, so retained share executions are compared to the broker like option contracts are: a lot that opened and closed inside retained history reconciles and contributes its real cash; one whose opening trade predates the window reads `UNRECONCILED` with a remedy, and entering the missing trade clears it and releases the cash. Shares still held keep the broker cost basis when the window does not cover their opening lots — incomplete history (`EQUITY_ACTIVITY_HISTORY`), not a disagreement. `CLOSED_EQUITY_UNSUPPORTED` and the now-unused `equity_events_by_symbol` helper removed; portfolio-level closed-equity coverage remains where it always was, in the coverage block. Full backend suite 458 passed; `npm run build` clean, `npm run test:ci` 55 passed; docs, secrets, `git diff --check` clean | Owner checkpoint still open |
 | 2026-07-29 | Handoff | COMPLETE | Owner confirmed the corrected symbol and P/L behaviour on the Trading ledger and asked for a handoff-ready document. Added a "Resume here" section (commit map, current suite totals, next action), a "Deviations from the original design" list so a later agent does not revert six deliberate, test-covered choices, and a "Known open questions for the owner" list. Rewrote the new-session kickoff prompt to resume at Phase 6 instead of restarting at Phase 1 — following the old prompt would have redone the whole backend. Dashboard now distinguishes per-phase historical totals from current ones, and records the Phase 5 checkpoint as partially confirmed rather than approved. Coordination mailbox annotated as deliberately empty. Docs check passed; no code changed | Owner to approve the remaining Phase 5 checkpoint items, then Phase 6 |
+| 2026-07-29 | 5 (fix 3) | COMPLETE | Owner reported that both Options tabs repeated equity-only holdings already shown under Holdings. Added the brokerage-neutral `exposure=options` Symbol Ledger filter so rows and aggregate counts include `OPTIONS` and `EQUITY_AND_OPTIONS` but exclude `EQUITY`; the shared Angular component requests it for both brokerages and retains the same rule defensively for rendering, search, result counts, empty states, and expanded-row cleanup. Regression coverage runs the backend filter and shared component against Fidelity and Tastytrade. Full backend suite 460 passed; `npm run build` clean; `npm run test:ci` 57 passed. Live verification: Trading showed 16 of 16 option-capable ledgers instead of 21 all-symbol ledgers; Retirement showed 10 of 10; neither rendered an equity-only row and both retained mixed equity-and-option rows | Owner checkpoint still open; approve Phase 5 before Phase 6 |
 
 ## Opus new-session kickoff prompt
 

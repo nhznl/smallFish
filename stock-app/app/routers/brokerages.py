@@ -91,9 +91,12 @@ def post_sync(brokerage_id: str, request: dict | None = None) -> dict:
 @router.get("/{brokerage_id}/symbols")
 def get_symbols(brokerage_id: str,
                 state: str = Query(default="active"),
+                exposure: str = Query(default="all"),
                 account_id: str | None = Query(default=None)) -> dict:
     try:
-        return service.list_symbols(brokerage_id, state=state, account_id=account_id)
+        return service.list_symbols(
+            brokerage_id, state=state, exposure=exposure, account_id=account_id
+        )
     except service.BrokerageRequestError as exc:
         raise _fail(exc) from exc
 

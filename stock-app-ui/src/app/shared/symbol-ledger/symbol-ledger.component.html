@@ -86,7 +86,7 @@
           <span>Search</span>
           <input [(ngModel)]="search" type="search" placeholder="Symbol, account, or note">
         </label>
-        <span class="result-count">{{ rows().length }} of {{ ledger.items.length }}</span>
+        <span class="result-count">{{ rows().length }} of {{ optionItems().length }}</span>
       </div>
 
       @if (rows().length) {
@@ -284,14 +284,14 @@
             </tbody>
           </table>
         </div>
-      } @else if (ledger.items.length) {
+      } @else if (optionItems().length) {
         <div class="empty-state">
           <h3>No symbol matches your search</h3>
-          <p>Clear the search box to see all {{ ledger.items.length }} symbols.</p>
+          <p>Clear the search box to see all {{ optionItems().length }} symbols.</p>
         </div>
       } @else {
         <div class="empty-state">
-          <h3>No {{ state === 'all' ? '' : state }} symbols</h3>
+          <h3>No {{ state === 'all' ? '' : state }} option symbols</h3>
           <p>
             @if (state === 'active') {
               Nothing currently has open exposure at {{ ledger.brokerage.label }}.
