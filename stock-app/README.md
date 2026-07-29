@@ -39,6 +39,7 @@ stock-app/
 │   ├── snaptrade_service.py  # read-only SnapTrade holdings import
 │   ├── studies_read.py     # fail-closed Research Studies reader
 │   ├── capabilities.py     # optional-integration and core-data states
+│   ├── brokerages/         # brokerage registry, provider adapters, canonical facts
 │   └── routers/            # HTTP endpoint groups
 └── tests/
 ```
