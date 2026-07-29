@@ -9,7 +9,6 @@ import {
   BrokerageLedgerComponent,
   BrokerageLedgerPortfolioSlug,
   BrokerageLedgerSnapshot,
-  BrokerageLedgerState,
   BrokerageLedgerSymbol,
   BrokerageLedgerWarning,
 } from '../../model/brokerage-ledger';
@@ -30,7 +29,6 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
   loading = false;
   error = '';
   search = '';
-  state: '' | BrokerageLedgerState = '';
   expandedSymbol = '';
 
   private requestSequence = 0;
@@ -64,13 +62,25 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
   }
 
   basisSymbols(): BrokerageLedgerSymbol[] {
-    return (this.data?.symbols ?? []).filter(row => row.exposure === 'EQUITY_AND_OPTIONS');
+    return (this.data?.symbols ?? []).filter(row =>
+      row.exposure === 'EQUITY_AND_OPTIONS'
+      && row.components.some(component =>
+        component.instrument === 'EQUITY'
+        && component.side === 'LONG'
+        && component.state === 'OPEN'
+        && component.quantity > 0
+      )
+      && row.components.some(component =>
+        component.instrument === 'OPTION'
+        && component.state === 'OPEN'
+        && component.quantity !== 0
+      )
+    );
   }
 
   filteredSymbols(): BrokerageLedgerSymbol[] {
     const query = this.search.trim().toUpperCase();
     return this.basisSymbols().filter(row => {
-      if (this.state && row.state !== this.state) return false;
       if (!query) return true;
       const notes = row.annotations.map(annotation => annotation.text).join(' ');
       return `${row.symbol} ${row.accounts.join(' ')} ${notes}`.toUpperCase().includes(query);
@@ -79,23 +89,20 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
 
   resetFilters(): void {
     this.search = '';
-    this.state = '';
   }
 
   hasFilters(): boolean {
-    return !!(this.search || this.state);
+    return !!this.search;
   }
 
   toggleSymbol(symbol: string): void {
     this.expandedSymbol = this.expandedSymbol === symbol ? '' : symbol;
   }
 
-  openSymbolCount(): number {
-    return this.basisSymbols().filter(row => row.state === 'OPEN').length;
-  }
-
-  incompleteSymbolCount(): number {
-    return this.basisSymbols().filter(row => row.pnl_completeness !== 'COMPLETE').length;
+  unavailableBasisCount(): number {
+    return this.basisSymbols().filter(
+      row => row.adjusted_basis.completeness === 'UNAVAILABLE'
+    ).length;
   }
 
   basisWarnings(): BrokerageLedgerWarning[] {

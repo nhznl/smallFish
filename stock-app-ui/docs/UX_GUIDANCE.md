@@ -241,11 +241,13 @@ other textual state.
   spot/distance-to-strike, IV/source, and delta-shares columns. The ledger UX
   intentionally omits beta comparisons, beta-delta totals, risk-status columns,
   and the separate Portfolio Risk section.
-- Option-Adjusted Basis includes only symbols with both equity and option
-  exposure, so do not show a redundant Exposure column. Keep all Share Position
-  columns together before the Options columns, followed by Net P/L and the live
-  option-adjusted basis. Calculate that basis from equity cost less option P/L
-  only; do not include equity P/L.
+- Option-Adjusted Basis includes only symbols with both open long-equity and
+  open option positions, so do not show redundant Exposure or State controls.
+  Search is its only table filter. Keep all Share Position columns together
+  before the Options columns, followed by Net P/L and the live option-adjusted
+  basis. Calculate that basis from equity cost less option P/L only; do not
+  include equity P/L. A `Basis unavailable` summary counts only genuinely
+  unavailable calculations, not the normal indicative state of live marks.
 - Retain warnings for breaches, near-strike positions, missing marks, stale
   data, and incomplete transaction history.
 - Editing should be deliberate. Prefer readable ledger rows with focused modal

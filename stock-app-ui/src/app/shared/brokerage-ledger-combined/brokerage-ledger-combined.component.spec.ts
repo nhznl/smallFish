@@ -37,6 +37,19 @@ const SNAPSHOT: BrokerageLedgerSnapshot = {
       scope: 'SYMBOL', kind: 'NOTE', text: 'Review after earnings', source: 'USER', updated_at: null,
     }],
     components: [{
+      id: 'demo-equity', account_id: 'trading', account: 'Trading', instrument: 'EQUITY', side: 'LONG',
+      option_type: null, state: 'OPEN', quantity: 100, strike: null, expiry: null,
+      cash_in: 0, cash_out: -11_100, net_cash_flow: -11_100, mark_per_unit: 120,
+      mark_observed_at: '2026-07-28T16:00:00Z', open_market_value: 12_000,
+      realized_pnl: null, total_pnl: 900, pnl_completeness: 'INDICATIVE',
+      cash_flow_basis: 'POSITION_COST_BASIS', open_leg_count: 1, event_count: 0,
+      annotations: [], missing: [],
+      provenance: {
+        position_source: 'TASTYTRADE', activity_source: null, market_source: 'TASTYTRADE_MARK',
+        position_retrieved_at: '2026-07-28T16:00:00Z', activity_retrieved_at: null,
+        mark_observed_at: '2026-07-28T16:00:00Z', mark_retrieved_at: '2026-07-28T16:01:00Z',
+      },
+    }, {
       id: 'demo-call', account_id: 'trading', account: 'Trading', instrument: 'OPTION', side: 'SHORT',
       option_type: 'CALL', state: 'OPEN', quantity: -1, strike: 125, expiry: '2026-08-21',
       cash_in: 600, cash_out: 0, net_cash_flow: 600, mark_per_unit: 0.75,
@@ -56,6 +69,22 @@ const SNAPSHOT: BrokerageLedgerSnapshot = {
   }],
 };
 
+function withComponentStates(
+  symbol: string, equityState: 'OPEN' | 'FLAT', optionState: 'OPEN' | 'FLAT'
+) {
+  const base = SNAPSHOT.symbols[0];
+  return {
+    ...base,
+    symbol,
+    state: equityState === 'OPEN' || optionState === 'OPEN' ? 'OPEN' as const : 'FLAT' as const,
+    components: base.components.map(component => ({
+      ...component,
+      id: `${symbol}:${component.instrument}`,
+      state: component.instrument === 'EQUITY' ? equityState : optionState,
+    })),
+  };
+}
+
 describe('BrokerageLedgerCombinedComponent', () => {
   it('renders normalized summary fields and expands component provenance without calculating partial totals', async () => {
     const api = jasmine.createSpyObj<BrokerageLedgerService>('BrokerageLedgerService', ['getCombined']);
@@ -63,6 +92,16 @@ describe('BrokerageLedgerCombinedComponent', () => {
       ...SNAPSHOT,
       symbols: [
         ...SNAPSHOT.symbols,
+        {
+          ...withComponentStates('READY', 'OPEN', 'OPEN'),
+          adjusted_basis: {
+            realized_per_share: null, marked_per_share: 105, history_start: '2026-01-01',
+            completeness: 'INDICATIVE' as const, reason: null,
+          },
+          option_adjusted_basis_per_share: 105,
+        },
+        withComponentStates('OPTION_FLAT', 'OPEN', 'FLAT'),
+        withComponentStates('EQUITY_FLAT', 'FLAT', 'OPEN'),
         { ...SNAPSHOT.symbols[0], symbol: 'EQUITY_ONLY', exposure: 'EQUITY' },
       ],
     }));
@@ -78,7 +117,18 @@ describe('BrokerageLedgerCombinedComponent', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
     expect(text).toContain('Trading option-adjusted basis');
     expect(text).toContain('DEMO');
+    expect(text).toContain('READY');
+    expect(text).not.toContain('OPTION_FLAT');
+    expect(text).not.toContain('EQUITY_FLAT');
     expect(text).not.toContain('EQUITY_ONLY');
+    expect(text).not.toContain('Open matched symbols');
+    expect(text).not.toContain('Incomplete matched symbols');
+    expect(text).toContain('Basis unavailable');
+    expect(fixture.nativeElement.querySelector('.filter-toolbar select')).toBeNull();
+    const unavailableCard = Array.from(
+      fixture.nativeElement.querySelectorAll('.combined-stats .stat-card') as NodeListOf<HTMLElement>
+    ).find(card => card.querySelector('.stat-label')?.textContent === 'Basis unavailable');
+    expect(unavailableCard?.querySelector('.stat-value')?.textContent?.trim()).toBe('1');
     expect(text).toContain('Indicative');
     expect(text).toContain('—');
     const headers = Array.from(

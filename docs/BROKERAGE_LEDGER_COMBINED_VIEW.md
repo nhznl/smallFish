@@ -40,7 +40,8 @@ both expose exactly three brokerage-data tabs in the same order:
   separate for each brokerage and separate from imported broker facts.
 - **Options:** option positions, groups, lifecycle activity, and risk. The
   current Trading options vocabulary is the reference for both brokerages.
-- **Option-Adjusted Basis:** only symbols with both equity and option exposure.
+- **Option-Adjusted Basis:** only symbols with an open long-equity position and
+  an open option position.
 
 The Option-Adjusted Basis tabs render the same shared Angular component with a
 portfolio identifier (`TRADING` or `RETIREMENT`). Provider-specific sync
@@ -58,8 +59,9 @@ the user-captured G/L columns.
 ### Symbol summary table
 
 The Option-Adjusted Basis table keeps share economics together first, option
-economics second, and combines them only in the final columns. Exposure is not
-shown because every included symbol is Equity + Options:
+economics second, and combines them only in the final columns. Exposure and
+state are not shown because every included symbol has both open long shares and
+an open option position:
 
 | Column | Meaning |
 |---|---|
@@ -70,16 +72,17 @@ shown because every included symbol is Equity + Options:
 | Cost Price | Positive total equity cost |
 | Current Equity | Positive current equity market value |
 | Equity P/L | Current Equity minus Cost Price |
-| Equity P/L / Share | Equity P/L divided by Share Qty |
 | Net Credit | Non-negative option cash received; empty for equity-only symbols |
 | Net Debit | Non-positive option cash paid; empty for equity-only symbols |
 | Option P/L | Option lifecycle cash plus signed open option value |
 | Net P/L | Equity P/L plus Option P/L, using only the applicable blocks |
-| Option Adjusted Basis / Share | `(Cost Price - Option P/L) / Share Qty`; zero when there are no shares |
+| Adjusted Basis / Share | `(Cost Price - Option P/L) / Share Qty` |
 
-Summary cards above the table include only matched Equity + Options symbols.
-Filters are limited to search and state; warnings and incompleteness are not
-filter gates.
+Summary cards above the table include only the displayed open matched symbols.
+`Basis unavailable` counts only rows whose adjusted-basis completeness is
+`UNAVAILABLE`; the normal `INDICATIVE` state for a live marked position does
+not count as unavailable. Search is the only table filter. Warnings and
+completeness are not filter gates.
 
 ### Expanded symbol detail
 
