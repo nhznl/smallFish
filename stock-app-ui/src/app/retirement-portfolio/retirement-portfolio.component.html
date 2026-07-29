@@ -508,22 +508,7 @@
     @if (tab === 'options') {
       <div class="options-tab">
         <!-- ── Trade Groups ────────────────────────────────────────────────── -->
-        <app-brokerage-option-groups
-          [groups]="optionsData?.groups || []"
-          [loading]="optionsLoading"
-          [error]="optionsError || ''"
-          [message]="optionsMessage"
-          [timestamp]="optionsData?.as_of || null"
-          timestampLabel="As of"
-          [eventCount]="optionsData?.events?.length || 0"
-          [ungroupedCount]="optionsData?.summary?.ungrouped_event_count || 0"
-          eventColumnLabel="Legs"
-          [capability]="snaptrade"
-          emptyText="No option positions in the retirement account."
-          syncLabel="Sync from Fidelity"
-          caveat="Group P/L is computed from the retained SnapTrade transaction event ledger, so a fully-closed (FLAT) contract keeps its realized P/L instead of disappearing with the current-positions feed. Open groups show an indicative total from current broker marks; a contract that has left the positions feed before its closing transaction posts reads “awaiting close”."
-          (editGroup)="openSharedOptionGroup($event)">
-        </app-brokerage-option-groups>
+        <app-symbol-ledger brokerageId="fidelity" [refreshToken]="combinedRefreshToken" />
         <!-- ── Trade Group details drill-down ──────────────────────────────── -->
         @if (detailGroup; as group) {
           <app-modal width="min(780px, 94vw)"

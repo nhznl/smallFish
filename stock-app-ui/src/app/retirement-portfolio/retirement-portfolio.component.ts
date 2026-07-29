@@ -13,7 +13,7 @@ import {
 } from '../model/retirement-options';
 import { BrokerageLedgerCombinedComponent } from '../shared/brokerage-ledger-combined/brokerage-ledger-combined.component';
 import { BrokerageHoldingsComponent } from '../shared/brokerage-holdings/brokerage-holdings.component';
-import { BrokerageOptionGroupsComponent } from '../shared/brokerage-option-groups/brokerage-option-groups.component';
+import { SymbolLedgerComponent } from '../shared/symbol-ledger/symbol-ledger.component';
 import { BrokerRiskPositionsComponent } from '../shared/broker-risk-positions/broker-risk-positions.component';
 import { BrokerageOptionGroup } from '../model/brokerage-option-groups';
 
@@ -72,7 +72,7 @@ interface CorrelationCluster {
   standalone: true,
   imports: [
     CommonModule, FormsModule, MatTooltipModule, ModalComponent, CapabilityStateComponent,
-    BrokerageLedgerCombinedComponent, BrokerageHoldingsComponent, BrokerageOptionGroupsComponent,
+    BrokerageLedgerCombinedComponent, BrokerageHoldingsComponent, SymbolLedgerComponent,
     BrokerRiskPositionsComponent,
   ],
   templateUrl: './retirement-portfolio.component.html',

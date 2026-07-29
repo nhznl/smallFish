@@ -49,25 +49,7 @@
       <div class="state error">{{ error }}</div>
     }
 
-    <app-brokerage-option-groups
-      [groups]="activity?.groups || []"
-      [loading]="activityLoading"
-      [error]="activityError || ''"
-      [message]="activityMessage"
-      [timestamp]="activity?.last_sync_at ? shortTimestamp(activity!.last_sync_at) : null"
-      timestampLabel="Synced"
-      [eventCount]="activity?.events?.length || 0"
-      [ungroupedCount]="activity?.ungrouped_event_count || 0"
-      eventColumnLabel="Broker events"
-      [reconciliationCount]="activity?.reconciliation_issues?.length || 0"
-      [manualReconciliationCount]="manualEvents().length"
-      [capability]="tastytrade"
-      emptyText="No Tastytrade option groups are available."
-      syncLabel="Sync Tastytrade"
-      [caveat]="(activity?.pnl_definition || '') + ' Current marks exclude estimated closing fees. A group with missing marks fails closed instead of showing a partial P/L.'"
-      (editGroup)="openSharedGroup($event)"
-      (reviewReconciliation)="reconciliationOpen = true">
-    </app-brokerage-option-groups>
+    <app-symbol-ledger brokerageId="tastytrade" [refreshToken]="combinedRefreshToken" />
 
     @if (data && !loading) {
     <section class="stat-strip">

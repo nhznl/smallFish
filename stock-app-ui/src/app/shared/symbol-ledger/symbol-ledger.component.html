@@ -1,0 +1,308 @@
+<section class="panel symbol-ledger" aria-label="Symbol ledger">
+  <div class="panel-heading">
+    <div>
+      <h3 class="panel-title">Symbol Ledger</h3>
+      <small>
+        One durable record per underlying. Imported broker events are immutable;
+        Active and Archived are derived from open exposure, not set by hand.
+      </small>
+    </div>
+    @if (data) {
+      <span class="snapshot-chip">
+        <span>{{ data.brokerage.label }} positions</span>
+        <strong>{{ timestamp(data.as_of.positions) }}</strong>
+      </span>
+    }
+  </div>
+
+  <div class="panel-body">
+    @if (loading) {
+      <div class="ledger-loading" aria-busy="true" aria-label="Loading symbol ledger">
+        <div class="skeleton skeleton-stat"></div>
+        <div class="skeleton skeleton-table"></div>
+      </div>
+    } @else if (error) {
+      <div class="empty-state" role="alert">
+        <span class="badge badge-neg">Unavailable</span>
+        <h3>The symbol ledger could not load</h3>
+        <p>{{ error }}</p>
+        <button type="button" class="btn" (click)="load()">Try again</button>
+      </div>
+    } @else if (data; as ledger) {
+      @if (ledger.availability.status !== 'AVAILABLE') {
+        <div class="banner banner-warn" role="status">
+          <strong>{{ ledger.availability.status === 'UNAVAILABLE' ? 'Nothing imported yet.' : 'Some data is missing.' }}</strong>
+          <span>{{ ledger.availability.reasons.join(' ') }}</span>
+        </div>
+      }
+
+      @if (ledger.coverage.reasons.length) {
+        <div class="banner banner-info coverage-banner" role="status">
+          <strong>Retained history</strong>
+          <span>
+            @if (ledger.coverage.history_start) {
+              Begins {{ ledger.coverage.history_start }}.
+            } @else {
+              No imported activity yet.
+            }
+            Lifetime totals cover this retained history only.
+          </span>
+          <small>{{ ledger.coverage.reasons.join(' ') }}</small>
+        </div>
+      }
+
+      <div class="stat-strip">
+        <div class="stat-card">
+          <span class="stat-label">Active symbols</span>
+          <span class="stat-value">{{ ledger.summary.active_count }}</span>
+          <span class="stat-delta">{{ ledger.summary.archived_count }} archived</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Lifetime P/L</span>
+          <span class="stat-value" [class]="pnlClass(ledger.summary.lifetime_pnl)">
+            {{ money(ledger.summary.lifetime_pnl, true) }}
+          </span>
+          <span class="stat-delta">
+            Since {{ ledger.coverage.history_start || 'the first imported event' }}
+          </span>
+        </div>
+        <div class="stat-card" [class.stat-card-warn]="ledger.summary.needs_review_count">
+          <span class="stat-label">Needs review</span>
+          <span class="stat-value">{{ ledger.summary.needs_review_count }}</span>
+          <span class="stat-delta">Flatness or history could not be proven</span>
+        </div>
+      </div>
+
+      <div class="filter-toolbar" aria-label="Symbol ledger filters">
+        <div class="tab-bar" role="tablist" aria-label="Lifecycle filter">
+          <button type="button" class="tab" role="tab" [class.active]="state === 'active'"
+            [attr.aria-selected]="state === 'active'" (click)="setState('active')">Active</button>
+          <button type="button" class="tab" role="tab" [class.active]="state === 'archived'"
+            [attr.aria-selected]="state === 'archived'" (click)="setState('archived')">Archived</button>
+          <button type="button" class="tab" role="tab" [class.active]="state === 'all'"
+            [attr.aria-selected]="state === 'all'" (click)="setState('all')">All</button>
+        </div>
+        <label>
+          <span>Search</span>
+          <input [(ngModel)]="search" type="search" placeholder="Symbol, account, or note">
+        </label>
+        <span class="result-count">{{ rows().length }} of {{ ledger.items.length }}</span>
+      </div>
+
+      @if (rows().length) {
+        <div class="table-shell">
+          <table class="data-table ledger-table">
+            <thead>
+              <tr>
+                <th scope="col" class="sticky-symbol">Symbol</th>
+                <th scope="col">State</th>
+                <th scope="col">Accounts</th>
+                <th scope="col" class="num">Events</th>
+                <th scope="col" class="num">Net cash</th>
+                <th scope="col" class="num">Open value</th>
+                <th scope="col" class="num"
+                  matTooltip="Net cash plus the signed value of anything still open"
+                  matTooltipPosition="above">Current period P/L</th>
+                <th scope="col" class="num">Lifetime P/L</th>
+                <th scope="col">Notes</th>
+                <th scope="col"><span class="visually-hidden">Details</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.symbol) {
+                <tr [class.needs-review]="row.warnings.length"
+                  [class.archived-row]="row.state === 'ARCHIVED'">
+                  <td class="sticky-symbol symbol-cell">
+                    <strong>{{ row.symbol }}</strong>
+                    <small>{{ row.exposure === 'EQUITY_AND_OPTIONS' ? 'Equity + options'
+                      : row.exposure === 'EQUITY' ? 'Equity' : 'Options' }}</small>
+                  </td>
+                  <td>
+                    <span [class]="stateClass(row.state)">
+                      {{ row.state === 'ACTIVE' ? 'Active' : 'Archived' }}
+                    </span>
+                    @if (row.reconciliation_status === 'UNRECONCILED') {
+                      <span class="badge badge-warn"
+                        matTooltip="Imported activity does not match the broker position yet."
+                        matTooltipPosition="above">Unreconciled</span>
+                    }
+                  </td>
+                  <td class="accounts-cell">{{ row.accounts.join(', ') || '—' }}</td>
+                  <td class="num">{{ row.current_period.event_count }}</td>
+                  <td [class]="'num ' + pnlClass(row.current_period.net_cash_flow)">
+                    {{ money(row.current_period.net_cash_flow, true) }}
+                  </td>
+                  <td [class]="'num ' + pnlClass(row.current_period.open_market_value)">
+                    {{ money(row.current_period.open_market_value, true) }}
+                  </td>
+                  <td [class]="'num ' + pnlClass(row.current_period.total_pnl)">
+                    {{ money(row.current_period.total_pnl, true) }}
+                    <small [class]="completenessClass(row.pnl_completeness)">
+                      {{ completenessLabel(row.pnl_completeness) }}
+                    </small>
+                  </td>
+                  <td [class]="'num ' + pnlClass(row.lifetime_pnl)">
+                    {{ money(row.lifetime_pnl, true) }}
+                    @if (row.archived_period_count) {
+                      <small>{{ row.archived_period_count }} archived
+                        {{ row.archived_period_count === 1 ? 'period' : 'periods' }}</small>
+                    }
+                  </td>
+                  <td class="notes-cell" [matTooltip]="row.notes || ''" matTooltipPosition="above">
+                    {{ row.notes || '—' }}
+                  </td>
+                  <td>
+                    <button type="button" class="btn btn-ghost btn-sm expand-button"
+                      [attr.aria-expanded]="expandedSymbol === row.symbol"
+                      [attr.aria-label]="(expandedSymbol === row.symbol ? 'Hide' : 'Show') + ' ' + row.symbol + ' details'"
+                      (click)="toggle(row.symbol)">
+                      {{ expandedSymbol === row.symbol ? 'Hide' : 'Details' }}
+                    </button>
+                  </td>
+                </tr>
+
+                @if (row.warnings.length) {
+                  <tr class="warning-row">
+                    <td [attr.colspan]="10">
+                      @for (warning of row.warnings; track warning) {
+                        <span class="banner banner-warn inline-warning">{{ warning }}</span>
+                      }
+                    </td>
+                  </tr>
+                }
+
+                @if (expandedSymbol === row.symbol) {
+                  <tr class="detail-row">
+                    <td [attr.colspan]="10">
+                      @if (detailLoading) {
+                        <div class="skeleton skeleton-table" aria-busy="true"
+                          aria-label="Loading symbol details"></div>
+                      } @else if (detailError) {
+                        <div class="banner banner-neg" role="alert">{{ detailError }}</div>
+                      } @else if (detail; as symbol) {
+                        <div class="detail-grid">
+                          <div class="detail-block">
+                            <h4>Current period</h4>
+                            <dl>
+                              <div><dt>Events</dt><dd>{{ symbol.current_period.event_count }}</dd></div>
+                              <div><dt>First event</dt>
+                                <dd>{{ symbol.current_period.first_event_at ? timestamp(symbol.current_period.first_event_at) : '—' }}</dd></div>
+                              <div><dt>Last event</dt>
+                                <dd>{{ symbol.current_period.last_event_at ? timestamp(symbol.current_period.last_event_at) : '—' }}</dd></div>
+                              <div><dt>Realized</dt>
+                                <dd [class]="pnlClass(symbol.current_period.realized_pnl)">
+                                  {{ money(symbol.current_period.realized_pnl, true) }}</dd></div>
+                            </dl>
+                          </div>
+                          <div class="detail-block">
+                            <h4>Lifetime</h4>
+                            <dl>
+                              <div><dt>Archived periods</dt><dd>{{ symbol.archived_period_count }}</dd></div>
+                              <div><dt>Archived P/L</dt>
+                                <dd [class]="pnlClass(symbol.archived_pnl)">{{ money(symbol.archived_pnl, true) }}</dd></div>
+                              <div><dt>Lifetime P/L</dt>
+                                <dd [class]="pnlClass(symbol.lifetime_pnl)">{{ money(symbol.lifetime_pnl, true) }}</dd></div>
+                              <div><dt>All imported events</dt><dd>{{ symbol.event_count_total }}</dd></div>
+                            </dl>
+                          </div>
+                          <div class="detail-block detail-notes">
+                            <h4>Notes</h4>
+                            <textarea [(ngModel)]="noteDraft" rows="3"
+                              [attr.aria-label]="'Notes for ' + symbol.symbol"
+                              placeholder="Your notes about this symbol"></textarea>
+                            <div class="note-actions">
+                              <button type="button" class="btn btn-primary btn-sm"
+                                [disabled]="!noteDirty || noteSaving" [attr.aria-busy]="noteSaving"
+                                (click)="saveNote()">
+                                {{ noteSaving ? 'Saving…' : 'Save note' }}
+                              </button>
+                              @if (noteMessage) {
+                                <span class="note-message" role="status">{{ noteMessage }}</span>
+                              }
+                            </div>
+                          </div>
+                        </div>
+
+                        <h4 class="detail-subtitle">Positions and contracts</h4>
+                        <div class="table-shell">
+                          <table class="data-table component-table">
+                            <thead>
+                              <tr>
+                                <th scope="col">Type</th>
+                                <th scope="col">Account</th>
+                                <th scope="col" class="num">Qty</th>
+                                <th scope="col">Contract</th>
+                                <th scope="col" class="num">Cash in</th>
+                                <th scope="col" class="num">Cash out</th>
+                                <th scope="col" class="num">Market value</th>
+                                <th scope="col" class="num">P/L</th>
+                                <th scope="col" class="num">Events</th>
+                                <th scope="col">Provenance</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (component of symbol.components; track component.id) {
+                                <tr>
+                                  <td>
+                                    {{ componentLabel(component) }}
+                                    <small>{{ component.state === 'OPEN' ? 'Open' : 'Flat' }}</small>
+                                  </td>
+                                  <td>{{ component.account }}</td>
+                                  <td class="num">{{ number(component.quantity) }}</td>
+                                  <td>{{ contractLabel(component) }}</td>
+                                  <td [class]="'num ' + pnlClass(component.cash_in)">{{ money(component.cash_in) }}</td>
+                                  <td [class]="'num ' + pnlClass(component.cash_out)">{{ money(component.cash_out) }}</td>
+                                  <td [class]="'num ' + pnlClass(component.open_market_value)">
+                                    {{ money(component.open_market_value, true) }}</td>
+                                  <td [class]="'num ' + pnlClass(component.total_pnl)">
+                                    {{ money(component.total_pnl, true) }}
+                                    <small [class]="completenessClass(component.pnl_completeness)">
+                                      {{ completenessLabel(component.pnl_completeness) }}
+                                    </small>
+                                  </td>
+                                  <td class="num">{{ component.event_count }}</td>
+                                  <td class="provenance-cell">
+                                    <span>{{ provenanceLabel(component) }}</span>
+                                    @if (component.missing.length) {
+                                      <small class="urgent">Missing: {{ component.missing.join(', ') }}</small>
+                                    }
+                                  </td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        </div>
+                        <p class="caveat">
+                          Imported broker events are read-only. Values are smallFish
+                          cash-flow P/L, not brokerage tax-lot or taxable realized P/L.
+                        </p>
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else if (ledger.items.length) {
+        <div class="empty-state">
+          <h3>No symbol matches your search</h3>
+          <p>Clear the search box to see all {{ ledger.items.length }} symbols.</p>
+        </div>
+      } @else {
+        <div class="empty-state">
+          <h3>No {{ state === 'all' ? '' : state }} symbols</h3>
+          <p>
+            @if (state === 'active') {
+              Nothing currently has open exposure at {{ ledger.brokerage.label }}.
+            } @else if (state === 'archived') {
+              No symbol is confidently flat yet.
+            } @else {
+              Sync {{ ledger.brokerage.label }} to import positions and activity.
+            }
+          </p>
+        </div>
+      }
+    }
+  </div>
+</section>

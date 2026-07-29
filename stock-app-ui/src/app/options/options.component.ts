@@ -10,7 +10,7 @@ import { BrokerageLedgerService } from '../api/brokerage-ledger.service';
 import { StockService } from '../api/stock.service';
 import { BrokerageLedgerCombinedComponent } from '../shared/brokerage-ledger-combined/brokerage-ledger-combined.component';
 import { BrokerageHoldingsComponent } from '../shared/brokerage-holdings/brokerage-holdings.component';
-import { BrokerageOptionGroupsComponent } from '../shared/brokerage-option-groups/brokerage-option-groups.component';
+import { SymbolLedgerComponent } from '../shared/symbol-ledger/symbol-ledger.component';
 import { BrokerRiskPositionsComponent } from '../shared/broker-risk-positions/broker-risk-positions.component';
 import { BrokerageOptionGroup } from '../model/brokerage-option-groups';
 import { BrokerageHolding, BrokerageHoldingsSnapshot } from '../model/brokerage-holdings';
@@ -45,7 +45,7 @@ interface ManualReconcileForm {
   standalone: true,
   imports: [
     DatePipe, FormsModule, MatTooltipModule, ModalComponent,
-    BrokerageLedgerCombinedComponent, BrokerageHoldingsComponent, BrokerageOptionGroupsComponent,
+    BrokerageLedgerCombinedComponent, BrokerageHoldingsComponent, SymbolLedgerComponent,
     BrokerRiskPositionsComponent,
   ],
   templateUrl: './options.component.html',
