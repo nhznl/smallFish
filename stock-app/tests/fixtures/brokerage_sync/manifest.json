@@ -1,0 +1,12 @@
+{
+  "schema_name": "smallfish.brokerage-sync-characterization",
+  "schema_version": 1,
+  "frozen_now": "2026-07-29T16:00:00+00:00",
+  "artifacts": [
+    "expected_holdings.csv",
+    "expected_events.csv",
+    "expected_betas.csv",
+    "expected_greeks.csv"
+  ],
+  "notes": "Parsed-row equivalence baselines for Phase 3 materialization moves. Generated offline from injected providers; do not refresh against live data."
+}

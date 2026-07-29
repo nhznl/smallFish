@@ -7,7 +7,7 @@ within the settled boundaries below and must pause at a listed stop condition.
 
 ## Resume here
 
-Begin with Phase 0. Work one phase and one focused commit at a time. Update the
+Begin with Phase 1. Work one phase and one focused commit at a time. Update the
 dashboard and progress log in the same commit as each completed phase. Do not
 restart the completed Symbol Ledger, common brokerage API, legacy-route
 retirement, or provider-I/O extraction projects.
@@ -505,12 +505,59 @@ The cleanup is complete only when:
 - documentation, secret, dependency, brokerage-status, and diff gates pass; and
 - no live provider call was made without explicit owner authorization.
 
+## Phase 0 caller classification
+
+Production callers only. Tests are consumers of the characterization, not
+owners. Classifications feed Phases 1–4; do not delete a `DEAD` name until
+Phase 1 re-confirms no external command reference.
+
+### `snaptrade_service.py`
+
+| Name | Production callers | Classification |
+|---|---|---|
+| `HOLDINGS_HEADERS` | adapters/tests write helpers | MOVE → `brokerages.importers.snaptrade` |
+| `SnapTradeValidationError` | setup/CLI paths | MOVE → `snaptrade_setup`; COMPAT re-export |
+| `register_user`, `connection_portal_url`, `list_accounts` | CLI; `tools/brokerages.py` verify snippet | MOVE → `snaptrade_setup`; COMPAT re-export |
+| `_shell_quote`, `_validate_registration_target`, `_save_registration_credentials`, `_account_summary` | setup/CLI only | MOVE → `snaptrade_setup` |
+| `fetch_snaptrade`, `fetch_activities` | default providers for sync/activity | MOVE → importer; COMPAT re-export until seams migrate |
+| `_value`, `_text`, `_read_ledger` | `retirement_options`; `SnapTradeAdapter` | MOVE → public importer helpers |
+| `_now`, `_decimal`, `_num`, `_atomic_write`, normalization/`_summarize`/`_sync_changes`/`_update_trend` | holdings materialization | MOVE → `brokerages.importers.snaptrade` |
+| `sync` | registry `HOLDINGS`; CLI | COMPAT orchestrator (Phase 2), then facade |
+| `snapshot` | CLI | MOVE → importer; COMPAT re-export |
+| `_main` | `python -m app.snaptrade_service` | COMPAT facade |
+| `UNCLASSIFIED`, `_read_enrichment`, `_round2` | none in production | DEAD (Phase 1) |
+| `SOURCE`, `OPTION_MULTIPLIER` | holdings normalization only | MOVE with holdings |
+
+### `retirement_options.py`
+
+| Name | Production callers | Classification |
+|---|---|---|
+| `EVENT_HEADERS`, `sync_events`, `_normalize_activity`, `_read_events` | registry `ACTIVITY`; holdings side-effect; `SnapTradeAdapter` | MOVE → `brokerages.importers.snaptrade` (`sync_activity`) |
+| `BETA_HEADERS`, `GREEKS_HEADERS`, `sync_betas`, `sync_greeks`, `sync_market_data`, `_option_rows`, `_fetch_tasty_*` | registry `MARKET_DATA`; holdings side-effect | MOVE → `brokerages.importers.held_option_market_data` |
+| `_read_rows`, `_atomic_write`, `_epoch_ms_to_iso`, `_greek_key`, share-coverage helpers | adapter + market-data path | MOVE with market-data / activity owners |
+| `RetirementOptionsError` | `sync_events` validation | MOVE with activity; rename only if a public import requires it |
+| `_group_name`, `_build_groups` | tests only (`test_build_groups_*`); no production caller | DEAD (Phase 1) |
+| Unused imports (`pandas`, `yaml`, `build_market_inputs`, risk-engine symbols except `apply_call_coverage`) | none | DEAD import cleanup (Phase 1) |
+| Empty legacy section scaffolding / retired `snapshot` | gone from production; dead `_group` test helper remains | DEAD (Phase 1) |
+
+### Current Fidelity call counts (empty body)
+
+Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
+
+| Seam | Count today | Target after Phase 2 |
+|---|---|---|
+| positions (`fetch_snaptrade`) | 1 | 1 |
+| activities (`fetch_activities`) | 2 | 1 |
+| betas (`sync_betas`) | 2 | 1 |
+| greeks (`sync_greeks`) | 2 | 1 |
+| registry commands | HOLDINGS → ACTIVITY → MARKET_DATA | unchanged order, once each |
+
 ## Phase dashboard
 
 | Phase | Scope | Status | Evidence / next action |
 |---|---|---|---|
-| 0 | Characterize ownership, compatibility, and provider call counts | NOT STARTED | Begin here |
-| 1 | Delete proven-dead remnants | NOT STARTED | Blocked on Phase 0 |
+| 0 | Characterize ownership, compatibility, and provider call counts | COMPLETE | 13 characterization tests; golden artifacts under `stock-app/tests/fixtures/brokerage_sync/`; caller table above |
+| 1 | Delete proven-dead remnants | NOT STARTED | Begin here |
 | 2 | Make resource commands single-purpose | NOT STARTED | Blocked on Phase 1 |
 | 3 | Move materialization into explicit modules | NOT STARTED | Blocked on Phase 2 |
 | 4 | Isolate setup/CLI and finish compatibility facade | NOT STARTED | Blocked on Phase 3 |
@@ -521,6 +568,7 @@ The cleanup is complete only when:
 | Date | Phase | Status | Evidence / decision | Next action |
 |---|---|---|---|---|
 | 2026-07-29 | Planning | COMPLETE | Current callers, registry commands, provider boundaries, dead remnants, CLI compatibility, and duplicate Fidelity orchestration were audited. The completed brokerage/provider refactor plans and unused coordination mailbox were retired. | Hand Phase 0 to the implementation agent |
+| 2026-07-29 | 0 | COMPLETE | Added `test_fidelity_sync_characterization.py` (13 tests): empty-body duplicate call counts (positions 1 / activities 2 / betas 2 / greeks 2), per-resource cases, CLI surface + secret redaction, sync return shape, and golden CSV fixtures for holdings/events/betas/greeks. Caller classification recorded above. Gate suites green; no production behavior change. | Phase 1 — delete proven-dead remnants |
 
 ## Implementation-agent kickoff prompt
 

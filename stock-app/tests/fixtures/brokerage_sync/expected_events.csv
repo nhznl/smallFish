@@ -1,0 +1,2 @@
+schema_version,id,source,account_id,account,underlying_symbol,option_type,strike,expiry,occ_symbol,action,activity_type,units,net_value,price,fee,trade_date,settlement_date,description,imported_at,retrieved_at
+1,act-1,SNAPTRADE,acct-1,BrokerageLink,CLX,PUT,70,2026-09-18,CLX   260918P00070000,SELL_TO_OPEN,SELL,-1,370.34,3.70,0.66,2026-07-15T04:00:00Z,2026-07-16T04:00:00Z,SELL_TO_OPEN PUT (CLX),2026-07-29T16:00:00+00:00,2026-07-29T16:00:00+00:00
