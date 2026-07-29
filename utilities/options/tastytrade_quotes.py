@@ -10,7 +10,6 @@ secret values are never included in returned metadata.
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -131,15 +130,6 @@ def normalize_quote(event: Any, contract_symbol: str) -> dict[str, Any]:
     }
 
 
-async def _fetch_batch(symbols: dict[str, str], *,
-                       timeout_seconds: float) -> tuple[dict[str, dict[str, Any]], str | None]:
-    result = tastytrade_io.fetch_quotes(list(symbols), timeout_seconds)
-    return {
-        symbols[event_symbol]: normalize_quote(event, symbols[event_symbol])
-        for event_symbol, event in result.events.items()
-    }, result.error
-
-
 async def fetch_quotes_async(contract_symbols: list[str], *,
                              timeout_seconds: float = 8.0,
                              batch_size: int = 400,
@@ -154,33 +144,35 @@ async def fetch_quotes_async(contract_symbols: list[str], *,
         batch.retrieved_at = datetime.now(timezone.utc).isoformat()
         return batch
 
-    try:
-        creds = credentials or tastytrade_io.load_credentials()
-    except Exception as exc:  # noqa: BLE001 - surfaced as provider metadata
-        batch.errors.append(_safe_error(exc))
-        batch.retrieved_at = datetime.now(timezone.utc).isoformat()
-        return batch
+    mapping = {
+        stream_symbol: contract
+        for contract in unique
+        if (stream_symbol := streamer_symbol(contract))
+    }
+    invalid_count = len(unique) - len(mapping)
+    if invalid_count:
+        batch.errors.append(
+            f"{invalid_count} contract symbol(s) could not be converted to dxFeed"
+        )
 
-    batch.environment = creds.environment
-    for offset in range(0, len(unique), batch_size):
-        contracts = unique[offset:offset + batch_size]
-        mapping: dict[str, str] = {}
-        for contract in contracts:
-            stream_symbol = streamer_symbol(contract)
-            if stream_symbol:
-                mapping[stream_symbol] = contract
-        invalid_count = len(contracts) - len(mapping)
-        if invalid_count:
-            batch.errors.append(
-                f"{invalid_count} contract symbol(s) could not be converted to dxFeed"
+    if mapping:
+        try:
+            result = await tastytrade_io.fetch_quotes_async(
+                list(mapping),
+                timeout_seconds,
+                batch_size,
+                credentials=credentials,
             )
-        if not mapping:
-            continue
-        batch.batches += 1
-        quotes, error = await _fetch_batch(mapping, timeout_seconds=timeout_seconds)
-        batch.quotes.update(quotes)
-        if error:
-            batch.errors.append(error)
+        except Exception as exc:  # noqa: BLE001 - surfaced as provider metadata
+            batch.errors.append(_safe_error(exc))
+        else:
+            batch.environment = result.environment
+            batch.batches = result.batches
+            batch.quotes.update({
+                mapping[event_symbol]: normalize_quote(event, mapping[event_symbol])
+                for event_symbol, event in result.events.items()
+            })
+            batch.errors.extend(result.errors)
 
     batch.received = len(batch.quotes)
     batch.retrieved_at = datetime.now(timezone.utc).isoformat()

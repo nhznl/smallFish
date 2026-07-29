@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 from datetime import date
 from importlib import import_module
@@ -51,8 +52,17 @@ def test_load_credentials_validates_and_redacts_repr():
     assert credentials.environment == "live"
     assert "client-secret" not in repr(credentials)
     assert "refresh-token" not in repr(credentials)
-    with pytest.raises(io.TastytradeConfigurationError):
+    with pytest.raises(io.TastytradeConfigurationError) as missing:
         io.load_credentials({})
+    assert missing.value.unavailable is True
+
+    with pytest.raises(io.TastytradeConfigurationError) as invalid:
+        io.load_credentials({
+            "TT_CLIENT_SECRET": "client-secret",
+            "TT_REFRESH_TOKEN": "refresh-token",
+            "TT_ENV": "production",
+        })
+    assert invalid.value.unavailable is False
 
 
 @pytest.mark.parametrize(
@@ -244,6 +254,65 @@ def test_greeks_timeout_returns_no_error_and_closes_session():
     assert result.events == {}
     assert result.error is None
     assert session.closed
+
+
+def test_quotes_use_one_session_and_keep_partial_results_across_batches():
+    class Quote:
+        pass
+
+    events = [
+        [
+            SimpleNamespace(event_symbol=".ABC", bid_time=20, ask_time=20),
+            SimpleNamespace(event_symbol=".ABC", bid_time=10, ask_time=10),
+            SimpleNamespace(event_symbol=".XYZ", bid_time=15, ask_time=15),
+        ],
+        [RuntimeError("provider token account-id")],
+    ]
+    subscriptions = []
+
+    class Streamer:
+        def __init__(self, queue):
+            self.queue = queue
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def subscribe(self, event_type, symbols):
+            assert event_type is Quote
+            subscriptions.append(symbols)
+
+        async def get_event(self, _event_type):
+            event = self.queue.pop(0)
+            if isinstance(event, Exception):
+                raise event
+            return event
+
+    session = FakeSession(_credentials())
+    result = asyncio.run(io.fetch_quotes_async(
+        [".ZZZ", ".XYZ", ".ABC"],
+        1.0,
+        2,
+        credentials=_credentials("live"),
+        session_factory=lambda _credentials: session,
+        streamer_factory=lambda _session: Streamer(events.pop(0)),
+        event_type=Quote,
+    ))
+
+    assert subscriptions == [[".ABC", ".XYZ"], [".ZZZ"]]
+    assert result.events[".ABC"].bid_time == 20
+    assert ".XYZ" in result.events
+    assert ".ZZZ" not in result.events
+    assert result.errors == (
+        "RuntimeError: Tastytrade quote collection is unavailable; "
+        "check the brokerage setup and retry the collection.",
+    )
+    assert result.error == result.errors[0]
+    assert result.batches == 2
+    assert result.environment == "live"
+    assert session.entered and session.closed
 
 
 def test_importing_service_does_not_import_tastytrade_sdk(monkeypatch):

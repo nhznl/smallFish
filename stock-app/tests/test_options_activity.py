@@ -87,6 +87,21 @@ def test_market_data_error_hides_provider_message():
     assert account not in error
 
 
+def test_tastytrade_configuration_preserves_validation_status_codes(monkeypatch):
+    monkeypatch.delenv("TT_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("TT_REFRESH_TOKEN", raising=False)
+    with pytest.raises(options_activity.ActivityValidationError) as missing:
+        options_activity.fetch_tastytrade(date(2026, 1, 1), date(2026, 1, 2))
+    assert missing.value.status_code == 503
+
+    monkeypatch.setenv("TT_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("TT_REFRESH_TOKEN", "refresh-token")
+    monkeypatch.setenv("TT_ENV", "production")
+    with pytest.raises(options_activity.ActivityValidationError) as invalid:
+        options_activity.fetch_tastytrade(date(2026, 1, 1), date(2026, 1, 2))
+    assert invalid.value.status_code == 422
+
+
 def _greek(*, event_symbol=".ABC260821P50", volatility="0.44"):
     observed = datetime(2026, 7, 20, 15, 0, tzinfo=timezone.utc)
     return {

@@ -12,6 +12,7 @@ from .io import (
     fetch_greeks,
     fetch_market_metrics,
     fetch_quotes,
+    fetch_quotes_async,
     load_credentials,
     verify_session,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "fetch_greeks",
     "fetch_market_metrics",
     "fetch_quotes",
+    "fetch_quotes_async",
     "load_credentials",
     "verify_session",
 ]

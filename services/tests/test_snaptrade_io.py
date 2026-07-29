@@ -55,6 +55,10 @@ def test_credentials_redaction_and_auth_modes():
     with pytest.raises(io.SnapTradeConfigurationError):
         io.user_kwargs(_credentials(user=False))
 
+    with pytest.raises(io.SnapTradeConfigurationError) as missing:
+        io.load_credentials({})
+    assert missing.value.unavailable is True
+
 
 def test_registration_and_portal_return_raw_bodies():
     client = Client([])

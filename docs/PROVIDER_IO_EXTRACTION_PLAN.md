@@ -12,10 +12,12 @@ follow-up; it must not recreate any retired ledger, route, trade-group, or
 compatibility surface. See
 [`BROKERAGE_REFACTOR_PLAN.md`](BROKERAGE_REFACTOR_PLAN.md).
 
-## Resume here
+## Completion state
 
-The next implementation step is Phase 0 below. Do not restart any phase from the
-brokerage refactor.
+No implementation phase remains. The phase descriptions below are retained as
+the acceptance record; do not restart either this extraction or any phase from
+the brokerage refactor. Future work should begin from a reproduced regression
+or a separately approved requirement.
 
 This plan extracts provider communication into two top-level packages:
 
@@ -455,7 +457,7 @@ Pause and ask the owner before proceeding if:
 | 1 | Shared Tastytrade I/O for backend | COMPLETE | Phase 2 can begin | 11 service tests under API venv; 10 passed + 1 backend-only skip under utilities; 450 backend tests; docs, secret, and diff checks clean |
 | 2 | Shared SnapTrade I/O for backend | COMPLETE | Phase 3 can begin | 4 service tests; backend, utilities, docs, secret, and diff checks clean |
 | 3 | Utilities and verification migration | COMPLETE | Phase 4 can begin | 467 utilities tests; 10 service tests + 1 backend-only skip; status, docs, secret, and diff checks clean |
-| 4 | Enforcement, docs, full regression | COMPLETE | No planned work remains | 444 backend tests; 465 utilities tests; Tastytrade service tests pass in both runtimes; SnapTrade service tests pass in the backend; all offline gates, docs, secret, and diff checks clean; read-only verification and owner-initiated Tastytrade/Fidelity sync validation passed |
+| 4 | Enforcement, docs, full regression | COMPLETE | No planned work remains | 446 backend tests; 466 utilities tests; Tastytrade service tests pass in both runtimes; SnapTrade service tests pass in the backend; all offline gates, docs, secret, and diff checks clean; read-only verification and owner-initiated Tastytrade/Fidelity sync validation passed |
 
 ## Progress log
 
@@ -466,13 +468,13 @@ Pause and ask the owner before proceeding if:
 | 2026-07-29 | 1 | COMPLETE | Added the stdlib-only shared Tastytrade transport package with lazy SDK imports, redacted credentials, session lifecycle ownership, raw account/metric/Greek envelopes, and fake-SDK coverage under both runtimes. Backend consumers retain their account-selection, normalization, artifact, and response-shape policy. | Phase 2 |
 | 2026-07-29 | 2 | COMPLETE | Added shared SnapTrade transport with lazy SDK client/auth construction, raw setup/account/position/activity payloads, and defensive offset pagination. The backend retains status mapping, credential persistence, CLI output, normalization, artifacts, and provider injection seams. | Phase 3 |
 | 2026-07-29 | 3 | COMPLETE | Moved utilities quote streaming and verification to the shared Tastytrade service, replaced direct SDK version imports with package metadata, and enforced SDK-import confinement plus duplicated-pin parity. Quote normalization and archive semantics remain in utilities. | Phase 4 |
-| 2026-07-29 | 4 | COMPLETE | Caller audit retained the documented consumer seams (`options_activity.sync`, `retirement_options.sync_events`/`sync_market_data`, and `snaptrade_service.sync`) because the registry and compatibility commands still use them. It removed pure credential/type delegates and an unused quote-batch parameter, leaving provider credentials and SDK types owned solely by `services/`. Final ownership docs now describe `services/` as the credential/session/client/streaming/paging/raw-payload owner. Both `pip check` runs passed; 444 backend and 465 utilities tests passed under normal and `SFP_BLOCK_NETWORK=1` gates; Tastytrade service tests passed under both runtimes (one backend-only skip under utilities) and SnapTrade service tests passed under the backend runtime. Documentation, secret, and diff checks are clean. Owner-authorized read-only verification and one owner-initiated Tastytrade and Fidelity UI sync then confirmed available capabilities, expected API/artifact schemas, and safe aggregate counts without exposing provider payloads or identifiers. | Complete |
+| 2026-07-29 | 4 | COMPLETE | Caller audit retained the documented consumer seams (`options_activity.sync`, `retirement_options.sync_events`/`sync_market_data`, and `snaptrade_service.sync`) because the registry and compatibility commands still use them. It removed pure credential/type delegates, leaving provider credentials and SDK types owned solely by `services/`. Final ownership docs now describe `services/` as the credential/session/client/streaming/paging/raw-payload owner. Both `pip check` runs passed; 444 backend and 465 utilities tests passed under normal and `SFP_BLOCK_NETWORK=1` gates; Tastytrade service tests passed under both runtimes (one backend-only skip under utilities) and SnapTrade service tests passed under the backend runtime. Documentation, secret, and diff checks are clean. Owner-authorized read-only verification and one owner-initiated Tastytrade and Fidelity UI sync then confirmed available capabilities, expected API/artifact schemas, and safe aggregate counts without exposing provider payloads or identifiers. | Complete |
+| 2026-07-29 | Post-completion review | COMPLETE | Corrected the async quote delegation so `services.tastytrade` owns credential loading, one session, bounded batches, latest raw events, and per-batch safe errors without nesting `asyncio.run()`. Restored the original Tastytrade and SnapTrade 422/503 configuration mappings and added regression coverage. Replaced stale Phase 0 restart instructions with a maintenance handoff. Both `pip check` runs passed; 446 backend and 466 utilities tests passed under normal and `SFP_BLOCK_NETWORK=1`; documentation, secret, status, and diff gates are clean. | Complete |
 
-## Terra kickoff prompt
+## Post-completion maintenance handoff
 
 ```text
-Implement the provider-I/O extraction described in
-docs/PROVIDER_IO_EXTRACTION_PLAN.md.
+Maintain the completed provider-I/O boundary described in this document.
 
 Read, in order:
 1. AGENTS.md
@@ -486,10 +488,10 @@ The Symbol Ledger refactor and legacy cleanup are complete. Do not restart
 them and do not recreate any retired route, projection, grouping concept, or
 CSV config path.
 
-Begin with Phase 0. Work one phase and one focused commit at a time. Run the
-phase gate before committing, update the plan dashboard/progress log in the
-same commit, and inspect git status before staging. Preserve pre-existing user
-changes. Do not push or open a pull request.
+Do not restart Phases 0-4. Begin from a reproduced regression or a separately
+approved requirement, make one focused change at a time, and run the relevant
+phase compatibility checks plus the final gate. Preserve pre-existing user
+changes and inspect git status before staging.
 
 The boundary is strict: services/ owns provider authentication, sessions,
 pagination/streaming, fetches, and raw payload envelopes. Consumer modules own
@@ -497,7 +499,6 @@ normalization, financial/lifecycle policy, artifact writes, and public API
 shapes. Both test suites remain offline. Never print a credential, account
 identifier, raw provider payload, or unsanitized provider exception.
 
-Pause only at a stop condition in the plan. After Phase 4, report automated
-verification separately from optional live-provider verification; do not make
-a live call without explicit owner permission.
+Report automated verification separately from optional live-provider
+verification; do not make a live call without explicit owner permission.
 ```

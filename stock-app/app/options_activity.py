@@ -285,7 +285,9 @@ def fetch_tastytrade(start_date: date, end_date: date) -> tuple[list[Any], list[
             start_date, end_date, account_selector=select_account
         )
     except tastytrade_io.TastytradeConfigurationError as exc:
-        raise ActivityValidationError(str(exc), 503) from exc
+        raise ActivityValidationError(
+            str(exc), 503 if exc.unavailable else 422
+        ) from exc
 
     greeks: list[Any] = []
     greeks_error = None

@@ -110,8 +110,17 @@ def test_config_paths(tmp_path, monkeypatch):
 def test_register_rejected_for_personal_key(holdings_env, monkeypatch):
     monkeypatch.setenv("SNAPTRADE_CLIENT_ID", "PERS-ABC")
     monkeypatch.setenv("SNAPTRADE_CONSUMER_KEY", "ckey")
-    with pytest.raises(snaptrade_service.SnapTradeValidationError, match="personal API keys"):
+    with pytest.raises(
+        snaptrade_service.SnapTradeValidationError, match="personal API keys"
+    ) as rejected:
         snaptrade_service.register_user()
+    assert rejected.value.status_code == 422
+
+
+def test_register_missing_app_credentials_is_unavailable(holdings_env):
+    with pytest.raises(snaptrade_service.SnapTradeValidationError) as missing:
+        snaptrade_service.register_user()
+    assert missing.value.status_code == 503
 
 
 def test_registration_credentials_are_saved_without_being_printed(

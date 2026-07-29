@@ -28,6 +28,10 @@ class SnapTradeCredentials:
 class SnapTradeConfigurationError(ValueError):
     """Invalid environment-backed SnapTrade configuration."""
 
+    def __init__(self, message: str, *, unavailable: bool = False):
+        super().__init__(message)
+        self.unavailable = unavailable
+
 
 class SnapTradeServiceError(RuntimeError):
     """Safe provider-boundary error; original detail remains chained."""
@@ -57,7 +61,8 @@ def load_credentials(environ: Mapping[str, str] | None = None) -> SnapTradeCrede
     if not client_id or not consumer_key:
         raise SnapTradeConfigurationError(
             "SnapTrade app credentials are not configured; set "
-            "SNAPTRADE_CLIENT_ID and SNAPTRADE_CONSUMER_KEY in app.env"
+            "SNAPTRADE_CLIENT_ID and SNAPTRADE_CONSUMER_KEY in app.env",
+            unavailable=True,
         )
     return SnapTradeCredentials(
         client_id, consumer_key, get("SNAPTRADE_USER_ID") or None,
@@ -76,7 +81,8 @@ def user_kwargs(credentials: SnapTradeCredentials) -> dict[str, str]:
         raise SnapTradeConfigurationError(
             "SnapTrade user is not registered; run "
             "'python -m app.snaptrade_service register' and save "
-            "SNAPTRADE_USER_ID/SNAPTRADE_USER_SECRET to app.env"
+            "SNAPTRADE_USER_ID/SNAPTRADE_USER_SECRET to app.env",
+            unavailable=True,
         )
     return {"user_id": credentials.user_id, "user_secret": credentials.user_secret}
 

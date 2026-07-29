@@ -31,6 +31,10 @@ class TastytradeCredentials:
 class TastytradeConfigurationError(ValueError):
     """Missing or invalid environment-backed Tastytrade configuration."""
 
+    def __init__(self, message: str, *, unavailable: bool = False):
+        super().__init__(message)
+        self.unavailable = unavailable
+
 
 class TastytradeServiceError(RuntimeError):
     """Safe provider-boundary failure; the original exception remains chained."""
@@ -73,6 +77,9 @@ class GreeksResult:
 class QuotesResult:
     events: dict[str, Any]
     error: str | None = None
+    errors: tuple[str, ...] = ()
+    batches: int = 0
+    environment: str | None = None
 
 
 SessionFactory = Callable[[TastytradeCredentials], Any]
@@ -90,7 +97,8 @@ def load_credentials(environ: Mapping[str, str] | None = None) -> TastytradeCred
     if not secret or not token:
         raise TastytradeConfigurationError(
             "Tastytrade credentials are not configured; set "
-            "TT_CLIENT_SECRET/TT_REFRESH_TOKEN in app.env"
+            "TT_CLIENT_SECRET/TT_REFRESH_TOKEN in app.env",
+            unavailable=True,
         )
     environment = values.get("TT_ENV", "").strip().lower() or "sandbox"
     if environment not in {"live", "sandbox"}:
@@ -102,6 +110,13 @@ def _safe_optional_error(operation: str, exc: Exception) -> str:
     return (
         f"{type(exc).__name__}: Tastytrade {operation} is unavailable; "
         "check the brokerage setup and retry the sync."
+    )
+
+
+def _safe_quote_error(exc: Exception) -> str:
+    return (
+        f"{type(exc).__name__}: Tastytrade quote collection is unavailable; "
+        "check the brokerage setup and retry the collection."
     )
 
 
@@ -263,52 +278,108 @@ def fetch_greeks(
         return GreeksResult(latest, _safe_optional_error("Greek data", exc))
 
 
-def fetch_quotes(
+async def fetch_quotes_async(
     streamer_symbols: list[str],
     timeout_seconds: float,
+    batch_size: int = 400,
     *,
     credentials: TastytradeCredentials | None = None,
     session_factory: SessionFactory | None = None,
     streamer_factory: StreamerFactory | None = None,
     event_type: Any = None,
 ) -> QuotesResult:
-    """Collect latest raw DXLink quote events for provider streamer symbols."""
+    """Collect raw DXLink quotes in bounded batches within one provider session."""
+    if timeout_seconds <= 0 or batch_size <= 0:
+        raise ValueError("quote timeout and batch size must be positive")
     symbols = sorted({symbol for symbol in streamer_symbols if symbol})
     if not symbols:
         return QuotesResult({})
     creds = credentials or load_credentials()
     latest: dict[str, Any] = {}
+    errors: list[str] = []
+    batches = 0
 
     async def read(session: Any) -> dict[str, Any]:
-        nonlocal event_type
+        nonlocal event_type, batches
         if event_type is None:
             from tastytrade.dxfeed import Quote
             event_type = Quote
-        if streamer_factory is None:
-            from tastytrade import DXLinkStreamer
-            streamer = DXLinkStreamer(session)
-        else:
-            streamer = streamer_factory(session)
-        async with streamer:
-            await streamer.subscribe(event_type, symbols)
-            loop, deadline = asyncio.get_running_loop(), asyncio.get_running_loop().time() + timeout_seconds
-            while set(symbols) - latest.keys():
-                remaining = deadline - loop.time()
-                if remaining <= 0:
-                    break
-                try:
-                    event = await asyncio.wait_for(streamer.get_event(event_type), remaining)
-                except (asyncio.TimeoutError, TimeoutError):
-                    break
-                symbol = str(_event_value(event, "event_symbol") or "")
-                if symbol in symbols:
-                    latest[symbol] = event
+        for offset in range(0, len(symbols), batch_size):
+            requested = symbols[offset:offset + batch_size]
+            batches += 1
+            try:
+                if streamer_factory is None:
+                    from tastytrade import DXLinkStreamer
+                    streamer = DXLinkStreamer(session)
+                else:
+                    streamer = streamer_factory(session)
+                async with streamer:
+                    await streamer.subscribe(event_type, requested)
+                    loop = asyncio.get_running_loop()
+                    deadline = loop.time() + timeout_seconds
+                    while set(requested) - latest.keys():
+                        remaining = deadline - loop.time()
+                        if remaining <= 0:
+                            break
+                        try:
+                            event = await asyncio.wait_for(
+                                streamer.get_event(event_type), remaining
+                            )
+                        except (asyncio.TimeoutError, TimeoutError):
+                            break
+                        symbol = str(_event_value(event, "event_symbol") or "")
+                        if symbol not in requested:
+                            continue
+                        prior = latest.get(symbol)
+                        event_order = max(
+                            int(_event_value(event, "bid_time") or 0),
+                            int(_event_value(event, "ask_time") or 0),
+                            int(_event_value(event, "event_time") or 0),
+                        )
+                        prior_order = max(
+                            int(_event_value(prior, "bid_time") or 0),
+                            int(_event_value(prior, "ask_time") or 0),
+                            int(_event_value(prior, "event_time") or 0),
+                        ) if prior is not None else -1
+                        if event_order >= prior_order:
+                            latest[symbol] = event
+            except Exception as exc:  # Partial batches remain useful.
+                errors.append(_safe_quote_error(exc))
         return latest
 
     try:
-        return QuotesResult(asyncio.run(_with_session(creds, read, session_factory)))
+        await _with_session(creds, read, session_factory)
     except Exception as exc:
-        return QuotesResult(latest, _safe_optional_error("quote data", exc))
+        errors.append(_safe_quote_error(exc))
+    return QuotesResult(
+        events=latest,
+        error=errors[0] if errors else None,
+        errors=tuple(errors),
+        batches=batches,
+        environment=creds.environment,
+    )
+
+
+def fetch_quotes(
+    streamer_symbols: list[str],
+    timeout_seconds: float,
+    batch_size: int = 400,
+    *,
+    credentials: TastytradeCredentials | None = None,
+    session_factory: SessionFactory | None = None,
+    streamer_factory: StreamerFactory | None = None,
+    event_type: Any = None,
+) -> QuotesResult:
+    """Synchronous boundary for callers that do not already own an event loop."""
+    return asyncio.run(fetch_quotes_async(
+        streamer_symbols,
+        timeout_seconds,
+        batch_size,
+        credentials=credentials,
+        session_factory=session_factory,
+        streamer_factory=streamer_factory,
+        event_type=event_type,
+    ))
 
 
 def verify_session(

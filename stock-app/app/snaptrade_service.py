@@ -169,7 +169,9 @@ def register_user(user_id: str | None = None) -> dict[str, str]:
     try:
         body = snaptrade_io.register_user(user_id)
     except snaptrade_io.SnapTradeConfigurationError as exc:
-        raise SnapTradeValidationError(str(exc)) from exc
+        raise SnapTradeValidationError(
+            str(exc), 503 if exc.unavailable else 422
+        ) from exc
     except snaptrade_io.SnapTradeServiceError as exc:
         raise SnapTradeValidationError(str(exc), 502) from exc
     return {
