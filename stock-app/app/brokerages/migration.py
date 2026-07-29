@@ -1,116 +1,37 @@
 """Carrying app-owned work across from the per-provider files into the common
-stores, so a cutover never costs the user something they typed or captured.
-
-Two migrations live here, both two-step: a ``report`` that reads and decides
-nothing, and a ``migrate`` that writes only what is unambiguous. Neither ever
-reads a legacy file destructively or rewrites one — the old artifacts remain the
-rollback boundary.
-
-Trade-group *names* and manual Active/Archived values are not authoritative: the
-new design derives lifecycle and names a ledger after its symbol. A note the user
-wrote is real work and must survive; when two groups for one symbol carry
-different notes, no automatic rule can pick a winner, so that case is reported
-rather than resolved.
+store, so a cutover never costs the user something they typed or captured.
 
 Captured gain/loss percentages are historical measurements that cannot be
 recomputed — the mark they were taken against is gone — so they are copied
-across verbatim and keyed the same way the common store keys them.
+across verbatim and keyed the same way the common store keys them. Two-step:
+``gain_loss_snapshot_report`` reads and decides nothing;
+``migrate_gain_loss_snapshots`` writes only what is not already present. Neither
+reads a legacy file destructively or rewrites one — the old artifact remains a
+rollback boundary until it is separately retired.
+
+The group-notes migration that used to live here — carrying a trade group's
+free-text note into symbol metadata — was retired with the group artifacts it
+read. Five notes that were never migrated were deliberately not carried over;
+that was an owner decision, not an oversight.
 """
 
 from __future__ import annotations
 
 import csv
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 from .. import config, options_activity
-from . import registry, store
+from . import registry
 from .projections import holdings
 
 
-def _legacy_brokerage_ids() -> dict[str, str]:
-    """Legacy account scope -> public brokerage id, via the registry's roles."""
-    return {
-        entry.descriptor.portfolio_role: entry.descriptor.id
-        for entry in registry.REGISTRY.values()
-    }
 
 
-def _grouped_notes() -> dict[tuple[str, str], list[dict[str, str]]]:
-    scopes = _legacy_brokerage_ids()
-    grouped: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
-    for row in options_activity._read_csv(
-        config.options_groups_csv(), options_activity.GROUP_HEADERS
-    ):
-        brokerage_id = scopes.get(str(row.get("account") or "").upper())
-        symbol = str(row.get("symbol") or "").strip().upper()
-        if brokerage_id and symbol:
-            grouped[(brokerage_id, symbol)].append(row)
-    return grouped
 
 
-def report() -> dict[str, Any]:
-    """What would move, and what needs the owner to decide. Writes nothing."""
-    existing = store.read_metadata()
-    ready: list[dict[str, Any]] = []
-    conflicts: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
-
-    for (brokerage_id, symbol), groups in sorted(_grouped_notes().items()):
-        notes = sorted({
-            str(group.get("notes") or "").strip()
-            for group in groups
-            if str(group.get("notes") or "").strip()
-        })
-        entry = {
-            "brokerage_id": brokerage_id,
-            "symbol": symbol,
-            "group_count": len(groups),
-            "notes": notes,
-        }
-        if not notes:
-            skipped.append({**entry, "reason": "NO_NOTE"})
-        elif len(notes) > 1:
-            # Two humans-written notes, no defensible automatic winner.
-            conflicts.append({**entry, "reason": "CONFLICTING_NOTES"})
-        elif (brokerage_id, symbol) in existing:
-            skipped.append({**entry, "reason": "ALREADY_MIGRATED"})
-        else:
-            ready.append({**entry, "note": notes[0]})
-
-    return {
-        "schema_name": "smallfish.symbol-ledger-migration-report",
-        "schema_version": 1,
-        "ready": ready,
-        "conflicts": conflicts,
-        "skipped": skipped,
-        "summary": {
-            "ready_count": len(ready),
-            "conflict_count": len(conflicts),
-            "skipped_count": len(skipped),
-            # Group names and manual status are intentionally not carried over.
-            "migrates": ["notes"],
-        },
-    }
 
 
-def migrate() -> dict[str, Any]:
-    """Move every unambiguous note into symbol metadata.
-
-    Conflicts are reported, not resolved, and nothing about the legacy group
-    files is read destructively or rewritten.
-    """
-    plan = report()
-    migrated = []
-    for entry in plan["ready"]:
-        store.set_notes(entry["brokerage_id"], entry["symbol"], entry["note"])
-        migrated.append({"brokerage_id": entry["brokerage_id"], "symbol": entry["symbol"]})
-    return {
-        **plan,
-        "migrated": migrated,
-        "summary": {**plan["summary"], "migrated_count": len(migrated)},
-    }
 
 
 # ------------------------------------------- captured gain/loss percentages ---

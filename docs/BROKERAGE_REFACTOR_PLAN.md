@@ -1,11 +1,14 @@
 # Brokerage API and ledger refactor plan
 
-**Status:** Core refactor complete; consumer-first legacy cleanup in progress.
-All eight phases, including the synthetic lifecycle browser check, are complete
-and committed. Both brokerage pages run on the provider-neutral API for their
-Options and Option-Adjusted Basis tabs. This document is the source of truth
-for implementation, cleanup boundaries, phase status, decisions, and
-verification evidence.
+**Status:** Complete. All eight phases and the full consumer-first legacy
+cleanup are done. Both brokerage pages run entirely on the provider-neutral
+`/api/brokerages` surface. The legacy options/ledger projection surface
+(`brokerage_ledger.py`, `options_portfolio.py`, the grouped `/options`,
+`/options/activity`, `/retirement/options`, `/brokerage-ledgers/*/combined`,
+every trade-group route, and both group CSVs) is fully retired — not a
+compatibility shim, gone. This document is the source of truth for
+implementation, cleanup boundaries, phase status, decisions, and verification
+evidence.
 
 ## Resume here
 
@@ -32,31 +35,74 @@ says where the work actually is.
 | `df4830a` | Aggregate adjusted basis across brokerage accounts |
 | `5aeb6d8` | Start cleanup by removing the unused legacy Combined client |
 | `b6e719f` | Symbol Ledger action follow-ups: conditional review/archival UI |
+| `8163897` | Migrate Holdings to the common brokerage API |
+| `241dac6` | Retire the legacy Retirement holdings routes |
+| `1104f0c` | Retire the legacy SnapTrade holdings projection |
+| `d14a567` | Fail safe on legacy group writes (`legacy_groups` default flipped to off) |
+| `5a2ee33` | Retire the trade group write path (mutators, `legacy_groups` flag, manual-event `group_id`) |
+| *(uncommitted at end of this session — see below)* | Delete the legacy options/ledger projection surface outright |
 
-**Last broad verified baselines:** backend `stock-app/tests` 481 passing;
-Angular `npm run test:ci` 69 passing; `npm run build` clean, with docs, secret,
-and diff checks clean. Re-run the affected full suites before declaring a new
-cleanup step complete.
+**⚠️ Uncommitted work at end of session.** The final increment — deleting
+`brokerage_ledger.py`, `options_portfolio.py`, the routers that served them,
+both group CSV config paths, and rewriting roughly 15 test files — is **staged
+in the working tree but not committed**. Run `git status --short` at the repo
+root for the full list. Before doing anything else, either commit it (every
+gate below already passes) or review the diff first if you want to split it.
+Do not discard it: it was an explicit owner decision ("we are not rolling
+back, delete them"), carried out step by step — a report-then-migrate check
+against the 5 real group notes that would otherwise have been silently lost
+(the owner was shown the exact symbols and declined to migrate them), a
+captured parity snapshot of the numbers before their legacy source was
+deleted, and a live isolated-server-plus-browser check afterward.
+
+**Last verified baselines (this session, pre-commit):** backend
+`stock-app/tests` 447 passing; Angular `npm run test:ci` 69 passing;
+`npm run build` clean; `tools/check_docs.py` and `tools/scan_secrets.py`
+clean; verified live on an isolated port-8001 server over a synthetic-only
+data root — the four retired routes (`/options`, `/options/activity`,
+`/retirement/options`, `/brokerage-ledgers/{portfolio}/combined`) now fall
+through to the Angular SPA (`text/html`) instead of answering JSON, every
+retained resource (`/api/brokerages/*`, `/options/activity/sync`,
+`/options/activity/manual`) still answers correctly, and both brokerage pages
+render with no console errors.
 
 **Current architecture:** all 14 settled `/api/brokerages` routes are served.
-`/options` and `/retirement` share one shell, and every tab on it — Holdings,
-Symbol Ledger, and Option-Adjusted Basis — is driven by the public brokerage id
-alone through one Angular client. Group mutations are 410 tombstones and common
-sync creates no group/membership artifacts. **No Angular code calls
-`/brokerage-ledgers/*` any more**; the only route left on that prefix is
-`/combined`, retained as the baseline the projection parity tests compare
-against. The peak/adverse-move trend rule lives once in
-`app/brokerages/trend.py`, fed by each provider's own extraction.
+`/options` and `/retirement` share one shell, and every tab — Holdings, Symbol
+Ledger, Option-Adjusted Basis — is driven by the public brokerage id alone
+through one Angular client. **No Angular code calls any retired legacy
+route.** Grouping has no representation anywhere in the backend any more: no
+config path, no header constant, no writer, no reader, no 410 tombstone. What
+remains under `/options` is `POST /options/activity/sync` (compatibility
+Tastytrade sync command) and the manual reconciliation CRUD
+(`POST`/`PUT`/`DELETE /options/activity/manual/...`), whose rows are Symbol
+Ledger events, unrelated to grouping. The peak/adverse-move trend rule lives
+once in `app/brokerages/trend.py`, fed by each provider's own extraction.
 
-**Next action:** the legacy cleanup is **complete**. The group write path is
-retired outright, so `options_groups.csv` and `options_group_members.csv` are
-read-only rollback state: `/options/activity` and `/options` still project the
-rows a pre-cutover install holds, `remove_symbols` still purges them, and
-nothing writes one. Do not reintroduce a writer, and do not remove provider
-ingestion, parsers, canonical facts, or those rollback artifacts merely because
-they contain legacy terminology.
+**Retained on purpose, not oversight:**
+- `snaptrade_service.sync` — the registry's `fidelity` entry calls it.
+- `options_activity.sync`, `retirement_options.sync_events` /
+  `sync_market_data` — compatibility sync commands the registry calls.
+- `_option_rows` / `_share_pool` in `retirement_options.py` — feed
+  `sync_market_data`'s beta/greeks fetch, not a projection.
+- `SPA_ROUTE_COLLISIONS = {"/portfolios"}` in `main.py` — `/options` was
+  removed from this set since there is no longer a `GET /options` JSON route
+  for it to collide with; `/portfolios` still has one.
+- `options_groups.csv` / `options_group_members.csv` on disk under `data/` —
+  real, gitignored files from before this cleanup. Nothing reads or writes
+  them now; they were left in place rather than deleted, since removing a
+  user's real local files without being asked is a different kind of action
+  than deleting dead code.
+- Five group notes (`ELAN`, `MDT`, `NOK`, `PLTR`, `QQQ` — real strategy notes,
+  not synthetic) that existed only in `options_groups.csv` were **not**
+  migrated into symbol metadata before deletion. The owner was shown the exact
+  symbols and note text and explicitly declined. Not recoverable through any
+  code path any more; the source data still exists at
+  `data/ledger_options/options_groups.csv` on this machine if it is ever
+  wanted back.
 
-The next piece of work is **Follow-up: provider I/O extraction** below.
+**Next action:** none identified. The next piece of *planned* work is
+**Follow-up: provider I/O extraction** below, which the owner agreed to in
+principle but has not asked to start.
 
 After that, see **Follow-up: provider I/O extraction** below, which the owner
 raised on 2026-07-29 and which is deliberately sequenced after this cleanup.
@@ -1058,16 +1104,22 @@ The main current implementation surfaces are:
 
 | Concern | Current files |
 |---|---|
-| Trading immutable activity, grouping, marks, and P/L | `stock-app/app/options_activity.py` |
-| Retirement option activity and group projection | `stock-app/app/retirement_options.py` |
-| Existing normalized symbol/component service | `stock-app/app/brokerage_ledger.py` |
+| Common brokerage package: adapters, projections, registry, trend rule | `stock-app/app/brokerages/` |
+| Brokerage-agnostic routes (`/api/brokerages/...`) | `stock-app/app/routers/brokerages.py` |
 | Artifact paths | `stock-app/app/config.py` |
-| Broker-neutral routes | `stock-app/app/routers/brokerage_ledgers.py` |
-| Legacy Trading routes | `stock-app/app/routers/options.py` |
-| Legacy Retirement routes | `stock-app/app/routers/retirement.py` |
-| Backend coverage | `stock-app/tests/test_options_activity.py`, `stock-app/tests/test_retirement_options.py`, `stock-app/tests/test_brokerage_ledger.py` |
-| Shared group UI | `stock-app-ui/src/app/shared/brokerage-option-groups/` |
-| Existing combined-symbol UI | `stock-app-ui/src/app/shared/brokerage-ledger-combined/` |
+| Tastytrade activity import, marks, and manual reconciliation | `stock-app/app/options_activity.py` |
+| Compatibility Tastytrade sync/manual routes (`/options/activity/...`) | `stock-app/app/routers/options.py` |
+| SnapTrade option event sync and market-data support | `stock-app/app/retirement_options.py` |
+| Read-only SnapTrade holdings import | `stock-app/app/snaptrade_service.py` |
+| Backend coverage | `stock-app/tests/test_options_activity.py`, `stock-app/tests/test_retirement_options.py`, `stock-app/tests/test_brokerage_api.py`, `stock-app/tests/test_symbol_ledger_api.py` |
+| Shared brokerage UI | `stock-app-ui/src/app/shared/symbol-ledger/`, `stock-app-ui/src/app/shared/brokerage-holdings/` |
+
+The grouped `GET /options`, `GET /options/activity`, `GET /retirement/options`,
+and `/brokerage-ledgers/{portfolio}/combined` projections; every trade-group
+route; `app/brokerage_ledger.py`, `app/options_portfolio.py`,
+`app/routers/brokerage_ledgers.py`, `app/routers/retirement.py`; and the
+`options_groups.csv` / `options_group_members.csv` config paths are retired.
+See the progress log for the retirement record.
 | Angular API/models | `stock-app-ui/src/app/api/`, `stock-app-ui/src/app/model/` |
 | Brokerage page consumers | `stock-app-ui/src/app/options/`, `stock-app-ui/src/app/retirement-portfolio/` |
 
@@ -1109,7 +1161,7 @@ why they differ. Current totals are in "Resume here" at the top.
 | 6 | History/reset UX and shared UI consolidation | COMPLETE — automated checks passed; browser verification pending | Phase 7 completed; Phase 8 performs final browser verification | Shared `SymbolLedgerComponent` implements current/all/archive history, compact archive summaries, on-demand archive detail, reset eligibility/confirmation, conflict refresh, and idempotent retry on both pages; focused tests 21 passed, full Angular suite 62 passed, build clean |
 | 7 | Compatibility cutover, cleanup, and current-behavior docs | COMPLETE — automated checks passed; browser verification pending | Phase 8 final regression and route verification | Owner confirmed legacy routes have no external consumers. Production sync suppresses legacy group writes; legacy group mutation routes return 410; shared UI no longer imports groups or risk surfaces; old artifacts remain rollback-only. The later adjusted-basis follow-up removed the last legacy combined projection from the Brokerage tab; full automated-gate evidence is in the progress log. |
 | 8 | Full regression, browser verification, and handoff closeout | COMPLETE | No further action | Full backend 461, Angular build + 55 tests, docs, secrets, and diff checks passed. Isolated browser checks confirmed both routes, shared tabs, Symbol Ledger lifecycle filters/detail, absence of groups/risk UI, and narrow-width fit. A synthetic-only lifecycle check created an archive, verified a reopen starts one active period while retaining the archive, and surfaced a changed-archive warning for a backdated event. |
-| Post-phase cleanup | Consumer-first removal of remaining internal legacy compatibility | COMPLETE | No further action; provider I/O extraction into `services/` is the next piece of work | Holdings is fully migrated and its legacy surface removed. The legacy Retirement holdings routes and the SnapTrade holdings projection are retired, with the risk cash limit re-pointed at a new common account value proven equal to the old figure before the old one was deleted. The group write path is retired outright: no `legacy_groups` flag, no mutators, no membership write from a manual row. `/brokerage-ledgers/{portfolio}/combined` and the group CSVs remain as read-only rollback and parity-baseline state. Backend 474, Angular 69. |
+| Post-phase cleanup | Consumer-first removal of remaining internal legacy compatibility | COMPLETE (commit pending) | Commit the uncommitted deletion; then provider I/O extraction into `services/` is the next piece of work | Holdings, the legacy Retirement holdings routes, and the SnapTrade holdings projection are fully migrated/retired. The group write path was retired outright first (no flag, no mutators, no membership write). Then, on explicit owner instruction, `/brokerage-ledgers/{portfolio}/combined`, `brokerage_ledger.py`, `options_portfolio.py`, the grouped `/options`/`/options/activity`/`/retirement/options` projections, every trade-group route, and both group CSV config paths were deleted outright — nothing here is a compatibility shim any more. Backend 447, Angular 69, verified live in the browser. See "Resume here" for the uncommitted-work warning. |
 
 ## Phased implementation plan
 
@@ -1145,6 +1197,10 @@ documentation from this phase. No data migration exists yet.
 Automated gate:
 
 ```bash
+# Phase 1's own gate, as run at the time. test_brokerage_ledger.py and its
+# subject (`app/brokerage_ledger.py`) no longer exist -- both were retired once
+# the common `/api/brokerages` projections replaced them; do not recreate
+# either to literally replay this historical command.
 stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app \
   stock-app/tests/test_options_activity.py \
   stock-app/tests/test_retirement_options.py \
@@ -1573,6 +1629,7 @@ Append entries; never rewrite older evidence to make progress look cleaner.
 | 2026-07-29 | Legacy Retirement holdings projection | COMPLETE | Owner chose to give the common API an explicit account-value figure rather than accept tighter risk bands. `CASH` was already a legal canonical instrument and `components.build` already skipped anything that is not equity or option, so the fix was small and contained: the SnapTrade adapter stops dropping cash positions, and `holdings.account_value` sums every non-option position into `summary.total_account_value`. Holdings still lists only what you hold; the account value answers what the account is worth, which is the question a cash limit asks. One unpriced position makes it `null` rather than low. A parity test asserted the new figure equalled the legacy `totalCurrent` **while both existed**, and that is what made the deletion safe; the comparison went with the projection and the figure is now pinned directly. `retirement_options._default_total_value` reads the common projection, and `/retirement/portfolio/live`, `snaptrade_service.portfolio`, `update_enrichment`, and `capture_gain_loss_snapshot` are gone, along with every helper an AST reachability sweep then showed unreferenced — `snaptrade_service.py` fell from 1172 to 839 lines with nothing left dangling. Five invariants their tests protected were **ported, not dropped**, because they now belong to the common implementation: capturing twice for one sync date replaces it, only the three newest dates are retained, capturing with nothing synced refuses safely, editing one classification field preserves the others, and a malformed metadata edit is rejected with a stable code. Backend 484 passed. | Audit the remaining group-only backend paths |
 | 2026-07-29 | Group-only audit; write default flipped | PARTIAL — superseded by the retirement below | Swept every reader and writer of `options_groups.csv` and `options_group_members.csv`. Findings: (1) `legacy_groups` defaulted to **`True`** in both `options_activity.sync` and `retirement_options.sync_events` while every production caller passed `False` explicitly — the default protected nothing except a *new* caller, who would silently resurrect group state without ever seeing the flag. Flipped to `False` and pinned by a signature test, and the characterizations that exercise the retained write path now opt in through an explicit `_legacy_sync` helper that says why. (2) `options_activity.create_group`/`update_group` and `retirement_options.create_group`/`update_group`/`assign_event` have no production caller — their routes are 410 tombstones — but deleting them was **backed out**: they are the only way to set up the characterizations for the group-write path that `sync` still carries, so removing them silently removes coverage of retained code. They should go *with* that path, not before it. (3) `POST /options/activity/manual` still accepts a `group_id` and writes membership through `assign_event`. No caller sends one — the Angular UI has no reference to it — so it can only create orphan state, but dropping it changes a frozen contract's input and response, which settled decision 9 anticipated ("drop `group_id` only after new consumers are ready") and which is now true. (4) `import_broker_events`, `remove_symbols`, `snapshot`, and `risk_rows` touch group artifacts but are not group-only; the last two serve frozen contracts and must keep reading. Backend 485 passed; docs, secret, and diff checks clean. | Owner: decide whether to retire the group *write* path entirely — `legacy_groups`, the five mutators, and the manual-event `group_id` — leaving the artifacts as read-only rollback |
 | 2026-07-29 | Group write path retired | COMPLETE | Owner authorized retiring it outright. Removed the `legacy_groups` parameter and both write branches, `_auto_group`, `_reactivate_archived_groups`, `_group_ids_for_events`, `_event_map`, and the six mutators across `options_activity` and `retirement_options`. `POST /options/activity/manual` now **refuses** a supplied `group_id` with a stable 422 rather than ignoring it — a caller asking for grouping wants something this no longer does, and silently dropping it would leave them believing the row was filed somewhere it was not — while `group_id` stays in the response as a null, because removing a key from a frozen contract is a shape change nobody asked for. Same reasoning kept `groups_created`, `events_auto_grouped`, and `groups_reactivated` in the sync reports, pinned at zero. **A consequence to state plainly:** `snapshot` and `risk_rows` read groups from the CSV and nothing writes it, so `/options/activity` and `/options` keep projecting whatever rows a pre-cutover install already has and gain no new ones; on a fresh install those arrays stay empty, and `risk_rows`' `wheel_id` — which carried the group name — is now blank. Both are retained internal contracts with no Angular consumer. Tests: 12 whose subject was group creation or assignment were deleted, but only after confirming what they protected survives elsewhere — cross-year-in-one-period and several-contracts-under-one-underlying are asserted by `test_symbol_ledger_api` and `test_brokerage_ledger`, and the marked/realized P/L semantics by the Symbol Ledger suite. Seven mixed-subject tests were rewritten to assert the live half. `remove_symbols` still purges group rows, so its test now seeds the pre-cutover artifacts it can only ever meet. A new contract test asserts the artifacts stay empty across a sync, the parameter is absent from both signatures, and the six mutators no longer exist — the point being that this is gone rather than switched off. The 410 tombstone routes stay: they are how a caller learns grouping is retired. Backend 474 passed (485 before, the difference being the deleted characterizations); docs, secret, and diff checks clean. | Provider I/O extraction into `services/` |
+| 2026-07-29 | Legacy projection surface deleted outright | COMPLETE — **not yet committed at session end** | Owner rejected keeping `/brokerage-ledgers/{portfolio}/combined` and the group CSVs as parity-baseline/rollback state ("we are not rolling back, delete them") and, after review, extended the instruction to the whole legacy options/ledger surface. Deleted `app/brokerage_ledger.py`, `app/options_portfolio.py`, `app/routers/brokerage_ledgers.py`, `app/routers/retirement.py` (whole file — only its 410 tombstones and the now-migrated Holdings routes lived there), the grouped `GET /options`/`GET /options/activity`/`GET /retirement/options` projections and every remaining trade-group route (including their 410 tombstones — the whole feature is gone, not just its writes), `options_groups_csv`/`options_group_members_csv`/`retirement_option_groups_csv` from `config.py`, and the `GROUP_HEADERS`/`MEMBER_HEADERS` constants. `remove_symbols` and `delete_manual_event` had their group-purge logic stripped since there is no longer anything to purge. The group-notes migration (`migration.report`/`migration.migrate`) was deleted with its only data source; **before deleting it**, a read-only report found 5 real notes (`ELAN`, `MDT`, `NOK`, `PLTR`, `QQQ`) that existed only in the legacy file — shown to the owner, who explicitly declined to migrate them. `SPA_ROUTE_COLLISIONS` dropped `/options`, since there is no longer a JSON route there to collide with. One real defect caught before commit: my own claim that "nothing writes the group CSVs" was false — `GET /retirement/options` lazily *created* a group row on read; traced and reproduced before the whole projection (writer included) was deleted, so the corrected claim never shipped. `test_brokerage_adapter_contract.py`'s three body tests (P/L identity, completeness vocabulary, fail-closed nulls) were evergreen invariants, not migration-parity checks, so they were rewritten against the live common API rather than deleted; the two option-adjusted-basis/options parity tests in `test_brokerage_api.py` were pinned to captured literal values proven correct while the legacy comparison still existed. `FROZEN_LEGACY_ROUTES` shrank to the 4 still-real routes; the 10 routes retired here moved to `RETIRED_LEGACY_ROUTES`. Full sweep across ~15 test files; stale module docstrings in `options_activity.py`, `retirement_options.py`, `options_risk.py`, and `main.py` corrected — one claim in an early draft docstring ("shared risk-input helpers the common resources use") was caught as inaccurate and fixed before it was written down. Backend 447 passed, Angular 69 passed, build/docs/secret checks clean. Verified live on an isolated port-8001 server over a synthetic-only data root: all four retired GET routes now return `text/html` (SPA fallback) instead of JSON, every retained resource still answers, both brokerage pages render with no console errors. **This entire increment was staged but not committed when the session ended** — see the warning in "Resume here." | Commit the pending diff, then start provider I/O extraction if asked |
 
 ## New-session kickoff prompt
 
@@ -1581,53 +1638,50 @@ cleanup. It replaces the old Phase 6/8 handoff; do not resume those completed
 phases.
 
 ```text
-Continue the smallFish brokerage legacy cleanup. Read the "Resume here" and
-"Current handoff boundary" sections of docs/BROKERAGE_REFACTOR_PLAN.md first,
-then AGENTS.md, Requirements.md, docs/BROKERAGE_LEDGER_COMBINED_VIEW.md,
-docs/ARCHITECTURE.md, and stock-app/README.md. Before UI work also read
-stock-app-ui/AGENTS.md and stock-app-ui/docs/UX_GUIDANCE.md.
+The smallFish brokerage legacy cleanup is complete. Read the "Resume here"
+section of docs/BROKERAGE_REFACTOR_PLAN.md first — it has a ⚠️ uncommitted-work
+warning that is almost certainly the first thing to act on. Then AGENTS.md and
+stock-app/README.md; docs/BROKERAGE_LEDGER_COMBINED_VIEW.md is now a historical
+design record only, not current-state documentation.
 
 State when you pick this up:
-- Phases 1-8 are complete and committed on main. The final synthetic lifecycle
-  browser check is complete. Do not restart any phase or repeat Phase 8.
-- `/options` and `/retirement` use the shared brokerage shell and Symbol Ledger;
-  the Option-Adjusted Basis tab uses the common brokerage client. The Symbol
-  Ledger intentionally hides a zero `Needs review` card and renders archive
-  controls only for eligible periods.
-- All 14 `/api/brokerages` routes remain the target contract. Legacy group
-  mutations are 410 tombstones and common sync no longer writes group or
-  membership artifacts.
-- Holdings is fully migrated. The common endpoint carries editable enrichment,
-  gain/loss snapshot columns, and declining-trend state; the legacy route, its
-  write paths, `app/brokerage_holdings.py`, and the Angular legacy client and
-  models are removed. No Angular code calls `/brokerage-ledgers/*`; `/combined`
-  is all that remains there and is kept as the parity-test baseline.
+- Phases 1-8, and the full consumer-first legacy cleanup, are complete. Do not
+  restart any phase.
+- All 14 `/api/brokerages` routes are the only brokerage-data contract that
+  matters. `/options` and `/retirement` use the shared brokerage shell,
+  Symbol Ledger, and Option-Adjusted Basis, all through one common Angular
+  client. Grouping has no representation anywhere any more — not in the
+  backend, not as a 410 tombstone, not as a config path.
+- The legacy options/ledger projection surface — `brokerage_ledger.py`,
+  `options_portfolio.py`, the grouped `/options`/`/options/activity`/
+  `/retirement/options`, `/brokerage-ledgers/{portfolio}/combined`, every
+  trade-group route, and both group CSV config paths — is deleted outright,
+  on explicit owner instruction. It is not a compatibility shim; do not
+  recreate any part of it.
+- What remains under `/options` is `POST /options/activity/sync` (the
+  Tastytrade compatibility sync command) and the manual reconciliation CRUD —
+  unrelated to grouping, still a frozen contract.
 - The peak/adverse-move trend rule lives once in `app/brokerages/trend.py`.
   Providers supply normalized observations; do not reintroduce a per-provider
-  copy of the rule.
-- Last broad verified baselines are backend 481 passing, Angular 69 passing,
-  and a clean Angular build. Re-run the full relevant suite before calling a
-  cleanup step complete.
+  copy.
+- Last verified baselines: backend 447 passing, Angular 69 passing, clean
+  build. Re-run the full relevant suite before calling anything complete.
 
-Start with the legacy Retirement holdings surface: `/retirement/holdings/sync`,
-`/retirement/holdings/gain-loss-snapshots`, `/retirement/enrichment/{symbol}`,
-and `snaptrade_service.portfolio`. It has no Angular consumer but is still a
-frozen contract, and `retirement_options.py` still calls `portfolio()` for a
-portfolio total, so re-point that caller at the common projection before
-removing anything. Apply the same order Holdings used — common contract first,
-then consumers, then route/reference sweeps, then removal — and record a
-retirement in `RETIRED_LEGACY_ROUTES` rather than silently dropping it from the
-frozen list. Audit group-only code separately; retain ingestion/parsing code
-that still produces canonical facts.
+No further cleanup work is identified. If the owner asks to continue, the
+recorded next step is the provider-I/O extraction into a top-level `services/`
+tree — see "Follow-up: provider I/O extraction" earlier in this document for
+the agreed scope and the two costs (shared SDK pin across both venvs, and the
+AGENTS.md dependency diagram update) to raise before starting, not silently
+absorb.
 
-Continue under this protocol:
-1. Keep each cleanup increment focused and independently reversible. Do not
-   mix a behavior change with unrelated deletion.
+Protocol for any further work:
+1. Keep each increment focused and independently reversible. Do not mix a
+   behavior change with unrelated deletion.
 2. Run the targeted backend/UI tests, relevant full suite, Angular build for UI
    changes, `python3 tools/check_docs.py`, `python3 tools/scan_secrets.py`, and
    `git diff --check` before committing.
-3. Update the dashboard and append a new progress-log row in every cleanup
-   commit. Never rewrite older log evidence.
+3. Update the dashboard and append a new progress-log row in every commit.
+   Never rewrite older log evidence.
 4. Inspect the affected route with representative/synthetic data for UI work;
    never print real positions, accounts, or provider details.
 5. Do not push or open a PR unless asked.

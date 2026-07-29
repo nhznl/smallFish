@@ -165,6 +165,11 @@ def test_wheel_candidates_horizon_filter(env_fixtures):
 
 
 def test_native_options_routes_are_registered(env_fixtures, tmp_path, monkeypatch):
+    """The grouped Options/Trading and Retirement projections, and every
+    trade-group route including their former 410 tombstones, are fully
+    retired -- not switched off, gone. What remains is the compatibility sync
+    command and the manual reconciliation CRUD, whose rows are Symbol Ledger
+    events rather than group state."""
     monkeypatch.setenv("SFP_OPTIONS_ACTIVITY", str(tmp_path / "options_activity.csv"))
     monkeypatch.setenv("SFP_OPTIONS_GROUPS", str(tmp_path / "options_groups.csv"))
     monkeypatch.setenv("SFP_OPTIONS_GROUP_MEMBERS", str(tmp_path / "options_group_members.csv"))
@@ -172,23 +177,37 @@ def test_native_options_routes_are_registered(env_fixtures, tmp_path, monkeypatc
     monkeypatch.setenv("SFP_OPTIONS_GREEKS", str(tmp_path / "options_greeks.csv"))
     monkeypatch.setenv("SFP_OPTIONS_BETAS", str(tmp_path / "options_betas.csv"))
     monkeypatch.setenv("SFP_EVENTS_CSV", str(tmp_path / "events.csv"))
-    options = client.get("/options")
-    assert options.status_code == 200
-    assert options.json()["rows"] == []
-    assert options.json()["account_filter"] == "ALL"
-    activity = client.get("/options/activity")
-    assert activity.status_code == 200
-    assert activity.json()["events"] == []
-    assert activity.json()["groups"] == []
 
-    # These paths remain explicit tombstones for an internal-only surface, not
-    # compatibility writers. Neither can create a second same-symbol group.
-    for response in (
-        client.post("/options/groups", json={}),
-        client.put("/options/groups/legacy", json={}),
-        client.put("/options/activity/event-1/group", json={}),
-        client.post("/retirement/options/groups", json={}),
-        client.put("/retirement/options/groups/legacy", json={}),
-        client.put("/retirement/options/activity/event-1/group", json={}),
+    # GET on a retired path falls to the Angular SPA catch-all rather than a
+    # fixed status code, so what proves the route is gone is that no JSON API
+    # answers it any more.
+    for path in ("/options", "/options/activity", "/retirement/options"):
+        response = client.get(path)
+        assert not response.headers.get("content-type", "").startswith(
+            "application/json"
+        ), path
+    # A write verb has no SPA catch-all to fall through to, so it 404s or
+    # 405s outright -- either way, not the 410 tombstone these used to return.
+    for method, path in (
+        ("POST", "/options/groups"), ("PUT", "/options/groups/legacy"),
+        ("PUT", "/options/activity/event-1/group"),
+        ("POST", "/retirement/options/groups"),
+        ("PUT", "/retirement/options/groups/legacy"),
+        ("PUT", "/retirement/options/activity/event-1/group"),
     ):
-        assert response.status_code == 410
+        assert client.request(method, path).status_code in (404, 405), path
+
+    sync = client.post("/options/activity/sync", json={})
+    # 200 with a live sync, 502 on an upstream failure, 503 with no Tastytrade
+    # credentials configured -- any of these prove the route still exists and
+    # is not the 410 a retired write path returns.
+    assert sync.status_code in (200, 502, 503)
+    created = client.post("/options/activity/manual", json={
+        "account": "TRADING", "contract_key": "ABC 260821P00050000",
+        "transaction_date": "2026-07-28", "quantity": "1", "position_delta": "-1",
+        "net_value": "100",
+    })
+    assert created.status_code == 200
+    assert client.delete(
+        f"/options/activity/manual/{created.json()['event_id']}"
+    ).status_code == 200

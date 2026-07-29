@@ -1,18 +1,20 @@
-"""Options activity, grouping, and portfolio-risk endpoints."""
+"""Tastytrade activity sync and manual reconciliation rows.
+
+The grouped `/options` and `/options/activity` projections and every trade-group
+route are retired: the Symbol Ledger under `/api/brokerages` is the lifecycle
+surface. What remains is the compatibility sync command and the manual
+reconciliation CRUD, whose rows are Symbol Ledger events rather than group state.
+"""
 
 from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 
-from .. import options_activity, options_portfolio
+from .. import options_activity
 
 router = APIRouter()
-
-
-def _raise_validation(exc: options_portfolio.PortfolioValidationError) -> None:
-    raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 def _raise_activity_validation(exc: options_activity.ActivityValidationError) -> None:
@@ -26,22 +28,6 @@ def _optional_date(value: object, field: str) -> str:
         return date.fromisoformat(str(value)).isoformat()
     except ValueError:
         raise ValueError(f"{field} must be YYYY-MM-DD") from None
-
-
-@router.get("/options")
-def get_options(account: str | None = Query(default=None)) -> dict:
-    try:
-        return options_portfolio.snapshot(account)
-    except options_portfolio.PortfolioValidationError as exc:
-        _raise_validation(exc)
-
-
-@router.get("/options/activity")
-def get_options_activity(account: str | None = Query(default=None)) -> dict:
-    try:
-        return options_activity.snapshot(account)
-    except options_activity.ActivityValidationError as exc:
-        _raise_activity_validation(exc)
 
 
 @router.post("/options/activity/sync")
@@ -59,30 +45,6 @@ def post_options_activity_sync(request: dict | None = None) -> dict:
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Tastytrade sync failed") from exc
-
-
-@router.post("/options/groups")
-def post_options_group(request: dict) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="Trade groups are retired. Use the Symbol Ledger instead.",
-    )
-
-
-@router.put("/options/groups/{group_id}")
-def put_options_group(group_id: str, request: dict) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="Trade groups are retired. Use Symbol Ledger notes instead.",
-    )
-
-
-@router.put("/options/activity/{event_id}/group")
-def put_options_event_group(event_id: str, request: dict) -> dict:
-    raise HTTPException(
-        status_code=410,
-        detail="Imported events are immutable and cannot be reassigned.",
-    )
 
 
 @router.post("/options/activity/manual")

@@ -15,8 +15,6 @@ def test_runtime_roots_derive_artifact_paths(tmp_path: Path, monkeypatch):
     assert config.retired_symbols_csv() == data / "retired_symbols.csv"
     options_dir = data / "ledger_options"
     assert config.options_activity_csv() == options_dir / "options_activity.csv"
-    assert config.options_groups_csv() == options_dir / "options_groups.csv"
-    assert config.options_group_members_csv() == options_dir / "options_group_members.csv"
     assert config.options_position_marks_csv() == options_dir / "options_position_marks.csv"
     assert config.options_greeks_csv() == options_dir / "options_greeks.csv"
     assert config.options_betas_csv() == options_dir / "options_betas.csv"

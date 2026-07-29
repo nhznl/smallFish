@@ -30,12 +30,11 @@ stock-app/
 │   ├── cache.py            # in-memory stock and trend cache
 │   ├── trend_engine.py     # technical trend calculations
 │   ├── stock_model.py      # stock, weekly, and gain/loss models
-│   ├── options_activity.py # Tastytrade import, marks, and retained reads
-│   ├── options_portfolio.py # broker-position risk snapshot for /options
+│   ├── options_activity.py # Tastytrade import, marks, and manual reconciliation
 │   ├── options_market.py   # market inputs for options positions
 │   ├── options_risk.py     # options-risk calculations
 │   ├── portfolios.py       # named symbol lists, returns, sector exposure
-│   ├── retirement_options.py # SnapTrade option positions and risk rows
+│   ├── retirement_options.py # SnapTrade option event sync and market data
 │   ├── snaptrade_service.py  # read-only SnapTrade holdings import
 │   ├── studies_read.py     # fail-closed Research Studies reader
 │   ├── capabilities.py     # optional-integration and core-data states
@@ -121,13 +120,10 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `POST /api/brokerages/{id}/symbols/{symbol}/archives` | Idempotently archive an eligible completed period. |
 | `POST /api/brokerages/{id}/sync` | Sync common holdings, activity, and market-data resources without creating group state. |
 | `GET /api/brokerages/{id}/holdings` | Current equity positions with editable classifications, captured G/L comparison columns, and declining-trend state. |
-| `/brokerage-ledgers/{portfolio}/combined`, `/options/activity`, `/retirement/options` | Internal compatibility reads retained during migration; the dashboard does not use their group workflow. |
+| `POST /options/activity/sync` | Internal compatibility Tastytrade sync command; the dashboard uses `POST /api/brokerages/tastytrade/sync`. |
+| `POST /options/activity/manual`, `PUT`/`DELETE /options/activity/manual/{event_id}` | Manual reconciliation rows: immutable-except-by-this-path Symbol Ledger events, not group state. |
 | `GET /runWheel`, `/runChains` | Run the wheel job (with best-effort upcoming-earnings refresh) and manual prospective option-quote collection. |
 | `GET /runEarningsScan` | Refresh the shared upcoming-earnings calendar (Finnhub, only when stale), then report how many scanner symbols have an upcoming report. |
-
-`GET /options?account=` returns `rows`, `wheel_groups`, `totals`, `risk`, and
-`warnings`. The optional account is `RETIREMENT` or `TRADING`; omitting it
-returns the combined view.
 
 `/api/brokerages/{id}` is the dashboard contract. It uses public brokerage IDs
 (`tastytrade`, `fidelity`), reads materialized artifacts only, and returns one
@@ -141,12 +137,16 @@ gain/loss-snapshot write paths are retired: the common Holdings resource now
 carries the editable classifications, the captured comparison columns, and the
 declining-trend state they were the only source of, and captured percentages
 recorded before the move are carried into the common store on the next sync.
-`/brokerage-ledgers/{portfolio}/combined` remains as an internal compatibility
-projection and as the baseline the parity tests compare against. It is not an
-external contract, and every group write path in the backend is retired: the
-`options_groups.csv` and `options_group_members.csv` artifacts are read-only
-rollback state that `/options/activity` and `/options` still project, and that
-`remove_symbols` still purges, but that nothing writes.
+
+`/brokerage-ledgers/{portfolio}/combined`, the grouped `GET /options` and
+`GET /options/activity` projections, `GET /retirement/options`, and every
+trade-group route are fully retired — not internal compatibility reads, gone.
+Their accounting lives in the common Holdings, Options, Option-Adjusted Basis,
+and Symbol Ledger resources. What remains under `/options` is the Tastytrade
+sync command and the manual reconciliation rows, whose CRUD is unrelated to
+grouping. `options_groups.csv` and `options_group_members.csv` are inert; a
+pre-cutover install may still have them on disk, but nothing reads or writes
+them.
 
 `POST /options/activity/sync` remains an internal compatibility command and
 imports January 1 through today by default. Grouping is retired, so no sync

@@ -1,15 +1,11 @@
-"""Retirement options: a separate positions view and a Broker Risk Positions
-table, mirroring the Options Ledger.
+"""Retirement option event sync and market-data support.
 
-SnapTrade supplies the current option legs (from the holdings ledger). The
-broker-agnostic options risk engine then computes spot, realized-vol IV,
-Black-Scholes delta, smallFish's own computed beta, and — using Tastytrade
-market-metric betas fetched for the underlyings (SnapTrade provides no beta) —
-beta-weighted delta.
-
-Grouping is retired here too: the projection still reads the app-owned group
-stores it shares with Trading, so retained rows keep showing, but nothing in
-this module writes one.
+SnapTrade option transaction events are pulled into an immutable local ledger.
+The grouped Broker Risk Positions view this module used to project is retired;
+the Symbol Ledger and Options resources under `/api/brokerages` are the current
+surface. What remains here is event sync, plus the current-option-leg reading
+that `sync_market_data` uses to decide which underlyings need fresh betas and
+greeks.
 """
 
 from __future__ import annotations
@@ -36,7 +32,6 @@ from .options_risk import (COVERED_CALL, LIMIT_APPROVED, SHORT_CALL, RiskConfig,
                            apply_call_coverage, build_risk_snapshot,
                            evaluate_position)
 
-GROUP_HEADERS = ["symbol", "name", "status", "notes", "updated_at"]
 EVENT_HEADERS = [
     "schema_version", "id", "source", "account_id", "account",
     "underlying_symbol", "option_type", "strike", "expiry", "occ_symbol",
@@ -90,9 +85,6 @@ def _dec(value: Any) -> Decimal:
     return result if result.is_finite() else Decimal("0")
 
 
-def _risk_config() -> RiskConfig:
-    with config.strategy_config_yaml().open() as handle:
-        return RiskConfig.from_strategy_yaml(yaml.safe_load(handle))
 
 
 def _atomic_write(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> None:
@@ -128,54 +120,12 @@ def _read_rows(path: Path, headers: list[str]) -> list[dict[str, str]]:
         return [{key: row.get(key, "") for key in headers} for row in csv.DictReader(handle)]
 
 
-def _read_groups() -> dict[str, dict[str, str]]:
-    """Legacy one-row-per-symbol metadata retained for automatic migration."""
-    path = config.retirement_option_groups_csv()
-    if not path.is_file():
-        return {}
-    with path.open("r", newline="", encoding="utf-8") as handle:
-        return {
-            row.get("symbol", "").strip().upper(): row
-            for row in csv.DictReader(handle)
-            if row.get("symbol", "").strip()
-        }
 
 
-def _app_groups() -> list[dict[str, str]]:
-    """smallFish-owned multi-group rows for the Retirement portfolio."""
-    return [
-        row for row in options_activity._read_csv(
-            config.options_groups_csv(), options_activity.GROUP_HEADERS,
-        )
-        if row["account"] == "RETIREMENT"
-    ]
 
 
-def _retirement_member_id(event_id: str) -> str:
-    """Namespace SnapTrade ids inside the cross-brokerage membership store."""
-    return f"retirement:{event_id}"
 
 
-def group_metadata_by_symbol() -> dict[str, dict[str, str]]:
-    """Aggregate app-group notes for symbol-level combined-ledger annotations."""
-    legacy = _read_groups()
-    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for group in _app_groups():
-        grouped[group["symbol"]].append(group)
-    result = dict(legacy)
-    for symbol, groups in grouped.items():
-        notes = [
-            f'{group["name"]}: {group["notes"]}'
-            for group in groups if group["notes"].strip()
-        ]
-        legacy_note = str(legacy.get(symbol, {}).get("notes") or "").strip()
-        result[symbol] = {
-            "symbol": symbol, "notes": " | ".join(notes),
-            "updated_at": max((group["updated_at"] for group in groups), default=""),
-        }
-        if not result[symbol]["notes"] and legacy_note:
-            result[symbol]["notes"] = legacy_note
-    return result
 
 
 # --------------------------------------------------------------------------- #
@@ -203,55 +153,6 @@ def _share_pool(ledger: list[dict[str, Any]]) -> dict[tuple[str, str], Decimal]:
     return dict(pool)
 
 
-def _equity_holdings(rows: list[dict[str, Any]],
-                     ledger: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Equity lots per underlying, with short-call coverage where calls exist.
-
-    This is context for the group drill-down, never an input to it: shares are
-    not option events, so they stay out of net credit received, open marked
-    value, and group P/L. Every underlying with shares is included -- holding
-    the stock is worth seeing next to its options whether or not a call has
-    been written against it -- and `short_call_contracts` is zero when there is
-    no call for the shares to cover.
-    """
-    contracts: dict[str, Decimal] = defaultdict(Decimal)
-    covered: dict[str, int] = defaultdict(int)
-    for row in rows:
-        if row["trade_type"] not in {SHORT_CALL, COVERED_CALL}:
-            continue
-        contracts[row["symbol"]] += _dec(row["qty"])
-        covered[row["symbol"]] += int(row.get("covered_contracts") or 0)
-
-    lots: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    totals: dict[str, Decimal] = defaultdict(Decimal)
-    for holding in ledger:
-        if not _is_share_holding(holding):
-            continue
-        symbol = str(holding.get("symbol") or "").upper().strip()
-        quantity = _dec(holding.get("quantity"))
-        if quantity <= 0:
-            continue
-        totals[symbol] += quantity
-        lots[symbol].append({
-            "account": holding.get("account_name", ""),
-            "quantity": float(quantity),
-            "average_price": float(_dec(holding.get("average_purchase_price"))),
-            "price": float(_dec(holding.get("price"))),
-            "cost_basis": float(_dec(holding.get("cost_basis"))),
-            "market_value": float(_dec(holding.get("market_value"))),
-            "open_pnl": float(_dec(holding.get("open_pnl"))),
-            "retrieved_at": holding.get("retrieved_at", ""),
-        })
-
-    return {
-        symbol: {
-            "lots": sorted(symbol_lots, key=lambda lot: lot["account"]),
-            "total_shares": float(totals[symbol]),
-            "short_call_contracts": float(contracts.get(symbol, 0)),
-            "covered_contracts": covered.get(symbol, 0),
-        }
-        for symbol, symbol_lots in lots.items()
-    }
 
 
 def _option_rows() -> list[dict[str, Any]]:
@@ -441,403 +342,34 @@ def sync_events(provider=None, *, start_date: date | None = None,
     }
 
 
-def _build_event_groups(events: list[dict[str, str]], live_rows: list[dict[str, Any]],
-                        meta: dict[str, dict[str, str]], *,
-                        year: int | None = None) -> list[dict[str, Any]]:
-    """One group per underlying, combining the retained event ledger with the
-    current live legs.
-
-    Realized P/L for a fully-closed (``FLAT``) underlying is ``Σ net_value``, so
-    a closed contract keeps its group row and P/L instead of disappearing with
-    the live-positions feed. An underlying with open contracts reports
-    ``total_pnl = net_cash_flow + open_market_value`` (marks from the current
-    holdings legs) and is labelled ``INDICATIVE``.
-
-    The broker activity feed can be incomplete or lag the positions feed, so both
-    sources are reconciled per underlying:
-
-    * A currently-held leg whose opening event has not (yet) posted still counts:
-      its premium comes from the holdings cost basis and its mark from the
-      holdings market value, exactly as the live-legs path would value it.
-    * An event residual that shows an open contract with no matching live leg —
-      the window where a close has left the positions feed but its closing event
-      has not posted — has no mark, so P/L reads ``UNAVAILABLE`` rather than a
-      bogus realized figure, mirroring ``options_activity``.
-    """
-    year = year or date.today().year
-    live_by_underlying: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in live_rows:
-        live_by_underlying[row["symbol"]].append(row)
-    events_by_underlying: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for event in events:
-        events_by_underlying[event["underlying_symbol"]].append(event)
-
-    groups: list[dict[str, Any]] = []
-    for underlying in sorted(set(events_by_underlying) | set(live_by_underlying)):
-        evs = events_by_underlying.get(underlying, [])
-        legs = live_by_underlying.get(underlying, [])
-        live_by_occ = {leg["contract_key"]: leg for leg in legs}
-        evented_occs = {e["occ_symbol"] for e in evs}
-
-        # Cash: signed event net_value, plus the premium (−cost_basis) of any live
-        # leg whose opening event is absent from the ledger, so nothing is lost.
-        net_cash_flow = sum((_dec(e["net_value"]) for e in evs), Decimal("0"))
-        for occ, leg in live_by_occ.items():
-            if occ not in evented_occs:
-                net_cash_flow += -_dec(leg["_cost_basis"])
-
-        residual: dict[str, Decimal] = defaultdict(Decimal)
-        for event in evs:
-            residual[event["occ_symbol"]] += _dec(event["units"])
-        # Open contracts: any currently-held leg, plus any nonzero event residual
-        # (a close whose event has not yet posted still reads as open).
-        open_occs = set(live_by_occ) | {occ for occ, qty in residual.items() if qty != 0}
-
-        tags = meta.get(underlying, {})
-        status = (tags.get("status", "") or "ACTIVE").strip().upper()
-        account = next((e["account"] for e in evs if e["account"]),
-                       legs[0]["account"] if legs else "")
-
-        open_market_value: float | None
-        if not open_occs:
-            position_status, completeness = "FLAT", "COMPLETE"
-            realized_pnl = total_pnl = round(float(net_cash_flow), 2)
-            open_market_value = 0.0
-        else:
-            position_status, realized_pnl = "OPEN", None
-            missing = [occ for occ in open_occs if occ not in live_by_occ]
-            if missing:
-                completeness, open_market_value, total_pnl = "UNAVAILABLE", None, None
-            else:
-                omv = sum((_dec(leg["_market_value"]) for leg in legs), Decimal("0"))
-                completeness = "INDICATIVE"
-                open_market_value = round(float(omv), 2)
-                total_pnl = round(float(net_cash_flow + omv), 2)
-
-        groups.append({
-            "symbol": underlying,
-            "account": account,
-            "name": _group_name(underlying, tags, year),
-            "status": status if status in {"ACTIVE", "ARCHIVED"} else "ACTIVE",
-            "net_cash_flow": round(float(net_cash_flow), 2),
-            "open_market_value": open_market_value,
-            "total_pnl": total_pnl,
-            "realized_pnl": realized_pnl,
-            "position_status": position_status,
-            "pnl_completeness": completeness,
-            "event_count": len(evs) if evs else len(legs),
-            "notes": tags.get("notes", "").strip(),
-        })
-
-    groups.sort(key=lambda group: (group["position_status"] != "OPEN", group["symbol"]))
-    return groups
 
 
-def _ensure_app_groups_unlocked(events: list[dict[str, str]], live_rows: list[dict[str, Any]],
-                                legacy_meta: dict[str, dict[str, str]], year: int
-                                ) -> tuple[list[dict[str, str]], dict[str, str]]:
-    """Create the same smallFish group/membership enrichment used by Trading.
-
-    Existing one-row-per-symbol Retirement metadata is migrated into the first
-    app group for that symbol. Once more than one group exists, newly imported
-    events stay ungrouped until the user assigns them, matching Trading.
-    """
-    now = _now()
-    all_groups = options_activity._read_csv(
-        config.options_groups_csv(), options_activity.GROUP_HEADERS,
-    )
-    groups = [row for row in all_groups if row["account"] == "RETIREMENT"]
-    all_members = options_activity._read_csv(
-        config.options_group_members_csv(), options_activity.MEMBER_HEADERS,
-    )
-    memberships = {
-        row["event_id"].removeprefix("retirement:"): row["group_id"]
-        for row in all_members if row["event_id"].startswith("retirement:")
-    }
-    changed_groups = changed_members = False
-    symbols = sorted(
-        {event["underlying_symbol"] for event in events}
-        | {row["symbol"] for row in live_rows}
-    )
-    for symbol in symbols:
-        matching = [group for group in groups if group["symbol"] == symbol]
-        if not matching:
-            tags = legacy_meta.get(symbol, {})
-            group = {
-                "group_id": str(uuid.uuid4()), "account": "RETIREMENT", "symbol": symbol,
-                "name": _group_name(symbol, tags, year),
-                "status": (tags.get("status", "") or "ACTIVE").strip().upper(),
-                "notes": tags.get("notes", "").strip(), "auto_created": "true",
-                "created_at": tags.get("updated_at", "") or now, "updated_at": now,
-            }
-            if group["status"] not in {"ACTIVE", "ARCHIVED"}:
-                group["status"] = "ACTIVE"
-            groups.append(group)
-            all_groups.append(group)
-            matching = [group]
-            changed_groups = True
-        unassigned = [
-            event for event in events
-            if event["underlying_symbol"] == symbol and event["id"] not in memberships
-        ]
-        if len(matching) == 1:
-            for event in unassigned:
-                member_id = _retirement_member_id(event["id"])
-                all_members.append({
-                    "event_id": member_id, "group_id": matching[0]["group_id"],
-                    "assigned_at": now,
-                })
-                memberships[event["id"]] = matching[0]["group_id"]
-                changed_members = True
-    if changed_groups:
-        options_activity._atomic_write(
-            config.options_groups_csv(), options_activity.GROUP_HEADERS, all_groups,
-        )
-    if changed_members:
-        options_activity._atomic_write(
-            config.options_group_members_csv(), options_activity.MEMBER_HEADERS, all_members,
-        )
-    return groups, memberships
 
 
-def _ensure_app_groups(events: list[dict[str, str]], live_rows: list[dict[str, Any]],
-                       legacy_meta: dict[str, dict[str, str]], year: int
-                       ) -> tuple[list[dict[str, str]], dict[str, str]]:
-    with options_activity._lock:
-        return _ensure_app_groups_unlocked(events, live_rows, legacy_meta, year)
 
 
-def _empty_group_summary(group: dict[str, str]) -> dict[str, Any]:
-    return {
-        "group_id": group["group_id"], "symbol": group["symbol"], "account": "RETIREMENT",
-        "name": group["name"], "status": group["status"], "net_cash_flow": 0.0,
-        "open_market_value": 0.0, "total_pnl": 0.0, "realized_pnl": 0.0,
-        "position_status": "FLAT", "pnl_completeness": "COMPLETE",
-        "event_count": 0, "notes": group["notes"],
-    }
 
 
-def _build_app_groups(events: list[dict[str, str]], live_rows: list[dict[str, Any]],
-                      legacy_meta: dict[str, dict[str, str]], year: int
-                      ) -> tuple[list[dict[str, Any]], dict[str, str]]:
-    groups, memberships = _ensure_app_groups(events, live_rows, legacy_meta, year)
-    by_symbol: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for group in groups:
-        by_symbol[group["symbol"]].append(group)
-    output: list[dict[str, Any]] = []
-    for group in groups:
-        group_events = [event for event in events if memberships.get(event["id"]) == group["group_id"]]
-        event_contracts = {event["occ_symbol"] for event in group_events}
-        symbol_groups = by_symbol[group["symbol"]]
-        group_legs = [
-            row for row in live_rows
-            if row["symbol"] == group["symbol"]
-            and (len(symbol_groups) == 1 or row["contract_key"] in event_contracts)
-        ]
-        if group_events or group_legs:
-            built = _build_event_groups(
-                group_events, group_legs, {group["symbol"]: group}, year=year,
-            )[0]
-            built["group_id"] = group["group_id"]
-        else:
-            built = _empty_group_summary(group)
-        output.append(built)
-    output.sort(key=lambda group: (
-        group["position_status"] != "OPEN", group["symbol"], group["name"],
-    ))
-    return output, memberships
 
 
 # --------------------------------------------------------------------------- #
 # snapshot                                                                      #
 # --------------------------------------------------------------------------- #
 
-def _num_or_none(value: Any) -> float | None:
-    """Float for the UI, or ``None`` for a blank field (so a missing price/fee
-    reads as '—' rather than a spurious 0)."""
-    if value in (None, ""):
-        return None
-    return float(_dec(value))
 
 
-def _event_rows(events: list[dict[str, str]], memberships: dict[str, str] | None = None,
-                group_names: dict[str, str] | None = None) -> list[dict[str, Any]]:
-    """Project the ledger events into the UI shape used by the group Details
-    drill-down (newest first), mirroring the options-ledger events table."""
-    memberships = memberships or {}
-    group_names = group_names or {}
-    rows = [
-        {
-            "id": event["id"],
-            "trade_date": event["trade_date"],
-            "underlying_symbol": event["underlying_symbol"],
-            "occ_symbol": event["occ_symbol"],
-            "option_type": event["option_type"],
-            "strike": _num_or_none(event["strike"]),
-            "expiry": event["expiry"],
-            "action": event["action"],
-            "activity_type": event["activity_type"],
-            "units": _num_or_none(event["units"]),
-            "price": _num_or_none(event["price"]),
-            "net_value": _num_or_none(event["net_value"]),
-            "fee": _num_or_none(event["fee"]),
-            "description": event["description"],
-            "group_id": memberships.get(event["id"]),
-            "group_name": group_names.get(memberships.get(event["id"], "")),
-        }
-        for event in events
-    ]
-    rows.sort(key=lambda row: (row["trade_date"], row["id"]), reverse=True)
-    return rows
 
 
-def _empty_risk() -> dict[str, Any]:
-    return {
-        "accounts": {},
-        "combined": {
-            "cash_limit": None, "cash_limit_status": "PLACEHOLDER",
-            "completeness": "UNAVAILABLE",
-            "included_position_count": 0, "excluded_position_count": 0,
-            "beta_weighted_delta_dollars": None,
-            "computed_beta_weighted_delta_dollars": None,
-            "spy_equivalent_shares": None, "computed_spy_equivalent_shares": None,
-        },
-        "positions": [], "spy_spot": None, "spy_as_of": None,
-        "warnings": {"short_gamma": [], "needs_settlement": []}, "caveat": "",
-    }
 
 
-def _empty(as_of: date) -> dict[str, Any]:
-    return {
-        "as_of": as_of.isoformat(),
-        "rows": [],
-        "groups": [],
-        "events": [],
-        "risk": _empty_risk(),
-        "summary": {"position_count": 0, "group_count": 0, "ungrouped_event_count": 0},
-    }
 
 
-def _default_market_provider(rows: list[dict[str, Any]], as_of: date,
-                             cfg: RiskConfig) -> tuple[dict[Any, Any], float | None]:
-    return build_market_inputs(
-        rows, as_of, cfg,
-        betas_path=config.retirement_option_betas_csv(),
-        greeks_path=config.retirement_option_greeks_csv(),
-    )
 
 
-def _default_total_value() -> float | None:
-    """Retirement portfolio's total current value, used as the risk cash limit.
-
-    Read from the common brokerage projection over the same materialized ledger,
-    and deliberately the non-option account value rather than the Holdings
-    total: cash counts toward what the account is worth, so excluding it would
-    quietly tighten the risk bands. Any failure degrades to no cash limit (bands
-    then read Unavailable) rather than breaking the options view, and a
-    non-positive or unknown total is treated as no limit."""
-    from .brokerages import registry
-    from .brokerages.projections import holdings
-
-    try:
-        entry = registry.registration("fidelity")
-        adapter = entry.factory(entry.descriptor, entry.capabilities)
-        total = holdings.account_value(adapter.snapshot())
-    except (RuntimeError, OSError, TypeError, ValueError, KeyError):
-        return None
-    if total is None:
-        return None
-    return float(total) if total > 0 else None
 
 
-def _retirement_risk_config(cfg: RiskConfig, rows: list[dict[str, Any]],
-                            total_current: float | None) -> RiskConfig:
-    """Scope the risk config to the retirement account(s): the total current
-    portfolio value is the cash limit. Overriding ``cash_limits`` (rather than
-    inheriting the TRADING limit) also stops ``build_risk_snapshot`` from adding a
-    spurious empty ``trading`` account card to the retirement view."""
-    accounts = sorted({str(row.get("account") or "") for row in rows})
-    cash_limits: dict[str, float] = {}
-    cash_status: dict[str, str] = {}
-    if total_current is not None:
-        for account in accounts:
-            cash_limits[account] = float(total_current)
-            cash_status[account] = LIMIT_APPROVED
-    return replace(cfg, cash_limits=cash_limits, cash_limit_status=cash_status)
 
 
-def snapshot(*, as_of: date | None = None, market_provider=_default_market_provider,
-             total_value_provider=_default_total_value) -> dict[str, Any]:
-    """Trade groups + broker risk positions for the retirement option legs."""
-    as_of = as_of or date.today()
-    rows = _option_rows()
-    meta = _read_groups()
-    events = _read_events()
-    # Prefer the retained event ledger so a closed contract keeps its group and
-    # realized P/L; fall back to live legs before the first activity sync.
-    groups, memberships = _build_app_groups(events, rows, meta, as_of.year)
-    group_names = {group["group_id"]: group["name"] for group in groups}
-    ungrouped_count = sum(1 for event in events if event["id"] not in memberships)
-    # Attached after the group totals are final, so the shares can only ever be
-    # read as context beside the options -- never as part of the premium math.
-    holdings = _equity_holdings(rows, _read_holdings_ledger())
-    for group in groups:
-        if group["symbol"] in holdings:
-            group["equity_holding"] = holdings[group["symbol"]]
-
-    if not rows:
-        # No live option legs. The risk table is empty, but any fully-closed
-        # groups from the event ledger still surface with their realized P/L.
-        snap = _empty(as_of)
-        snap["groups"] = groups
-        snap["events"] = _event_rows(events, memberships, group_names)
-        snap["summary"] = {
-            "position_count": 0, "group_count": len(groups),
-            "ungrouped_event_count": ungrouped_count,
-        }
-        return snap
-
-    base_cfg = _risk_config()
-    market, spy_spot = market_provider(rows, as_of, base_cfg)
-    cfg = _retirement_risk_config(base_cfg, rows, total_value_provider())
-
-    enriched: list[dict[str, Any]] = []
-    for row in rows:
-        leg_market = market.get(row["id"]) or market.get(row["symbol"])
-        out = {key: value for key, value in row.items() if not key.startswith("_")}
-        out["market_value"] = row["_market_value"]
-        out["current_underlying_price"] = leg_market.spot if leg_market else None
-        # The session the spot closed on. Without it the column reads as live,
-        # and over a weekend it can trail the page's own timestamp by days.
-        out["price_as_of"] = leg_market.price_as_of if leg_market else None
-        out["dte_remaining"] = None
-        out["percent_to_strike"] = None
-        out["needs_settlement"] = False
-        if row["expiry"]:
-            dte = (date.fromisoformat(row["expiry"]) - as_of).days
-            out["dte_remaining"] = dte
-            out["needs_settlement"] = dte < 0
-            if leg_market and leg_market.spot and row["strike"]:
-                out["percent_to_strike"] = (
-                    (leg_market.spot - row["strike"]) / leg_market.spot * 100.0
-                )
-        enriched.append(out)
-
-    enriched.sort(key=lambda r: (r["symbol"], r["expiry"] or "", r["trade_type"]))
-    risk = build_risk_snapshot(pd.DataFrame(rows), market, spy_spot, as_of, cfg)
-    spy_reference = market.get("__SPY_REFERENCE__")
-    risk["spy_as_of"] = spy_reference.price_as_of if spy_reference else None
-    return {
-        "as_of": as_of.isoformat(),
-        "rows": enriched,
-        "groups": groups,
-        "events": _event_rows(events, memberships, group_names),
-        "risk": risk,
-        "summary": {
-            "position_count": len(rows), "group_count": len(groups),
-            "ungrouped_event_count": ungrouped_count,
-        },
-    }
 
 
 # --------------------------------------------------------------------------- #

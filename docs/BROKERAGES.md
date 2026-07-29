@@ -179,7 +179,6 @@ Partial risk inputs are never presented as complete totals.
 | Path | Contents |
 |---|---|
 | `$SFP_DATA_DIR/ledger_options/options_activity.csv` | Immutable broker transactions |
-| `$SFP_DATA_DIR/ledger_options/options_groups.csv` | Legacy rollback artifact; production sync no longer writes it |
 | `$SFP_DATA_DIR/ledger_options/options_position_marks.csv` | Current marks |
 | `$SFP_DATA_DIR/ledger_options/options_greeks.csv` | Timestamped IV and Greeks |
 | `$SFP_DATA_DIR/ledger_options/options_betas.csv` | Timestamped market-metric beta |

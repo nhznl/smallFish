@@ -1,5 +1,13 @@
 # Brokerage ledger normalized views
 
+**Status:** this document is the original design record. The surface it
+describes — `GET /brokerage-ledgers/{portfolio}/combined`, the grouped
+`GET /options` and `GET /options/activity` projections, and
+`GET /retirement/options` — is fully implemented and then fully retired; see
+`docs/BROKERAGE_REFACTOR_PLAN.md` for the retirement record and current
+`/api/brokerages` contract. Read this for the accounting reasoning, not as a
+description of what is live today.
+
 ## Objective
 
 Give the Trading (Tastytrade) and Retirement (Fidelity through SnapTrade)
@@ -332,8 +340,10 @@ compatible. Retirement already materializes all current positions.
 - Account identity remains visible and short-call coverage never crosses an
   account boundary.
 - Existing `/options`, `/options/activity`, and `/retirement/options` response
-  shapes do not change. (`/retirement/portfolio/live` was in this list and was
-  retired later, once the common Holdings resource carried its behavior; that
-  retirement is recorded in `docs/BROKERAGE_REFACTOR_PLAN.md`.)
+  shapes do not change. (This criterion held through the migration; all three
+  of these, along with `/retirement/portfolio/live`, were later retired
+  outright once the common resources carried their behavior and a consumer
+  sweep found nothing left calling them. See `docs/BROKERAGE_REFACTOR_PLAN.md`
+  for the retirement record.)
 - Backend tests, Angular build/tests, route inspection with representative
   data, docs checks, secret scan, and `git diff --check` pass.

@@ -206,50 +206,10 @@ def _group(symbol="CLX"):
     return next(g for g in snapshot["groups"] if g["symbol"] == symbol)
 
 
-def test_group_equity_holding_is_context_and_changes_no_total(opts_env):
-    """The drill-down shows the shares behind a covered call; the premium math
-    stays option-only."""
-    without_shares = [_short_call("CLX")]
-    _write_rows(without_shares)
-    baseline = _group()
-
-    _write_rows(without_shares + [_holding("CLX", "150")])
-    group = _group()
-
-    assert "equity_holding" not in baseline
-    holding = group["equity_holding"]
-    assert holding["total_shares"] == 150.0
-    assert holding["covered_contracts"] == 1
-    assert holding["short_call_contracts"] == 1.0
-    assert [lot["account"] for lot in holding["lots"]] == ["BrokerageLink"]
-    # Adding 150 shares must not move any figure the group reports.
-    assert {key: group[key] for key in (
-        "net_cash_flow", "open_market_value", "total_pnl", "realized_pnl",
-        "event_count", "position_status", "pnl_completeness")} == {
-        key: baseline[key] for key in (
-            "net_cash_flow", "open_market_value", "total_pnl", "realized_pnl",
-            "event_count", "position_status", "pnl_completeness")}
 
 
-def test_shares_appear_on_a_group_with_no_call_written_against_them(opts_env):
-    """Holding the stock is worth seeing beside its options either way; with no
-    call, there is simply nothing for the shares to cover."""
-    _write_rows([
-        {**_short_call("CLX"), "option_type": "PUT", "symbol": "CLX  260821P00061000"},
-        _holding("CLX", "100"),
-    ])
-
-    holding = _group()["equity_holding"]
-
-    assert holding["total_shares"] == 100.0
-    assert holding["short_call_contracts"] == 0.0
-    assert holding["covered_contracts"] == 0
 
 
-def test_groups_without_shares_carry_no_equity_holding(opts_env):
-    _write_rows([_short_call("CLX"), _holding("AMD", "500")])
-
-    assert "equity_holding" not in _group()
 
 
 def test_cash_is_not_share_coverage(opts_env):
@@ -289,28 +249,6 @@ def test_build_groups_net_credit_from_cost_basis(opts_env):
 # snapshot shape                                                                #
 # --------------------------------------------------------------------------- #
 
-def test_snapshot_shape_with_injected_market(opts_env):
-    _write_ledger(opts_env)
-    d = retirement_options.snapshot(as_of=date(2026, 7, 23),
-                                    market_provider=_fake_market_provider)
-    assert d["summary"] == {
-        "position_count": 2, "group_count": 2, "ungrouped_event_count": 0,
-    }
-    assert len(d["rows"]) == 2 and len(d["risk"]["positions"]) == 2
-
-    by_id = {r["id"]: r for r in d["rows"]}
-    spcx = next(r for r in d["rows"] if r["symbol"] == "SPCX")
-    assert spcx["current_underlying_price"] == 124.0
-    assert spcx["market_value"] == pytest.approx(-1008.0)
-    assert spcx["dte_remaining"] == 29
-    assert spcx["percent_to_strike"] == pytest.approx((124.0 - 95.0) / 124.0 * 100.0)
-    # No leaked internal aggregation fields in the API rows.
-    assert not any(k.startswith("_") for k in spcx)
-
-    risk = {p["row_id"]: p for p in d["risk"]["positions"]}
-    assert risk[spcx["id"]]["delta_shares"] is not None  # BS delta from injected vol/spot
-    # Portfolio Risk aggregation is present (previously absent from this ledger).
-    assert set(d["risk"]) >= {"accounts", "combined", "positions", "warnings", "spy_spot"}
 
 
 def _beta_market_provider(rows, as_of, cfg):
@@ -335,36 +273,8 @@ def _beta_market_provider(rows, as_of, cfg):
     return market, 500.0
 
 
-def test_snapshot_portfolio_risk_uses_total_current_as_cash_limit(opts_env):
-    _write_ledger(opts_env)
-    d = retirement_options.snapshot(
-        as_of=date(2026, 7, 23),
-        market_provider=_beta_market_provider,
-        total_value_provider=lambda: 250_000.0,
-    )
-    accounts = d["risk"]["accounts"]
-    # Only the retirement account appears — no spurious TRADING card leaks in.
-    assert set(accounts) == {"BrokerageLink"}
-    acct = accounts["BrokerageLink"]
-    assert acct["cash_limit"] == 250_000.0
-    assert acct["cash_limit_status"] == "APPROVED"
-    # Both beta-delta totals populate (Tasty 1.5, our beta 2.0) and differ.
-    assert acct["completeness"] == "COMPLETE"
-    assert acct["beta_weighted_delta_dollars"] is not None
-    assert acct["computed_beta_weighted_delta_dollars"] is not None
-    assert (acct["computed_beta_weighted_delta_dollars"]
-            != acct["beta_weighted_delta_dollars"])
-    assert d["risk"]["spy_as_of"] == "2026-07-23"
 
 
-def test_snapshot_portfolio_risk_degrades_without_total_value(opts_env):
-    _write_ledger(opts_env)
-    d = retirement_options.snapshot(as_of=date(2026, 7, 23),
-                                    market_provider=_beta_market_provider,
-                                    total_value_provider=lambda: None)
-    acct = d["risk"]["accounts"]["BrokerageLink"]
-    assert acct["cash_limit"] is None  # no limit -> bands read Unavailable
-    assert "TRADING" not in d["risk"]["accounts"]
 
 
 def test_epoch_ms_to_iso_utc_date():
@@ -533,85 +443,14 @@ def test_sync_events_imports_options_and_is_idempotent(opts_env):
 
 
 
-def test_closed_contract_persists_with_realized_pnl(opts_env):
-    # Contract closed and gone from the positions feed (empty holdings ledger),
-    # but the buy-to-close has posted to activities: group survives as realized.
-    _write_empty_ledger(opts_env)
-    retirement_options.sync_events(provider=_provider(
-        _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
-                      "2026-07-24", "370.34", "-1"),
-        _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
-                      "2026-07-24", "-259.00", "1", trade_date="2026-07-23T04:00:00Z"),
-    ))
-    d = retirement_options.snapshot()
-    assert d["summary"] == {
-        "position_count": 0, "group_count": 1, "ungrouped_event_count": 0,
-    }
-    msft = {g["symbol"]: g for g in d["groups"]}["MSFT"]
-    assert msft["position_status"] == "FLAT"
-    assert msft["pnl_completeness"] == "COMPLETE"
-    assert msft["realized_pnl"] == pytest.approx(111.34)   # 370.34 - 259.00
-    assert msft["total_pnl"] == pytest.approx(111.34)
 
 
 
 
-def test_open_event_without_mark_reads_unavailable(opts_env):
-    # Transitional window: position already left the feed, only the opening
-    # event has posted. P/L must not fabricate a realized figure.
-    _write_empty_ledger(opts_env)
-    retirement_options.sync_events(provider=_provider(
-        _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
-                      "2026-07-24", "370.34", "-1"),
-    ))
-    msft = {g["symbol"]: g for g in retirement_options.snapshot()["groups"]}["MSFT"]
-    assert msft["position_status"] == "OPEN"
-    assert msft["pnl_completeness"] == "UNAVAILABLE"
-    assert msft["realized_pnl"] is None
-    assert msft["total_pnl"] is None
-    assert msft["net_cash_flow"] == pytest.approx(370.34)
 
 
-def test_open_group_marks_from_live_holdings_indicative(opts_env):
-    # Open contract still in the holdings feed: total_pnl uses the live mark and
-    # reads INDICATIVE, matching the live-leg path's numbers.
-    _write_ledger(opts_env)  # SPCX short put open, market_value -1008
-    retirement_options.sync_events(provider=_provider(
-        _opt_activity("a1", "SELL_TO_OPEN", "SELL", _SPCX_OCC, "SPCX", "PUT", 95,
-                      "2026-08-21", "428.67", "-2"),
-    ))
-    d = retirement_options.snapshot(as_of=date(2026, 7, 23),
-                                    market_provider=_fake_market_provider)
-    by_symbol = {g["symbol"]: g for g in d["groups"]}
-    spcx = by_symbol["SPCX"]
-    assert spcx["position_status"] == "OPEN"
-    assert spcx["pnl_completeness"] == "INDICATIVE"
-    assert spcx["net_cash_flow"] == pytest.approx(428.67)
-    assert spcx["open_market_value"] == pytest.approx(-1008.0)
-    assert spcx["total_pnl"] == pytest.approx(428.67 - 1008.0)
-    # FLKR has a live leg but no event yet -> still surfaces via the live path.
-    assert "FLKR" in by_symbol
 
 
-def test_snapshot_exposes_events_for_details(opts_env):
-    # The Details drill-down needs the group's broker events in the snapshot,
-    # newest first, with numeric fields typed for the UI.
-    _write_empty_ledger(opts_env)
-    retirement_options.sync_events(provider=_provider(
-        _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
-                      "2026-07-24", "370.34", "-1", trade_date="2026-07-15T04:00:00Z"),
-        _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
-                      "2026-07-24", "-259.00", "1", trade_date="2026-07-23T04:00:00Z"),
-    ))
-    events = retirement_options.snapshot()["events"]
-    assert [e["action"] for e in events] == ["BUY_TO_CLOSE", "SELL_TO_OPEN"]  # newest first
-    close = events[0]
-    assert close["underlying_symbol"] == "MSFT"
-    assert close["occ_symbol"] == _MSFT_OCC
-    assert close["net_value"] == pytest.approx(-259.00)
-    assert close["units"] == pytest.approx(1.0)
-    assert close["strike"] == pytest.approx(380.0)
-    assert close["option_type"] == "PUT"
 
 
 def test_sync_events_rejects_inverted_window(opts_env):
@@ -621,18 +460,6 @@ def test_sync_events_rejects_inverted_window(opts_env):
                                        end_date=date(2026, 7, 1))
 
 
-def test_snapshot_empty_without_options(opts_env):
-    # Ledger with no option rows -> empty shape, no market provider call needed.
-    path = config.snaptrade_holdings_csv()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=snaptrade_service.HOLDINGS_HEADERS)
-        writer.writeheader()
-    d = retirement_options.snapshot()
-    assert d["summary"] == {
-        "position_count": 0, "group_count": 0, "ungrouped_event_count": 0,
-    }
-    assert d["rows"] == [] and d["groups"] == []
 
 
 # --------------------------------------------------------------------------- #
@@ -669,92 +496,3 @@ def _open_option_holding(occ, underlying, *, account_id="acct-1",
         "cost_basis": cost_basis, "market_value": market_value,
         "open_pnl": "0", "open_pnl_pct": "0",
     }
-
-
-def test_same_symbol_in_several_accounts_is_one_group(opts_env):
-    """Fidelity sub-accounts contribute to the same underlying.
-
-    Today's grouping is keyed by symbol alone, so both accounts' events land in
-    one row and its P/L is their sum. The symbol ledger keeps that top-level
-    identity; account identity has to stay visible on the components.
-    """
-    _write_empty_ledger(opts_env)
-    retirement_options.sync_events(provider=_multi_account_provider(
-        ("acct-1", "BrokerageLink", _opt_activity(
-            "a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
-            "2026-07-24", "370.34", "-1")),
-        ("acct-1", "BrokerageLink", _opt_activity(
-            "a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
-            "2026-07-24", "-259.00", "1")),
-        ("acct-2", "ROTH IRA", _opt_activity(
-            "b1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
-            "2026-07-24", "185.17", "-1")),
-        ("acct-2", "ROTH IRA", _opt_activity(
-            "b2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
-            "2026-07-24", "-129.50", "1")),
-    ))
-
-    snap = retirement_options.snapshot()
-    assert len(snap["groups"]) == 1
-    group = snap["groups"][0]
-    assert group["symbol"] == "MSFT"
-    assert group["event_count"] == 4
-    assert group["position_status"] == "FLAT"
-    assert group["pnl_completeness"] == "COMPLETE"
-    assert group["realized_pnl"] == pytest.approx(167.01)
-    assert snap["summary"]["ungrouped_event_count"] == 0
-    # Both accounts' events are retained and attributable.
-    assert {event["id"] for event in retirement_options._read_events()} == {
-        "a1", "a2", "b1", "b2"
-    }
-
-
-def test_closing_one_contract_leaves_the_underlying_open(opts_env):
-    """Two contracts on one underlying: the closed one keeps its cash, and the
-    symbol stays open and indicative because the other still has a mark."""
-    _write_rows([_open_option_holding(_MSFT_OCC_2, "MSFT")])
-    retirement_options.sync_events(provider=_provider(
-        _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
-                      "2026-07-24", "370.34", "-1"),
-        _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
-                      "2026-07-24", "-259.00", "1"),
-        _opt_activity("a3", "SELL_TO_OPEN", "SELL", _MSFT_OCC_2, "MSFT", "PUT", 370,
-                      "2026-08-21", "300.00", "-1"),
-    ))
-
-    groups = retirement_options.snapshot(
-        market_provider=lambda rows, as_of, cfg: ({}, None))["groups"]
-    assert len(groups) == 1
-    group = groups[0]
-    assert group["position_status"] == "OPEN"
-    assert group["pnl_completeness"] == "INDICATIVE"
-    assert group["realized_pnl"] is None
-    assert group["net_cash_flow"] == pytest.approx(411.34)
-    assert group["open_market_value"] == pytest.approx(-200.0)
-    assert group["total_pnl"] == pytest.approx(211.34)
-
-
-def test_cross_year_open_and_close_stay_in_one_retirement_group(opts_env):
-    """The retained event ledger is upserted by activity id and never truncated
-    to the current fetch window, so a December open closes against a February
-    buy-to-close inside the same running tally."""
-    _write_empty_ledger(opts_env)
-    retirement_options.sync_events(
-        start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
-        provider=_provider(_opt_activity(
-            "a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
-            "2026-07-24", "370.34", "-1", trade_date="2025-12-05T05:00:00Z")),
-    )
-    report = retirement_options.sync_events(
-        start_date=date(2026, 1, 1), end_date=date(2026, 7, 28),
-        provider=_provider(_opt_activity(
-            "a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
-            "2026-07-24", "-259.00", "1", trade_date="2026-02-13T05:00:00Z")),
-    )
-
-    assert report["events_inserted"] == 1
-    assert len(retirement_options._read_events()) == 2   # 2025 event retained
-    groups = retirement_options.snapshot()["groups"]
-    assert len(groups) == 1
-    assert groups[0]["position_status"] == "FLAT"
-    assert groups[0]["realized_pnl"] == pytest.approx(111.34)

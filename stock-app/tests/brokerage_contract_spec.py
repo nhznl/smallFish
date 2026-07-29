@@ -175,20 +175,10 @@ NEW_ROUTES = (
 # Entries leave this list only by that deliberate audit, recorded in
 # RETIRED_LEGACY_ROUTES below — never because a phase found one inconvenient.
 FROZEN_LEGACY_ROUTES = (
-    ("GET", "/options"),
-    ("GET", "/options/activity"),
     ("POST", "/options/activity/sync"),
-    ("POST", "/options/groups"),
-    ("PUT", "/options/groups/{group_id}"),
-    ("PUT", "/options/activity/{event_id}/group"),
     ("POST", "/options/activity/manual"),
     ("PUT", "/options/activity/manual/{event_id}"),
     ("DELETE", "/options/activity/manual/{event_id}"),
-    ("GET", "/retirement/options"),
-    ("POST", "/retirement/options/groups"),
-    ("PUT", "/retirement/options/groups/{symbol}"),
-    ("PUT", "/retirement/options/activity/{event_id}/group"),
-    ("GET", "/brokerage-ledgers/{portfolio}/combined"),
 )
 
 # Retired by the post-phase cleanup, after the owner confirmed these are not
@@ -207,6 +197,19 @@ RETIRED_LEGACY_ROUTES = (
     ("GET", "/brokerage-ledgers/{portfolio}/holdings"),
     ("PUT", "/brokerage-ledgers/{portfolio}/holdings/{symbol}/enrichment"),
     ("POST", "/brokerage-ledgers/{portfolio}/holdings/gain-loss-snapshots"),
+    # The grouped Options/Trading and Retirement projections and every trade-
+    # group route: no Angular consumer, and their accounting now lives in the
+    # common Options, Option-Adjusted Basis, and Symbol Ledger resources.
+    ("GET", "/options"),
+    ("GET", "/options/activity"),
+    ("POST", "/options/groups"),
+    ("PUT", "/options/groups/{group_id}"),
+    ("PUT", "/options/activity/{event_id}/group"),
+    ("GET", "/retirement/options"),
+    ("POST", "/retirement/options/groups"),
+    ("PUT", "/retirement/options/groups/{symbol}"),
+    ("PUT", "/retirement/options/activity/{event_id}/group"),
+    ("GET", "/brokerage-ledgers/{portfolio}/combined"),
 )
 
 # Provider vocabulary that must be converted inside an adapter and must never

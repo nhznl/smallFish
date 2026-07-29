@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app import brokerage_ledger, config, options_activity
+from app import config, options_activity
 from app.brokerages import contracts, migration, registry, trend
 from app.brokerages.projections import components as component_projection
 from app.brokerages.projections import holdings as holdings_projection
@@ -29,9 +29,6 @@ client = TestClient(app)
 
 BROKERAGE_IDS = sorted(registry.REGISTRY)
 RESOURCES = ("holdings", "options", "option-adjusted-basis")
-
-#: The compatibility view keyed by portfolio; the new API by brokerage id.
-LEGACY_PORTFOLIO = {"tastytrade": "trading", "fidelity": "retirement"}
 
 
 def _get(brokerage_id: str, resource: str, **params):
@@ -713,43 +710,47 @@ def test_a_missing_mark_makes_the_total_null_not_zero(adapter_env, brokerage_id)
 # ---------------------------------------------------------------- parity ---
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
-def test_accounting_matches_the_compatibility_view_it_replaces(adapter_env,
-                                                               brokerage_id):
-    """The formulas moved; the numbers did not."""
+def test_adjusted_basis_accounting_for_the_reference_position(adapter_env,
+                                                              brokerage_id):
+    """100 shares at a 110 cost and a 120 mark, one short put opened for a 600
+    credit and marked at 0.75 -- the same economic position both brokerage
+    artifact families express. These figures were proven identical to the
+    legacy compatibility view before that view was retired; pinned directly
+    now that there is nothing left to compare against."""
     write_covered_put(brokerage_id)
-    legacy = brokerage_ledger.snapshot(LEGACY_PORTFOLIO[brokerage_id])["symbols"][0]
-    new = _get(brokerage_id, "option-adjusted-basis")["items"][0]
+    item = _get(brokerage_id, "option-adjusted-basis")["items"][0]
 
-    assert new["symbol"] == legacy["symbol"]
-    assert new["share_quantity"] == pytest.approx(legacy["share_quantity"])
-    assert new["equity_cost"] == pytest.approx(legacy["equity_cost"])
-    assert new["current_equity"] == pytest.approx(legacy["current_equity"])
-    assert new["equity_pnl"] == pytest.approx(legacy["equity_pnl"])
-    assert new["option_pnl"] == pytest.approx(legacy["option_pnl"])
-    assert new["net_pnl"] == pytest.approx(legacy["net_pnl"])
-    assert new["adjusted_basis"]["marked_per_share"] == pytest.approx(
-        legacy["option_adjusted_basis_per_share"]
-    )
+    assert item["symbol"] == "ABC"
+    assert item["share_quantity"] == pytest.approx(100)
+    assert item["equity_cost"] == pytest.approx(11000)
+    assert item["current_equity"] == pytest.approx(12000)
+    assert item["equity_pnl"] == pytest.approx(1000)
+    assert item["option_pnl"] == pytest.approx(525)
+    assert item["net_pnl"] == pytest.approx(1525)
+    assert item["adjusted_basis"]["marked_per_share"] == pytest.approx(104.75)
 
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
-def test_component_vocabulary_matches_the_established_one(adapter_env, brokerage_id):
-    """Reused rather than reinvented, so no second meaning for `cash_in`."""
+def test_option_component_accounting_for_the_reference_position(adapter_env,
+                                                                 brokerage_id):
+    """The short put half of the same reference position. Pinned directly for
+    the same reason as the adjusted-basis figures above."""
     write_covered_put(brokerage_id)
-    legacy = brokerage_ledger.snapshot(LEGACY_PORTFOLIO[brokerage_id])["symbols"][0]
-    legacy_option = next(
-        row for row in legacy["components"] if row["instrument"] == "OPTION"
-    )
-    new_option = _get(brokerage_id, "options")["items"][0]
+    option = _get(brokerage_id, "options")["items"][0]
 
-    shared = set(legacy_option) - {"annotations"}
-    assert shared <= set(new_option)
-    for field in ("cash_in", "cash_out", "net_cash_flow", "open_market_value",
-                  "total_pnl", "quantity", "strike"):
-        assert new_option[field] == pytest.approx(legacy_option[field])
-    for field in ("instrument", "side", "option_type", "state",
-                  "pnl_completeness", "cash_flow_basis"):
-        assert new_option[field] == legacy_option[field]
+    assert option["instrument"] == "OPTION"
+    assert option["side"] == "SHORT"
+    assert option["option_type"] == "PUT"
+    assert option["state"] == "OPEN"
+    assert option["pnl_completeness"] == "INDICATIVE"
+    assert option["cash_flow_basis"] == "BROKER_ACTIVITY"
+    assert option["cash_in"] == pytest.approx(600)
+    assert option["cash_out"] == pytest.approx(0)
+    assert option["net_cash_flow"] == pytest.approx(600)
+    assert option["open_market_value"] == pytest.approx(-75)
+    assert option["total_pnl"] == pytest.approx(525)
+    assert option["quantity"] == pytest.approx(-1)
+    assert option["strike"] == pytest.approx(50)
 
 
 def test_an_expiration_now_resolves_instead_of_reading_as_a_mismatch(adapter_env):
@@ -780,9 +781,9 @@ def test_an_expiration_now_resolves_instead_of_reading_as_a_mismatch(adapter_env
     assert item["realized_pnl"] == pytest.approx(600)
     assert item["pnl_completeness"] == "COMPLETE"
     assert component_projection.POSITION_ACTIVITY_MISMATCH not in item["missing"]
-
-    legacy = brokerage_ledger.snapshot("trading")["symbols"][0]["components"][0]
-    assert legacy["pnl_completeness"] == "UNAVAILABLE"   # the behavior being replaced
+    # The behavior this replaced -- reading the same expiration as
+    # UNAVAILABLE / POSITION_ACTIVITY_MISMATCH -- lived in the legacy combined
+    # projection, retired with the rest of the compatibility surface.
 
 
 def test_a_genuinely_unexplained_blank_delta_still_fails_closed(adapter_env):
@@ -823,11 +824,14 @@ def test_coverage_reports_retained_history_not_claimed_history(adapter_env):
     assert coverage["status"] in spec.COVERAGE_STATUSES
 
 
-def test_the_legacy_contracts_are_untouched_by_the_additive_api(adapter_env):
+def test_the_additive_api_does_not_disturb_the_activity_artifact(adapter_env):
+    """What this protected -- several now-retired legacy routes staying live
+    beside the new API -- no longer applies; they are gone on purpose. What
+    still matters is that reading the new API is not destructive to the
+    artifact underneath it."""
     write_covered_put("tastytrade")
     write_covered_put("fidelity")
-    for path in ("/brokerage-ledgers/trading/combined",
-                 "/brokerage-ledgers/retirement/combined",
-                 "/options/activity", "/retirement/options"):
-        assert client.get(path).status_code == 200
+    for resource in RESOURCES:
+        for brokerage_id in BROKERAGE_IDS:
+            _get(brokerage_id, resource)
     assert config.options_activity_csv().is_file()

@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from app import config, options_activity, options_portfolio
+from app import config, options_activity
 
 
 @pytest.fixture
@@ -18,6 +18,18 @@ def activity_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SFP_OPTIONS_BETAS", str(tmp_path / "betas.csv"))
     monkeypatch.delenv("SFP_OPTIONS_ACTIVITY_EXCLUDED_SYMBOLS", raising=False)
     return tmp_path
+
+
+def _events(account: str | None = None) -> list[dict[str, str]]:
+    """The immutable event ledger, read straight from its artifact.
+
+    The grouped projection these tests used to read through is retired, and
+    asserting on the artifact is closer to what actually has to hold anyway.
+    """
+    rows = options_activity._read_csv(
+        config.options_activity_csv(), options_activity.ACTIVITY_HEADERS
+    )
+    return [row for row in rows if account is None or row["account"] == account]
 
 
 def _tx(tx_id, *, symbol="ABC   260821P00050000", underlying="ABC",
@@ -99,13 +111,7 @@ def test_sync_is_idempotent_and_marks_open_pnl(activity_env):
     assert second["events_inserted"] == 0
     assert first["groups_created"] == second["groups_created"] == 0
 
-    snap = options_activity.snapshot("TRADING")
-    assert len(snap["events"]) == 1
-    # Nothing creates a group any more, so the retained projection has none to
-    # show. The marked P/L those rows carried is the Symbol Ledger's now, and is
-    # asserted in `test_symbol_ledger_api`.
-    assert snap["groups"] == []
-    assert options_activity.snapshot()["reconciliation_issues"] == []
+    assert len(_events("TRADING")) == 1
 
 
 
@@ -140,77 +146,10 @@ def test_sync_materializes_equity_only_positions_for_combined_ledger(activity_en
     ] == "20"
 
 
-def test_risk_rows_are_current_broker_positions(activity_env):
-    transactions = [
-        _tx(1),
-        _tx(2, symbol="ABC   260821C00060000", action="Buy to Open",
-            net_value="-151", value="-150"),
-    ]
-    marks = [
-        _mark(),
-        _mark(symbol="ABC   260821C00060000", direction="Long", mark_price="1.60"),
-    ]
-    options_activity.sync(
-        date(2026, 1, 1), date(2026, 7, 20),
-        provider=lambda _start, _end: (transactions, marks, {"environment": "live"}),
-    )
-
-    rows = sorted(options_activity.risk_rows(), key=lambda row: row["trade_type"])
-    assert [row["trade_type"] for row in rows] == ["LONG_CALL", "SHORT_PUT"]
-    assert {row["status"] for row in rows} == {"OPEN"}
-    # `wheel_id` carried the group name. With grouping retired it is blank,
-    # and the row is identified by its contract as it substantively always was.
-    assert {row["wheel_id"] for row in rows} == {""}
-    assert {row["symbol"] for row in rows} == {"ABC"}
-    assert {row["contract_key"] for row in rows} == {
-        "ABC 260821C00060000", "ABC 260821P00050000",
-    }
-    assert {row["mark_price"] for row in rows} == {0.4, 1.6}
-    assert all(row["mark_retrieved_at"] for row in rows)
 
 
-def test_risk_rows_report_share_coverage_for_short_calls(activity_env):
-    """Shares and the call against them arrive as separate broker positions."""
-    transactions = [
-        _tx(1, symbol="ABC", underlying="ABC", action="Buy to Open",
-            quantity="100", instrument="Equity", net_value="-8000", value="-8000"),
-        _tx(2, symbol="ABC   260821C00060000", action="Sell to Open",
-            net_value="150", value="151"),
-    ]
-    marks = [
-        _mark(symbol="ABC", quantity="100", direction="Long", mark_price="80",
-              multiplier="1") | {"instrument_type": "Equity"},
-        _mark(symbol="ABC   260821C00060000", direction="Short", mark_price="1.60"),
-    ]
-    options_activity.sync(
-        date(2026, 1, 1), date(2026, 7, 20),
-        provider=lambda _start, _end: (transactions, marks, {"environment": "live"}),
-    )
-
-    rows = {row["trade_type"]: row for row in options_activity.risk_rows()}
-
-    assert "COVERED_CALL" in rows, "100 shares back the single short call"
-    assert rows["COVERED_CALL"]["coverage"] == "COVERED"
-    assert rows["COVERED_CALL"]["covered_contracts"] == 1
-    assert rows["STOCK"]["qty"] == 100.0
 
 
-def test_risk_rows_mark_a_short_call_without_shares_uncovered(activity_env):
-    options_activity.sync(
-        date(2026, 1, 1), date(2026, 7, 20),
-        provider=lambda _start, _end: (
-            [_tx(1, symbol="ABC   260821C00060000", action="Sell to Open")],
-            [_mark(symbol="ABC   260821C00060000", direction="Short")],
-            {"environment": "live"},
-        ),
-    )
-
-    row = next(row for row in options_activity.risk_rows()
-               if row["trade_type"] in {"SHORT_CALL", "COVERED_CALL"})
-
-    assert row["trade_type"] == "SHORT_CALL"
-    assert row["coverage"] == "UNCOVERED"
-    assert row["covered_contracts"] == 0
 
 
 def test_sync_persists_exact_timestamped_tastytrade_iv_and_beta(activity_env):
@@ -244,20 +183,6 @@ def test_sync_persists_exact_timestamped_tastytrade_iv_and_beta(activity_env):
     }]
 
 
-def test_broker_position_totals_are_not_manual_ledger_pnl(activity_env):
-    rows = [
-        {"account": "TRADING", "status": "OPEN", "trade_type": "SHORT_PUT",
-         "strike": 50.0, "qty": 2, "non_standard": False},
-        {"account": "TRADING", "status": "OPEN", "trade_type": "SHORT_CALL",
-         "strike": 60.0, "qty": 1, "non_standard": False},
-    ]
-    totals = options_portfolio._totals(rows, ["TRADING"])["combined"]
-    assert totals == {
-        "gross_assignment_obligation": 10_000.0,
-        "open_broker_positions": 2,
-        "open_short_puts": 1,
-        "open_short_calls": 1,
-    }
 
 
 def test_a_closing_trade_is_retained_beside_its_opening_one(activity_env):
@@ -271,7 +196,7 @@ def test_a_closing_trade_is_retained_beside_its_opening_one(activity_env):
     )
     # A flat symbol's realized P/L is the Symbol Ledger's answer now; what this
     # still protects is that both closing legs land as immutable facts.
-    events = options_activity.snapshot()["events"]
+    events = _events()
     assert sorted(row["source_transaction_id"] for row in events) == ["1", "2"]
     assert sum(float(row["net_value"]) for row in events) == 58.0
 
@@ -295,14 +220,16 @@ def test_expiration_is_recorded_as_zero_cash_expired_event(activity_env):
         provider=lambda _start, _end: ([opening, expiration], [], {"environment": "live"}),
     )
 
-    event = next(row for row in options_activity.snapshot()["events"]
+    event = next(row for row in _events()
                  if row["source_transaction_id"] == "2")
     assert event["transaction_type"] == "Receive Deliver"
     assert event["transaction_sub_type"] == "Expiration"
     assert event["description"].endswith("due to expiration.")
     assert event["action"] == "Expired"
-    assert event["position_delta"] is None
-    assert all(event[field] == 0 for field in (
+    # Blank in the artifact: an expiration removes a position without the
+    # provider stating a signed delta.
+    assert event["position_delta"] == ""
+    assert all(float(event[field]) == 0 for field in (
         "price", "value", "net_value", "fee_effect", "commission", "regulatory_fees",
         "clearing_fees", "proprietary_index_option_fees", "other_charge",
     ))
@@ -340,7 +267,7 @@ def test_assignment_imports_option_removal_and_equity_delivery(activity_env):
         ),
     )
     assert report["option_events_selected"] == 5
-    events = options_activity.snapshot()["events"]
+    events = _events()
     assert {row["instrument_type"] for row in events} == {"Equity Option", "Equity"}
     assert {row["transaction_sub_type"] for row in events} >= {"Assignment", "Buy to Open"}
     assert {row["source_transaction_id"] for row in events} == {"1", "2", "3", "4", "5"}
@@ -365,7 +292,7 @@ def test_targeted_pre_window_import_is_idempotent(activity_env):
     assert first["events_inserted"] == 1
     assert second["events_inserted"] == 0
     assert first["events_auto_grouped"] == 0    # grouping is retired
-    imported = next(row for row in options_activity.snapshot()["events"]
+    imported = next(row for row in _events()
                     if row["source_transaction_id"] == "9")
     assert imported["executed_at"].startswith("2025-09-19")
 
@@ -381,41 +308,11 @@ def test_excluded_symbols_are_not_synced_or_imported(activity_env, monkeypatch):
         ),
     )
     assert report["option_events_selected"] == 1
-    assert {row["underlying_symbol"] for row in options_activity.snapshot()["events"]} == {"XYZ"}
+    assert {row["underlying_symbol"] for row in _events()} == {"XYZ"}
     assert options_activity.import_broker_events([_tx(3)])["events_received"] == 0
 
 
-def _seed_legacy_group_rows() -> None:
-    """Write the group artifacts a pre-cutover install would already hold.
-
-    Nothing creates these any more, so a purge can only ever meet leftovers —
-    and it must still take them, or a removed symbol keeps a stale group row.
-    """
-    events = options_activity._read_csv(
-        config.options_activity_csv(), options_activity.ACTIVITY_HEADERS
-    )
-    now = "2026-07-28T16:00:00+00:00"
-    groups, members = [], []
-    for index, symbol in enumerate(sorted({row["underlying_symbol"] for row in events})):
-        group_id = f"legacy-{index}"
-        groups.append({
-            "group_id": group_id, "account": "TRADING", "symbol": symbol,
-            "name": f"{symbol} 2026", "status": "ACTIVE", "notes": "",
-            "auto_created": "true", "created_at": now, "updated_at": now,
-        })
-        members.extend(
-            {"event_id": row["id"], "group_id": group_id, "assigned_at": now}
-            for row in events if row["underlying_symbol"] == symbol
-        )
-    options_activity._atomic_write(
-        config.options_groups_csv(), options_activity.GROUP_HEADERS, groups
-    )
-    options_activity._atomic_write(
-        config.options_group_members_csv(), options_activity.MEMBER_HEADERS, members
-    )
-
-
-def test_remove_symbols_cleans_events_groups_memberships_marks_greeks_and_betas(activity_env):
+def test_remove_symbols_cleans_events_marks_greeks_and_betas(activity_env):
     options_activity.sync(
         date(2026, 1, 1), date(2026, 7, 20),
         provider=lambda _start, _end: (
@@ -425,23 +322,14 @@ def test_remove_symbols_cleans_events_groups_memberships_marks_greeks_and_betas(
              "betas": [_beta(), _beta(symbol="XYZ", beta="0.8")]},
         ),
     )
-    # Grouping is retired, so a group row can only be a pre-cutover leftover.
-    # Purging a symbol must still take those with it, which is what this seeds.
-    _seed_legacy_group_rows()
-
     result = options_activity.remove_symbols({"abc"})
     assert result == {
         "events_removed": 1,
-        "groups_removed": 1,
-        "memberships_removed": 1,
         "marks_removed": 1,
         "greeks_removed": 1,
         "betas_removed": 1,
     }
-    snap = options_activity.snapshot()
-    assert {row["underlying_symbol"] for row in snap["events"]} == {"XYZ"}
-    assert {row["symbol"] for row in snap["groups"]} == {"XYZ"}
-    assert snap["reconciliation_issues"] == []
+    assert {row["underlying_symbol"] for row in _events()} == {"XYZ"}
 
 
 def _joby_provider(_start, _end):
@@ -464,25 +352,26 @@ def _joby_provider(_start, _end):
     )
 
 
-def test_manual_event_resolves_a_position_mismatch(activity_env):
+def test_a_manual_row_is_added_and_removed_without_touching_broker_facts(activity_env):
+    """Whether the row *clears a mismatch* is the Symbol Ledger's question now.
+
+    What still has to hold here is the row's own lifecycle: it joins the ledger,
+    it is distinguishable from an imported fact, and deleting it leaves the
+    broker events untouched.
+    """
     options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
-    issue = options_activity.snapshot()["reconciliation_issues"][0]
-    assert issue["contract_key"] == "JOBY"
-    assert (issue["activity_quantity"], issue["broker_quantity"]) == (-100.0, 0.0)
+    broker_ids = {row["id"] for row in _events()}
 
     created = options_activity.create_manual_event({
         "account": "TRADING", "contract_key": "JOBY", "quantity": 100,
         "transaction_date": "2025-11-21", "price": "13.00",
         "net_cash": "-1300.00", "fees": "-0.50",
     })
-    snap = options_activity.snapshot()
-    assert snap["reconciliation_issues"] == []
-    assert [row["id"] for row in snap["manual_events"]] == [created["event_id"]]
+    manual = [row for row in _events() if row["source"] == options_activity.MANUAL_SOURCE]
+    assert [row["id"] for row in manual] == [created["event_id"]]
 
     options_activity.delete_manual_event(created["event_id"])
-    restored = options_activity.snapshot()
-    assert restored["manual_events"] == []
-    assert restored["reconciliation_issues"][0]["activity_quantity"] == -100.0
+    assert {row["id"] for row in _events()} == broker_ids
 
 
 def test_manual_events_survive_a_tastytrade_sync(activity_env):
@@ -492,9 +381,8 @@ def test_manual_events_survive_a_tastytrade_sync(activity_env):
         "transaction_date": "2025-11-21", "net_cash": "-1300.00", "fees": "-0.50",
     })
     options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
-    snap = options_activity.snapshot()
-    assert [row["id"] for row in snap["manual_events"]] == [created["event_id"]]
-    assert snap["reconciliation_issues"] == []
+    manual = [row for row in _events() if row["source"] == options_activity.MANUAL_SOURCE]
+    assert [row["id"] for row in manual] == [created["event_id"]]
 
 
 def test_manual_event_records_signed_delta_and_derived_fee_effect(activity_env):
@@ -502,17 +390,20 @@ def test_manual_event_records_signed_delta_and_derived_fee_effect(activity_env):
         "account": "TRADING", "contract_key": "JOBY", "quantity": -3,
         "transaction_date": "2025-11-21", "net_cash": "-1300.00", "fees": "-0.50",
     })
-    event = next(row for row in options_activity.snapshot()["events"]
+    event = next(row for row in _events()
                  if row["id"] == created["event_id"])
     assert event["source"] == "MANUAL"
-    assert (event["position_delta"], event["quantity"]) == (-3.0, 3.0)
-    # fee_effect must stay net_value - value so group P/L math is unchanged.
-    assert event["net_value"] - event["value"] == pytest.approx(event["fee_effect"])
+    assert (float(event["position_delta"]), float(event["quantity"])) == (-3.0, 3.0)
+    # fee_effect must stay net_value - value: the cash-flow math downstream
+    # depends on fees being counted exactly once.
+    assert float(event["net_value"]) - float(event["value"]) == pytest.approx(
+        float(event["fee_effect"])
+    )
 
 
 def test_broker_events_cannot_be_deleted_through_the_manual_path(activity_env):
     options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
-    broker_id = next(row["id"] for row in options_activity.snapshot()["events"]
+    broker_id = next(row["id"] for row in _events()
                      if row["source"] == "TASTYTRADE")
     with pytest.raises(options_activity.ActivityValidationError):
         options_activity.delete_manual_event(broker_id)
@@ -538,15 +429,17 @@ def test_manual_event_edit_updates_values_and_keeps_identity(activity_env):
         "price": "12.00", "net_cash": "-3000.00", "fees": "-1.25",
         "description": "corrected assignment",
     })
-    event = next(row for row in options_activity.snapshot()["events"]
+    event = next(row for row in _events()
                  if row["id"] == created["event_id"])
     assert event["id"] == created["event_id"]          # identity survives the edit
     assert event["source"] == "MANUAL"
     assert event["contract_key"] == "JOBY"
-    assert (event["position_delta"], event["quantity"]) == (250.0, 250.0)
+    assert (float(event["position_delta"]), float(event["quantity"])) == (250.0, 250.0)
     assert event["transaction_date"] == "2025-11-24"
-    assert event["net_value"] == pytest.approx(-3000.0)
-    assert event["net_value"] - event["value"] == pytest.approx(event["fee_effect"])
+    assert float(event["net_value"]) == pytest.approx(-3000.0)
+    assert float(event["net_value"]) - float(event["value"]) == pytest.approx(
+        float(event["fee_effect"])
+    )
     assert event["description"] == "corrected assignment"
 
 
@@ -554,7 +447,7 @@ def test_manual_event_edit_updates_values_and_keeps_identity(activity_env):
 
 def test_manual_event_edit_rejects_broker_rows_and_bad_values(activity_env):
     options_activity.sync(date(2026, 1, 1), date(2026, 7, 20), provider=_joby_provider)
-    broker_id = next(row["id"] for row in options_activity.snapshot()["events"]
+    broker_id = next(row["id"] for row in _events()
                      if row["source"] == "TASTYTRADE")
     with pytest.raises(options_activity.ActivityValidationError):
         options_activity.update_manual_event(broker_id, {

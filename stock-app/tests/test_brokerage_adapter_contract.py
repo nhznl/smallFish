@@ -1,16 +1,15 @@
-"""Phase 1 contract baseline for the brokerage-agnostic API migration.
+"""Contract baseline for the brokerage-agnostic API.
 
 Two jobs:
 
 1. Hold the settled API decisions to their own invariants — public identities
    are institutions rather than connectors, the new routes are additive, and the
    Symbol Ledger contract carries no group identity.
-2. Bind that frozen contract to the code that exists today. The accounting
-   identities, completeness vocabulary, and per-resource response identity are
-   asserted against the live ``/brokerage-ledgers`` responses, so a later phase
-   cannot drift the two apart without a failing test.
-
-No production behavior is exercised beyond the endpoints already shipped.
+2. Bind the frozen accounting identities and completeness vocabulary to the
+   live common API, so a later change cannot drift the two apart without a
+   failing test. These originally characterized the pre-migration
+   ``/brokerage-ledgers`` response; that projection is retired, and the same
+   formulas are now proven directly against the surface that replaced it.
 """
 
 from __future__ import annotations
@@ -21,14 +20,12 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from app import (brokerage_ledger, config, options_activity, retirement_options,
-                 snaptrade_service)
+from app import config, options_activity, retirement_options
 from app.brokerages import registry
 from app.main import app
 from tests import brokerage_contract_spec as spec
-from tests.test_brokerage_ledger import (_holding, _retirement_event,
-                                         _trading_event, _trading_position,
-                                         ledger_env)  # noqa: F401 - fixture
+from tests.test_brokerage_adapters import (CONTRACT, adapter_env,  # noqa: F401
+                                           write_covered_put)
 
 client = TestClient(app)
 
@@ -67,14 +64,17 @@ def test_public_brokerage_ids_are_institutions_not_connectors():
 
 
 def test_catalog_describes_the_portfolios_the_backend_configures_today():
-    """The migration renames the identity; it does not invent new brokerages."""
+    """The frozen catalog names an institution the registry actually serves,
+    under the public id the registry actually keys it by. The legacy
+    ``brokerage_ledger.PORTFOLIOS`` this compared against during migration is
+    retired; the registry is now the sole source of configuration."""
     configured = {
-        entry["id"]: entry["brokerage"]
-        for entry in brokerage_ledger.PORTFOLIOS.values()
+        entry.descriptor.id: entry.descriptor.institution
+        for entry in registry.REGISTRY.values()
     }
     assert configured == {
-        entry["portfolio_role"]: entry["institution"]
-        for entry in spec.BROKERAGE_CATALOG.values()
+        brokerage_id: entry["institution"]
+        for brokerage_id, entry in spec.BROKERAGE_CATALOG.items()
     }
 
 
@@ -82,27 +82,35 @@ def test_catalog_describes_the_portfolios_the_backend_configures_today():
 
 
 
-def test_a_sync_creates_no_group_state(ledger_env, monkeypatch):
-    """The write path is gone, not merely switched off.
+def test_a_sync_creates_no_group_state(adapter_env, monkeypatch):
+    """The whole write path is gone, not merely switched off.
 
-    The old flag made this a matter of every caller remembering to opt out. Now
-    there is nothing to opt out of, so a sync cannot leave group artifacts
-    behind however it is called.
+    A flag would still be a matter of every caller remembering to opt out; a
+    config function returning a path would still be an artifact a sync could
+    write to. Neither exists any more, so there is nothing left to opt out of
+    and nowhere left to write.
     """
     def provider(_start, _end):
         return ([], [], {"environment": "live"})
 
     options_activity.sync(provider=provider)
 
-    for path in (config.options_groups_csv(), config.options_group_members_csv()):
-        assert not path.exists() or path.read_text(encoding="utf-8").strip() == ""
     assert "legacy_groups" not in inspect.signature(options_activity.sync).parameters
     assert "legacy_groups" not in inspect.signature(
         retirement_options.sync_events
     ).parameters
-    # And the mutation entry points are gone rather than merely unreachable.
-    for module in (options_activity, retirement_options):
-        for name in ("create_group", "update_group", "assign_event"):
+    # The mutation entry points, the group artifact paths, and the header
+    # constants that described their rows are gone rather than merely
+    # unreachable.
+    for module, names in (
+        (options_activity, ("create_group", "update_group", "assign_event",
+                            "GROUP_HEADERS", "MEMBER_HEADERS")),
+        (retirement_options, ("create_group", "update_group", "assign_event",
+                              "GROUP_HEADERS")),
+        (config, ("options_groups_csv", "options_group_members_csv",
+                  "retirement_option_groups_csv")),
+    ):
+        for name in names:
             assert not hasattr(module, name), f"{module.__name__}.{name} still exists"
 
 
@@ -214,78 +222,28 @@ def test_the_persisted_schemas_are_exactly_the_frozen_ones():
 
 # ------------------------------------------- accounting identities, live data ---
 
-def _write_matched_symbol() -> None:
-    """One underlying with 100 shares and one open short put, in both ledgers."""
-    options_activity._atomic_write(
-        config.tastytrade_positions_csv(), options_activity.COMBINED_POSITION_HEADERS,
-        [
-            _trading_position(
-                symbol="ABC", underlying="ABC", instrument="Equity", quantity="100",
-                direction="Long", mark="120", multiplier="1", average="110",
-            ),
-            _trading_position(
-                symbol=_CONTRACT, underlying="ABC", instrument="Equity Option",
-                quantity="-1", direction="Short", mark="0.75", multiplier="100",
-                average="6",
-            ),
-        ],
-    )
-    options_activity._atomic_write(
-        config.options_activity_csv(), options_activity.ACTIVITY_HEADERS,
-        [_trading_event(
-            event_id="tastytrade:TRADING:1", contract=_CONTRACT, underlying="ABC",
-            action="Sell to Open", delta="-1", net_value="600",
-        )],
-    )
-    options_activity._atomic_write(config.options_groups_csv(), options_activity.GROUP_HEADERS, [])
-    options_activity._atomic_write(
-        config.options_group_members_csv(), options_activity.MEMBER_HEADERS, []
-    )
-    snaptrade_service._atomic_write(
-        config.snaptrade_holdings_csv(), snaptrade_service.HOLDINGS_HEADERS,
-        [
-            _holding(
-                account_id="acct-1", account="BrokerageLink", symbol="ABC",
-                asset_class="STOCK", quantity="100", price="120",
-                cost_basis="11000", market_value="12000",
-            ),
-            _holding(
-                account_id="acct-1", account="BrokerageLink", symbol=_CONTRACT,
-                asset_class="OPTION", quantity="-1", price="0.75",
-                cost_basis="-600", market_value="-75", underlying="ABC",
-                option_type="PUT", strike="50", expiry="2026-08-21",
-            ),
-        ],
-    )
-    retirement_options._atomic_write(
-        config.retirement_option_events_csv(), retirement_options.EVENT_HEADERS,
-        [_retirement_event(
-            event_id="activity-1", account_id="acct-1", account="BrokerageLink",
-            contract=_CONTRACT, underlying="ABC", units="-1", amount="600",
-        )],
-    )
+BROKERAGE_IDS = sorted(registry.REGISTRY)
 
 
-@pytest.mark.parametrize("portfolio", ["trading", "retirement"])
-def test_settled_pnl_identities_hold_in_the_contract_being_migrated(ledger_env, portfolio):
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_settled_pnl_identities_hold_in_the_live_contract(adapter_env, brokerage_id):
     """`net_cash_flow = cash_in + cash_out` and
-    `total_pnl = net_cash_flow + open_market_value` are the formulas the new
-    projections inherit. Prove the existing response already satisfies them."""
-    _write_matched_symbol()
-    row = brokerage_ledger.snapshot(portfolio)["symbols"][0]
+    `total_pnl = net_cash_flow + open_market_value` are the formulas the common
+    projections implement. Prove the live response satisfies them for both the
+    equity and option halves of the same reference position."""
+    write_covered_put(brokerage_id)
+    equity = client.get(f"/api/brokerages/{brokerage_id}/holdings").json()["items"][0]
+    option = client.get(f"/api/brokerages/{brokerage_id}/options").json()["items"][0]
 
-    assert row["cash_in"] >= 0
-    assert row["cash_out"] <= 0
-    assert row["net_cash_flow"] == pytest.approx(row["cash_in"] + row["cash_out"])
-    assert row["total_pnl"] == pytest.approx(row["net_cash_flow"] + row["open_market_value"])
-    assert row["open_market_value"] == pytest.approx(
-        row["equity_market_value"] + row["option_market_value"]
-    )
-    # A short option is a negative signed market value; a long equity is positive.
-    assert row["option_market_value"] < 0
-    assert row["equity_market_value"] > 0
-
-    for component in row["components"]:
+    for component in (equity, option):
+        assert component["cash_in"] >= 0
+        assert component["cash_out"] <= 0
+        assert component["net_cash_flow"] == pytest.approx(
+            component["cash_in"] + component["cash_out"]
+        )
+        assert component["total_pnl"] == pytest.approx(
+            component["net_cash_flow"] + component["open_market_value"]
+        )
         assert component["pnl_completeness"] in spec.PNL_COMPLETENESS
         if component["state"] == "FLAT":
             assert component["open_market_value"] == pytest.approx(0)
@@ -293,52 +251,30 @@ def test_settled_pnl_identities_hold_in_the_contract_being_migrated(ledger_env, 
             assert component["realized_pnl"] == pytest.approx(component["net_cash_flow"])
         else:
             assert component["realized_pnl"] is None
+    # A short option is a negative signed market value; a long equity is positive.
+    assert option["open_market_value"] < 0
+    assert equity["open_market_value"] > 0
 
 
-@pytest.mark.parametrize("portfolio", ["trading", "retirement"])
-def test_existing_completeness_vocabulary_is_inside_the_canonical_sets(ledger_env, portfolio):
-    _write_matched_symbol()
-    data = brokerage_ledger.snapshot(portfolio)
-
-    assert data["coverage"]["closed_equity"] in spec.COVERAGE_STATUSES
-    assert data["coverage"]["open_equity"] in spec.COVERAGE_STATUSES
-    assert data["coverage"]["options"] in spec.COVERAGE_STATUSES
-    for row in data["symbols"]:
-        assert row["exposure"] in spec.EXPOSURES
-        assert row["pnl_completeness"] in spec.PNL_COMPLETENESS
-        assert row["adjusted_basis"]["completeness"] in spec.PNL_COMPLETENESS
-        for component in row["components"]:
-            assert component["pnl_completeness"] in spec.PNL_COMPLETENESS
-
-
-# The Phase 1 characterization that both legacy Holdings views already shared
-# one response shape was removed with the route it described. What it was
-# protecting — per-resource response identity across brokerages — is asserted
-# against the surviving contract by
-# `test_brokerage_api.test_each_resource_has_one_shape_across_brokerages`,
-# which covers Holdings along with the other resources.
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_existing_completeness_vocabulary_is_inside_the_canonical_sets(adapter_env,
+                                                                       brokerage_id):
+    write_covered_put(brokerage_id)
+    for resource in ("holdings", "options", "option-adjusted-basis"):
+        body = client.get(f"/api/brokerages/{brokerage_id}/{resource}").json()
+        assert body["coverage"]["status"] in spec.COVERAGE_STATUSES
+        assert body["summary"]["pnl_completeness"] in spec.PNL_COMPLETENESS
+        for item in body["items"]:
+            assert item["pnl_completeness"] in spec.PNL_COMPLETENESS
+    basis = client.get(
+        f"/api/brokerages/{brokerage_id}/option-adjusted-basis"
+    ).json()["items"][0]
+    assert basis["adjusted_basis"]["completeness"] in spec.PNL_COMPLETENESS
 
 
-def test_unavailable_totals_are_null_rather_than_zero(ledger_env):
-    """Fail-closed is part of the settled contract: a missing input may never be
-    rendered as a complete number."""
-    snaptrade_service._atomic_write(
-        config.snaptrade_holdings_csv(), snaptrade_service.HOLDINGS_HEADERS,
-        [_holding(
-            account_id="acct-1", account="BrokerageLink", symbol=_CONTRACT,
-            asset_class="OPTION", quantity="-1", price="0.50", cost_basis="-100",
-            market_value="-50", underlying="ABC", option_type="PUT", strike="50",
-            expiry="2026-08-21",
-        )],
-    )
-    retirement_options._atomic_write(
-        config.retirement_option_events_csv(), retirement_options.EVENT_HEADERS,
-        [_retirement_event(
-            event_id="event-1", account_id="acct-1", account="BrokerageLink",
-            contract=_CONTRACT, underlying="ABC", units="-2", amount="200",
-        )],
-    )
-    data = brokerage_ledger.snapshot("retirement")
-    assert data["summary"]["total_pnl"] is None
-    assert data["symbols"][0]["total_pnl"] is None
-    assert Decimal(str(data["summary"]["incomplete_symbol_count"])) == 1
+# A fail-closed null total — one missing mark makes the whole total unknown
+# rather than partial — is asserted directly against Holdings in
+# `test_brokerage_api.test_a_missing_mark_makes_the_total_null_not_zero` and
+# against the Symbol Ledger throughout `test_symbol_ledger_api`. Both replaced
+# the legacy `/brokerage-ledgers/{portfolio}/combined` characterization that
+# used to live here.

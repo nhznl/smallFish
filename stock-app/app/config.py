@@ -102,16 +102,6 @@ def options_activity_csv() -> Path:
     return _under("SFP_OPTIONS_ACTIVITY", data_dir(), "ledger_options/options_activity.csv")
 
 
-def options_groups_csv() -> Path:
-    """Editable options trade-group metadata (kept separate from broker facts)."""
-    return _under("SFP_OPTIONS_GROUPS", data_dir(), "ledger_options/options_groups.csv")
-
-
-def options_group_members_csv() -> Path:
-    """Editable event-to-group assignments."""
-    return _under("SFP_OPTIONS_GROUP_MEMBERS", data_dir(), "ledger_options/options_group_members.csv")
-
-
 def options_position_marks_csv() -> Path:
     """Latest broker position marks used for open group P/L."""
     return _under("SFP_OPTIONS_POSITION_MARKS", data_dir(), "ledger_options/options_position_marks.csv")
@@ -194,17 +184,6 @@ def holdings_enrichment_csv() -> Path:
     trade-group metadata."""
     return _under(
         "SFP_HOLDINGS_ENRICHMENT", data_dir(), "ledger_retirement/holdings_enrichment.csv"
-    )
-
-
-def retirement_option_groups_csv() -> Path:
-    """Legacy per-symbol Retirement group metadata, read as a migration source.
-
-    New multi-group enrichment uses the shared options_groups_csv and
-    options_group_members_csv stores for both brokerages.
-    """
-    return _under(
-        "SFP_RETIREMENT_OPTION_GROUPS", data_dir(), "ledger_retirement/option_groups.csv"
     )
 
 

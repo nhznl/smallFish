@@ -1,7 +1,8 @@
 """Native FastAPI backend for smallFish.
 
 Runs on :8000 and owns the complete Angular-facing surface, including the
-options and retirement ledger views. CORS allows local Angular development and
+brokerage-agnostic Holdings, Options, Option-Adjusted Basis, and Symbol Ledger
+resources under ``/api/brokerages``. CORS allows local Angular development and
 the configured static-app origin.
 """
 
@@ -14,12 +15,10 @@ from fastapi.responses import FileResponse
 from . import capabilities, config
 from .path_security import UnsafePathError, contained_path
 from .routers import (
-    brokerage_ledgers,
     brokerages,
     options,
     portfolios,
     premium_quotes,
-    retirement,
     run_jobs,
     sector_rotation,
     studies,
@@ -43,8 +42,6 @@ app.include_router(wheel_candidates.router)
 app.include_router(stock_info.router)
 app.include_router(run_jobs.router)
 app.include_router(brokerages.router)
-app.include_router(brokerage_ledgers.router)
-app.include_router(retirement.router)
 app.include_router(options.router)
 app.include_router(premium_quotes.router)
 app.include_router(portfolios.router)
@@ -70,7 +67,11 @@ def capabilities_snapshot() -> dict:
 #: Angular routes whose path is also an API path. In single-server mode both
 #: live on the same origin, and the API router matches first, so browsing to
 #: one of these would render raw JSON instead of the application.
-SPA_ROUTE_COLLISIONS = frozenset({"/options", "/portfolios"})
+#:
+#: `/options` was here because `GET /options` was once a JSON API route too;
+#: that route is retired, so the Angular page at `/options` is now the only
+#: thing at that path and the SPA catch-all serves it unconditionally.
+SPA_ROUTE_COLLISIONS = frozenset({"/portfolios"})
 
 
 def _is_document_navigation(request) -> bool:

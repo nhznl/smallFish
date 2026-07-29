@@ -461,8 +461,3 @@ def run_sync(brokerage_id: str, payload: dict[str, Any] | None = None) -> dict[s
 
 
 # ------------------------------------------------------------- migration ---
-
-def migration_report() -> dict[str, Any]:
-    from . import migration
-
-    return migration.report()

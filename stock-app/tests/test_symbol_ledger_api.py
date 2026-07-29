@@ -675,39 +675,6 @@ def test_a_reset_writes_a_boundary_and_never_a_broker_event(adapter_env):
 
 # --------------------------------------------------------------- migration ---
 
-def test_the_migration_report_reads_groups_without_changing_them(adapter_env):
-    write_closed_cycle("tastytrade")
-    options_activity._atomic_write(
-        config.options_groups_csv(), options_activity.GROUP_HEADERS,
-        [
-            {"group_id": "g1", "account": "TRADING", "symbol": "ABC",
-             "name": "ABC 2026", "status": "ACTIVE", "notes": "wheel campaign",
-             "auto_created": "true", "created_at": "", "updated_at": ""},
-            {"group_id": "g2", "account": "RETIREMENT", "symbol": "XYZ",
-             "name": "XYZ 2026", "status": "ACTIVE", "notes": "note one",
-             "auto_created": "true", "created_at": "", "updated_at": ""},
-            {"group_id": "g3", "account": "RETIREMENT", "symbol": "XYZ",
-             "name": "XYZ 2025", "status": "ARCHIVED", "notes": "note two",
-             "auto_created": "true", "created_at": "", "updated_at": ""},
-        ],
-    )
-    from app.brokerages import migration
-
-    groups_before = config.options_groups_csv().read_bytes()
-    report = migration.report()
-
-    ready = {(row["brokerage_id"], row["symbol"]) for row in report["ready"]}
-    assert ready == {("tastytrade", "ABC")}
-    conflicts = {(row["brokerage_id"], row["symbol"]) for row in report["conflicts"]}
-    assert conflicts == {("fidelity", "XYZ")}      # two notes, no automatic winner
-    assert report["summary"]["migrates"] == ["notes"]
-    assert config.options_groups_csv().read_bytes() == groups_before
-
-    migration.migrate()
-    assert _symbol("tastytrade")["notes"] == "wheel campaign"
-    # The conflict was reported, not guessed at, and nothing was discarded.
-    assert config.options_groups_csv().read_bytes() == groups_before
-    assert {row["symbol"] for row in migration.report()["conflicts"]} == {"XYZ"}
 
 
 # -------------------------------------------------------------------- sync ---
@@ -778,11 +745,13 @@ def test_sync_rejects_an_unknown_resource(adapter_env):
 
 
 def test_sync_results_are_visible_without_a_membership_write(adapter_env):
-    """A new event reaches the ledger by its underlying alone."""
+    """A new event reaches the ledger by its underlying alone -- there is no
+    membership concept left to write; `config.options_group_members_csv` was
+    retired along with it."""
     assert _symbols("tastytrade", state="all")["items"] == []
     _write_tastytrade(activity=[_tastytrade_event("1")])
     assert [item["symbol"] for item in _symbols("tastytrade", state="all")["items"]] == ["ABC"]
-    assert not config.options_group_members_csv().is_file()
+    assert not hasattr(config, "options_group_members_csv")
 
 
 # ------------------------------------------------------- holdings metadata ---

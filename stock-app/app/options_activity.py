@@ -1,14 +1,8 @@
 """Tastytrade-backed options activity: immutable broker facts and their marks.
 
 Broker transactions are facts keyed by the provider transaction ID, so a repeat
-sync merges rather than rewrites.
-
-Grouping is retired. Nothing here creates or mutates a group any more — the
-Symbol Ledger derives lifecycle from the events themselves, keyed by normalized
-underlying. The group artifacts are still *read* by `snapshot` and `risk_rows`,
-which serve retained compatibility contracts, and `remove_symbols` still purges
-them; a pre-cutover install therefore keeps projecting the rows it already has,
-and gains no new ones.
+sync merges rather than rewrites. The Symbol Ledger derives lifecycle from these
+events by normalized underlying; there is no grouping concept here at all.
 """
 
 from __future__ import annotations
@@ -48,11 +42,6 @@ ACTIVITY_HEADERS = [
     "proprietary_index_option_fees", "other_charge", "order_id", "reverses_id",
     "option_type", "expiry", "strike", "description", "imported_at", "retrieved_at",
 ]
-GROUP_HEADERS = [
-    "group_id", "account", "symbol", "name", "status", "notes", "auto_created",
-    "created_at", "updated_at",
-]
-MEMBER_HEADERS = ["event_id", "group_id", "assigned_at"]
 MARK_HEADERS = [
     "source", "account", "instrument_type", "contract_symbol", "contract_key",
     "underlying_symbol", "quantity", "direction", "signed_quantity", "multiplier",
@@ -564,26 +553,12 @@ def remove_symbols(symbols: set[str]) -> dict[str, int]:
         raise ActivityValidationError("at least one symbol is required")
     with _lock:
         events = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
-        groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
-        members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
         marks = _read_csv(config.options_position_marks_csv(), MARK_HEADERS)
         greeks = _read_csv(config.options_greeks_csv(), GREEKS_HEADERS)
         betas = _read_csv(config.options_betas_csv(), BETA_HEADERS)
 
-        removed_event_ids = {
-            row["id"] for row in events if row["underlying_symbol"].upper() in normalized
-        }
-        removed_group_ids = {
-            row["group_id"] for row in groups if row["symbol"].upper() in normalized
-        }
         retained_events = [
             row for row in events if row["underlying_symbol"].upper() not in normalized
-        ]
-        retained_groups = [row for row in groups if row["symbol"].upper() not in normalized]
-        retained_members = [
-            row for row in members
-            if row["event_id"] not in removed_event_ids
-            and row["group_id"] not in removed_group_ids
         ]
         retained_marks = [
             row for row in marks if row["underlying_symbol"].upper() not in normalized
@@ -595,15 +570,11 @@ def remove_symbols(symbols: set[str]) -> dict[str, int]:
         retained_betas = [row for row in betas if row["symbol"].upper() not in normalized]
 
         _atomic_write(config.options_activity_csv(), ACTIVITY_HEADERS, retained_events)
-        _atomic_write(config.options_groups_csv(), GROUP_HEADERS, retained_groups)
-        _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS, retained_members)
         _atomic_write(config.options_position_marks_csv(), MARK_HEADERS, retained_marks)
         _atomic_write(config.options_greeks_csv(), GREEKS_HEADERS, retained_greeks)
         _atomic_write(config.options_betas_csv(), BETA_HEADERS, retained_betas)
     return {
         "events_removed": len(events) - len(retained_events),
-        "groups_removed": len(groups) - len(retained_groups),
-        "memberships_removed": len(members) - len(retained_members),
         "marks_removed": len(marks) - len(retained_marks),
         "greeks_removed": len(greeks) - len(retained_greeks),
         "betas_removed": len(betas) - len(retained_betas),
@@ -775,269 +746,14 @@ def sync(start_date: date | None = None,
     }
 
 
-def _event_positions(events: list[dict[str, str]]) -> dict[str, Decimal]:
-    positions: dict[str, Decimal] = defaultdict(Decimal)
-    for event in sorted(events, key=lambda row: (row["executed_at"], row["id"])):
-        key = event["contract_key"]
-        delta_raw = event.get("position_delta", "")
-        if delta_raw:
-            delta = _decimal(delta_raw)
-        elif event.get("transaction_sub_type") in {"Assignment", "Exercise", "Expiration"}:
-            current = positions[key]
-            qty = _decimal(event.get("quantity"))
-            if current > 0:
-                delta = -min(current, qty)
-            elif current < 0:
-                delta = min(-current, qty)
-            else:
-                delta = Decimal("0")
-        else:
-            delta = Decimal("0")
-        positions[key] += delta
-    return {key: qty for key, qty in positions.items() if qty != 0}
 
 
-def _reconciliation_detail(key: str, activity_qty: Decimal, broker_qty: Decimal,
-                            key_events: list[dict[str, str]], mark: dict[str, str] | None,
-                            membership: dict[str, str], group_names: dict[str, str]) -> dict[str, Any]:
-    key_events = sorted(key_events, key=lambda row: row["executed_at"])
-    last_event = key_events[-1] if key_events else None
-    group_id = next((membership[row["id"]] for row in key_events if membership.get(row["id"])), None)
-    return {
-        "contract_key": key,
-        "underlying_symbol": key_events[0]["underlying_symbol"] if key_events
-            else (mark["underlying_symbol"] if mark else key),
-        "account": key_events[0]["account"] if key_events else (mark["account"] if mark else None),
-        "instrument_type": key_events[0]["instrument_type"] if key_events
-            else (mark["instrument_type"] if mark else None),
-        "activity_quantity": float(activity_qty),
-        "broker_quantity": float(broker_qty),
-        "difference": float(activity_qty - broker_qty),
-        "event_count": len(key_events),
-        # A gap between when the account plausibly opened this symbol and
-        # first_execution is the clue that an assignment/transfer predating
-        # the imported broker history is missing from the ledger.
-        "first_execution": key_events[0]["executed_at"] if key_events else None,
-        "last_execution": last_event["executed_at"] if last_event else None,
-        "last_event_summary": (
-            f"{last_event['transaction_sub_type'] or last_event['transaction_type']} "
-            f"{last_event['quantity']} {last_event['contract_symbol']} on {last_event['transaction_date']}"
-        ) if last_event else None,
-        "group_id": group_id,
-        "group_name": group_names.get(group_id) if group_id else None,
-    }
 
 
-def _group_summary(group: dict[str, str], events: list[dict[str, str]],
-                   marks_by_key: dict[str, dict[str, str]],
-                   unreconciled_keys: set[str] | None = None) -> dict[str, Any]:
-    # Same-symbol equity executions remain in the retained activity ledger for
-    # assignment and reconciliation evidence, but an option group is valued
-    # from option events only. Current shares are projected separately by the
-    # Holdings contract and must never leak into option premium or P/L.
-    option_events = [
-        row for row in events
-        if _is_option_instrument(row.get("instrument_type")) or row.get("option_type")
-    ]
-    cash_flow = sum((_decimal(row["net_value"]) for row in option_events), Decimal("0"))
-    fee_effect = sum((_decimal(row["fee_effect"]) for row in option_events), Decimal("0"))
-    positions = _event_positions(option_events)
-    open_value = Decimal("0")
-    missing: list[str] = []
-    unreconciled_keys = unreconciled_keys or set()
-    open_positions = []
-    for key, qty in sorted(positions.items()):
-        mark = marks_by_key.get(key)
-        option_type, expiry, strike = _option_terms(mark["contract_symbol"] if mark else key)
-        marked_value = None
-        if key in unreconciled_keys:
-            missing.append(f"UNRECONCILED:{key}")
-        elif mark and mark.get("mark_price") not in (None, ""):
-            marked_value = qty * _decimal(mark["mark_price"]) * _decimal(mark.get("multiplier"), Decimal("1"))
-            open_value += marked_value
-        else:
-            missing.append(key)
-        open_positions.append({
-            "contract_key": key, "quantity": float(qty),
-            "option_type": option_type or None,
-            "expiry": expiry or None,
-            "strike": float(_decimal(strike)) if strike else None,
-            "mark_price": float(_decimal(mark["mark_price"])) if mark and mark.get("mark_price") else None,
-            "market_value": float(marked_value) if marked_value is not None else None,
-        })
-    completeness = "UNAVAILABLE" if missing else ("INDICATIVE" if positions else "COMPLETE")
-    total_pnl = cash_flow + open_value if not missing else None
-    return {
-        **group,
-        "event_count": len(option_events),
-        "first_execution": min((row["executed_at"] for row in option_events), default=None),
-        "last_execution": max((row["executed_at"] for row in option_events), default=None),
-        "net_cash_flow": float(cash_flow),
-        "fee_effect": float(fee_effect),
-        "open_market_value": float(open_value) if not missing else None,
-        "total_pnl": float(total_pnl) if total_pnl is not None else None,
-        "realized_pnl": float(cash_flow) if not positions else None,
-        "position_status": "OPEN" if positions else "FLAT",
-        "pnl_completeness": completeness,
-        "missing_marks": missing,
-        "open_positions": open_positions,
-        "mark_retrieved_at": max(
-            (marks_by_key[key]["retrieved_at"] for key in positions if key in marks_by_key),
-            default=None,
-        ),
-    }
 
 
-def snapshot(account: str | None = None) -> dict[str, Any]:
-    account_filter = _text(account or "ALL").upper()
-    if account_filter not in {"ALL", "RETIREMENT", "TRADING"}:
-        raise ActivityValidationError("account must be ALL, RETIREMENT, or TRADING")
-    with _lock:
-        events = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
-        groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
-        members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
-        marks = _read_csv(config.options_position_marks_csv(), MARK_HEADERS)
-    if account_filter != "ALL":
-        events = [row for row in events if row["account"] == account_filter]
-        groups = [row for row in groups if row["account"] == account_filter]
-        marks = [row for row in marks if row["account"] == account_filter]
-    event_ids = {row["id"] for row in events}
-    members = [row for row in members if row["event_id"] in event_ids]
-    membership = {row["event_id"]: row["group_id"] for row in members}
-    group_names = {row["group_id"]: row["name"] for row in groups}
-    marks_by_key = {row["contract_key"]: row for row in marks}
-    events_by_key: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for event in events:
-        events_by_key[event["contract_key"]].append(event)
-    activity_positions = _event_positions(events)
-    broker_positions = {row["contract_key"]: _decimal(row["signed_quantity"]) for row in marks}
-    reconciliation_issues = [
-        _reconciliation_detail(
-            key, activity_positions.get(key, Decimal("0")), broker_positions.get(key, Decimal("0")),
-            events_by_key.get(key, []), marks_by_key.get(key), membership, group_names,
-        )
-        for key in sorted(set(activity_positions) | set(broker_positions))
-        if activity_positions.get(key, Decimal("0")) != broker_positions.get(key, Decimal("0"))
-    ]
-    unreconciled_keys = {row["contract_key"] for row in reconciliation_issues}
-    events_by_group: dict[str, list[dict[str, str]]] = defaultdict(list)
-    output_events = []
-    numeric_fields = {"quantity", "position_delta", "price", "value", "net_value", "fee_effect",
-                      "commission", "regulatory_fees", "clearing_fees",
-                      "proprietary_index_option_fees", "other_charge", "strike"}
-    for event in reversed(events):
-        group_id = membership.get(event["id"], "")
-        if group_id:
-            events_by_group[group_id].append(event)
-        output = dict(event)
-        output["group_id"] = group_id or None
-        output["group_name"] = group_names.get(group_id) if group_id else None
-        for field in numeric_fields:
-            output[field] = float(_decimal(output[field])) if output.get(field) not in (None, "") else None
-        output_events.append(output)
-    output_groups = [
-        _group_summary(group, events_by_group.get(group["group_id"], []), marks_by_key,
-                       unreconciled_keys)
-        for group in groups
-    ]
-    output_groups.sort(key=lambda row: (row["position_status"] != "OPEN", row["symbol"], row["name"]))
-    return {
-        "schema_name": SCHEMA_NAME, "schema_version": SCHEMA_VERSION,
-        "account_filter": account_filter, "events": output_events, "groups": output_groups,
-        "ungrouped_event_count": sum(1 for row in events if row["id"] not in membership),
-        # A manual row's retrieved_at is its entry time, not a broker fetch, so
-        # it must not masquerade as the last successful sync.
-        "last_sync_at": max((row["retrieved_at"] for row in events
-                             if row["source"] != MANUAL_SOURCE), default=None),
-        "reconciliation_issues": reconciliation_issues,
-        "manual_events": [row for row in output_events if row["source"] == MANUAL_SOURCE],
-        "pnl_definition": "Net option cash flows (including fees) plus signed open-option marks. Same-symbol equity executions are retained for reconciliation but excluded from option-group totals. Flat groups are realized option P/L; open-group marks are indicative because the provider mark-observation timestamp is unavailable.",
-    }
 
 
-def risk_rows(account: str | None = None) -> list[dict[str, Any]]:
-    """Return current broker positions in the row shape expected by risk analytics."""
-    account_filter = _text(account or "ALL").upper()
-    if account_filter not in {"ALL", "RETIREMENT", "TRADING"}:
-        raise ActivityValidationError("account must be ALL, RETIREMENT, or TRADING")
-    with _lock:
-        events = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
-        groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
-        members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
-        marks = _read_csv(config.options_position_marks_csv(), MARK_HEADERS)
-    if account_filter != "ALL":
-        events = [row for row in events if row["account"] == account_filter]
-        groups = [row for row in groups if row["account"] == account_filter]
-        marks = [row for row in marks if row["account"] == account_filter]
-
-    membership = {row["event_id"]: row["group_id"] for row in members}
-    groups_by_id = {row["group_id"]: row for row in groups}
-    events_by_key: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for event in events:
-        events_by_key[event["contract_key"]].append(event)
-
-    rows: list[dict[str, Any]] = []
-    for mark in marks:
-        signed_quantity = _decimal(mark["signed_quantity"])
-        if signed_quantity == 0:
-            continue
-        contract_key = mark["contract_key"]
-        option_type, expiry, strike = _option_terms(mark["contract_symbol"])
-        instrument_type = mark["instrument_type"]
-        if option_type:
-            if signed_quantity < 0:
-                trade_type = "SHORT_PUT" if option_type == "PUT" else "SHORT_CALL"
-            else:
-                trade_type = "LONG_PUT" if option_type == "PUT" else "LONG_CALL"
-            qty: Decimal | int = abs(signed_quantity)
-        elif instrument_type == "Equity":
-            trade_type = "STOCK"
-            qty = signed_quantity
-        else:
-            trade_type = "OTHER"
-            qty = abs(signed_quantity)
-
-        related_events = events_by_key.get(contract_key, [])
-        first_event = min((row["transaction_date"] for row in related_events if row["transaction_date"]),
-                          default="")
-        group_id = ""
-        for event in related_events:
-            if event["id"] in membership:
-                group_id = membership[event["id"]]
-                break
-        group = groups_by_id.get(group_id)
-        mark_price = _decimal(mark["mark_price"])
-        stock_notional = abs(signed_quantity) * mark_price if trade_type == "STOCK" else None
-        rows.append({
-            "id": f"broker-position:{mark['account']}:{contract_key}",
-            "contract_symbol": mark["contract_symbol"],
-            "contract_key": contract_key,
-            "account": mark["account"],
-            "wheel_id": group["name"] if group else "",
-            "symbol": mark["underlying_symbol"],
-            "trade_type": trade_type,
-            "qty": float(qty),
-            "strike": float(_decimal(strike)) if strike else None,
-            "expiry": expiry,
-            "open_date": first_event,
-            "underlying_price_at_open": None,
-            "mark_price": float(mark_price),
-            "mark_retrieved_at": mark["retrieved_at"],
-            "credit": None,
-            "debit": float(stock_notional) if stock_notional is not None else None,
-            "close_date": "",
-            "status": "OPEN",
-            "non_standard": False,
-            "notes": f"Imported broker position {contract_key}",
-        })
-    # Shares are held as their own broker position, so coverage can only be
-    # decided once every row for the account is built.
-    shares: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
-    for row in rows:
-        if row["trade_type"] == "STOCK":
-            shares[(row["account"], row["symbol"].upper())] += _decimal(row["qty"])
-    apply_call_coverage(rows, dict(shares))
-    return rows
 
 
 
@@ -1166,7 +882,4 @@ def delete_manual_event(event_id: str) -> dict[str, Any]:
             raise ActivityValidationError("only manual reconciliation rows can be deleted")
         _atomic_write(config.options_activity_csv(), ACTIVITY_HEADERS,
                       [row for row in events if row["id"] != event_id])
-        members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
-        _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS,
-                      [row for row in members if row["event_id"] != event_id])
     return {"event_id": event_id, "deleted": True}
