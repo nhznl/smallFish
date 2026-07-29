@@ -88,10 +88,13 @@ The Studies shell presents curated historical evidence without importing or
 rerunning research code. Scan-capable studies can show a current candidate
 snapshot in the reusable sortable table without changing the study verdict.
 
-## Options
+## Brokerage ledgers
 
-The Options Trading Ledger supports adding and closing individual option or stock legs, filtering by Retirement or Trading
-account, wheel-position grouping, totals, warnings, and the risk dashboard.
+Trading and Retirement are thin route shells over the same three tabs:
+Holdings, Options, and Option-Adjusted Basis. Options is a Symbol Ledger: one
+durable record per underlying with derived Active/Archived lifecycle, immutable
+event history, optional archived-period detail, and deliberate archive/reset
+confirmation. Trade groups and event reassignment are not part of the UI.
 
 ## Stock detail
 

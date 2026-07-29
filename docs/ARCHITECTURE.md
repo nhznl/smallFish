@@ -117,15 +117,16 @@ A deliberate split in the ledgers:
 
 | Immutable | Editable |
 |---|---|
-| `options_activity.csv` — broker transactions; `tastytrade_positions.csv` — all current positions for the combined ledger | `options_groups.csv` — your grouping and notes |
-| `options_greeks.csv`, `options_betas.csv` — timestamped observations | group status (active/archived) |
+| `options_activity.csv` — broker transactions; `tastytrade_positions.csv` — all current positions for the combined ledger | symbol-ledger notes and archive boundaries |
+| `options_greeks.csv`, `options_betas.csv` — timestamped observations | symbol-ledger notes and archive boundaries |
 | `snaptrade_holdings.csv` — normalized holdings | holding enrichment metadata and user-captured G/L snapshots |
 
-Broker facts are never edited in place; syncs upsert by provider id. Your
-metadata lives in separate files keyed to those facts, so a resync never
-destroys your work and an edit never rewrites history.
+Broker facts are never edited in place; syncs upsert by provider id. Symbol
+Ledger archives and notes live in separate app-owned files, so a resync never
+destroys evidence or rewrites history. Legacy group files are retained only for
+rollback; production sync no longer mutates them.
 
-Observations are timestamped, and their timestamps matter: an option group whose
+Observations are timestamped, and their timestamps matter: an option component whose
 mark-observation time is unavailable is labelled *indicative* rather than
 reported as realized P/L. Missing marks fail closed instead of showing a partial
 total.

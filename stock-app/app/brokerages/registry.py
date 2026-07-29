@@ -62,7 +62,12 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
 
 def _tastytrade_sync() -> dict:
     """One provider call materializes positions, activity, and market data."""
-    return options_activity.sync()
+    return options_activity.sync(legacy_groups=False)
+
+
+def _fidelity_activity_sync() -> dict:
+    """Production activity sync records facts, never mutable group state."""
+    return retirement_options.sync_events(legacy_groups=False)
 
 
 #: Ordered so the catalog is stable for the UI.
@@ -85,7 +90,7 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         holdings_metadata_path=config.holdings_enrichment_csv,
         sync_commands={
             "HOLDINGS": snaptrade_service.sync,
-            "ACTIVITY": retirement_options.sync_events,
+            "ACTIVITY": _fidelity_activity_sync,
             "MARKET_DATA": retirement_options.sync_market_data,
         },
     ),

@@ -1,6 +1,6 @@
 # Brokerage API and ledger refactor plan
 
-**Status:** In progress. Phases 1-6 are implemented and committed; the backend
+**Status:** In progress. Phases 1-7 are implemented and committed; the backend
 is complete and both brokerage pages run on it. This document is the source of
 truth for implementation, phase status, decisions, verification evidence, and
 the next action.
@@ -22,15 +22,15 @@ says where the work actually is.
 | `3917d77` | 5 fix — spent option leg reading as unreconciled |
 | `754bb09` | 5 fix — reconcile share lots rather than declaring closed equity unknowable |
 | `05f09b3` | 5 fix — retain adjusted basis after options close |
+| `75db1d8` | 6 — history, archive, reset, and shared UI consolidation |
 
-**Current totals:** backend `stock-app/tests` 460 passing; Angular
-`npm run test:ci` 62 passing; `npm run build` clean. All 14 settled
-`/api/brokerages` routes are served and all 21 frozen legacy brokerage routes
-still answer. Worktree clean and all work committed on `main`; the latest Phase
-5 corrections are not pushed.
+**Current totals:** backend `stock-app/tests` 461 passing; Angular
+`npm run test:ci` 55 passing; `npm run build` clean. All 14 settled
+`/api/brokerages` routes are served. Retained legacy brokerage routes are
+internal compatibility shims; group-mutation routes reject requests with 410.
 
-**Next action:** Phase 7 consumer audit and owner decision on legacy public
-route compatibility. See the dashboard row for what remains open.
+**Next action:** Phase 8 final regression and browser verification on both
+brokerage pages. See the dashboard row for the acceptance checklist.
 
 **Do not restart from Phase 1.** The kickoff prompt at the foot of this document
 has been rewritten for resumption; use that, not the original start-from-scratch
@@ -69,8 +69,9 @@ reading the reasoning.
   the Trading ledger after `754bb09`. Explicit approval covering navigation,
   Active/Archived filtering, symbol detail, and notes across **both** `/options`
   and `/retirement` has not been recorded. Phase 6 must not begin until it is.
-- Phase 7 will need an owner decision on whether any legacy public route has an
-  external consumer, before anything is removed.
+- The owner confirmed on 2026-07-29 that legacy brokerage routes are not
+  externally consumable. Phase 7 retains read-only internal compatibility
+  projections and rollback artifacts, while rejecting legacy group mutations.
 
 ## Handoff operating model
 
@@ -1017,8 +1018,8 @@ why they differ. Current totals are in "Resume here" at the top.
 | 3 | Common projections and additive read APIs | COMPLETE | Phase 4 may begin | `app/brokerages/projections/` + `service.py` + `routers/brokerages.py`; `GET /api/brokerages`, `/holdings`, `/options`, `/option-adjusted-basis`; `test_brokerage_api.py` (35 tests) incl. parity against `/brokerage-ledgers/*/combined`; full backend suite 395 passed |
 | 4 | Symbol Ledger lifecycle, archives, and mutation APIs | COMPLETE | Phase 5 may begin | `projections/symbol_ledger.py`, `projections/events.py`, `store.py`, `sync.py`, `migration.py`; all 14 settled routes now served and all 21 frozen legacy routes still served; `test_symbol_ledger_api.py` (56 tests); full backend suite 452 passed |
 | 5 | First shared Trading/Retirement UI slice | COMPLETE — owner approved | Owner approved the Phase 5 checkpoint on 2026-07-29 and authorized Phase 6 | `model/brokerage.ts`, `api/brokerage.service.ts`, `shared/symbol-ledger/` mounted on both pages; later corrections preserve option-only scope and option-adjusted-basis semantics |
-| 6 | History/reset UX and shared UI consolidation | COMPLETE — automated checks passed; browser verification pending | Phase 7 requires a repository-wide consumer audit and owner decision before legacy public routes or artifacts change | Shared `SymbolLedgerComponent` implements current/all/archive history, compact archive summaries, on-demand archive detail, reset eligibility/confirmation, conflict refresh, and idempotent retry on both pages; focused tests 21 passed, full Angular suite 62 passed, build clean |
-| 7 | Compatibility cutover, cleanup, and current-behavior docs | NOT STARTED | Depends on Phase 6 and consumer audit | - |
+| 6 | History/reset UX and shared UI consolidation | COMPLETE — automated checks passed; browser verification pending | Phase 7 completed; Phase 8 performs final browser verification | Shared `SymbolLedgerComponent` implements current/all/archive history, compact archive summaries, on-demand archive detail, reset eligibility/confirmation, conflict refresh, and idempotent retry on both pages; focused tests 21 passed, full Angular suite 62 passed, build clean |
+| 7 | Compatibility cutover, cleanup, and current-behavior docs | COMPLETE — automated checks passed; browser verification pending | Phase 8 final regression and route verification | Owner confirmed legacy routes have no external consumers. Production sync suppresses legacy group writes; legacy group mutation routes return 410; shared UI no longer imports groups or risk surfaces; old artifacts remain rollback-only; required behavior docs updated; full automated-gate evidence in the progress log. |
 | 8 | Full regression, browser verification, and handoff closeout | NOT STARTED | Depends on Phase 7 | - |
 
 ## Phased implementation plan
@@ -1463,6 +1464,7 @@ Append entries; never rewrite older evidence to make progress look cleaner.
 | 2026-07-29 | 5 (fix 6) | COMPLETE | Corrected the fix 5 scope after live Trading review showed that BTU disappeared: its shares are open and its completed option cycle still changes the adjusted basis, but it has no currently open option contract. Option-Adjusted Basis now requires open long shares plus option history, retaining completed option cycles until the related shares close while still excluding equity-only holdings and symbols without open shares. Updated the shared explanation, empty state, durable UX guidance, and component coverage for an open-equity/flat-option row. Focused component tests 2 passed; `npm run build` clean; `npm run test:ci` 57 passed; docs, secrets, and `git diff --check` clean. Live verification restored BTU in Trading and confirmed the shared Retirement view still loads with the corrected explanation | Owner checkpoint still open; approve Phase 5 before Phase 6 |
 | 2026-07-29 | 5 checkpoint | COMPLETE | Owner approved moving to the next phase after reviewing the shared ledger corrections | Phase 6 authorized |
 | 2026-07-29 | 6 | COMPLETE — automated checks passed; browser verification pending | Added the complete history/archive workflow to the brokerage-agnostic shared Symbol Ledger used by both Trading and Retirement. Detail loads immutable current-period history by default, supports All history and any archived period on demand, and paginates with the API's opaque cursor. Compact archive summaries show realized P/L, verification state, and late-event changed warnings. Archive completed history appears only when the API marks the loaded period eligible; a shared confirmation modal names the symbol, event count, period, and realized P/L. A `PERIOD_CHANGED` conflict prompts a fact refresh, while any uncertain retry reuses the same request ID so the backend returns the original archive rather than creating another. No imported event is editable, moved, or deleted. Component coverage adds pagination, archive detail, changed archive warnings, reset confirmation/success, conflict refresh, and idempotent retry. Focused suite 21 passed; `npm run build` clean; full `npm run test:ci` 62 passed | Phase 7 requires consumer audit and owner compatibility decision; Phase 8 will perform browser verification |
+| 2026-07-29 | 7 | COMPLETE — automated checks passed; browser verification pending | Owner confirmed legacy brokerage routes are not externally consumable. Replaced the remaining per-brokerage pages with one shared brokerage shell: Holdings and Option-Adjusted Basis keep their internal compatibility projections, while Options is solely the brokerage-neutral Symbol Ledger. Common brokerage sync now suppresses legacy group/membership writes. Legacy group-creation, group-update, and event-reassignment routes remain explicit 410 tombstones; non-mutating legacy projections and CSV artifacts remain internal rollback compatibility. Removed the unused Trade Groups and Broker Risk Angular models/components, and updated all required behavior docs. Full Phase 7 gate passed: backend 461, Angular build, Angular 55, docs, secret scan, and diff check. | Phase 8 final regression and browser verification on `/options` and `/retirement` |
 
 ## Opus new-session kickoff prompt
 
@@ -1478,32 +1480,28 @@ docs/ARCHITECTURE.md, and stock-app/README.md. Before any UI work also read
 stock-app-ui/AGENTS.md and stock-app-ui/docs/UX_GUIDANCE.md.
 
 State when you pick this up:
-- Phases 1-5 are complete and committed on main. Nothing is pushed.
-- The backend is finished: all 14 routes under /api/brokerages are served, and
-  all 21 legacy brokerage routes still answer. No legacy group file has stopped
-  being written.
-- Both /options and /retirement already render the shared Symbol Ledger through
-  one brokerage-agnostic Angular client.
-- Baselines to preserve: stock-app/tests 458 passing, npm run test:ci 55
+- Phases 1-7 are complete and committed on main. Nothing is pushed.
+- The backend serves all 14 routes under `/api/brokerages`. Legacy brokerage
+  reads are internal compatibility projections; legacy group mutations return
+  410, and common sync does not create group or membership artifacts.
+- Both `/options` and `/retirement` render the same shared brokerage shell and
+  Symbol Ledger. Holdings and adjusted-basis compatibility projections remain
+  until their consumer migration is separately authorized.
+- Baselines to preserve: stock-app/tests 461 passing, npm run test:ci 55
   passing, npm run build clean. A drop in any of these is a regression.
-- Do NOT redo Phases 1-4. Do not "fix" the deviations listed under "Resume
+- Do NOT redo Phases 1-7. Do not "fix" the deviations listed under "Resume
   here"; they are deliberate and test-covered.
 
-Start at Phase 6, but only after confirming with the owner that the Phase 5
-checkpoint is approved. That checkpoint covers navigation, Active/Archived
-filtering, symbol detail, notes, warnings, and P/L presentation across both
-routes. The owner has confirmed the corrected symbol and P/L behaviour on the
-Trading ledger; explicit approval of the rest is not recorded. If it is still
-open, ask, and do not begin Phase 6 until you have an answer.
+Start at Phase 8. It is the final full regression and browser checkpoint for
+both routes. Do not print real positions, account identifiers, or provider
+details while performing that verification.
 
 Then continue under the existing protocol:
 1. One focused commit per phase. Run that phase's automated gate before
    committing and stage only that phase's files.
 2. Update the dashboard and append the progress log in every phase commit.
    Never rewrite older log evidence.
-3. After Phase 5 approval, run Phases 6-7 without further browser pauses when
-   their automated gates pass. Mark intermediate UI work as browser
-   verification pending.
+3. Mark Phase 7's UI change as browser verification pending until Phase 8.
 4. Phase 8 runs the full regression and the final browser verification on both
    routes. Fix and reverify anything it finds.
 5. Do not push or open a PR unless asked.

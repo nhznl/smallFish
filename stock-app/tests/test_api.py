@@ -180,3 +180,15 @@ def test_native_options_routes_are_registered(env_fixtures, tmp_path, monkeypatc
     assert activity.status_code == 200
     assert activity.json()["events"] == []
     assert activity.json()["groups"] == []
+
+    # These paths remain explicit tombstones for an internal-only surface, not
+    # compatibility writers. Neither can create a second same-symbol group.
+    for response in (
+        client.post("/options/groups", json={}),
+        client.put("/options/groups/legacy", json={}),
+        client.put("/options/activity/event-1/group", json={}),
+        client.post("/retirement/options/groups", json={}),
+        client.put("/retirement/options/groups/legacy", json={}),
+        client.put("/retirement/options/activity/event-1/group", json={}),
+    ):
+        assert response.status_code == 410

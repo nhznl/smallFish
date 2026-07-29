@@ -185,8 +185,8 @@ run's failures.
 
 `data/` is fully regenerable from providers except for two things:
 
-- **`data/ledger_options/options_groups.csv`** — your own trade-group metadata.
-  Not recoverable from any provider. Back this up.
+- **Symbol Ledger metadata and archive CSVs** — your notes and completed-period
+  boundaries. Not recoverable from a provider. Back them up.
 - **Long price history.** Regenerable, but a full multi-year backfill is slow
   and rate-limited.
 

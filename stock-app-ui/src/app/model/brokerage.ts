@@ -306,6 +306,20 @@ export interface ArchiveCreatedResponse {
   symbol: SymbolLedgerDetail;
 }
 
+export interface BrokerageSyncResult {
+  resource: 'HOLDINGS' | 'ACTIVITY' | 'MARKET_DATA';
+  status: 'OK' | 'FAILED' | 'UNSUPPORTED';
+  detail: Record<string, string | number | boolean | string[]> | null;
+  warnings: string[];
+}
+
+export interface BrokerageSyncResponse {
+  schema_name: string;
+  schema_version: number;
+  brokerage_id: BrokerageId;
+  results: BrokerageSyncResult[];
+}
+
 /** A public failure: a stable code plus a message safe to show a user. */
 export interface BrokerageErrorDetail {
   code: string;

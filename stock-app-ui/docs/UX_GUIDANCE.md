@@ -217,30 +217,13 @@ other textual state.
   always retain search, Declining only, Snapshot G/L %, Copy Symbols, sortable
   columns, snapshot columns, and deliberate modal editing for classification
   and notes.
-- Options uses one shared Trade Groups table on both brokerage pages, including
-  Active/Archived filters, imported-event/group/ungrouped counts, fail-closed
-  filtered totals, and modal editing. Group edit dialogs use the same compact
-  edit/summary/event layout in both ledgers. The opened group defines the event
-  table context, so do not repeat a Group column or expose event reassignment
-  there. Keep the event table read-only and omit inert action columns; surface
-  current position values beside the contract rows they qualify. Use the same
-  option-event columns in both ledgers and show equity share lots in a separate,
-  consistently shaped table; equity values are context and never enter option
-  event rows or group totals. Retain same-symbol equity executions as brokerage
-  evidence when needed for assignment reconciliation, but do not render them as
-  option trades. Groups and event assignments remain smallFish-owned enrichment
-  even though the immutable broker-event shapes differ. Groups originate
-  automatically from imported activity; do not expose an ad hoc New Group
-  action in the ledger UX. A newly inserted broker event assigned to an
-  archived group reactivates that group during the sync; an idempotent refresh
-  of an existing event does not. Include the number of reactivated groups in
-  the sync confirmation when it is non-zero.
-- Broker Risk Positions uses one shared table on both brokerage pages and lists
-  open option legs only; equity/stock positions belong in Holdings. Keep the
-  account/group, symbol, leg, quantity, strike, expiry/DTE, option price,
-  spot/distance-to-strike, IV/source, and delta-shares columns. The ledger UX
-  intentionally omits beta comparisons, beta-delta totals, risk-status columns,
-  and the separate Portfolio Risk section.
+- Options uses the shared Symbol Ledger on both brokerage pages. It includes
+  only option-capable symbols, derives Active or Archived lifecycle state from
+  immutable broker facts, and keeps imported events read-only. Show current,
+  all-history, and archived periods on demand; retain account-aware option and
+  equity components as reconciliation context. Notes are the only editable
+  ledger metadata. Do not expose Trade Groups, manual lifecycle status, event
+  reassignment, or broker-risk tables in this surface.
 - Option-Adjusted Basis includes only symbols with open long-equity positions
   and option activity that affects their basis. Keep completed option cycles
   while the shares remain open; do not show redundant Exposure or State

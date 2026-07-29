@@ -1,159 +1,30 @@
+import { Component, Input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
-import { StockService } from '../api/stock.service';
-import { CapabilityService } from '../api/capability.service';
-import { BrokerageLedgerService } from '../api/brokerage-ledger.service';
-import { BrokerageHoldingsSnapshot } from '../model/brokerage-holdings';
-import { RetirementPortfolioData } from '../model/retirement';
-import { RetirementOptionsData } from '../model/retirement-options';
+
+import { BrokerageId } from '../model/brokerage';
+import { BrokerageLedgerPortfolioSlug } from '../model/brokerage-ledger';
 import { RetirementPortfolioComponent } from './retirement-portfolio.component';
 
-const PORTFOLIO: RetirementPortfolioData = {
-  holdings: [],
-  totalInitial: 0,
-  totalCurrent: 0,
-  totalGainLoss: 0,
-  totalGainLossPct: 0,
-  byCategory: {},
-  byIndustry: {},
-  byAccountType: {},
-  topPositions: [],
-  gainLossSnapshots: [{
-    syncDate: '2026-07-27',
-    retrievedAt: '2026-07-27T17:00:00+00:00',
-    capturedAt: '2026-07-27T17:01:00+00:00',
-  }],
-  retrievedAt: '2026-07-27T17:00:00+00:00',
-};
+@Component({ selector: 'app-brokerage-ledger-page', standalone: true, template: '' })
+class BrokerageLedgerPageStub {
+  @Input() brokerageId!: BrokerageId;
+  @Input() portfolio!: BrokerageLedgerPortfolioSlug;
+  @Input() title = '';
+}
 
-describe('RetirementPortfolioComponent G/L snapshots', () => {
-  it('reports an archived group reactivated by a Fidelity sync', () => {
-    TestBed.configureTestingModule({
-      providers: [
-        {
-          provide: StockService,
-          useValue: jasmine.createSpyObj('StockService', ['getRetirementPortfolio']),
-        },
-        { provide: CapabilityService, useValue: jasmine.createSpyObj('CapabilityService', ['get']) },
-      ],
-    });
-    const component = TestBed.runInInjectionContext(() => new RetirementPortfolioComponent());
-
-    const message = (component as any).fidelitySyncMessage({
-      sync: {
-        accounts_synced: 1, positions_synced: 2, added: 0, changed: 0,
-        unchanged: 2, removed: 0, groups_reactivated: 1,
-      },
-    });
-
-    expect(message).toContain('Updated 1 archived group back to Active.');
-  });
-
-  it('captures and reports replacement for the current sync date', () => {
-    const stockService = jasmine.createSpyObj<StockService>('StockService', [
-      'captureRetirementGainLossSnapshot',
-    ]);
-    stockService.captureRetirementGainLossSnapshot.and.returnValue(of({
-      snapshot: {
-        ...PORTFOLIO.gainLossSnapshots[0], replaced: true, snapshotCount: 3,
-      },
-      portfolio: PORTFOLIO,
-    }));
-
-    TestBed.configureTestingModule({
-      providers: [
-        { provide: StockService, useValue: stockService },
-        { provide: CapabilityService, useValue: jasmine.createSpyObj('CapabilityService', ['get']) },
-      ],
-    });
-    const component = TestBed.runInInjectionContext(() => new RetirementPortfolioComponent());
-
-    component.captureGainLossSnapshot();
-
-    expect(stockService.captureRetirementGainLossSnapshot).toHaveBeenCalledOnceWith();
-    expect(component.data).toBe(PORTFOLIO);
-    expect(component.snapshotting).toBeFalse();
-    expect(component.syncMessage).toContain('Jul 27, 2026 replaced');
-    expect(component.syncMessage).toContain('3 of 3 snapshot dates retained');
-  });
-
-  it('renders one dated column and its captured value', async () => {
-    const displayPortfolio: RetirementPortfolioData = {
-      ...PORTFOLIO,
-      holdings: [{
-        enrichmentSymbol: 'DEMO',
-        category: 'GROWTH',
-        accountType: 'PRE TAX',
-        industry: 'SOFTWARE',
-        symbol: 'DEMO',
-        costPrice: 100,
-        qty: 1,
-        initialInvestment: 100,
-        marketPrice: 87.66,
-        currentValue: 87.66,
-        pctOfTotal: 100,
-        gainLossPct: -12.34,
-        gainLoss: -12.34,
-        gainLossSnapshots: { '2026-07-27': -12.34 },
-        note: '',
-        trend: {
-          alert: false, peakPct: -12.34, peakAt: '2026-07-27T17:00:00+00:00',
-          dropPct: null, fromPct: null, toPct: null, alertAt: null, direction: 'LOSS',
-        },
-      }],
-      totalInitial: 100,
-      totalCurrent: 87.66,
-      totalGainLoss: -12.34,
-      totalGainLossPct: -12.34,
-      byCategory: {},
-      byIndustry: {},
-      byAccountType: {},
-    };
-    const stockService = jasmine.createSpyObj<StockService>('StockService', [
-      'getRetirementPortfolio', 'getRetirementOptions',
-    ]);
-    stockService.getRetirementPortfolio.and.returnValue(of(displayPortfolio));
-    stockService.getRetirementOptions.and.returnValue(of({} as RetirementOptionsData));
-    const capabilityService = jasmine.createSpyObj<CapabilityService>('CapabilityService', ['get']);
-    capabilityService.get.and.returnValue(of(null));
-    const brokerageLedgerService = jasmine.createSpyObj<BrokerageLedgerService>(
-      'BrokerageLedgerService', ['getHoldings']
-    );
-    brokerageLedgerService.getHoldings.and.returnValue(
-      of(displayPortfolio as unknown as BrokerageHoldingsSnapshot)
-    );
-
-    await TestBed.configureTestingModule({
-      imports: [RetirementPortfolioComponent],
-      providers: [
-        { provide: StockService, useValue: stockService },
-        { provide: CapabilityService, useValue: capabilityService },
-        { provide: BrokerageLedgerService, useValue: brokerageLedgerService },
-      ],
-    }).compileComponents();
+describe('RetirementPortfolioComponent', () => {
+  it('is a thin Retirement shell over the shared brokerage ledger page', async () => {
+    await TestBed.configureTestingModule({ imports: [RetirementPortfolioComponent] })
+      .overrideComponent(RetirementPortfolioComponent, { set: { imports: [BrokerageLedgerPageStub] } })
+      .compileComponents();
     const fixture = TestBed.createComponent(RetirementPortfolioComponent);
-    fixture.componentInstance.tab = 'holdings';
     fixture.detectChanges();
 
-    const columns = Array.from(
-      fixture.nativeElement.querySelectorAll('.snapshot-col') as NodeListOf<HTMLElement>
-    ).map(element => element.textContent?.replace(/\s+/g, ' ').trim());
-    expect(columns).toEqual([
-      'G/L % as of Jul 27, 2026',
-      '−12.34%',
-    ]);
-
-    const headers = Array.from(
-      fixture.nativeElement.querySelectorAll('.holdings-table th') as NodeListOf<HTMLElement>
-    ).map(header => header.textContent?.replace(/[▲▼]/g, '').replace(/\s+/g, ' ').trim());
-    expect(headers.slice(8, 13)).toEqual([
-      'Current', '% Portfolio', 'G/L $', 'G/L %', 'G/L % as of Jul 27, 2026',
-    ]);
-
-    const toolbarButtons = Array.from(
-      fixture.nativeElement.querySelectorAll('.toolbar-actions button') as NodeListOf<HTMLButtonElement>
-    ).map(button => button.textContent?.replace(/\s+/g, ' ').trim());
-    expect(toolbarButtons).toEqual(['Snapshot G/L %', 'Copy Symbols']);
-    expect(fixture.nativeElement.querySelector('.charts-row')).toBeNull();
+    const shell = fixture.nativeElement.querySelector('app-brokerage-ledger-page') as HTMLElement;
+    expect(shell).toBeTruthy();
+    const instance = fixture.debugElement.children[0].componentInstance as BrokerageLedgerPageStub;
+    expect(instance.brokerageId).toBe('fidelity');
+    expect(instance.portfolio).toBe('retirement');
+    expect(instance.title).toBe('Retirement Ledger');
   });
 });

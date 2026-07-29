@@ -388,7 +388,8 @@ def _normalize_activity(activity: Any, ctx: dict[str, str], retrieved_at: str,
 
 
 def sync_events(provider=None, *, start_date: date | None = None,
-                end_date: date | None = None) -> dict[str, Any]:
+                end_date: date | None = None,
+                legacy_groups: bool = True) -> dict[str, Any]:
     """Pull SnapTrade option transaction events over a full window and upsert them
     into the immutable ledger, keyed by activity id — never deleting.
 
@@ -424,27 +425,30 @@ def sync_events(provider=None, *, start_date: date | None = None,
         events = sorted(merged.values(), key=lambda row: (row["trade_date"], row["id"]))
         _atomic_write(config.retirement_option_events_csv(), EVENT_HEADERS, events)
 
-        # Materialize app-owned grouping before the sync report is returned so
-        # a new event can reactivate its archived group in the same operation.
-        # Multiple same-symbol groups remain ambiguous and therefore ungrouped.
-        _groups, memberships = _ensure_app_groups_unlocked(
-            events, _option_rows(), _read_groups(), start_date.year,
-        )
-        new_event_ids = {row["id"] for row in normalized if row["id"] not in existing_by_id}
-        group_ids = {
-            memberships[event_id] for event_id in new_event_ids
-            if event_id in memberships
-        }
-        all_groups = options_activity._read_csv(
-            config.options_groups_csv(), options_activity.GROUP_HEADERS,
-        )
-        groups_reactivated = options_activity._reactivate_archived_groups(
-            all_groups, group_ids, retrieved_at,
-        )
-        if groups_reactivated:
-            options_activity._atomic_write(
-                config.options_groups_csv(), options_activity.GROUP_HEADERS, all_groups,
+        if legacy_groups:
+            # Legacy direct callers retain their historical behavior. Registry
+            # sync uses ``legacy_groups=False`` so normal production refreshes
+            # cannot create or mutate ambiguous group state.
+            _groups, memberships = _ensure_app_groups_unlocked(
+                events, _option_rows(), _read_groups(), start_date.year,
             )
+            new_event_ids = {row["id"] for row in normalized if row["id"] not in existing_by_id}
+            group_ids = {
+                memberships[event_id] for event_id in new_event_ids
+                if event_id in memberships
+            }
+            all_groups = options_activity._read_csv(
+                config.options_groups_csv(), options_activity.GROUP_HEADERS,
+            )
+            groups_reactivated = options_activity._reactivate_archived_groups(
+                all_groups, group_ids, retrieved_at,
+            )
+            if groups_reactivated:
+                options_activity._atomic_write(
+                    config.options_groups_csv(), options_activity.GROUP_HEADERS, all_groups,
+                )
+        else:
+            groups_reactivated = 0
     return {
         "events_received": len(normalized),
         "events_inserted": sum(1 for row in normalized if row["id"] not in existing_by_id),

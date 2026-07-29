@@ -660,7 +660,8 @@ def remove_symbols(symbols: set[str]) -> dict[str, int]:
 
 
 def sync(start_date: date | None = None, end_date: date | None = None,
-         *, provider: BrokerProvider | None = None) -> dict[str, Any]:
+         *, provider: BrokerProvider | None = None,
+         legacy_groups: bool = True) -> dict[str, Any]:
     end_date = end_date or date.today()
     start_date = start_date or date(end_date.year, 1, 1)
     if start_date > end_date:
@@ -743,15 +744,22 @@ def sync(start_date: date | None = None, end_date: date | None = None,
         _atomic_write(config.options_greeks_csv(), GREEKS_HEADERS, persisted_greeks)
         _atomic_write(config.options_betas_csv(), BETA_HEADERS, persisted_betas)
 
-        groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
-        members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
-        new_event_ids = {row["id"] for row in normalized if row["id"] not in existing_by_id}
-        groups_created, events_grouped = _auto_group(events, groups, members, start_date.year, retrieved_at)
-        groups_reactivated = _reactivate_archived_groups(
-            groups, _group_ids_for_events(members, new_event_ids), retrieved_at,
-        )
-        _atomic_write(config.options_groups_csv(), GROUP_HEADERS, groups)
-        _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS, members)
+        if legacy_groups:
+            groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
+            members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
+            new_event_ids = {row["id"] for row in normalized if row["id"] not in existing_by_id}
+            groups_created, events_grouped = _auto_group(
+                events, groups, members, start_date.year, retrieved_at,
+            )
+            groups_reactivated = _reactivate_archived_groups(
+                groups, _group_ids_for_events(members, new_event_ids), retrieved_at,
+            )
+            _atomic_write(config.options_groups_csv(), GROUP_HEADERS, groups)
+            _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS, members)
+        else:
+            # Symbol Ledger is the production lifecycle. Keep legacy artifacts
+            # readable for rollback, but do not create or mutate grouping state.
+            groups_created = events_grouped = groups_reactivated = 0
 
     # Holdings trend is advisory metadata derived from the new broker snapshot.
     # Never fail a brokerage sync because the optional trend view could not

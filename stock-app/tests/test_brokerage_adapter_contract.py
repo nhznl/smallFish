@@ -20,7 +20,9 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from app import brokerage_ledger, config, options_activity, retirement_options, snaptrade_service
+from app import (brokerage_ledger, config, options_activity, retirement_options,
+                 snaptrade_service)
+from app.brokerages import registry
 from app.main import app
 from tests import brokerage_contract_spec as spec
 from tests.test_brokerage_ledger import (_holding, _retirement_event,
@@ -73,6 +75,27 @@ def test_catalog_describes_the_portfolios_the_backend_configures_today():
         entry["portfolio_role"]: entry["institution"]
         for entry in spec.BROKERAGE_CATALOG.values()
     }
+
+
+def test_registry_sync_disables_legacy_group_writes(monkeypatch):
+    """The production sync path preserves facts without making group state."""
+    calls: dict[str, object] = {}
+
+    def trading_sync(*_args, **kwargs):
+        calls["trading"] = kwargs
+        return {}
+
+    def retirement_sync(*_args, **kwargs):
+        calls["retirement"] = kwargs
+        return {}
+
+    monkeypatch.setattr(options_activity, "sync", trading_sync)
+    monkeypatch.setattr(retirement_options, "sync_events", retirement_sync)
+    registry.REGISTRY["tastytrade"].sync_commands["ACTIVITY"]()
+    registry.REGISTRY["fidelity"].sync_commands["ACTIVITY"]()
+
+    assert calls["trading"] == {"legacy_groups": False}
+    assert calls["retirement"] == {"legacy_groups": False}
 
 
 def test_canonical_vocabulary_carries_no_provider_terms():

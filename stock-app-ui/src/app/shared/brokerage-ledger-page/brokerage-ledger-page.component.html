@@ -1,0 +1,40 @@
+<div class="brokerage-ledger-page">
+  <header class="page-header">
+    <div>
+      <p class="page-eyebrow">Brokerage ledger</p>
+      <h1 class="page-title">{{ title }}</h1>
+      <p class="page-subtitle">Equity holdings, symbol-level option history, and option-adjusted basis.</p>
+    </div>
+    <div class="page-actions">
+      <button type="button" class="btn btn-primary" (click)="sync()"
+        [disabled]="syncing" [attr.aria-busy]="syncing">
+        @if (syncing) { <span class="btn-spinner" aria-hidden="true"></span> }
+        {{ syncing ? 'Syncing…' : 'Sync brokerage' }}
+      </button>
+      <button type="button" class="btn" (click)="refresh()">Refresh</button>
+    </div>
+  </header>
+
+  @if (syncMessage) { <div class="banner banner-pos" role="status">{{ syncMessage }}</div> }
+  @if (syncError) { <div class="banner banner-neg" role="alert">{{ syncError }}</div> }
+
+  <div class="tab-bar" role="tablist" [attr.aria-label]="title + ' views'">
+    <button type="button" class="tab" role="tab" [class.active]="tab === 'holdings'"
+      [attr.aria-selected]="tab === 'holdings'" (click)="tab = 'holdings'">
+      Holdings<span class="tab-count">{{ holdingsCount }}</span>
+    </button>
+    <button type="button" class="tab" role="tab" [class.active]="tab === 'options'"
+      [attr.aria-selected]="tab === 'options'" (click)="tab = 'options'">Options</button>
+    <button type="button" class="tab" role="tab" [class.active]="tab === 'basis'"
+      [attr.aria-selected]="tab === 'basis'" (click)="tab = 'basis'">Option-Adjusted Basis</button>
+  </div>
+
+  @if (tab === 'holdings') {
+    <app-brokerage-holdings [portfolio]="portfolio" [refreshToken]="refreshToken"
+      (countChange)="holdingsCount = $event" />
+  } @else if (tab === 'options') {
+    <app-symbol-ledger [brokerageId]="brokerageId" [refreshToken]="refreshToken" />
+  } @else {
+    <app-brokerage-ledger-combined [portfolio]="portfolio" [refreshToken]="refreshToken" />
+  }
+</div>

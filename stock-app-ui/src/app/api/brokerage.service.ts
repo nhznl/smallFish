@@ -7,6 +7,7 @@ import {
   ArchiveCreatedResponse,
   BrokerageCatalog,
   BrokerageId,
+  BrokerageSyncResponse,
   HoldingsResponse,
   LedgerEventsResponse,
   OptionsResponse,
@@ -114,6 +115,10 @@ export class BrokerageService {
     return this.http.post<ArchiveCreatedResponse>(
       `${this.symbolUrl(brokerageId, symbol)}/archives`, body
     );
+  }
+
+  runSync(brokerageId: BrokerageId): Observable<BrokerageSyncResponse> {
+    return this.http.post<BrokerageSyncResponse>(`${this.base(brokerageId)}/sync`, {});
   }
 
   private symbolUrl(brokerageId: BrokerageId, symbol: string): string {

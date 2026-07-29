@@ -40,8 +40,8 @@ beta.
 
 ### What smallFish reads
 
-- Options activity — the immutable transaction history used to build trade groups
-  and P/L.
+- Options activity — immutable transaction history used by Symbol Ledger P/L
+  and archive verification.
 - Current open option positions and their marks.
 - Live IV and Greeks for your exact open contracts.
 - Market-metric beta, the governed beta input for beta-delta risk.
@@ -179,7 +179,7 @@ Partial risk inputs are never presented as complete totals.
 | Path | Contents |
 |---|---|
 | `$SFP_DATA_DIR/ledger_options/options_activity.csv` | Immutable broker transactions |
-| `$SFP_DATA_DIR/ledger_options/options_groups.csv` | *Your* editable grouping metadata, kept separate from broker facts |
+| `$SFP_DATA_DIR/ledger_options/options_groups.csv` | Legacy rollback artifact; production sync no longer writes it |
 | `$SFP_DATA_DIR/ledger_options/options_position_marks.csv` | Current marks |
 | `$SFP_DATA_DIR/ledger_options/options_greeks.csv` | Timestamped IV and Greeks |
 | `$SFP_DATA_DIR/ledger_options/options_betas.csv` | Timestamped market-metric beta |

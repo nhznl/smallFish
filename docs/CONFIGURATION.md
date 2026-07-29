@@ -89,8 +89,8 @@ specific artifact.
 | `SFP_UNIVERSE_CSV` | `$SFP_DATA_DIR/universe.csv` |
 | `SFP_RETIRED_SYMBOLS_CSV` | `$SFP_DATA_DIR/retired_symbols.csv` |
 | `SFP_OPTIONS_ACTIVITY` | `$SFP_DATA_DIR/ledger_options/options_activity.csv` |
-| `SFP_OPTIONS_GROUPS` | `$SFP_DATA_DIR/ledger_options/options_groups.csv` |
-| `SFP_OPTIONS_GROUP_MEMBERS` | `$SFP_DATA_DIR/ledger_options/options_group_members.csv` |
+| `SFP_OPTIONS_GROUPS` | `$SFP_DATA_DIR/ledger_options/options_groups.csv` (legacy rollback artifact; production sync does not write it) |
+| `SFP_OPTIONS_GROUP_MEMBERS` | `$SFP_DATA_DIR/ledger_options/options_group_members.csv` (legacy rollback artifact; production sync does not write it) |
 | `SFP_TASTYTRADE_POSITIONS` | `$SFP_DATA_DIR/ledger_options/tastytrade_positions.csv` |
 | `SFP_TRADING_HOLDINGS_ENRICHMENT` | `$SFP_DATA_DIR/ledger_options/holdings_enrichment.csv` |
 | `SFP_TRADING_HOLDINGS_TREND` | `$SFP_DATA_DIR/ledger_options/holdings_trend.csv` |
