@@ -4,7 +4,6 @@ import { Observable } from 'rxjs';
 
 import {
   BrokerageLedgerPortfolioSlug,
-  BrokerageLedgerSnapshot,
 } from '../model/brokerage-ledger';
 import {
   BrokerageGainLossSnapshotResponse,
@@ -17,12 +16,6 @@ export class BrokerageLedgerService {
   private readonly apiBaseUrl = window.location.port === '4200'
     ? 'http://localhost:8000'
     : window.location.origin;
-
-  getCombined(portfolio: BrokerageLedgerPortfolioSlug): Observable<BrokerageLedgerSnapshot> {
-    return this.http.get<BrokerageLedgerSnapshot>(
-      `${this.apiBaseUrl}/brokerage-ledgers/${portfolio}/combined`
-    );
-  }
 
   getHoldings(portfolio: BrokerageLedgerPortfolioSlug): Observable<BrokerageHoldingsSnapshot> {
     return this.http.get<BrokerageHoldingsSnapshot>(
