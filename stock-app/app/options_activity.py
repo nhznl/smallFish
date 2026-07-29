@@ -7,7 +7,6 @@ events by normalized underlying; there is no grouping concept here at all.
 
 from __future__ import annotations
 
-import asyncio
 import csv
 import math
 import os
@@ -20,6 +19,8 @@ from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
+
+from services.tastytrade import io as tastytrade_io
 
 from . import config
 from .options_risk import apply_call_coverage
@@ -234,17 +235,14 @@ def _atomic_write(path: Path, headers: list[str], rows: list[dict[str, Any]]) ->
 
 
 def _credentials() -> tuple[str, str, str]:
-    secret = os.environ.get("TT_CLIENT_SECRET", "").strip()
-    token = os.environ.get("TT_REFRESH_TOKEN", "").strip()
-    if not secret or not token:
+    try:
+        credentials = tastytrade_io.load_credentials()
+    except tastytrade_io.TastytradeConfigurationError as exc:
         raise ActivityValidationError(
-            "Tastytrade credentials are not configured; set TT_CLIENT_SECRET/TT_REFRESH_TOKEN in app.env",
+            str(exc),
             503,
-        )
-    env = os.environ.get("TT_ENV", "").strip().lower() or "sandbox"
-    if env not in {"live", "sandbox"}:
-        raise ActivityValidationError("TT_ENV must be live or sandbox")
-    return secret, token, env
+        ) from exc
+    return credentials.client_secret, credentials.refresh_token, credentials.environment
 
 
 def _safe_market_data_error(exc: Exception) -> str:
@@ -255,12 +253,9 @@ def _safe_market_data_error(exc: Exception) -> str:
     )
 
 
-async def _fetch_tasty_greeks(session: Any, positions: list[Any],
-                              timeout_seconds: float = 8.0) -> tuple[list[Any], str | None]:
+def _fetch_tasty_greeks(positions: list[Any],
+                        timeout_seconds: float = 8.0) -> tuple[list[Any], str | None]:
     """Collect one timestamped dxFeed Greeks event per open option contract."""
-    from tastytrade import DXLinkStreamer
-    from tastytrade.dxfeed import Greeks
-
     symbols = {
         _streamer_symbol(_text(_value(position, "symbol")))
         for position in positions
@@ -270,35 +265,12 @@ async def _fetch_tasty_greeks(session: Any, positions: list[Any],
     if not symbols:
         return [], None
 
-    latest: dict[str, Any] = {}
-    try:
-        async with DXLinkStreamer(session) as streamer:
-            await streamer.subscribe(Greeks, sorted(symbols))
-            loop = asyncio.get_running_loop()
-            deadline = loop.time() + timeout_seconds
-            while symbols - latest.keys():
-                remaining = deadline - loop.time()
-                if remaining <= 0:
-                    break
-                try:
-                    event = await asyncio.wait_for(streamer.get_event(Greeks), remaining)
-                except TimeoutError:
-                    break
-                event_symbol = _text(_value(event, "event_symbol"))
-                if event_symbol not in symbols:
-                    continue
-                prior = latest.get(event_symbol)
-                if prior is None or _decimal(_value(event, "time")) >= _decimal(_value(prior, "time")):
-                    latest[event_symbol] = event
-    except Exception as exc:  # Greeks are optional; transaction sync must still succeed.
-        return list(latest.values()), _safe_market_data_error(exc)
-    return list(latest.values()), None
+    result = tastytrade_io.fetch_greeks(sorted(symbols), timeout_seconds)
+    return list(result.events.values()), result.error
 
 
-async def _fetch_tasty_betas(session: Any, positions: list[Any]) -> tuple[list[Any], str | None]:
+def _fetch_tasty_betas(positions: list[Any]) -> tuple[list[Any], str | None]:
     """Fetch timestamped market-metric beta for each current underlying."""
-    from tastytrade.metrics import get_market_metrics
-
     symbols = sorted({
         _text(_value(position, "underlying_symbol")).strip().upper()
         for position in positions
@@ -306,55 +278,43 @@ async def _fetch_tasty_betas(session: Any, positions: list[Any]) -> tuple[list[A
     })
     if not symbols:
         return [], None
-    try:
-        return list(await get_market_metrics(session, symbols)), None
-    except Exception as exc:  # Beta is optional; transaction sync must still succeed.
-        return [], _safe_market_data_error(exc)
+    result = tastytrade_io.fetch_market_metrics(symbols)
+    return list(result.metrics), result.error
 
 
 def fetch_tastytrade(start_date: date, end_date: date) -> tuple[list[Any], list[Any], dict[str, Any]]:
     """Read account history and marked positions through the official SDK."""
-    secret, token, env = _credentials()
-
-    async def fetch() -> tuple[list[Any], list[Any], dict[str, Any]]:
-        from tastytrade import Account, Session
-
-        session = Session(secret, refresh_token=token, is_test=env != "live")
-        await session.__aenter__()
-        try:
-            account = await Account.get(session)
-            if isinstance(account, list):
-                if len(account) != 1:
-                    raise ActivityValidationError(
-                        "multiple Tastytrade accounts are available; configure credentials for one account"
-                    )
-                account = account[0]
-            transactions = await account.get_history(
-                session, start_date=start_date, end_date=end_date,
-                page_offset=None, sort="Asc",
+    def select_account(accounts: tuple[Any, ...]) -> Any:
+        if len(accounts) != 1:
+            raise ActivityValidationError(
+                "multiple Tastytrade accounts are available; configure credentials for one account"
             )
-            positions = await account.get_positions(session, include_marks=True)
-            greeks: list[Any] = []
-            greeks_error = None
-            betas: list[Any] = []
-            betas_error = None
-            if env == "live":
-                greeks, greeks_error = await _fetch_tasty_greeks(session, positions)
-                betas, betas_error = await _fetch_tasty_betas(session, positions)
-            metadata = {
-                "environment": env,
-                "nickname": account.nickname,
-                "account_type": account.account_type_name,
-                "greeks": greeks,
-                "greeks_error": greeks_error,
-                "betas": betas,
-                "betas_error": betas_error,
-            }
-            return transactions, positions, metadata
-        finally:
-            await session.__aexit__(None, None, None)
+        return accounts[0]
 
-    return asyncio.run(fetch())
+    try:
+        data = tastytrade_io.fetch_account_data(
+            start_date, end_date, account_selector=select_account
+        )
+    except tastytrade_io.TastytradeConfigurationError as exc:
+        raise ActivityValidationError(str(exc), 503) from exc
+
+    greeks: list[Any] = []
+    greeks_error = None
+    betas: list[Any] = []
+    betas_error = None
+    if data.environment == "live":
+        greeks, greeks_error = _fetch_tasty_greeks(list(data.positions))
+        betas, betas_error = _fetch_tasty_betas(list(data.positions))
+    metadata = {
+        "environment": data.environment,
+        "nickname": data.account.nickname,
+        "account_type": data.account.account_type_name,
+        "greeks": greeks,
+        "greeks_error": greeks_error,
+        "betas": betas,
+        "betas_error": betas_error,
+    }
+    return list(data.transactions), list(data.positions), metadata
 
 
 def _is_option_instrument(value: Any) -> bool:

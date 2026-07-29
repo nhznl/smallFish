@@ -10,7 +10,6 @@ greeks.
 
 from __future__ import annotations
 
-import asyncio
 import csv
 import os
 import tempfile
@@ -25,6 +24,8 @@ from typing import Any
 
 import pandas as pd
 import yaml
+
+from services.tastytrade import io as tastytrade_io
 
 from . import config, options_activity, snaptrade_service
 from .options_market import build_market_inputs
@@ -388,20 +389,10 @@ def sync_events(provider=None, *, start_date: date | None = None,
 
 def _fetch_tasty_betas(symbols: list[str]) -> list[Any]:
     """Live Tastytrade market-metric beta objects for ``symbols``."""
-    secret, token, env = options_activity._credentials()
-
-    async def fetch() -> list[Any]:
-        from tastytrade import Session
-        from tastytrade.metrics import get_market_metrics
-
-        session = Session(secret, refresh_token=token, is_test=env != "live")
-        await session.__aenter__()
-        try:
-            return list(await get_market_metrics(session, symbols))
-        finally:
-            await session.__aexit__(None, None, None)
-
-    return asyncio.run(fetch())
+    result = tastytrade_io.fetch_market_metrics(symbols)
+    if result.error:
+        raise RuntimeError(result.error)
+    return list(result.metrics)
 
 
 def sync_betas(fetcher=_fetch_tasty_betas) -> dict[str, Any]:
@@ -455,39 +446,11 @@ def sync_betas(fetcher=_fetch_tasty_betas) -> dict[str, Any]:
 
 def _fetch_tasty_greeks(legs: list[dict[str, str]], timeout_seconds: float) -> dict[str, Any]:
     """Live dxFeed Greeks events keyed by streamer symbol for ``legs``."""
-    from . import options_activity  # noqa: F401 — kept for import symmetry/credentials
-
     by_streamer = {leg["streamer"]: leg for leg in legs}
-    secret, token, env = options_activity._credentials()
-
-    async def fetch() -> dict[str, Any]:
-        from tastytrade import DXLinkStreamer, Session
-        from tastytrade.dxfeed import Greeks
-
-        session = Session(secret, refresh_token=token, is_test=env != "live")
-        await session.__aenter__()
-        latest: dict[str, Any] = {}
-        try:
-            async with DXLinkStreamer(session) as streamer:
-                await streamer.subscribe(Greeks, list(by_streamer))
-                loop = asyncio.get_running_loop()
-                deadline = loop.time() + timeout_seconds
-                while by_streamer.keys() - latest.keys():
-                    remaining = deadline - loop.time()
-                    if remaining <= 0:
-                        break
-                    try:
-                        event = await asyncio.wait_for(streamer.get_event(Greeks), remaining)
-                    except (asyncio.TimeoutError, TimeoutError):
-                        break
-                    symbol = getattr(event, "event_symbol", None)
-                    if symbol in by_streamer and symbol not in latest:
-                        latest[symbol] = event
-        finally:
-            await session.__aexit__(None, None, None)
-        return latest
-
-    return asyncio.run(fetch())
+    result = tastytrade_io.fetch_greeks(list(by_streamer), timeout_seconds)
+    if result.error:
+        raise RuntimeError(result.error)
+    return result.events
 
 
 def sync_greeks(fetcher=_fetch_tasty_greeks, timeout_seconds: float = 12.0) -> dict[str, Any]:

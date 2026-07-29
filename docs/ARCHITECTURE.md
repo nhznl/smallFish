@@ -13,7 +13,11 @@ point.
 │  Angular 22    │───────▶│   FastAPI    │───────▶│  generated artifacts   │
 └────────────────┘        └──────────────┘        └────────────────────────┘
                                  │                             ▲
-                                 │                             │ write
+                    ┌────────────┴────────────┐                │ write
+                    │       services/          │                │
+                    │ raw provider transport   │                │
+                    └────────────▲────────────┘                │
+                                 │                             │
                                  │                  ┌──────────┴───────────┐
                                  │                  │ utilities/, studies/ │
                                  │                  │    batch pipeline    │
@@ -32,6 +36,10 @@ One way, and it is a hard rule:
 - `utilities/` and `studies/` may import `models/`. They write artifacts.
 - `stock-app/` may import `models/`. It **must never** import `utilities/` or
   `studies/`.
+- `services/` owns provider credentials, SDK sessions, streaming, and raw
+  payload envelopes. Both Python runtimes may import it when their matching SDK
+  is installed; it imports neither runtime, project configuration, persistence,
+  FastAPI, pandas, numpy, nor project contracts.
 - `stock-app-ui/` talks only to the API over HTTP.
 
 The API's independence is what allows two Python environments. The moment the

@@ -12,12 +12,15 @@ the module READMEs linked below rather than duplicating them here.
 ```
 stock-app-ui/  ──HTTP──▶  stock-app/  ──reads──▶  data/  ◀──writes──  utilities/, studies/
                               │                                            │
-                              └────────────▶  models/  ◀──────────────────┘
+                              ├────────────▶  models/  ◀──────────────────┤
+                              │                                            │
+                              └────────────▶  services/  ◀─────────────────┘
 ```
 
 | Path | Owns | README |
 |---|---|---|
 | `models/` | Standard-library-only shared data contracts | [models/README.md](models/README.md) |
+| `services/` | Shared raw provider transport; no application imports | [services/README.md](services/README.md) |
 | `utilities/` | Batch pipeline: scraper, universe, indicators, options | [utilities/README.md](utilities/README.md) |
 | `studies/` | Research studies and materialization | [studies/README.md](studies/README.md) |
 | `stock-app/` | FastAPI backend | [stock-app/README.md](stock-app/README.md) |
@@ -29,6 +32,9 @@ project and uses only the standard library. `stock-app/` must never import
 `utilities/` or `studies/` — it consumes generated artifacts under
 `SFP_DATA_DIR`. Adding such an import couples the two Python environments and
 breaks the split. If you think you need it, you need a new artifact instead.
+`services/` is the narrow exception: both runtimes may import its raw
+provider-transport packages, while it imports neither runtime nor project
+configuration, persistence, FastAPI, pandas, or numpy.
 
 ## Runtimes
 
