@@ -87,12 +87,9 @@ once in `app/brokerages/trend.py`, fed by each provider's own extraction.
   `data/ledger_options/options_groups.csv` on this machine if it is ever
   wanted back.
 
-**Next action:** none identified. The next piece of *planned* work is
-**Follow-up: provider I/O extraction** below, which the owner agreed to in
-principle but has not asked to start.
-
-After that, see **Follow-up: provider I/O extraction** below, which the owner
-raised on 2026-07-29 and which is deliberately sequenced after this cleanup.
+**Next action:** hand the separate provider-I/O extraction plan to the owner's
+chosen implementation agent. No brokerage-refactor phase remains to resume.
+See [`PROVIDER_IO_EXTRACTION_PLAN.md`](PROVIDER_IO_EXTRACTION_PLAN.md).
 
 **Do not restart from Phase 1.** The kickoff prompt at the foot of this document
 has been rewritten for resumption; use that, not the original start-from-scratch
@@ -149,6 +146,11 @@ period; otherwise show no archive card, blocker, or empty-state message.
 
 Raised by the owner on 2026-07-29 and **agreed in principle**. Recorded here so
 it is not lost, and deliberately sequenced *after* the legacy cleanup.
+
+The focused implementation plan, phase gates, and Terra kickoff are now in
+[`PROVIDER_IO_EXTRACTION_PLAN.md`](PROVIDER_IO_EXTRACTION_PLAN.md). That document
+governs the follow-up; this section preserves the decision history and original
+scope rationale.
 
 The shape: top-level `services/tastytrade/` and `services/snaptrade/`, siblings
 of `models/`, importable by both `stock-app/` and `utilities/`.
@@ -1626,9 +1628,8 @@ phases.
 
 ```text
 The smallFish brokerage legacy cleanup is complete. Read the "Resume here"
-section of docs/BROKERAGE_REFACTOR_PLAN.md first — it has a ⚠️ uncommitted-work
-warning that is almost certainly the first thing to act on. Then AGENTS.md and
-stock-app/README.md; docs/BROKERAGE_LEDGER_COMBINED_VIEW.md is now a historical
+section of docs/BROKERAGE_REFACTOR_PLAN.md first, then AGENTS.md and
+stock-app/README.md. docs/BROKERAGE_LEDGER_COMBINED_VIEW.md is now a historical
 design record only, not current-state documentation.
 
 State when you pick this up:
@@ -1654,12 +1655,10 @@ State when you pick this up:
 - Last verified baselines: backend 447 passing, Angular 69 passing, clean
   build. Re-run the full relevant suite before calling anything complete.
 
-No further cleanup work is identified. If the owner asks to continue, the
-recorded next step is the provider-I/O extraction into a top-level `services/`
-tree — see "Follow-up: provider I/O extraction" earlier in this document for
-the agreed scope and the two costs (shared SDK pin across both venvs, and the
-AGENTS.md dependency diagram update) to raise before starting, not silently
-absorb.
+No further cleanup work is identified. The separate next step is the
+provider-I/O extraction into a top-level `services/` tree. Follow
+docs/PROVIDER_IO_EXTRACTION_PLAN.md; it records the agreed scope, phase gates,
+shared-SDK-pin constraint, dependency-diagram update, and current Terra kickoff.
 
 Protocol for any further work:
 1. Keep each increment focused and independently reversible. Do not mix a
