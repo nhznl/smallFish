@@ -244,7 +244,8 @@ def test_sync_includes_reactivated_option_group_count(holdings_env, monkeypatch)
     from app import retirement_options
 
     monkeypatch.setattr(
-        retirement_options, "sync_events", lambda: {"groups_reactivated": 2},
+        retirement_options, "sync_events",
+        lambda *args, **kwargs: {"groups_reactivated": 2},
     )
 
     summary = snaptrade_service.sync(provider=_provider)

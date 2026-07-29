@@ -1,9 +1,8 @@
-"""Phase 0 characterization of Fidelity sync ownership and provider call counts.
+"""Phase 0/2 characterization of Fidelity sync ownership and provider call counts.
 
-Locks the *current* public response shape and records how many times each
-provider seam runs. The empty-body case intentionally documents the duplicate
-activity / market-data defect that Phase 2 removes — do not "fix" those
-counts here.
+Locks the public response shape and proves each provider seam runs once per
+requested resource. Phase 0 recorded the pre-fix duplicate-call defect;
+Phase 2 corrected it — empty-body sync is now one call each.
 """
 
 from __future__ import annotations
@@ -218,13 +217,9 @@ def _statuses(body: dict) -> dict[str, str]:
 
 # ------------------------------------------------------ empty-body / all ---
 
-def test_empty_body_fidelity_sync_public_shape_and_duplicate_calls(
+def test_empty_body_fidelity_sync_public_shape_and_no_duplicate_calls(
         fidelity_sync_env, monkeypatch):
-    """Angular posts `{}`. Today HOLDINGS secretly re-runs ACTIVITY + MARKET_DATA.
-
-    Phase 2 must bring these counts to one each; this assertion records the
-    defect so the cleanup cannot ship without fixing it.
-    """
+    """Angular posts `{}`. Each resource command runs once; no sibling re-entry."""
     counter = _CallCounter()
     _install_providers(monkeypatch, counter)
 
@@ -255,14 +250,12 @@ def test_empty_body_fidelity_sync_public_shape_and_duplicate_calls(
                     "betas_observed", "betas_retained", "betas_missing",
                 }
 
-    # Registry runs each mapped command once, in order.
     assert counter.resource_commands == ["HOLDINGS", "ACTIVITY", "MARKET_DATA"]
-    # Provider seams: HOLDINGS also invokes activity + market data today.
     assert counter.as_dict() == {
         "positions": 1,
-        "activities": 2,
-        "betas": 2,
-        "greeks": 2,
+        "activities": 1,
+        "betas": 1,
+        "greeks": 1,
         "resource_commands": ["HOLDINGS", "ACTIVITY", "MARKET_DATA"],
     }
 
@@ -279,18 +272,17 @@ def test_all_resources_explicit_list_matches_empty_body_order_and_counts(
     ]
     assert counter.as_dict() == {
         "positions": 1,
-        "activities": 2,
-        "betas": 2,
-        "greeks": 2,
+        "activities": 1,
+        "betas": 1,
+        "greeks": 1,
         "resource_commands": ["HOLDINGS", "ACTIVITY", "MARKET_DATA"],
     }
 
 
 # --------------------------------------------------- resource-specific ---
 
-def test_holdings_resource_currently_also_fetches_activity_and_market_data(
+def test_holdings_resource_requests_positions_once_without_siblings(
         fidelity_sync_env, monkeypatch):
-    """Current HOLDINGS command is not single-purpose — Phase 2 splits it."""
     counter = _CallCounter()
     _install_providers(monkeypatch, counter)
 
@@ -300,9 +292,9 @@ def test_holdings_resource_currently_also_fetches_activity_and_market_data(
     assert body["results"][0]["status"] == "OK"
     assert counter.as_dict() == {
         "positions": 1,
-        "activities": 1,
-        "betas": 1,
-        "greeks": 1,
+        "activities": 0,
+        "betas": 0,
+        "greeks": 0,
         "resource_commands": ["HOLDINGS"],
     }
 
@@ -355,7 +347,7 @@ def test_market_data_resource_reads_holdings_artifact_without_snaptrade_calls(
     }
 
 
-def test_holdings_without_option_legs_skips_market_data_side_effect(
+def test_holdings_without_option_legs_skips_market_data(
         fidelity_sync_env, monkeypatch):
     counter = _CallCounter()
     _install_providers(monkeypatch, counter, with_option_position=False)
@@ -365,10 +357,27 @@ def test_holdings_without_option_legs_skips_market_data_side_effect(
     assert body["results"][0]["status"] == "OK"
     assert counter.as_dict() == {
         "positions": 1,
-        "activities": 1,  # event sync still runs unconditionally today
+        "activities": 0,
         "betas": 0,
         "greeks": 0,
         "resource_commands": ["HOLDINGS"],
+    }
+
+
+def test_legacy_sync_orchestrates_each_resource_at_most_once(
+        fidelity_sync_env, monkeypatch):
+    counter = _CallCounter()
+    _install_providers(monkeypatch, counter)
+
+    summary = snaptrade_service.sync(provider=snaptrade_service.fetch_snaptrade)
+
+    assert summary["sync"]["positions_synced"] == 2
+    assert counter.as_dict() == {
+        "positions": 1,
+        "activities": 1,
+        "betas": 1,
+        "greeks": 1,
+        "resource_commands": [],
     }
 
 

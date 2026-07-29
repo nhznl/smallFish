@@ -81,7 +81,7 @@ def _tastytrade_sync() -> dict:
 
 def _fidelity_activity_sync() -> dict:
     """Production activity sync records facts, never mutable group state."""
-    return retirement_options.sync_events()
+    return retirement_options.sync_activity()
 
 
 #: Ordered so the catalog is stable for the UI.
@@ -109,9 +109,9 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         holdings_trend_path=config.holdings_trend_csv,
         legacy_gain_loss_snapshots_path=config.holdings_gain_loss_snapshots_csv,
         sync_commands={
-            "HOLDINGS": snaptrade_service.sync,
+            "HOLDINGS": snaptrade_service.sync_holdings,
             "ACTIVITY": _fidelity_activity_sync,
-            "MARKET_DATA": retirement_options.sync_market_data,
+            "MARKET_DATA": retirement_options.sync_held_option_market_data,
         },
     ),
 }

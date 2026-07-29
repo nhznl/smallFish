@@ -567,8 +567,12 @@ def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[
     )
 
 
-def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:
-    """Pull holdings, normalize them, write the ledger, and return a summary."""
+def sync_holdings(provider: HoldingsProvider | None = None) -> dict[str, Any]:
+    """Pull holdings only: normalize, write the ledger, advance trend, summarize.
+
+    Does not fetch activity or market data. The registry HOLDINGS resource and the
+    legacy ``sync`` orchestrator are the callers that decide sibling resources.
+    """
     provider = provider or fetch_snaptrade
     previous_rows = _read_ledger(config.snaptrade_holdings_csv())
     retrieved_at = _now()
@@ -594,36 +598,49 @@ def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:
     except Exception:  # noqa: BLE001 — trend is advisory; holdings sync must succeed.
         pass
 
-    # Best-effort: refresh the immutable option-event ledger so a closed contract
-    # keeps its realized P/L after it leaves the current-positions feed. Run
-    # unconditionally — a fully-closed underlying has no current leg but still
-    # needs its closing event. Never fail the holdings sync over it.
-    option_event_sync: dict[str, Any] | None = None
-    try:
-        from . import retirement_options
-
-        option_event_sync = retirement_options.sync_events()
-    except Exception:  # noqa: BLE001 — event ledger is best-effort; holdings sync must succeed.
-        pass
-
-    # Best-effort: refresh Tastytrade betas + dxFeed Greeks for any option legs
-    # so the retirement risk table has exact-contract IV and beta-weighted delta.
-    # Never fail the holdings sync over optional market data.
-    if any(row.get("asset_class") == "OPTION" for row in rows):
-        try:
-            from . import retirement_options
-
-            retirement_options.sync_market_data()
-        except Exception:  # noqa: BLE001 — market data is optional; holdings sync must succeed.
-            pass
-
     summary = _summarize(rows)
     summary["sync"] = {
         "accounts_synced": len(accounts_synced),
         "positions_synced": len(rows),
         **_sync_changes(previous_rows, rows),
-        "groups_reactivated": int((option_event_sync or {}).get("groups_reactivated") or 0),
+        # Activity owns reactivation counting; holdings alone always reports 0.
+        "groups_reactivated": 0,
     }
+    return summary
+
+
+def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:
+    """Compatibility orchestrator: holdings, then activity, then market data.
+
+    Each sibling resource runs at most once. Prefer the registry's single-purpose
+    commands for API sync; this entry point preserves the CLI/module contract.
+    """
+    from . import retirement_options
+
+    summary = sync_holdings(provider=provider)
+    rows = _read_ledger(config.snaptrade_holdings_csv())
+
+    # Best-effort: refresh the immutable option-event ledger so a closed contract
+    # keeps its realized P/L after it leaves the current-positions feed. Run
+    # unconditionally — a fully-closed underlying has no current leg but still
+    # needs its closing event. Never fail the holdings summary over it.
+    option_event_sync: dict[str, Any] | None = None
+    try:
+        option_event_sync = retirement_options.sync_activity()
+    except Exception:  # noqa: BLE001 — event ledger is best-effort.
+        pass
+
+    # Best-effort: refresh Tastytrade betas + dxFeed Greeks for any option legs.
+    # Never fail the holdings summary over optional market data.
+    if any(row.get("asset_class") == "OPTION" for row in rows):
+        try:
+            retirement_options.sync_held_option_market_data()
+        except Exception:  # noqa: BLE001 — market data is optional.
+            pass
+
+    summary["sync"]["groups_reactivated"] = int(
+        (option_event_sync or {}).get("groups_reactivated") or 0
+    )
     return summary
 
 

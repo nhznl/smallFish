@@ -274,6 +274,11 @@ def sync_events(provider=None, *, start_date: date | None = None,
     }
 
 
+#: Registry and new callers prefer this name; ``sync_events`` stays for seams.
+def sync_activity(*args, **kwargs) -> dict[str, Any]:
+    return sync_events(*args, **kwargs)
+
+
 # --------------------------------------------------------------------------- #
 # Tastytrade beta sync (SnapTrade has no beta)                                  #
 # --------------------------------------------------------------------------- #
@@ -442,3 +447,8 @@ def sync_market_data() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 — greeks are optional.
         report["greeks_error"] = options_activity._safe_market_data_error(exc)
     return report
+
+
+#: Registry name for the held-option market-data resource.
+def sync_held_option_market_data() -> dict[str, Any]:
+    return sync_market_data()

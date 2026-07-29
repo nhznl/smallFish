@@ -7,7 +7,7 @@ within the settled boundaries below and must pause at a listed stop condition.
 
 ## Resume here
 
-Begin with Phase 2. Work one phase and one focused commit at a time. Update the
+Begin with Phase 3. Work one phase and one focused commit at a time. Update the
 dashboard and progress log in the same commit as each completed phase. Do not
 restart the completed Symbol Ledger, common brokerage API, legacy-route
 retirement, or provider-I/O extraction projects.
@@ -547,9 +547,9 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | Seam | Count today | Target after Phase 2 |
 |---|---|---|
 | positions (`fetch_snaptrade`) | 1 | 1 |
-| activities (`fetch_activities`) | 2 | 1 |
-| betas (`sync_betas`) | 2 | 1 |
-| greeks (`sync_greeks`) | 2 | 1 |
+| activities (`fetch_activities`) | 1 | 1 |
+| betas (`sync_betas`) | 1 | 1 |
+| greeks (`sync_greeks`) | 1 | 1 |
 | registry commands | HOLDINGS → ACTIVITY → MARKET_DATA | unchanged order, once each |
 
 ## Phase dashboard
@@ -558,8 +558,8 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 |---|---|---|---|
 | 0 | Characterize ownership, compatibility, and provider call counts | COMPLETE | 13 characterization tests; golden artifacts under `stock-app/tests/fixtures/brokerage_sync/`; caller table above |
 | 1 | Delete proven-dead remnants | COMPLETE | Removed `_group_name`/`_build_groups`, group-only row fields, unused retirement imports/scaffolding, and `UNCLASSIFIED`/`_read_enrichment`/`_round2`; deleted dead-only group/snapshot test helpers |
-| 2 | Make resource commands single-purpose | NOT STARTED | Begin here |
-| 3 | Move materialization into explicit modules | NOT STARTED | Blocked on Phase 2 |
+| 2 | Make resource commands single-purpose | COMPLETE | Registry: `sync_holdings` / `sync_activity` / `sync_held_option_market_data`; empty-body sync is 1/1/1/1; legacy `sync` orchestrates once each |
+| 3 | Move materialization into explicit modules | NOT STARTED | Begin here |
 | 4 | Isolate setup/CLI and finish compatibility facade | NOT STARTED | Blocked on Phase 3 |
 | 5 | Enforcement, docs, and full regression | NOT STARTED | Blocked on Phase 4 |
 
@@ -570,6 +570,7 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 2026-07-29 | Planning | COMPLETE | Current callers, registry commands, provider boundaries, dead remnants, CLI compatibility, and duplicate Fidelity orchestration were audited. The completed brokerage/provider refactor plans and unused coordination mailbox were retired. | Hand Phase 0 to the implementation agent |
 | 2026-07-29 | 0 | COMPLETE | Added `test_fidelity_sync_characterization.py` (13 tests): empty-body duplicate call counts (positions 1 / activities 2 / betas 2 / greeks 2), per-resource cases, CLI surface + secret redaction, sync return shape, and golden CSV fixtures for holdings/events/betas/greeks. Caller classification recorded above. Gate suites green; no production behavior change. | Phase 1 — delete proven-dead remnants |
 | 2026-07-29 | 1 | COMPLETE | Deleted dead group projection helpers and enrichment remnants; cleaned unused imports and empty scaffolding; removed `test_build_groups_*` and retired snapshot helpers. Fresh reference audit confirmed no production callers. Full stock-app suite + docs/secret gates green. | Phase 2 — single-purpose resource commands |
+| 2026-07-29 | 2 | COMPLETE | Split `sync_holdings` from legacy `sync`; registry points at holdings/activity/market-data commands; empty-body Fidelity sync is one positions/activity/beta/greeks call each. Characterization updated; 459 stock-app tests pass. | Phase 3 — move materialization into importers |
 
 ## Implementation-agent kickoff prompt
 
