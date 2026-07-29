@@ -606,3 +606,86 @@ def test_manual_event_edit_rejects_broker_rows_and_bad_values(activity_env):
     with pytest.raises(options_activity.ActivityValidationError):
         options_activity.update_manual_event(created["event_id"], {
             "quantity": 0, "transaction_date": "2025-11-21"})
+
+
+# --------------------------------------------------------------------------- #
+# migration baseline: what the symbol ledger must preserve                      #
+# --------------------------------------------------------------------------- #
+
+def _dated_tx(tx_id, *, on, symbol="ABC   260821P00050000", underlying="ABC",
+              action="Sell to Open", net_value="600", value="601"):
+    """A broker transaction on an explicit date, for cross-year scenarios."""
+    row = _tx(tx_id, symbol=symbol, underlying=underlying, action=action,
+              net_value=net_value, value=value)
+    row["executed_at"] = f"{on}T15:00:00+00:00"
+    row["transaction_date"] = on
+    return row
+
+
+def test_cross_year_open_and_close_stay_in_one_group(activity_env):
+    """A calendar year is a fetch window, not a ledger boundary.
+
+    The symbol ledger inherits this: an option opened in one year and closed in
+    the next must remain one running tally, and the January-1 default start of
+    the next sync must not drop the retained prior-year event.
+    """
+    opening = _dated_tx(1, on="2025-11-21")
+    options_activity.sync(
+        date(2025, 1, 1), date(2025, 12, 31),
+        provider=lambda _s, _e: ([opening], [_mark()], {"environment": "live"}),
+    )
+    assert options_activity.snapshot("TRADING")["groups"][0]["name"] == "ABC 2025"
+
+    closing = _dated_tx(2, on="2026-02-13", action="Buy to Close",
+                        net_value="-450", value="-449")
+    report = options_activity.sync(
+        date(2026, 1, 1), date(2026, 7, 20),
+        provider=lambda _s, _e: ([closing], [], {"environment": "live"}),
+    )
+
+    assert report["groups_created"] == 0
+    snap = options_activity.snapshot("TRADING")
+    assert len(snap["groups"]) == 1
+    group = snap["groups"][0]
+    assert group["name"] == "ABC 2025"          # not re-created as "ABC 2026"
+    assert group["event_count"] == 2            # the 2025 opening survived
+    assert group["position_status"] == "FLAT"
+    assert group["realized_pnl"] == pytest.approx(150.0)
+    assert group["pnl_completeness"] == "COMPLETE"
+    assert snap["ungrouped_event_count"] == 0
+
+
+def test_several_contracts_under_one_underlying_share_one_group(activity_env):
+    """Closing one contract does not complete the symbol while another is open."""
+    put = "ABC   260821P00050000"
+    call = "ABC   260821C00060000"
+    transactions = [
+        _dated_tx(1, on="2026-03-02", symbol=put, net_value="600", value="601"),
+        _dated_tx(2, on="2026-03-09", symbol=call, net_value="300", value="301"),
+        _dated_tx(3, on="2026-04-06", symbol=put, action="Buy to Close",
+                  net_value="-450", value="-449"),
+    ]
+    options_activity.sync(
+        date(2026, 1, 1), date(2026, 7, 20),
+        provider=lambda _s, _e: (
+            transactions,
+            [_mark(symbol=call, quantity="1", direction="Short", mark_price="1.10")],
+            {"environment": "live"},
+        ),
+    )
+
+    snap = options_activity.snapshot("TRADING")
+    assert len(snap["groups"]) == 1
+    group = snap["groups"][0]
+    assert group["symbol"] == "ABC"
+    assert group["event_count"] == 3
+    assert group["position_status"] == "OPEN"           # the call is still open
+    assert group["pnl_completeness"] == "INDICATIVE"
+    assert [row["contract_key"] for row in group["open_positions"]] == [
+        options_activity._contract_key(call)
+    ]
+    assert group["net_cash_flow"] == pytest.approx(450.0)
+    assert group["open_market_value"] == pytest.approx(-110.0)
+    assert group["total_pnl"] == pytest.approx(340.0)
+    assert group["realized_pnl"] is None
+    assert snap["reconciliation_issues"] == []

@@ -713,3 +713,128 @@ def test_snapshot_empty_without_options(opts_env):
         "position_count": 0, "group_count": 0, "ungrouped_event_count": 0,
     }
     assert d["rows"] == [] and d["groups"] == []
+
+
+# --------------------------------------------------------------------------- #
+# migration baseline: what the symbol ledger must preserve                      #
+# --------------------------------------------------------------------------- #
+
+_MSFT_OCC_2 = "MSFT  260821P00370000"
+
+
+def _multi_account_provider(*pairs):
+    """Activities split across several Fidelity sub-accounts."""
+    accounts = {}
+    for account_id, account_name, activity in pairs:
+        accounts.setdefault(
+            (account_id, account_name),
+            (SimpleNamespace(id=account_id, name=account_name), []),
+        )[1].append(activity)
+    return lambda start_date, end_date: list(accounts.values())
+
+
+def _open_option_holding(occ, underlying, *, account_id="acct-1",
+                         account_name="BrokerageLink", quantity="-1",
+                         price="2.00", cost_basis="-300", market_value="-200"):
+    return {
+        "schema_version": "1", "source": "SNAPTRADE",
+        "retrieved_at": "2026-07-23T22:00:00+00:00",
+        "imported_at": "2026-07-23T22:00:05+00:00",
+        "account_id": account_id, "account_name": account_name,
+        "account_number": "652", "institution": "Fidelity", "asset_class": "OPTION",
+        "symbol": occ, "description": f"{underlying} put",
+        "underlying_symbol": underlying, "option_type": "PUT", "strike": "370",
+        "expiry": "2026-08-21", "currency": "USD",
+        "quantity": quantity, "price": price, "average_purchase_price": "300",
+        "cost_basis": cost_basis, "market_value": market_value,
+        "open_pnl": "0", "open_pnl_pct": "0",
+    }
+
+
+def test_same_symbol_in_several_accounts_is_one_group(opts_env):
+    """Fidelity sub-accounts contribute to the same underlying.
+
+    Today's grouping is keyed by symbol alone, so both accounts' events land in
+    one row and its P/L is their sum. The symbol ledger keeps that top-level
+    identity; account identity has to stay visible on the components.
+    """
+    _write_empty_ledger(opts_env)
+    retirement_options.sync_events(provider=_multi_account_provider(
+        ("acct-1", "BrokerageLink", _opt_activity(
+            "a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
+            "2026-07-24", "370.34", "-1")),
+        ("acct-1", "BrokerageLink", _opt_activity(
+            "a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
+            "2026-07-24", "-259.00", "1")),
+        ("acct-2", "ROTH IRA", _opt_activity(
+            "b1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
+            "2026-07-24", "185.17", "-1")),
+        ("acct-2", "ROTH IRA", _opt_activity(
+            "b2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
+            "2026-07-24", "-129.50", "1")),
+    ))
+
+    snap = retirement_options.snapshot()
+    assert len(snap["groups"]) == 1
+    group = snap["groups"][0]
+    assert group["symbol"] == "MSFT"
+    assert group["event_count"] == 4
+    assert group["position_status"] == "FLAT"
+    assert group["pnl_completeness"] == "COMPLETE"
+    assert group["realized_pnl"] == pytest.approx(167.01)
+    assert snap["summary"]["ungrouped_event_count"] == 0
+    # Both accounts' events are retained and attributable.
+    assert {event["id"] for event in retirement_options._read_events()} == {
+        "a1", "a2", "b1", "b2"
+    }
+
+
+def test_closing_one_contract_leaves_the_underlying_open(opts_env):
+    """Two contracts on one underlying: the closed one keeps its cash, and the
+    symbol stays open and indicative because the other still has a mark."""
+    _write_rows([_open_option_holding(_MSFT_OCC_2, "MSFT")])
+    retirement_options.sync_events(provider=_provider(
+        _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
+                      "2026-07-24", "370.34", "-1"),
+        _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
+                      "2026-07-24", "-259.00", "1"),
+        _opt_activity("a3", "SELL_TO_OPEN", "SELL", _MSFT_OCC_2, "MSFT", "PUT", 370,
+                      "2026-08-21", "300.00", "-1"),
+    ))
+
+    groups = retirement_options.snapshot(
+        market_provider=lambda rows, as_of, cfg: ({}, None))["groups"]
+    assert len(groups) == 1
+    group = groups[0]
+    assert group["position_status"] == "OPEN"
+    assert group["pnl_completeness"] == "INDICATIVE"
+    assert group["realized_pnl"] is None
+    assert group["net_cash_flow"] == pytest.approx(411.34)
+    assert group["open_market_value"] == pytest.approx(-200.0)
+    assert group["total_pnl"] == pytest.approx(211.34)
+
+
+def test_cross_year_open_and_close_stay_in_one_retirement_group(opts_env):
+    """The retained event ledger is upserted by activity id and never truncated
+    to the current fetch window, so a December open closes against a February
+    buy-to-close inside the same running tally."""
+    _write_empty_ledger(opts_env)
+    retirement_options.sync_events(
+        start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+        provider=_provider(_opt_activity(
+            "a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
+            "2026-07-24", "370.34", "-1", trade_date="2025-12-05T05:00:00Z")),
+    )
+    report = retirement_options.sync_events(
+        start_date=date(2026, 1, 1), end_date=date(2026, 7, 28),
+        provider=_provider(_opt_activity(
+            "a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
+            "2026-07-24", "-259.00", "1", trade_date="2026-02-13T05:00:00Z")),
+    )
+
+    assert report["events_inserted"] == 1
+    assert len(retirement_options._read_events()) == 2   # 2025 event retained
+    groups = retirement_options.snapshot()["groups"]
+    assert len(groups) == 1
+    assert groups[0]["position_status"] == "FLAT"
+    assert groups[0]["realized_pnl"] == pytest.approx(111.34)

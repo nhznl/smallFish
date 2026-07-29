@@ -937,7 +937,7 @@ corresponding evidence.
 
 | Phase | Scope | Status | Next action / blocker | Evidence |
 |---|---|---|---|---|
-| 1 | Contract baseline and characterization | NOT STARTED | Begin with existing-route and fixture coverage | - |
+| 1 | Contract baseline and characterization | COMPLETE | Phase 2 may begin | `stock-app/tests/brokerage_contract_spec.py` + `test_brokerage_adapter_contract.py` (14 tests); new characterization cases in `test_options_activity.py`, `test_retirement_options.py`, `test_brokerage_ledger.py`; full backend suite 328 passed |
 | 2 | Brokerage registry, adapters, and canonical facts | NOT STARTED | Depends on Phase 1 | - |
 | 3 | Common projections and additive read APIs | NOT STARTED | Depends on Phase 2 | - |
 | 4 | Symbol Ledger lifecycle, archives, and mutation APIs | NOT STARTED | Depends on Phase 3 | - |
@@ -983,11 +983,16 @@ Automated gate:
 stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app \
   stock-app/tests/test_options_activity.py \
   stock-app/tests/test_retirement_options.py \
-  stock-app/tests/test_brokerage_ledger.py
+  stock-app/tests/test_brokerage_ledger.py \
+  stock-app/tests/test_brokerage_adapter_contract.py
 python3 tools/check_docs.py
 python3 tools/scan_secrets.py
 git diff --check
 ```
+
+`test_brokerage_adapter_contract.py` was added to this gate during
+implementation; the `-k 'brokerage_adapter'` selection in Phases 2-3 and the
+full-suite runs in Phases 4, 7, and 8 already cover it.
 
 Suggested commit: `test: characterize brokerage API migration baseline`
 
@@ -1369,6 +1374,7 @@ Append entries; never rewrite older evidence to make progress look cleaner.
 | 2026-07-28 | Planning | COMPLETE | Created the proposed grouping, reset, persistence, and API design; documentation checks and secret scan passed; no production code changed | Review migration order |
 | 2026-07-28 | Handoff | COMPLETE | Added eight commit-sized phases, automated gates, a Phase 5 owner checkpoint, final Phase 8 UI verification, rollback/stop rules, and kickoff prompt | Start Phase 1 when implementation is requested |
 | 2026-07-28 | API design | COMPLETE | Owner approved public brokerage IDs, registry-selected SnapTrade/Tastytrade adapters, canonical facts, common projections, standardized resource contracts, capabilities, and additive compatibility migration | Implement adapters before Symbol Ledger behavior |
+| 2026-07-28 | 1 | COMPLETE | Settled decisions frozen as importable test data in `stock-app/tests/brokerage_contract_spec.py` and asserted by `test_brokerage_adapter_contract.py`: public IDs are institutions not connectors, the catalog matches `brokerage_ledger.PORTFOLIOS`, all 21 legacy brokerage routes are still published, all 14 new routes are additive and provider-agnostic, and the settled P/L identities and completeness vocabulary already hold in the live `/brokerage-ledgers` responses for both brokerages. New synthetic characterization: cross-year open/close (Trading, Retirement, and combined), several contracts under one underlying, and the same symbol across multiple Retirement accounts. Gate green (79 targeted, 328 full backend suite); `check_docs`, `scan_secrets`, `git diff --check` clean. No production code changed. Phase 1 gate command amended to include the new contract file | Begin Phase 2: registry, adapters, canonical facts |
 
 ## Opus new-session kickoff prompt
 

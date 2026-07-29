@@ -43,14 +43,15 @@ def _trading_position(*, symbol: str, underlying: str, instrument: str,
 
 
 def _trading_event(*, event_id: str, contract: str, underlying: str,
-                   action: str, delta: str, net_value: str) -> dict[str, str]:
+                   action: str, delta: str, net_value: str,
+                   on: str = "2026-07-01") -> dict[str, str]:
     row = {header: "" for header in options_activity.ACTIVITY_HEADERS}
     option_type, expiry, strike = options_activity._option_terms(contract)
     row.update({
         "schema_version": "1", "id": event_id, "source": "TASTYTRADE",
         "source_transaction_id": event_id, "account": "TRADING",
-        "executed_at": "2026-07-01T16:00:00+00:00",
-        "transaction_date": "2026-07-01", "transaction_type": "Trade",
+        "executed_at": f"{on}T16:00:00+00:00",
+        "transaction_date": on, "transaction_type": "Trade",
         "instrument_type": "Equity Option", "contract_symbol": contract,
         "contract_key": options_activity._contract_key(contract),
         "underlying_symbol": underlying, "action": action, "quantity": "1",
@@ -308,3 +309,134 @@ def test_main_row_keeps_equity_and_option_blocks_empty_when_not_applicable(ledge
 def test_unknown_portfolio_is_404(ledger_env):
     response = client.get("/brokerage-ledgers/taxable/combined")
     assert response.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# migration baseline: what the symbol ledger must preserve                      #
+# --------------------------------------------------------------------------- #
+
+_PUT = "ABC   260821P00050000"
+_CALL = "ABC   260821C00060000"
+
+
+def _empty_trading_positions() -> None:
+    """Materialized all-position artifact with nothing open."""
+    options_activity._atomic_write(
+        config.tastytrade_positions_csv(),
+        options_activity.COMBINED_POSITION_HEADERS, [],
+    )
+
+
+def test_cross_year_option_lifecycle_is_one_flat_symbol_row(ledger_env):
+    """A December open and a February close belong to the same symbol and the
+    same period, and the flat result is realized rather than indicative."""
+    _empty_trading_positions()
+    options_activity._atomic_write(
+        config.options_activity_csv(), options_activity.ACTIVITY_HEADERS,
+        [
+            _trading_event(event_id="tastytrade:TRADING:1", contract=_PUT,
+                           underlying="ABC", action="Sell to Open", delta="-1",
+                           net_value="600", on="2025-11-21"),
+            _trading_event(event_id="tastytrade:TRADING:2", contract=_PUT,
+                           underlying="ABC", action="Buy to Close", delta="1",
+                           net_value="-450", on="2026-02-13"),
+        ],
+    )
+
+    data = brokerage_ledger.snapshot("trading")
+    assert data["coverage"]["history_start"] == "2025-11-21"
+    assert len(data["symbols"]) == 1
+    row = data["symbols"][0]
+    assert row["symbol"] == "ABC"
+    assert row["exposure"] == "OPTIONS"
+    assert row["state"] == "FLAT"
+    assert row["net_cash_flow"] == pytest.approx(150.0)
+    assert row["open_market_value"] == pytest.approx(0.0)
+    assert row["total_pnl"] == pytest.approx(150.0)
+    assert row["pnl_completeness"] == "COMPLETE"
+    component = row["components"][0]
+    assert component["event_count"] == 2
+    assert component["realized_pnl"] == pytest.approx(150.0)
+    assert component["cash_flow_basis"] == "BROKER_ACTIVITY"
+
+
+def test_several_contracts_under_one_underlying_stay_separate_components(ledger_env):
+    """One symbol row, one component per exact contract; the symbol stays open
+    while any contract is open."""
+    options_activity._atomic_write(
+        config.tastytrade_positions_csv(), options_activity.COMBINED_POSITION_HEADERS,
+        [_trading_position(
+            symbol=_CALL, underlying="ABC", instrument="Equity Option",
+            quantity="-1", direction="Short", mark="1.10", multiplier="100",
+            average="3",
+        )],
+    )
+    options_activity._atomic_write(
+        config.options_activity_csv(), options_activity.ACTIVITY_HEADERS,
+        [
+            _trading_event(event_id="tastytrade:TRADING:1", contract=_PUT,
+                           underlying="ABC", action="Sell to Open", delta="-1",
+                           net_value="600", on="2026-03-02"),
+            _trading_event(event_id="tastytrade:TRADING:2", contract=_PUT,
+                           underlying="ABC", action="Buy to Close", delta="1",
+                           net_value="-450", on="2026-04-06"),
+            _trading_event(event_id="tastytrade:TRADING:3", contract=_CALL,
+                           underlying="ABC", action="Sell to Open", delta="-1",
+                           net_value="300", on="2026-03-09"),
+        ],
+    )
+
+    data = brokerage_ledger.snapshot("trading")
+    assert len(data["symbols"]) == 1
+    row = data["symbols"][0]
+    assert row["state"] == "OPEN"
+    assert row["pnl_completeness"] == "INDICATIVE"
+    by_state = {component["state"]: component for component in row["components"]}
+    assert set(by_state) == {"FLAT", "OPEN"}
+    assert by_state["FLAT"]["realized_pnl"] == pytest.approx(150.0)
+    assert by_state["OPEN"]["realized_pnl"] is None
+    assert by_state["OPEN"]["open_market_value"] == pytest.approx(-110.0)
+    assert row["net_cash_flow"] == pytest.approx(450.0)
+    assert row["total_pnl"] == pytest.approx(340.0)
+    # One row per underlying, never one per contract or per year.
+    assert len({component["id"] for component in row["components"]}) == 2
+
+
+def test_shares_never_cover_an_option_in_another_retirement_account(ledger_env):
+    """Account identity is part of the result: option P/L is not allocated
+    across accounts, so the adjusted basis fails closed with a stated reason."""
+    snaptrade_service._atomic_write(
+        config.snaptrade_holdings_csv(), snaptrade_service.HOLDINGS_HEADERS,
+        [
+            _holding(
+                account_id="acct-1", account="Roth IRA", symbol="ABC",
+                asset_class="STOCK", quantity="100", price="120",
+                cost_basis="11000", market_value="12000",
+            ),
+            _holding(
+                account_id="acct-2", account="BrokerageLink", symbol=_CALL,
+                asset_class="OPTION", quantity="-1", price="1.10",
+                cost_basis="-300", market_value="-110", underlying="ABC",
+                option_type="CALL", strike="60", expiry="2026-08-21",
+            ),
+        ],
+    )
+    retirement_options._atomic_write(
+        config.retirement_option_events_csv(), retirement_options.EVENT_HEADERS,
+        [_retirement_event(
+            event_id="activity-1", account_id="acct-2", account="BrokerageLink",
+            contract=_CALL, underlying="ABC", units="-1", amount="300",
+        )],
+    )
+
+    row = brokerage_ledger.snapshot("retirement")["symbols"][0]
+    assert row["accounts"] == ["BrokerageLink", "Roth IRA"]
+    assert {component["account_id"] for component in row["components"]} == {
+        "acct-1", "acct-2"
+    }
+    assert row["adjusted_basis"]["completeness"] == "UNAVAILABLE"
+    assert row["adjusted_basis"]["marked_per_share"] is None
+    assert row["adjusted_basis"]["reason"] == (
+        "Option P/L cannot be allocated safely across accounts."
+    )
+    assert row["option_adjusted_basis_per_share"] is not None  # main row still shown
