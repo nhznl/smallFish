@@ -116,6 +116,36 @@ def test_sync_is_idempotent_auto_groups_and_marks_open_pnl(activity_env):
     assert options_activity.snapshot()["reconciliation_issues"] == []
 
 
+def test_sync_materializes_equity_only_positions_for_combined_ledger(activity_env,
+                                                                     monkeypatch):
+    combined = activity_env / "all_positions.csv"
+    monkeypatch.setenv("SFP_TASTYTRADE_POSITIONS", str(combined))
+    positions = [
+        _mark(),
+        _mark(symbol="EQT", underlying="EQT", quantity="20", direction="Long",
+              mark_price="25", multiplier="1") | {
+                  "instrument_type": "Equity", "average_open_price": "20",
+              },
+    ]
+    options_activity.sync(
+        date(2026, 1, 1), date(2026, 7, 20),
+        provider=lambda _start, _end: (
+            [_tx(1)], positions, {"environment": "live"}
+        ),
+    )
+    all_positions = options_activity._read_csv(
+        combined, options_activity.COMBINED_POSITION_HEADERS
+    )
+    legacy_marks = options_activity._read_csv(
+        options_activity.config.options_position_marks_csv(), options_activity.MARK_HEADERS
+    )
+    assert {row["underlying_symbol"] for row in all_positions} == {"ABC", "EQT"}
+    assert {row["underlying_symbol"] for row in legacy_marks} == {"ABC"}
+    assert next(row for row in all_positions if row["underlying_symbol"] == "EQT")[
+        "average_open_price"
+    ] == "20"
+
+
 def test_risk_rows_are_current_broker_positions(activity_env):
     transactions = [
         _tx(1),
@@ -321,6 +351,11 @@ def test_assignment_imports_option_removal_and_equity_delivery(activity_env):
     assert {row["instrument_type"] for row in events} == {"Equity Option", "Equity"}
     assert {row["transaction_sub_type"] for row in events} >= {"Assignment", "Buy to Open"}
     assert {row["source_transaction_id"] for row in events} == {"1", "2", "3", "4", "5"}
+    group = options_activity.snapshot()["groups"][0]
+    assert group["event_count"] == 2
+    assert group["net_cash_flow"] == 99.0
+    assert group["position_status"] == "FLAT"
+    assert group["realized_pnl"] == 99.0
 
 
 def test_group_assignment_requires_same_account_and_symbol(activity_env):

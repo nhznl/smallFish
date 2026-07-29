@@ -117,6 +117,40 @@ def options_position_marks_csv() -> Path:
     return _under("SFP_OPTIONS_POSITION_MARKS", data_dir(), "ledger_options/options_position_marks.csv")
 
 
+def tastytrade_positions_csv() -> Path:
+    """Latest normalized Tastytrade positions for the broker-neutral combined
+    ledger. Unlike ``options_position_marks_csv``, this includes every current
+    equity and option position and is not consumed by the legacy options API."""
+    return _under(
+        "SFP_TASTYTRADE_POSITIONS", data_dir(), "ledger_options/tastytrade_positions.csv"
+    )
+
+
+def trading_holdings_trend_csv() -> Path:
+    """Per-holding adverse-move state for Tastytrade equity positions."""
+    return _under(
+        "SFP_TRADING_HOLDINGS_TREND", data_dir(), "ledger_options/holdings_trend.csv"
+    )
+
+
+def trading_holdings_gain_loss_snapshots_csv() -> Path:
+    """User-captured Trading holding G/L percentages for the newest sync dates."""
+    return _under(
+        "SFP_TRADING_HOLDINGS_GL_SNAPSHOTS",
+        data_dir(),
+        "ledger_options/holdings_gain_loss_snapshots.csv",
+    )
+
+
+def trading_holdings_enrichment_csv() -> Path:
+    """Editable Trading holding classifications and notes, separate from broker facts."""
+    return _under(
+        "SFP_TRADING_HOLDINGS_ENRICHMENT",
+        data_dir(),
+        "ledger_options/holdings_enrichment.csv",
+    )
+
+
 def options_greeks_csv() -> Path:
     """Latest timestamped Tastytrade Greeks for current option positions."""
     return _under("SFP_OPTIONS_GREEKS", data_dir(), "ledger_options/options_greeks.csv")
@@ -164,8 +198,11 @@ def holdings_enrichment_csv() -> Path:
 
 
 def retirement_option_groups_csv() -> Path:
-    """Editable per-underlying trade-group metadata (name/status/notes) for the
-    retirement options view; kept separate from immutable broker positions."""
+    """Legacy per-symbol Retirement group metadata, read as a migration source.
+
+    New multi-group enrichment uses the shared options_groups_csv and
+    options_group_members_csv stores for both brokerages.
+    """
     return _under(
         "SFP_RETIREMENT_OPTION_GROUPS", data_dir(), "ledger_retirement/option_groups.csv"
     )

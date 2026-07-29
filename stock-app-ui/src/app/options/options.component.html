@@ -1,11 +1,17 @@
 <div class="options-page">
   <header class="page-header">
     <div>
-      <p class="page-eyebrow">Broker ledger</p>
-      <h1 class="page-title">Options Trading Ledger</h1>
-      <p class="page-subtitle">Broker activity groups, group P/L, current broker risk positions, and portfolio risk.</p>
+      <p class="page-eyebrow">Tastytrade ledger</p>
+      <h1 class="page-title">Trading Ledger</h1>
+      <p class="page-subtitle">Equity holdings, option positions and option-adjusted basis.</p>
     </div>
     <div class="page-actions">
+      @if (syncedAt || activity?.last_sync_at) {
+        <span class="snapshot-chip">
+          <span>{{ syncedAt ? 'Synced' : 'Data as of' }}</span>
+          <strong>{{ (syncedAt || activity!.last_sync_at) | date:'MMM d, h:mm a' }}</strong>
+        </span>
+      }
       <button type="button" class="btn btn-primary" (click)="syncActivity()"
         [attr.aria-busy]="activitySyncing" [disabled]="activitySyncing">
         @if (activitySyncing) {
@@ -17,110 +23,53 @@
     </div>
   </header>
 
-  @if (loading) {
-    <div class="state">Loading options ledger…</div>
-  }
-  @if (error) {
-    <div class="state error">{{ error }}</div>
-  }
+  <div class="tab-bar" role="tablist" aria-label="Trading ledger views">
+    <button type="button" class="tab" role="tab" [class.active]="tab === 'holdings'"
+      [attr.aria-selected]="tab === 'holdings'" (click)="tab = 'holdings'">
+      Holdings<span class="tab-count">{{ holdingsCount }}</span>
+    </button>
+    <button type="button" class="tab" role="tab" [class.active]="tab === 'options'"
+      [attr.aria-selected]="tab === 'options'" (click)="tab = 'options'">
+      Options<span class="tab-count">{{ data?.totals?.combined?.open_broker_positions || 0 }}</span>
+    </button>
+    <button type="button" class="tab" role="tab" [class.active]="tab === 'basis'"
+      [attr.aria-selected]="tab === 'basis'" (click)="tab = 'basis'">Option-Adjusted Basis</button>
+  </div>
 
-  <section class="panel activity-panel">
-    <div class="panel-heading">
-      <div><h3 class="panel-title">Trade Groups</h3><small>Imported broker events stay immutable; grouping is editable and restricted to the same account and underlying symbol.</small></div>
-      <div class="inline-actions">
-        @if (activity?.last_sync_at) {
-          <span>Synced {{ shortTimestamp($safeNavigationMigration(activity?.last_sync_at)) }}</span>
-        }
-        <span class="status-filter">Status
-          <label><input type="checkbox" [(ngModel)]="showActive"> Active</label>
-          <label><input type="checkbox" [(ngModel)]="showArchived"> Archived</label>
-        </span>
-        <button type="button" class="btn btn-sm" (click)="openGroup()" [disabled]="!activity?.events?.length">+ New Group</button>
-      </div>
-    </div>
-    @if (activityLoading) {
-      <div class="state">Loading broker activity…</div>
+  @if (tab === 'holdings') {
+    <app-brokerage-holdings portfolio="trading" [refreshToken]="combinedRefreshToken"
+      (countChange)="holdingsCount = $event" />
+  } @else if (tab === 'basis') {
+    <app-brokerage-ledger-combined portfolio="trading" [refreshToken]="combinedRefreshToken" />
+  } @else {
+    @if (loading) {
+      <div class="state">Loading options ledger…</div>
     }
-    @if (activityError) {
-      <div class="state error">{{ activityError }}</div>
+    @if (error) {
+      <div class="state error">{{ error }}</div>
     }
-    @if (activityMessage) {
-      <div class="sync-toast" role="status">{{ activityMessage }}</div>
-    }
-    @if (activity && !activityLoading) {
-      <div class="activity-summary">
-        <span><strong>{{ activity.events.length }}</strong> imported events</span>
-        <span><strong>{{ activity.groups.length }}</strong> groups</span>
-        <span [class.urgent]="activity.ungrouped_event_count"><strong>{{ activity.ungrouped_event_count }}</strong> ungrouped</span>
-        <!-- A count of zero mismatches is not worth a slot in the summary. Once
-        everything reconciles the chip renames itself to the manual rows it
-        still needs to expose, and disappears entirely when there are none. -->
-        @if (hasReconciliationDetail()) {
-          <button type="button" class="link-btn"
-            [class.urgent]="activity.reconciliation_issues.length"
-            (click)="reconciliationOpen = true"
-                [matTooltip]="activity.reconciliation_issues.length
-                  ? 'Review mismatches and manual reconciliations'
-                  : 'Review, edit or remove manual reconciliations'" matTooltipPosition="above">
-            @if (activity.reconciliation_issues.length) {
-              <strong>{{ activity.reconciliation_issues.length }}</strong>
-              position {{ activity.reconciliation_issues.length === 1 ? 'mismatch' : 'mismatches' }}
-            } @else {
-              <strong>{{ manualEvents().length }}</strong>
-              manual {{ manualEvents().length === 1 ? 'reconciliation' : 'reconciliations' }}
-            }
-            <span class="link-cue" aria-hidden="true">Review</span>
-          </button>
-        }
-      </div>
-      @if (filteredGroups().length) {
-        <div class="table-wrap">
-          <table class="group-table">
-            <thead><tr>
-              <th>Symbol</th><th>Group Name</th><th>Status</th><th class="num">Net credit received</th>
-              <th class="num">Open marked value</th><th class="num">Total P/L</th><th class="num">Broker events</th>
-              <th>Notes</th><th>Edit</th>
-            </tr></thead>
-            <tbody>
-              <tr class="totals-row">
-                <td colspan="3"><strong>Filtered totals</strong></td>
-                <td class="num" [class]="'num ' + pnlClass(filteredNetCreditReceived())">{{ money(filteredNetCreditReceived()) }}</td>
-                <td class="num">—</td>
-                <td class="num" [class]="'num ' + pnlClass(filteredTotalPnl())">{{ money(filteredTotalPnl()) }}</td>
-                <td colspan="3"></td>
-              </tr>
-              @for (group of filteredGroups(); track group) {
-                <tr [class.archived-row]="group.status === 'ARCHIVED'">
-                  <td class="symbol-cell"><strong>{{ group.symbol }}</strong><small>{{ group.account }}</small></td>
-                  <td><strong class="group-name">{{ group.name }}</strong></td>
-                  <td>
-                    <span class="badge" [class]="group.status === 'ARCHIVED' ? 'badge badge-neutral' : 'badge badge-primary'">
-                      {{ group.status === 'ARCHIVED' ? 'Archived' : 'Active' }}
-                    </span>
-                  </td>
-                  <td class="num" [class]="'num ' + pnlClass(group.net_cash_flow)">{{ money(group.net_cash_flow) }}</td>
-                  <td class="num">{{ money(group.open_market_value) }}</td>
-                  <td class="num" [class]="'num ' + pnlClass(group.total_pnl)">{{ money(group.total_pnl) }}</td>
-                  <td class="num">{{ group.event_count }}</td>
-                  <td class="notes-cell" [matTooltip]="group.notes || ''" matTooltipPosition="above">{{ group.notes || '—' }}</td>
-                  <td>
-                    <button type="button" class="icon-btn" (click)="openGroupDetails(group)"
-                      [attr.aria-label]="'Edit ' + group.symbol + ' group'"
-                    matTooltip="Edit name, status and notes; review broker events" matTooltipPosition="above">✎</button>
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      } @else {
-        <div class="empty">No trade groups match the selected status filters.</div>
-      }
-      <p class="caveat">{{ activity.pnl_definition }} Current marks exclude estimated closing fees. A group with missing marks fails closed instead of showing a partial P/L.</p>
-    }
-  </section>
 
-  @if (data && !loading) {
+    <app-brokerage-option-groups
+      [groups]="activity?.groups || []"
+      [loading]="activityLoading"
+      [error]="activityError || ''"
+      [message]="activityMessage"
+      [timestamp]="activity?.last_sync_at ? shortTimestamp(activity!.last_sync_at) : null"
+      timestampLabel="Synced"
+      [eventCount]="activity?.events?.length || 0"
+      [ungroupedCount]="activity?.ungrouped_event_count || 0"
+      eventColumnLabel="Broker events"
+      [reconciliationCount]="activity?.reconciliation_issues?.length || 0"
+      [manualReconciliationCount]="manualEvents().length"
+      [capability]="tastytrade"
+      emptyText="No Tastytrade option groups are available."
+      syncLabel="Sync Tastytrade"
+      [caveat]="(activity?.pnl_definition || '') + ' Current marks exclude estimated closing fees. A group with missing marks fails closed instead of showing a partial P/L.'"
+      (editGroup)="openSharedGroup($event)"
+      (reviewReconciliation)="reconciliationOpen = true">
+    </app-brokerage-option-groups>
+
+    @if (data && !loading) {
     <section class="stat-strip">
       <div class="stat-card">
         <span class="stat-label">Open broker positions</span>
@@ -182,219 +131,127 @@
         }
       </section>
     }
-    <section class="panel">
-      <div class="panel-heading">
-        <div><h3 class="panel-title">Broker Risk Positions</h3><small>Current open Tastytrade positions used by the portfolio-risk calculation.</small></div>
-        <div class="risk-heading-meta"><span>As of {{ data.as_of }}</span><small><i class="legend-swatch breached"></i> Strike breached <i class="legend-swatch near"></i> Within {{ nearStrikeThresholdPercent }}%</small></div>
-      </div>
-      @if (data.rows.length) {
-        <div class="table-wrap">
-          <table>
-            <thead><tr>
-              <th class="col-account">Account / group</th><th>Symbol</th>
-              <th matTooltip="A short call reads COVERED_CALL when long shares in the same account back every contract. Share coverage only — an offsetting option leg such as a call spread is not counted." matTooltipPosition="above">Leg</th>
-              <th>Qty</th><th>Strike</th>
-              <th>Expiry / DTE</th><th>Current option price</th><th><button type="button" class="sort-button" (click)="toggleStrikeSort()">Spot / to strike {{ strikeSortDirection === 'asc' ? '▲' : '▼' }}</button></th>
-              <th>IV / source</th><th>Delta shares</th><th>Beta</th><th>Tasty Beta</th><th>Beta-delta $</th><th>Beta-delta $ (Tasty)</th><th>Risk status</th>
-            </tr></thead>
-            <tbody>
-              @for (row of sortedRiskRows(); track row) {
-                <tr [class]="rowClass(row)"
-                  [class.row-focused]="focusedSymbol === row.symbol" [attr.data-symbol]="row.symbol">
-                  <td class="col-account"><span class="account-tag">{{ row.account }}</span><small>{{ row.wheel_id || 'Independent' }}</small></td>
-                  <td><strong>{{ row.symbol }}</strong>@if (row.non_standard) {
-                  <small class="risk-unavailable">Non-standard · risk unavailable</small>
-                }</td>
-                <td>{{ row.trade_type }}@if (coverageLabel(row)) {
-                  <small [class.urgent]="row.coverage === 'PARTIAL'">{{ coverageLabel(row) }}</small>
-                }</td><td>{{ row.qty }}</td><td>{{ money(row.strike) }}</td>
-                <td>{{ row.expiry || '—' }}@if (row.dte_remaining != null) {
-                  <small [class.urgent]="row.dte_remaining <= 7">{{ row.dte_remaining }} DTE</small>
-                }</td>
-                <td>{{ optionPrice(row.mark_price) }}<small>Retrieved {{ shortTimestamp(row.mark_retrieved_at) }}</small></td>
-                <td>{{ money(row.current_underlying_price) }}<small>{{ strikeDistanceLabel(row) }}</small></td>
-                <td>{{ percent($safeNavigationMigration(positionRisk(row)?.vol_annual)) }}<small>{{ ivSourceLabel($safeNavigationMigration(positionRisk(row)?.delta_source)) }} · {{ shortTimestamp($safeNavigationMigration(positionRisk(row)?.vol_as_of)) }}</small></td>
-                <td>{{ number($safeNavigationMigration(positionRisk(row)?.delta_shares), 1) }}</td>
-                <td>{{ number($safeNavigationMigration(positionRisk(row)?.computed_beta), 3) }}<small>Computed · {{ positionRisk(row)?.computed_beta_as_of || '—' }}</small></td>
-                <td>{{ number($safeNavigationMigration(positionRisk(row)?.tasty_beta), 3) }}<small>Tastytrade · {{ shortTimestamp($safeNavigationMigration(positionRisk(row)?.tasty_beta_as_of)) }}</small></td>
-                <td [class]="pnlClass($safeNavigationMigration(positionRisk(row)?.computed_beta_weighted_delta_dollars))">{{ money($safeNavigationMigration(positionRisk(row)?.computed_beta_weighted_delta_dollars)) }}@if (positionRisk(row)?.computed_beta_fallback) {
-                  <small>Tasty fallback</small>
-                }</td>
-                <td [class]="pnlClass($safeNavigationMigration(positionRisk(row)?.beta_weighted_delta_dollars))">{{ money($safeNavigationMigration(positionRisk(row)?.beta_weighted_delta_dollars)) }}</td>
-                <td [class.risk-unavailable]="positionRisk(row)?.beta_weighted_delta_dollars == null">{{ riskStatus(positionRisk(row)) }}@if (positionRisk(row)?.short_gamma_warning) {
-                  <small class="urgent">Short-gamma warning</small>
-                }</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    } @else {
-      <app-capability-state
-        [capability]="tastytrade"
-        [emptyWhenAvailable]="true"
-        availableEmptyText="No open broker option positions for this account."
-        syncLabel="Sync Tastytrade">
-      </app-capability-state>
+    <app-broker-risk-positions
+      [rows]="data.rows"
+      [metrics]="data.risk.positions"
+      [asOf]="data.as_of"
+      brokerName="Tastytrade"
+      [capability]="tastytrade"
+      emptyText="No open broker option positions for this account."
+      syncLabel="Sync Tastytrade"
+      [focusedSymbol]="focusedSymbol">
+    </app-broker-risk-positions>
     }
-  </section>
-  <section class="panel risk-panel">
-    <div class="panel-heading"><div><h3 class="panel-title">Portfolio Risk</h3><small>Approximate, point-in-time exposure—not broker margin.</small></div></div>
-    <div class="risk-grid">
-      @for (entry of accountEntries(); track entry) {
-        <div class="risk-card">
-          <h4>{{ entry[0] }}</h4>
-          <dl class="risk-facts">
-            <dt>Cash limit <span class="help-dot" tabindex="0" role="img" aria-label="Cash limit explanation" matTooltip="Configured trading-capital limit. This is a governed input, not a computed broker balance." matTooltipPosition="above">?</span></dt><dd>{{ money(entry[1].cash_limit) }} · {{ entry[1].cash_limit_status }}</dd>
-            <dt>Gross cash commitment <span class="help-dot" tabindex="0" role="img" aria-label="Gross cash commitment formula" matTooltip="Stock cash basis + sum of (short-put strike × 100 × contracts). The displayed percentage is total commitment ÷ cash limit." matTooltipPosition="above">?</span></dt><dd [class.negative]="entry[1].gross_cash_commitment.warn">{{ money(entry[1].gross_cash_commitment.total) }} · {{ percent(entry[1].gross_cash_commitment.ratio) }}</dd>
-            <dt>Risk completeness <span class="help-dot" tabindex="0" role="img" aria-label="Risk completeness formula" matTooltip="Included positions ÷ all open positions. Inclusion requires usable spot, IV, option delta, and fresh Tasty Beta inputs." matTooltipPosition="above">?</span></dt><dd>{{ entry[1].completeness }} ({{ entry[1].included_position_count }} included / {{ entry[1].excluded_position_count }} excluded)</dd>
-            <dt>SPY reference price <span class="help-dot" tabindex="0" role="img" aria-label="SPY reference price explanation" matTooltip="Latest available SPY closing price. It converts beta-delta dollars into SPY Delta Shares; it is not a portfolio-risk amount." matTooltipPosition="above">?</span></dt><dd>{{ money(data.risk.spy_spot) }}<small>As of {{ data.risk.spy_as_of || '—' }}</small></dd>
-          </dl>
-          <!-- One comparison table per account: rows are metrics, columns are
-          the two beta sources. Each cell keeps the exact expression the
-          paired sub-cards used. -->
-          <table class="beta-table">
-            <thead>
-              <tr>
-                <th scope="col">Metric</th>
-                <th scope="col" class="num">Tasty</th>
-                <th scope="col" class="num">Computed</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th scope="row">SPY Delta Shares <span class="help-dot" tabindex="0" role="img" aria-label="SPY Delta Shares formula" matTooltip="SPY Beta-Delta Dollars ÷ SPY reference price, for each beta source. Current directional exposure as an equivalent number of SPY shares." matTooltipPosition="above">?</span></th>
-                <td class="num">{{ number(entry[1].spy_equivalent_shares) }}</td>
-                <td class="num">{{ number(entry[1].computed_spy_equivalent_shares) }}</td>
-              </tr>
-              <tr>
-                <th scope="row">SPY Beta-Delta Dollars <span class="help-dot" tabindex="0" role="img" aria-label="SPY Beta-Delta Dollars formula" matTooltip="Sum of (delta shares × underlying price × beta) across included positions, using Tasty Beta or the smallFish computed beta. Positive is bullish SPY-adjusted exposure; negative is bearish. The computed side falls back to Tasty beta for symbols with too little price history." matTooltipPosition="above">?</span></th>
-                <td class="num">{{ money(entry[1].beta_weighted_delta_dollars) }}</td>
-                <td class="num">{{ money(entry[1].computed_beta_weighted_delta_dollars) }}</td>
-              </tr>
-              @if (entry[1].diagnostic_partial_beta_delta_dollars != null) {
-                <tr>
-                  <th scope="row">Partial beta-delta diagnostic <span class="help-dot" tabindex="0" role="img" aria-label="Partial beta-delta formula" matTooltip="The beta-delta formula summed only over positions with complete inputs. It is diagnostic and is not promoted as the complete portfolio total." matTooltipPosition="above">?</span></th>
-                  <td class="num">{{ money(entry[1].diagnostic_partial_beta_delta_dollars) }}</td>
-                  <td class="num faint">—</td>
-                </tr>
-              }
-              <tr>
-                <th scope="row">Target Beta-Delta Minimum <span class="help-dot" tabindex="0" role="img" aria-label="Target Beta-Delta Minimum formula" matTooltip="Configured lower boundary for normalized beta delta. Dollar equivalent = cash limit × target minimum." matTooltipPosition="above">?</span></th>
-                <td class="num">{{ percent(entry[1].band.band_min) }} · {{ money(targetBandDollars(entry[1], 'min')) }}</td>
-                <td class="num">{{ percent(entry[1].computed_band.band_min) }} · {{ money(targetBandDollars(entry[1], 'min')) }}</td>
-              </tr>
-              <tr>
-                <th scope="row">Target Beta-Delta Maximum <span class="help-dot" tabindex="0" role="img" aria-label="Target Beta-Delta Maximum formula" matTooltip="Configured upper boundary for normalized beta delta. Dollar equivalent = cash limit × target maximum." matTooltipPosition="above">?</span></th>
-                <td class="num">{{ percent(entry[1].band.band_max) }} · {{ money(targetBandDollars(entry[1], 'max')) }}</td>
-                <td class="num">{{ percent(entry[1].computed_band.band_max) }} · {{ money(targetBandDollars(entry[1], 'max')) }}</td>
-              </tr>
-              <tr>
-                <th scope="row">Current Beta-Delta Value <span class="help-dot" tabindex="0" role="img" aria-label="Current Beta-Delta Value explanation" matTooltip="Current SPY Beta-Delta Dollars for each source, shown beside the target range for direct comparison." matTooltipPosition="above">?</span></th>
-                <td class="num">{{ money(entry[1].beta_weighted_delta_dollars) }}</td>
-                <td class="num">{{ money(entry[1].computed_beta_weighted_delta_dollars) }}</td>
-              </tr>
-              <tr class="normalized-row"
-                [class.out-of-band]="entry[1].band.in_band === false || entry[1].computed_band.in_band === false">
-                <th scope="row">Normalized beta delta <span class="help-dot" tabindex="0" role="img" aria-label="Normalized beta delta formula" matTooltip="Beta-delta dollars ÷ configured cash limit, compared with the target minimum and maximum." matTooltipPosition="above">?</span></th>
-                <td class="num">
-                  {{ percent(entry[1].band.normalized_beta_delta) }}
-                  <span class="badge" [class]="'badge ' + bandBadgeClass(entry[1].band.in_band)">{{ entry[1].band.in_band == null ? 'Unavailable' : (entry[1].band.in_band ? 'In band' : 'Outside band') }}</span>
-                </td>
-                <td class="num">
-                  {{ percent(entry[1].computed_band.normalized_beta_delta) }}
-                  <span class="badge" [class]="'badge ' + bandBadgeClass(entry[1].computed_band.in_band)">{{ entry[1].computed_band.in_band == null ? 'Unavailable' : (entry[1].computed_band.in_band ? 'In band' : 'Outside band') }}</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          @if (entry[1].excluded_positions.length) {
-            <div class="excluded">{{ entry[1].excluded_positions.length }} position(s) have unavailable risk inputs.</div>
-          }
-        </div>
-      }
-    </div>
-    <p class="caveat">{{ data.risk.caveat }}</p>
-    <p class="caveat">Current stock notional plus assignment cash for every open standard short put. Does not measure broker margin or buying-power usage; naked-call and strangle margin are not tracked.</p>
-  </section>
-}
+  }
 </div>
 
 @if (detailGroup; as group) {
-  <app-modal width="min(1400px, 94vw)"
+  <app-modal width="min(780px, 94vw)"
     [ariaLabel]="group.symbol + ' group details'" (closed)="closeGroupDetails()">
     <div modalTitle>
       <h2>{{ group.symbol }}@if (groupSpot(group.symbol) != null) {
         <span> — {{ money(groupSpot(group.symbol)) }}</span>
       } · {{ group.name }}</h2>
-      <p>Group details and same-symbol broker events</p>
+      <p>Broker option events · {{ group.position_status }}</p>
     </div>
-    <article class="group-card details-card" [class.archived]="group.status === 'ARCHIVED'">
-      <div class="group-title"><strong>{{ group.symbol }}</strong><span class="status" [class.open]="group.position_status === 'OPEN'">{{ group.position_status }}</span></div>
-      <label>Name<input [(ngModel)]="group.name"></label>
-      <label>Notes<input [(ngModel)]="group.notes" placeholder="Roll, repair, earnings trade…"></label>
-      <label>Status<select [(ngModel)]="group.status"><option value="ACTIVE">Active</option><option value="ARCHIVED">Archived</option></select></label>
-      <dl>
-        <dt>{{ openingCashFlowLabel(group.net_cash_flow) }}</dt><dd [class]="pnlClass(group.net_cash_flow)">{{ moneyAbsolute(group.net_cash_flow) }}</dd>
-        <dt>Open marked value</dt><dd>{{ money(group.open_market_value) }}</dd>
-        <dt>Total P/L</dt><dd [class]="pnlClass(group.total_pnl)">{{ money(group.total_pnl) }}</dd>
-        <dt>Broker events</dt><dd>{{ group.event_count }}</dd>
-      </dl>
-      @if (group.pnl_completeness === 'UNAVAILABLE') {
-        <div class="risk-unavailable">P/L unavailable: {{ group.missing_marks.join(', ') }}</div>
-      }
-      @if (group.pnl_completeness === 'INDICATIVE') {
-        <div class="indicative">Indicative mark retrieved {{ shortTimestamp(group.mark_retrieved_at) }}; provider observation time unavailable.</div>
-      }
-      @if (group.open_positions.length) {
-        <div class="open-contracts">
-          @for (position of group.open_positions; track position) {
-            <small>{{ openPositionLabel(position) }} · {{ optionPrice(position.mark_price) }}</small>
-          }
-        </div>
-      }
-    </article>
-    <div class="details-events-heading">
-      <h4>Broker Events for {{ group.symbol }}</h4>
-      <small>Only manual rows are editable — broker events are immutable. Regrouping and manual-row edits save immediately; Save Group applies just the name, notes and status above.</small>
+    <div class="details-edit">
+      <label>Name<input [(ngModel)]="group.name" placeholder="e.g. SPY wheel" aria-label="Group name"></label>
+      <label>Status
+        <select [(ngModel)]="group.status" aria-label="Group status">
+          <option value="ACTIVE">Active</option>
+          <option value="ARCHIVED">Archived</option>
+        </select>
+      </label>
+      <label class="wide">Notes<input [(ngModel)]="group.notes" placeholder="Roll, repair, thesis…" aria-label="Group notes"></label>
     </div>
+    <dl class="details-summary">
+      <div><dt>Net credit received</dt><dd [class]="pnlClass(group.net_cash_flow)">{{ money(group.net_cash_flow) }}</dd></div>
+      <div><dt>Open marked value</dt><dd>{{ money(group.open_market_value) }}</dd></div>
+      <div><dt>Total / Realized P/L</dt><dd [class]="pnlClass(group.total_pnl)">{{ money(group.total_pnl) }}
+        @if (group.pnl_completeness === 'COMPLETE') {
+          <small>realized</small>
+        }
+        @if (group.pnl_completeness === 'INDICATIVE') {
+          <small>indicative</small>
+        }
+        @if (group.pnl_completeness === 'UNAVAILABLE') {
+          <small class="urgent">awaiting close</small>
+        }
+      </dd></div>
+      <div><dt>Option trades</dt><dd>{{ detailEvents().length }}</dd></div>
+    </dl>
+    @if (group.pnl_completeness === 'UNAVAILABLE') {
+      <div class="risk-unavailable">P/L unavailable: {{ group.missing_marks.join(', ') }}</div>
+    }
+    @if (group.pnl_completeness === 'INDICATIVE') {
+      <div class="indicative">Indicative mark retrieved {{ shortTimestamp(group.mark_retrieved_at) }}; provider observation time unavailable.</div>
+    }
+    @if (group.open_positions.length) {
+      <div class="open-contracts">
+        @for (position of group.open_positions; track position) {
+          <small>{{ openPositionLabel(position) }} · {{ optionPrice(position.mark_price) }}</small>
+        }
+      </div>
+    }
+    <h3 class="group-detail-section-title">Option trades
+      <small>Read-only broker events. Open marked value appears only for contracts with a current open position.</small>
+    </h3>
     @if (detailEvents().length) {
       <div class="table-wrap">
-        <table>
-          <thead><tr><th>Date</th><th>Symbol</th><th>Contract</th><th>Action</th><th>Qty</th><th>Price</th><th>Net cash</th><th>Fees</th><th>Group</th><th>Edit</th></tr></thead>
+        <table class="data-table opt-table">
+          <thead><tr><th>Date</th><th>Contract</th><th>Action</th><th>Qty</th><th>Price</th><th>Net cash</th><th>Fees</th><th>Open marked value</th></tr></thead>
           <tbody>@for (event of detailEvents(); track event) {
-            <tr [class.manual-row]="isManualEvent(event)">
+            <tr>
               <td>{{ shortTimestamp(event.executed_at) }}</td>
-              <td><strong>{{ event.underlying_symbol }}</strong><small>{{ event.instrument_type }}</small></td>
               <td>{{ event.contract_symbol }}<small>{{ event.option_type }} {{ event.strike == null ? '' : event.strike }} {{ event.expiry }}</small></td>
-              <td>
-                {{ event.action || event.transaction_sub_type }}
-                @if (isManualEvent(event)) {
-                  <small class="manual-tag">Manual</small>
-                }
-              </td>
+              <td>{{ event.action || event.transaction_sub_type }}</td>
               <td>{{ event.quantity }}</td><td>{{ money(event.price) }}</td>
               <td [class]="pnlClass(event.net_value)">{{ money(event.net_value) }}</td><td>{{ money(event.fee_effect) }}</td>
-              <td><select [ngModel]="event.group_id || ''" (ngModelChange)="assignEvent(event, $event)"><option value="">Ungrouped</option>@for (candidate of groupsForEvent(event); track candidate) {
-              <option [value]="candidate.group_id">{{ candidate.name }}</option>
-            }</select></td>
-            <td>
-              @if (isManualEvent(event)) {
-                <button type="button" class="icon-btn" (click)="openManualEdit(event)"
-                  [attr.aria-label]="'Edit manual reconciliation for ' + event.underlying_symbol"
-                matTooltip="Edit this manual reconciliation" matTooltipPosition="above">✎</button>
-              }
-              @if (!isManualEvent(event)) {
-                <span class="text-faint">—</span>
-              }
-            </td>
-          </tr>
+              <td [class]="pnlClass(openMarketValueForEvent(event))">{{ money(openMarketValueForEvent(event)) }}</td>
+            </tr>
         }</tbody>
       </table>
     </div>
   } @else {
-    <div class="empty">No broker events for {{ group.symbol }}.</div>
+    <div class="empty">No option events for {{ group.symbol }}.</div>
   }
+  @if (equityHoldings(group.symbol).length) {
+    <h3 class="group-detail-section-title">Equity shares held
+      <small [class.urgent]="coveredCallContracts(group) < shortCallContracts(group)">
+        {{ shares(equityShareTotal(group.symbol)) }} shares@if (shortCallContracts(group)) {
+          <span> · covers {{ coveredCallContracts(group) }} of
+          {{ shares(shortCallContracts(group)) }} short call{{ shortCallContracts(group) === 1 ? '' : 's' }}</span>
+        } @else {
+          <span> · no call written against them</span>
+        }
+      </small>
+    </h3>
+    <div class="table-wrap">
+      <table class="data-table opt-table">
+        <thead><tr>
+          <th>Account</th><th>Shares</th><th>Avg cost</th><th>Last price</th>
+          <th>Cost basis</th><th>Market value</th><th>Open P/L</th>
+        </tr></thead>
+        <tbody>
+          @for (holding of equityHoldings(group.symbol); track holding) {
+            <tr>
+              <td><span class="account-tag">{{ holding.accountType }}</span></td>
+              <td>{{ shares(holding.qty) }}</td>
+              <td>{{ money(holding.costPrice) }}</td>
+              <td>{{ money(holding.marketPrice) }}<small>Retrieved {{ shortTimestamp(holdingsContext?.retrievedAt) }}</small></td>
+              <td>{{ money(holding.initialInvestment) }}</td>
+              <td>{{ money(holding.currentValue) }}</td>
+              <td [class]="pnlClass(holding.gainLoss)">{{ money(holding.gainLoss) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="caveat">Shares held in this underlying, shown as context for the
+    contracts above. They are not option events: no figure above &mdash; net credit
+    received, open marked value, or group P/L &mdash; includes them.</p>
+  }
+  <p class="caveat">Imported broker events are immutable facts. Net cash is the signed broker cash flow including fees; a fully-closed group's realized P/L is their sum.</p>
   <ng-container modalActions>
     @if (detailError) {
       <span class="modal-status error">{{ detailError }}</span>
@@ -543,25 +400,6 @@
     <ng-container modalActions>
       <button type="button" class="btn" (click)="manualForm = null">Cancel</button>
       <button type="button" class="btn btn-primary" (click)="saveManualReconcile()" [disabled]="manualSaving">{{ manualSaving ? 'Saving…' : (form.mode === 'edit' ? 'Save Changes' : 'Save Reconciliation') }}</button>
-    </ng-container>
-  </app-modal>
-}
-
-@if (groupOpen) {
-  <app-modal title="Create Trade Group" width="min(460px, 94vw)" (closed)="groupOpen = false">
-    <div class="create-form">
-      <label>Symbol<select [(ngModel)]="groupSymbol">@for (symbol of activitySymbols(); track symbol) {
-        <option [value]="symbol">{{ symbol }}</option>
-      }</select></label>
-      <label>Group name<input [(ngModel)]="groupName" placeholder="e.g. GLW July roll"></label>
-      <label>Notes<textarea [(ngModel)]="groupNotes" rows="3"></textarea></label>
-      @if (groupError) {
-        <div class="modal-error">{{ groupError }}</div>
-      }
-    </div>
-    <ng-container modalActions>
-      <button type="button" class="btn" (click)="groupOpen = false">Cancel</button>
-      <button type="button" class="btn btn-primary" (click)="createGroup()" [disabled]="groupSaving">{{ groupSaving ? 'Saving…' : 'Create Group' }}</button>
     </ng-container>
   </app-modal>
 }

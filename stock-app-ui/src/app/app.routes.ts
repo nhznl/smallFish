@@ -20,7 +20,7 @@ export const routes: Routes = [
   { path: 'sectors', title: 'Sectors · smallFish', loadComponent: () => import('./sector-rotation/sector-rotation.component').then(m => m.SectorRotationComponent) },
   { path: 'wheel', component: WheelComponent, title: 'Wheel · smallFish' },
   { path: 'wheelExplainer', title: 'Wheel Explainer · smallFish', loadComponent: () => import('./wheel-explainer/wheel-explainer.component').then(m => m.WheelExplainerComponent) },
-  { path: 'options', component: OptionsComponent, title: 'Options Ledger · smallFish' },
+  { path: 'options', component: OptionsComponent, title: 'Trading Ledger · smallFish' },
   { path: 'retirement', component: RetirementPortfolioComponent, title: 'Retirement Ledger · smallFish' },
   { path: 'portfolios', title: 'Portfolios · smallFish', loadComponent: () => import('./portfolios/portfolios.component').then(m => m.PortfoliosComponent) },
   { path: 'stockDetail/:symbol', component: StockDetailComponent, title: stockDetailTitle },

@@ -195,26 +195,12 @@ export class StockService {
       .pipe(catchError(this.handleError<OptionsActivitySyncReport>('syncOptionsActivity')));
   }
 
-  createOptionsGroup(request: {
-    account: string; symbol: string; name: string; notes?: string;
-  }): Observable<OptionsTradeGroup> {
-    return this.http.post<OptionsTradeGroup>(`${this.apiBaseUrl}/options/groups`, request)
-      .pipe(catchError(this.handleError<OptionsTradeGroup>('createOptionsGroup')));
-  }
-
   updateOptionsGroup(groupId: string, request: {
     name?: string; notes?: string; status?: string;
   }): Observable<OptionsTradeGroup> {
     return this.http.put<OptionsTradeGroup>(
       `${this.apiBaseUrl}/options/groups/${encodeURIComponent(groupId)}`, request
     ).pipe(catchError(this.handleError<OptionsTradeGroup>('updateOptionsGroup')));
-  }
-
-  assignOptionsEvent(eventId: string, groupId: string | null): Observable<any> {
-    return this.http.put<any>(
-      `${this.apiBaseUrl}/options/activity/${encodeURIComponent(eventId)}/group`,
-      { group_id: groupId }
-    ).pipe(catchError(this.handleError<any>('assignOptionsEvent')));
   }
 
   /** Manual reconciliation rows deliberately skip `handleError` so a rejected
@@ -285,13 +271,13 @@ export class StockService {
       .pipe(catchError(this.handleError<RetirementOptionsData>('getRetirementOptions')));
   }
 
-  /** Update the editable name/status/notes for one option group (underlying). */
+  /** Update the editable name/status/notes for one smallFish option group. */
   updateRetirementOptionGroup(
-    symbol: string,
+    groupId: string,
     body: { name?: string; status?: string; notes?: string }
   ): Observable<any> {
     return this.http.put<any>(
-      `${this.apiBaseUrl}/retirement/options/groups/${encodeURIComponent(symbol)}`, body
+      `${this.apiBaseUrl}/retirement/options/groups/${encodeURIComponent(groupId)}`, body
     );
   }
 }

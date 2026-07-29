@@ -30,9 +30,27 @@ def get_retirement_options() -> dict:
 
 @router.put("/retirement/options/groups/{symbol}")
 def put_retirement_option_group(symbol: str, request: dict) -> dict:
-    """Update the editable name/status/notes for one option group (underlying)."""
+    """Update one app-owned option group by id (or unique-symbol compatibility alias)."""
     try:
         return retirement_options.update_group(symbol, request or {})
+    except retirement_options.RetirementOptionsError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.post("/retirement/options/groups")
+def post_retirement_option_group(request: dict) -> dict:
+    """Create another app-owned Retirement trade group."""
+    try:
+        return retirement_options.create_group(request or {})
+    except retirement_options.RetirementOptionsError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.put("/retirement/options/activity/{event_id}/group")
+def put_retirement_option_event_group(event_id: str, request: dict) -> dict:
+    """Assign an immutable broker event to an app-owned group, or ungroup it."""
+    try:
+        return retirement_options.assign_event(event_id, (request or {}).get("group_id"))
     except retirement_options.RetirementOptionsError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 

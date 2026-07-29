@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from . import capabilities, config
 from .path_security import UnsafePathError, contained_path
 from .routers import (
+    brokerage_ledgers,
     options,
     portfolios,
     premium_quotes,
@@ -40,6 +41,7 @@ app.include_router(stocks.router)
 app.include_router(wheel_candidates.router)
 app.include_router(stock_info.router)
 app.include_router(run_jobs.router)
+app.include_router(brokerage_ledgers.router)
 app.include_router(retirement.router)
 app.include_router(options.router)
 app.include_router(premium_quotes.router)

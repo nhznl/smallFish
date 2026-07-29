@@ -14,6 +14,7 @@ export interface RetirementOptionRow {
   expiry: string;
   contract_symbol: string;
   mark_price: number | null;
+  market_value: number | null;
   mark_retrieved_at: string | null;
   status: string;
   non_standard: boolean;
@@ -52,6 +53,7 @@ export interface RetirementOptionRisk {
 }
 
 export interface RetirementOptionGroup {
+  group_id: string;
   symbol: string;
   account: string;
   name: string;
@@ -109,6 +111,8 @@ export interface RetirementOptionEvent {
   net_value: number | null;  // signed net cash flow incl. fees
   fee: number | null;
   description: string;
+  group_id: string | null;
+  group_name: string | null;
 }
 
 export interface RetirementOptionsData {
@@ -138,5 +142,5 @@ export interface RetirementOptionsData {
       needs_settlement: { symbol: string }[];
     };
   };
-  summary: { position_count: number; group_count: number };
+  summary: { position_count: number; group_count: number; ungrouped_event_count: number };
 }

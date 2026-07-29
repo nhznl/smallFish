@@ -53,6 +53,8 @@ def opts_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SFP_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("SFP_SNAPTRADE_HOLDINGS", str(tmp_path / "holdings.csv"))
     monkeypatch.setenv("SFP_RETIREMENT_OPTION_GROUPS", str(tmp_path / "groups.csv"))
+    monkeypatch.setenv("SFP_OPTIONS_GROUPS", str(tmp_path / "app_groups.csv"))
+    monkeypatch.setenv("SFP_OPTIONS_GROUP_MEMBERS", str(tmp_path / "app_group_members.csv"))
     monkeypatch.setenv("SFP_RETIREMENT_OPTION_BETAS", str(tmp_path / "betas.csv"))
     monkeypatch.setenv("SFP_RETIREMENT_OPTION_EVENTS", str(tmp_path / "events.csv"))
     return tmp_path
@@ -260,7 +262,9 @@ def test_cash_is_not_share_coverage(opts_env):
 
 def test_build_groups_net_credit_from_cost_basis(opts_env):
     _write_ledger(opts_env)
-    groups = retirement_options._build_groups(retirement_options._option_rows(), {})
+    groups = retirement_options._build_groups(
+        retirement_options._option_rows(), {}, year=2026,
+    )
     by_symbol = {g["symbol"]: g for g in groups}
     # short put: cost basis -428.67 -> credit received +428.67
     assert by_symbol["SPCX"]["net_cash_flow"] == pytest.approx(428.67)
@@ -268,6 +272,7 @@ def test_build_groups_net_credit_from_cost_basis(opts_env):
     assert by_symbol["SPCX"]["total_pnl"] == pytest.approx(-579.33)
     assert by_symbol["SPCX"]["event_count"] == 1
     assert by_symbol["SPCX"]["status"] == "ACTIVE"
+    assert by_symbol["SPCX"]["name"] == "SPCX 2026"
 
 
 # --------------------------------------------------------------------------- #
@@ -295,6 +300,35 @@ def test_update_group_validation(opts_env):
         retirement_options.update_group("SPCX", {"status": "bogus"})
 
 
+def test_retirement_supports_multiple_app_groups_and_event_assignment(opts_env):
+    _write_empty_ledger(opts_env)
+    retirement_options.sync_events(provider=_provider(
+        _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
+                      "2026-07-24", "370.34", "-1"),
+        _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
+                      "2026-07-24", "-259.00", "1"),
+    ))
+    first = retirement_options.snapshot(as_of=date(2026, 7, 28))
+    assert first["groups"][0]["name"] == "MSFT 2026"
+    assert first["groups"][0]["event_count"] == 2
+
+    second = retirement_options.create_group({
+        "symbol": "MSFT", "name": "MSFT earnings", "notes": "separate thesis",
+    })
+    retirement_options.assign_event("a2", second["group_id"])
+    regrouped = retirement_options.snapshot(as_of=date(2026, 7, 28))
+
+    assert len(regrouped["groups"]) == 2
+    assert {group["event_count"] for group in regrouped["groups"]} == {1}
+    assert {event["group_name"] for event in regrouped["events"]} == {
+        "MSFT 2026", "MSFT earnings",
+    }
+    assert regrouped["summary"]["ungrouped_event_count"] == 0
+
+    retirement_options.assign_event("a2", None)
+    assert retirement_options.snapshot()["summary"]["ungrouped_event_count"] == 1
+
+
 # --------------------------------------------------------------------------- #
 # snapshot shape                                                                #
 # --------------------------------------------------------------------------- #
@@ -303,12 +337,15 @@ def test_snapshot_shape_with_injected_market(opts_env):
     _write_ledger(opts_env)
     d = retirement_options.snapshot(as_of=date(2026, 7, 23),
                                     market_provider=_fake_market_provider)
-    assert d["summary"] == {"position_count": 2, "group_count": 2}
+    assert d["summary"] == {
+        "position_count": 2, "group_count": 2, "ungrouped_event_count": 0,
+    }
     assert len(d["rows"]) == 2 and len(d["risk"]["positions"]) == 2
 
     by_id = {r["id"]: r for r in d["rows"]}
     spcx = next(r for r in d["rows"] if r["symbol"] == "SPCX")
     assert spcx["current_underlying_price"] == 124.0
+    assert spcx["market_value"] == pytest.approx(-1008.0)
     assert spcx["dte_remaining"] == 29
     assert spcx["percent_to_strike"] == pytest.approx((124.0 - 95.0) / 124.0 * 100.0)
     # No leaked internal aggregation fields in the API rows.
@@ -549,7 +586,9 @@ def test_closed_contract_persists_with_realized_pnl(opts_env):
                       "2026-07-24", "-259.00", "1", trade_date="2026-07-23T04:00:00Z"),
     ))
     d = retirement_options.snapshot()
-    assert d["summary"] == {"position_count": 0, "group_count": 1}
+    assert d["summary"] == {
+        "position_count": 0, "group_count": 1, "ungrouped_event_count": 0,
+    }
     msft = {g["symbol"]: g for g in d["groups"]}["MSFT"]
     assert msft["position_status"] == "FLAT"
     assert msft["pnl_completeness"] == "COMPLETE"
@@ -644,5 +683,7 @@ def test_snapshot_empty_without_options(opts_env):
         writer = csv.DictWriter(handle, fieldnames=snaptrade_service.HOLDINGS_HEADERS)
         writer.writeheader()
     d = retirement_options.snapshot()
-    assert d["summary"] == {"position_count": 0, "group_count": 0}
+    assert d["summary"] == {
+        "position_count": 0, "group_count": 0, "ungrouped_event_count": 0,
+    }
     assert d["rows"] == [] and d["groups"] == []

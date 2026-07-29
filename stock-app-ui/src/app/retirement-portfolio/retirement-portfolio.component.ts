@@ -8,10 +8,14 @@ import { Capability, CapabilityService } from '../api/capability.service';
 import { StockService } from '../api/stock.service';
 import { RetirementHolding, RetirementGroupSummary, RetirementPortfolioData } from '../model/retirement';
 import {
-  RetirementOptionsData, RetirementOptionRow, RetirementOptionRisk, RetirementOptionGroup,
+  RetirementOptionsData, RetirementOptionGroup,
   RetirementOptionEvent
 } from '../model/retirement-options';
-import { OptionsRiskAccount } from '../model/options-ledger';
+import { BrokerageLedgerCombinedComponent } from '../shared/brokerage-ledger-combined/brokerage-ledger-combined.component';
+import { BrokerageHoldingsComponent } from '../shared/brokerage-holdings/brokerage-holdings.component';
+import { BrokerageOptionGroupsComponent } from '../shared/brokerage-option-groups/brokerage-option-groups.component';
+import { BrokerRiskPositionsComponent } from '../shared/broker-risk-positions/broker-risk-positions.component';
+import { BrokerageOptionGroup } from '../model/brokerage-option-groups';
 
 interface RiskWarning {
   level: 'critical' | 'warn' | 'info';
@@ -66,7 +70,11 @@ interface CorrelationCluster {
 @Component({
   selector: 'app-retirement-portfolio',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatTooltipModule, ModalComponent, CapabilityStateComponent],
+  imports: [
+    CommonModule, FormsModule, MatTooltipModule, ModalComponent, CapabilityStateComponent,
+    BrokerageLedgerCombinedComponent, BrokerageHoldingsComponent, BrokerageOptionGroupsComponent,
+    BrokerRiskPositionsComponent,
+  ],
   templateUrl: './retirement-portfolio.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./retirement-portfolio.component.css']
@@ -77,8 +85,6 @@ export class RetirementPortfolioComponent implements OnInit {
 
   /** An unconfigured brokerage and an empty account are different states. */
   snaptrade: Capability | null = null;
-  /** SnapTrade alone cannot supply exact-contract Greeks or beta. */
-  retirementRisk: Capability | null = null;
 
   data: RetirementPortfolioData | null = null;
   loading = false;
@@ -87,7 +93,11 @@ export class RetirementPortfolioComponent implements OnInit {
   syncedAt: Date | null = null;
   error: string | null = null;
   syncMessage = '';
-  tab: 'holdings' | 'analysis' | 'options' = 'holdings';
+  // Analysis remains an internal legacy state until its retirement-specific
+  // code is folded into Holdings or removed in the follow-up cleanup. It is no
+  // longer exposed as a fourth brokerage-data tab.
+  tab: 'holdings' | 'options' | 'basis' | 'analysis' = 'holdings';
+  combinedRefreshToken = 0;
 
   // Options sub-view (trade groups + broker risk positions)
   optionsData: RetirementOptionsData | null = null;
@@ -97,11 +107,6 @@ export class RetirementPortfolioComponent implements OnInit {
   optionsMessage = '';
   optionGroupSaving = false;
   optionGroupMessage = '';
-  strikeSortDirection: 'asc' | 'desc' = 'asc';
-  /** Which risk column is sorted. Strike distance stays the default view. */
-  riskSortKey: 'strikeDistance' | 'expiry' = 'strikeDistance';
-  expirySortDirection: 'asc' | 'desc' = 'asc';
-  readonly nearStrikeThresholdPercent = 5;
 
   // Enrichment editor (category/industry/note live in an editable CSV,
   // separate from immutable broker facts)
@@ -153,8 +158,6 @@ export class RetirementPortfolioComponent implements OnInit {
   ngOnInit(): void {
     this.capabilityService.get('snaptrade')
       .subscribe(capability => this.snaptrade = capability);
-    this.capabilityService.get('retirement-risk')
-      .subscribe(capability => this.retirementRisk = capability);
     this.load();
     this.loadOptions();
   }
@@ -166,6 +169,9 @@ export class RetirementPortfolioComponent implements OnInit {
       next: (d) => {
         this.optionsData = d;
         if (!d) this.optionsError = 'Failed to load retirement options.';
+        if (d && this.detailGroup) {
+          this.detailGroup = d.groups.find(group => group.group_id === this.detailGroup!.group_id) ?? null;
+        }
         this.optionsLoading = false;
       },
       error: () => {
@@ -176,6 +182,7 @@ export class RetirementPortfolioComponent implements OnInit {
   }
 
   load(): void {
+    this.combinedRefreshToken++;
     this.loading = true;
     this.error = null;
     this.stockService.getRetirementPortfolio().subscribe({
@@ -296,7 +303,7 @@ export class RetirementPortfolioComponent implements OnInit {
     this.optionGroupMessage = '';
     this.optionsError = null;
     this.optionGroupSaving = true;
-    this.stockService.updateRetirementOptionGroup(group.symbol, {
+    this.stockService.updateRetirementOptionGroup(group.group_id, {
       name: group.name, status: group.status, notes: group.notes,
     }).subscribe({
       next: (saved) => {
@@ -319,15 +326,15 @@ export class RetirementPortfolioComponent implements OnInit {
     });
   }
 
-  optionPositionRisk(row: RetirementOptionRow): RetirementOptionRisk | undefined {
-    return this.optionsData?.risk.positions.find(p => p.row_id === row.id);
-  }
-
   /** Open the broker-events drill-down for one trade group. */
   openOptionGroupDetails(group: RetirementOptionGroup): void {
     this.optionGroupMessage = '';
     this.optionsError = null;
     this.detailGroup = group;
+  }
+
+  openSharedOptionGroup(group: BrokerageOptionGroup): void {
+    this.openOptionGroupDetails(group as RetirementOptionGroup);
   }
 
   closeOptionGroupDetails(): void {
@@ -340,8 +347,14 @@ export class RetirementPortfolioComponent implements OnInit {
   detailOptionEvents(): RetirementOptionEvent[] {
     if (!this.detailGroup) return [];
     return (this.optionsData?.events ?? []).filter(
-      e => e.underlying_symbol === this.detailGroup!.symbol
+      e => e.group_id === this.detailGroup!.group_id
     );
+  }
+
+  optionEventOpenMarketValue(event: RetirementOptionEvent): number | null {
+    return this.optionsData?.rows.find(
+      row => row.contract_symbol === event.occ_symbol
+    )?.market_value ?? null;
   }
 
   /** Current underlying price for a group's symbol, from a live leg if present. */
@@ -350,156 +363,6 @@ export class RetirementPortfolioComponent implements OnInit {
     if (pos?.spot != null) return pos.spot;
     const row = this.optionsData?.rows?.find(r => r.symbol === symbol && r.current_underlying_price != null);
     return row?.current_underlying_price ?? null;
-  }
-
-  // ── Totals (mirror the options ledger's "Filtered Totals" row) ───────────
-
-  private sumGroups(field: 'net_cash_flow' | 'open_market_value' | 'total_pnl'): number {
-    return (this.optionsData?.groups ?? []).reduce((total, g) => total + (g[field] ?? 0), 0);
-  }
-
-  groupsTotalNetCredit(): number { return this.sumGroups('net_cash_flow'); }
-  groupsTotalMarketValue(): number { return this.sumGroups('open_market_value'); }
-  groupsTotalPnl(): number { return this.sumGroups('total_pnl'); }
-
-  /** Net beta-weighted delta $ across positions where risk was computable
-   *  (null if any open position is missing it, so the total never understates). */
-  riskTotalBetaDelta(): number | null {
-    const positions = this.optionsData?.risk.positions ?? [];
-    if (positions.some(p => p.beta_weighted_delta_dollars == null)) return null;
-    return positions.reduce((total, p) => total + (p.beta_weighted_delta_dollars ?? 0), 0);
-  }
-
-  /** Net beta-weighted delta $ using smallFish's own computed beta (same gate). */
-  riskTotalComputedBetaDelta(): number | null {
-    const positions = this.optionsData?.risk.positions ?? [];
-    if (positions.some(p => p.computed_beta_weighted_delta_dollars == null)) return null;
-    return positions.reduce((total, p) => total + (p.computed_beta_weighted_delta_dollars ?? 0), 0);
-  }
-
-  // ── Portfolio Risk (mirrors the options ledger's Portfolio Risk cards) ────
-  retirementAccountEntries(): [string, OptionsRiskAccount][] {
-    return Object.entries(this.optionsData?.risk.accounts ?? {});
-  }
-
-  targetBandDollars(account: OptionsRiskAccount, boundary: 'min' | 'max'): number | null {
-    if (account.cash_limit == null) return null;
-    const normalized = boundary === 'min' ? account.band.band_min : account.band.band_max;
-    return account.cash_limit * normalized;
-  }
-
-  ivSourceLabel(source: string | null | undefined): string {
-    const labels: Record<string, string> = {
-      TASTYTRADE_IV: 'Tastytrade live', CHAIN_IV: 'Chain IV', RV_FALLBACK: 'RV fallback',
-    };
-    return source ? (labels[source] ?? source) : 'Unavailable';
-  }
-
-  riskStatus(position: RetirementOptionRisk | undefined): string {
-    if (!position) return 'Unavailable';
-    const labels: Record<string, string> = {
-      MISSING_BETA: 'Missing beta', MISSING_SPOT: 'Missing spot price',
-      MISSING_VOL: 'Missing volatility',
-      STALE_VOL: 'Stale volatility', STALE_BETA: 'Stale Tasty Beta',
-      PAST_EXPIRY_OPEN: 'Past expiry', UNSUPPORTED_TYPE: 'Unsupported position type',
-    };
-    return position.beta_weighted_delta_dollars != null
-      ? 'Included'
-      : (position.unavailable_reasons.map(r => labels[r] ?? r).join(', ') || 'Unavailable');
-  }
-
-  toggleStrikeSort(): void {
-    if (this.riskSortKey === 'strikeDistance') {
-      this.strikeSortDirection = this.strikeSortDirection === 'asc' ? 'desc' : 'asc';
-    }
-    this.riskSortKey = 'strikeDistance';
-  }
-
-  /** Sort by time left, so what is closest to expiration surfaces first. */
-  toggleExpirySort(): void {
-    if (this.riskSortKey === 'expiry') {
-      this.expirySortDirection = this.expirySortDirection === 'asc' ? 'desc' : 'asc';
-    }
-    this.riskSortKey = 'expiry';
-  }
-
-  riskSortIndicator(key: 'strikeDistance' | 'expiry'): string {
-    if (this.riskSortKey !== key) return '';
-    const direction = key === 'expiry' ? this.expirySortDirection : this.strikeSortDirection;
-    return direction === 'asc' ? '▲' : '▼';
-  }
-
-  sortedRiskRows(): RetirementOptionRow[] {
-    const rows = [...(this.optionsData?.rows ?? [])];
-    const byExpiry = this.riskSortKey === 'expiry';
-    const direction = (byExpiry ? this.expirySortDirection : this.strikeSortDirection) === 'asc' ? 1 : -1;
-    return rows.sort((left, right) => {
-      const ld = byExpiry ? this.expirySortValue(left) : this.strikeRiskDistance(left);
-      const rd = byExpiry ? this.expirySortValue(right) : this.strikeRiskDistance(right);
-      // A leg with no expiry or no distance sorts last in either direction:
-      // it is missing data, not the nearest or the furthest position.
-      if (ld == null && rd == null) return 0;
-      if (ld == null) return 1;
-      if (rd == null) return -1;
-      return direction * (ld - rd);
-    });
-  }
-
-  /** Days to expiration, falling back to the date when DTE is absent. */
-  private expirySortValue(row: RetirementOptionRow): number | null {
-    if (row.dte_remaining != null) return row.dte_remaining;
-    if (!row.expiry) return null;
-    const parsed = Date.parse(row.expiry);
-    return Number.isNaN(parsed) ? null : parsed / 86_400_000;
-  }
-
-  /**
-   * Short calls only: how many contracts long shares in the same account back.
-   * Offsetting option legs (a call spread) are not coverage and not counted.
-   */
-  coverageLabel(row: { trade_type: string; qty: number; coverage?: string; covered_contracts?: number }): string {
-    if (row.coverage === 'PARTIAL') {
-      return `⚠ ${row.covered_contracts ?? 0} of ${row.qty} share-covered`;
-    }
-    return row.coverage === 'UNCOVERED' ? 'No share cover' : '';
-  }
-
-  strikeRiskDistance(row: RetirementOptionRow): number | null {
-    const distance = row.percent_to_strike;
-    if (distance == null) return null;
-    if (row.trade_type === 'SHORT_PUT') return distance;
-    if (row.trade_type === 'SHORT_CALL' || row.trade_type === 'COVERED_CALL') return -distance;
-    return Math.abs(distance);
-  }
-
-  strikeDistanceLabel(row: RetirementOptionRow): string {
-    const distance = this.strikeRiskDistance(row);
-    if (distance == null) return '—';
-    const isShort = ['SHORT_PUT', 'SHORT_CALL', 'COVERED_CALL'].includes(row.trade_type);
-    if (!isShort) return `${Math.abs(distance).toFixed(2)}% from strike`;
-    return distance <= 0
-      ? `${Math.abs(distance).toFixed(2)}% past strike`
-      : `${distance.toFixed(2)}% from breach`;
-  }
-
-  isStrikeBreached(row: RetirementOptionRow): boolean {
-    const distance = this.strikeRiskDistance(row);
-    return ['SHORT_PUT', 'SHORT_CALL', 'COVERED_CALL'].includes(row.trade_type)
-      && distance != null && distance <= 0;
-  }
-
-  isNearStrike(row: RetirementOptionRow): boolean {
-    const distance = this.strikeRiskDistance(row);
-    return ['SHORT_PUT', 'SHORT_CALL', 'COVERED_CALL'].includes(row.trade_type)
-      && distance != null && distance > 0 && distance <= this.nearStrikeThresholdPercent;
-  }
-
-  optionRowClass(row: RetirementOptionRow): string {
-    const classes: string[] = [];
-    if (row.needs_settlement) classes.push('settlement-row');
-    if (this.isStrikeBreached(row)) classes.push('strike-breached-row');
-    else if (this.isNearStrike(row)) classes.push('strike-near-row');
-    return classes.join(' ');
   }
 
   money(value: number | null | undefined): string {
@@ -617,11 +480,6 @@ export class RetirementPortfolioComponent implements OnInit {
   sortIcon(col: keyof RetirementHolding): string {
     if (this.sortCol !== col) return '';
     return this.sortAsc ? ' ▲' : ' ▼';
-  }
-
-  bandBadgeClass(inBand: boolean | null | undefined): string {
-    if (inBand == null) return 'badge-neutral';
-    return inBand ? 'badge-pos' : 'badge-neg';
   }
 
   /** Announced sort state for the column header. */

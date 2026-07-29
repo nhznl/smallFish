@@ -116,6 +116,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `GET /wheelCandidates?horizon=37` | Wheel candidates with trend data. |
 | `GET /stocks/{symbol}/info` | Company information. |
 | `GET`, `POST`, `PUT /options*` | Broker activity sync, editable trade groups, group P/L, warnings, and risk data. |
+| `GET /brokerage-ledgers/{portfolio}/combined` | Broker-neutral combined equity/options view for `trading` or `retirement`, with account-aware components, provenance, and fail-closed P/L completeness. |
 | `GET /retirement/portfolio/live` | SnapTrade ledger + editable enrichment in the same shape; the retirement UI reads this. |
 | `POST /retirement/holdings/sync` | Pull current holdings from SnapTrade and rewrite the ledger. |
 | `PUT /retirement/enrichment/{symbol}` | Create or update the editable category/industry/note for one symbol. |
@@ -128,10 +129,28 @@ development, use `npm start` in `stock-app-ui/` instead.
 `warnings`. The optional account is `RETIREMENT` or `TRADING`; omitting it
 returns the combined view.
 
+`GET /brokerage-ledgers/{portfolio}/combined` is the additive normalized read
+contract used by both ledger pages. It reads materialized artifacts only and
+returns the same versioned shape for `trading` and `retirement`. Missing marks,
+activity, or reconciliation make the affected P/L and portfolio total null
+rather than substituting zero. Closed-equity history remains explicitly
+unavailable until equity executions are imported. Tastytrade sync materializes
+all current positions in `data/ledger_options/tastytrade_positions.csv` for
+this view without changing the legacy options-position artifact.
+
+`GET /brokerage-ledgers/{portfolio}/holdings` projects Trading and Retirement
+onto the same Holdings contract. The matching enrichment and G/L snapshot
+endpoints keep editable category, industry, note, trend, and snapshot data
+outside immutable brokerage artifacts. Trading stores this metadata below
+`data/ledger_options/`; Retirement retains its established files below
+`data/ledger_retirement/`.
+
 `POST /options/activity/sync` imports January 1 through today by default.
 `GET /options/activity?account=` returns immutable executions, editable groups,
-marked group P/L, and reconciliation issues. Sync is read-only at the broker and
-idempotent by Tastytrade transaction ID. The sync also subscribes to live
+marked option-group P/L, and reconciliation issues. Same-symbol equity
+executions remain in the activity ledger for assignment reconciliation but are
+excluded from option-event rows and group totals. Sync is read-only at the
+broker and idempotent by Tastytrade transaction ID. The sync also subscribes to live
 Tastytrade DXLink Greeks for exact open option contracts and stores valid
 observations, including broker observation and retrieval timestamps, in
 `data/ledger_options/options_greeks.csv`. Portfolio risk prefers a fresh exact-
@@ -208,10 +227,16 @@ holdings absent on an older date display `—` rather than zero.
 ### Retirement options
 
 `GET /retirement/options` presents the SnapTrade option legs as the Options
-Ledger's two tables: an editable **Trade Groups** table (one row per underlying;
-net credit from the broker cost basis, live marked value and P/L, editable
-name/status/notes in `data/ledger_retirement/option_groups.csv`) and a **Broker
-Risk Positions** table. The risk table feeds the legs through the broker-agnostic
+Ledger's two tables: an editable **Trade Groups** table and a **Broker Risk
+Positions** table. Groups are smallFish enrichment rather than brokerage
+objects. Both ledgers use automatically created groups, Active/Archived
+filtering, and the same compact group editor. Group membership is persisted as
+smallFish enrichment but is not editable from the ledger dialog; the UI also
+does not expose ad hoc group creation. Shared group metadata lives
+in `data/ledger_options/options_groups.csv`; provider-namespaced assignments
+live in `options_group_members.csv`. Existing one-row-per-symbol Retirement
+metadata is migrated into the first app group without losing its name, status,
+or notes. The risk table feeds the legs through the broker-agnostic
 options risk engine, so spot, Black-Scholes delta, and computed beta come from
 the smallFish price cache. SnapTrade provides no beta or Greeks, so a holdings
 sync fetches, from Tastytrade, both market-metric **beta** for the underlyings
@@ -219,11 +244,14 @@ sync fetches, from Tastytrade, both market-metric **beta** for the underlyings
 (`option_greeks.csv`) — the dxFeed stream
 serves any listed contract, not only ones held at Tastytrade. Both also run
 best-effort during a holdings sync. With them the table shows Tastytrade live IV,
-real Tasty Beta, and beta-weighted delta; without them it falls back to
-realized-vol IV and leaves beta blank. dxFeed observations are stamped with the
+spot/strike distance, and delta shares; without them it falls back to
+realized-vol IV. Beta and beta-delta metrics remain in the API response for
+compatibility but are not rendered in the ledger UI. The shared risk table
+lists option legs only, and neither ledger renders the former Portfolio Risk
+summary. dxFeed observations are stamped with the
 quote's market time (not wall-clock) so a fetch after UTC midnight is still dated
-to the trading day. Because SnapTrade returns current positions only, groups
-reflect open legs — a rolled position won't show its prior legs.
+to the trading day. The retained SnapTrade event ledger keeps closed-group cash
+flows and realized P/L visible after a contract leaves the positions feed.
 
 ## Tests
 

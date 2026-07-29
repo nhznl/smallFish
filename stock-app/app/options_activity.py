@@ -52,6 +52,9 @@ MARK_HEADERS = [
     "underlying_symbol", "quantity", "direction", "signed_quantity", "multiplier",
     "mark", "mark_price", "updated_at", "retrieved_at",
 ]
+COMBINED_POSITION_HEADERS = [
+    "schema_version", *MARK_HEADERS, "average_open_price",
+]
 GREEKS_HEADERS = [
     "schema_version", "source", "account", "contract_symbol", "contract_key",
     "streamer_symbol", "implied_volatility", "option_price", "delta", "gamma",
@@ -442,6 +445,21 @@ def _normalize_mark(raw: Any, account: str, retrieved_at: str) -> dict[str, str]
     }
 
 
+def _normalize_combined_position(raw: Any, account: str,
+                                 retrieved_at: str) -> dict[str, str]:
+    """Materialize one current position for the additive broker-neutral ledger.
+
+    The legacy marks artifact intentionally contains only option-traded symbols.
+    This separate versioned artifact retains every current equity and option
+    position without changing that established contract.
+    """
+    return {
+        "schema_version": str(SCHEMA_VERSION),
+        **_normalize_mark(raw, account, retrieved_at),
+        "average_open_price": _text(_value(raw, "average_open_price")),
+    }
+
+
 def _select_transactions(transactions: list[Any]) -> tuple[list[Any], set[str]]:
     """Select options plus equity activity for every option-traded symbol.
 
@@ -640,9 +658,20 @@ def sync(start_date: date | None = None, end_date: date | None = None,
         merged.update({row["id"]: row for row in normalized})
         events = sorted(merged.values(), key=lambda row: (row["executed_at"], row["id"]))
 
+        combined_positions = [
+            _normalize_combined_position(row, account, retrieved_at) for row in positions
+        ]
+        combined_positions.sort(
+            key=lambda row: (row["account"], row["underlying_symbol"], row["contract_key"])
+        )
+        _atomic_write(
+            config.tastytrade_positions_csv(), COMBINED_POSITION_HEADERS,
+            combined_positions,
+        )
         marks = [
-            _normalize_mark(row, account, retrieved_at) for row in positions
-            if _text(_value(row, "underlying_symbol")).upper() in option_underlyings
+            {key: row[key] for key in MARK_HEADERS}
+            for row in combined_positions
+            if row["underlying_symbol"].upper() in option_underlyings
         ]
         marks.sort(key=lambda row: (row["underlying_symbol"], row["contract_key"]))
         contracts = {
@@ -690,6 +719,16 @@ def sync(start_date: date | None = None, end_date: date | None = None,
         groups_created, events_grouped = _auto_group(events, groups, members, start_date.year, retrieved_at)
         _atomic_write(config.options_groups_csv(), GROUP_HEADERS, groups)
         _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS, members)
+
+    # Holdings trend is advisory metadata derived from the new broker snapshot.
+    # Never fail a brokerage sync because the optional trend view could not
+    # advance.
+    try:
+        from . import brokerage_holdings
+
+        brokerage_holdings.update_trading_trend(combined_positions, now=retrieved_at)
+    except Exception:  # noqa: BLE001 - holdings trend must not block broker sync
+        pass
 
     return {
         "source": SOURCE, "environment": metadata.get("environment"),
@@ -776,9 +815,17 @@ def _reconciliation_detail(key: str, activity_qty: Decimal, broker_qty: Decimal,
 def _group_summary(group: dict[str, str], events: list[dict[str, str]],
                    marks_by_key: dict[str, dict[str, str]],
                    unreconciled_keys: set[str] | None = None) -> dict[str, Any]:
-    cash_flow = sum((_decimal(row["net_value"]) for row in events), Decimal("0"))
-    fee_effect = sum((_decimal(row["fee_effect"]) for row in events), Decimal("0"))
-    positions = _event_positions(events)
+    # Same-symbol equity executions remain in the retained activity ledger for
+    # assignment and reconciliation evidence, but an option group is valued
+    # from option events only. Current shares are projected separately by the
+    # Holdings contract and must never leak into option premium or P/L.
+    option_events = [
+        row for row in events
+        if _is_option_instrument(row.get("instrument_type")) or row.get("option_type")
+    ]
+    cash_flow = sum((_decimal(row["net_value"]) for row in option_events), Decimal("0"))
+    fee_effect = sum((_decimal(row["fee_effect"]) for row in option_events), Decimal("0"))
+    positions = _event_positions(option_events)
     open_value = Decimal("0")
     missing: list[str] = []
     unreconciled_keys = unreconciled_keys or set()
@@ -806,9 +853,9 @@ def _group_summary(group: dict[str, str], events: list[dict[str, str]],
     total_pnl = cash_flow + open_value if not missing else None
     return {
         **group,
-        "event_count": len(events),
-        "first_execution": min((row["executed_at"] for row in events), default=None),
-        "last_execution": max((row["executed_at"] for row in events), default=None),
+        "event_count": len(option_events),
+        "first_execution": min((row["executed_at"] for row in option_events), default=None),
+        "last_execution": max((row["executed_at"] for row in option_events), default=None),
         "net_cash_flow": float(cash_flow),
         "fee_effect": float(fee_effect),
         "open_market_value": float(open_value) if not missing else None,
@@ -888,7 +935,7 @@ def snapshot(account: str | None = None) -> dict[str, Any]:
                              if row["source"] != MANUAL_SOURCE), default=None),
         "reconciliation_issues": reconciliation_issues,
         "manual_events": [row for row in output_events if row["source"] == MANUAL_SOURCE],
-        "pnl_definition": "Net broker cash flows (including fees) plus signed broker position marks. Flat groups are realized P/L; open-group marks are indicative because the provider mark-observation timestamp is unavailable.",
+        "pnl_definition": "Net option cash flows (including fees) plus signed open-option marks. Same-symbol equity executions are retained for reconciliation but excluded from option-group totals. Flat groups are realized option P/L; open-group marks are indicative because the provider mark-observation timestamp is unavailable.",
     }
 
 
@@ -1080,8 +1127,9 @@ def create_manual_event(request: dict[str, Any]) -> dict[str, Any]:
     delivered — typically an assignment or transfer that predates the imported
     history and leaves the ledger position disagreeing with the broker.
 
-    The row is a first-class broker event: it carries a signed `position_delta`
-    so `_event_positions` counts it, and its cash flows land in group P/L.
+    The row is a first-class broker event and carries a signed `position_delta`
+    so reconciliation can count it. Its cash flow enters group P/L only when it
+    represents an option contract; equity corrections remain evidence only.
     """
     account = _text(request.get("account") or "TRADING").upper()
     if account not in {"RETIREMENT", "TRADING"}:

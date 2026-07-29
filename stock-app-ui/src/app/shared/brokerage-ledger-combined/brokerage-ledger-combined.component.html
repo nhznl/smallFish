@@ -1,0 +1,232 @@
+<section class="combined-ledger" aria-label="Option-adjusted basis">
+  @if (loading) {
+    <div class="combined-loading" aria-busy="true" aria-label="Loading combined ledger">
+      <div class="skeleton skeleton-stat"></div>
+      <div class="skeleton skeleton-stat"></div>
+      <div class="skeleton skeleton-stat"></div>
+      <div class="skeleton skeleton-table"></div>
+    </div>
+  } @else if (error) {
+    <div class="empty-state combined-error" role="alert">
+      <span class="badge badge-neg">Unavailable</span>
+      <h3>Option-adjusted basis could not load</h3>
+      <p>{{ error }}</p>
+      <button type="button" class="btn" (click)="load()">Try again</button>
+    </div>
+  } @else if (data; as ledger) {
+    <div class="combined-heading">
+      <div>
+        <p class="section-kicker">Equity + options positions</p>
+        <h2>{{ ledger.portfolio.label }} option-adjusted basis</h2>
+        <p>Only symbols with both share holdings and option activity are included.</p>
+      </div>
+      <span class="snapshot-chip">
+        <span>{{ ledger.portfolio.brokerage }} positions</span>
+        <strong>{{ timestamp(ledger.as_of.positions) }}</strong>
+      </span>
+    </div>
+
+    @if (ledger.coverage.reasons.length) {
+      <div class="banner banner-warn coverage-banner" role="status">
+        <strong>Coverage is limited.</strong>
+        <span>{{ ledger.coverage.reasons.join(' ') }}</span>
+        @if (ledger.coverage.history_start) {
+          <small>Included history begins {{ ledger.coverage.history_start }}.</small>
+        }
+      </div>
+    }
+
+    @if (basisWarnings().length) {
+      <div class="warning-list" aria-label="Option-adjusted basis warnings">
+        @for (warning of basisWarnings(); track warning.code + ':' + warning.symbol + ':' + warning.component_id) {
+          <div class="banner banner-warn">
+            <strong>{{ warning.symbol || ledger.portfolio.label }}</strong>
+            <span>{{ warning.message }}</span>
+          </div>
+        }
+      </div>
+    }
+
+    <div class="stat-strip combined-stats">
+      <div class="stat-card">
+        <span class="stat-label">Matched market value</span>
+        <span class="stat-value">{{ money(basisTotal('open_market_value'), true) }}</span>
+        <span class="stat-delta">Equity {{ money(basisTotal('equity_market_value'), true) }} · Options {{ money(basisTotal('option_market_value'), true) }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Matched net P/L</span>
+        <span class="stat-value" [class]="pnlClass(basisTotal('net_pnl'))">{{ money(basisTotal('net_pnl'), true) }}</span>
+        <span class="stat-delta">Equity P/L plus option P/L</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Open matched symbols</span>
+        <span class="stat-value">{{ openSymbolCount() }}</span>
+        <span class="stat-delta">{{ basisSymbols().length }} equity + options symbols</span>
+      </div>
+      <div class="stat-card" [class.stat-card-warn]="incompleteSymbolCount()">
+        <span class="stat-label">Incomplete matched symbols</span>
+        <span class="stat-value">{{ incompleteSymbolCount() }}</span>
+        <span class="stat-delta">No partial total is promoted as complete</span>
+      </div>
+    </div>
+
+    <div class="filter-toolbar" aria-label="Option-adjusted basis filters">
+      <label>
+        <span>Search</span>
+        <input [(ngModel)]="search" type="search" placeholder="Symbol, account, or note">
+      </label>
+      <label>
+        <span>State</span>
+        <select [(ngModel)]="state">
+          <option value="">All states</option>
+          <option value="OPEN">Open</option>
+          <option value="FLAT">Flat</option>
+        </select>
+      </label>
+      @if (hasFilters()) {
+        <button type="button" class="btn btn-sm" (click)="resetFilters()">Reset</button>
+      }
+      <span class="result-count">{{ filteredSymbols().length }} of {{ basisSymbols().length }} symbols</span>
+    </div>
+
+    @if (basisSymbols().length && filteredSymbols().length) {
+      <div class="table-shell combined-table-shell">
+        <table class="data-table combined-table">
+          <thead>
+            <tr>
+              <th class="col-sticky" rowspan="2">Symbol</th>
+              <th class="num" rowspan="2">Current Price / Share</th>
+              <th class="column-group" colspan="6">Share Position</th>
+              <th class="column-group" colspan="3">Options</th>
+              <th class="column-group" colspan="2">Combined</th>
+            </tr>
+            <tr>
+              <th class="num">Share Qty</th>
+              <th class="num">Cost Price / Share</th>
+              <th class="num">Cost Price</th>
+              <th class="num">Current Equity</th>
+              <th class="num">Equity P/L</th>
+              <th class="num">Equity P/L / Share</th>
+              <th class="num">Net Credit</th>
+              <th class="num">Net Debit</th>
+              <th class="num">Option P/L</th>
+              <th class="num">Net P/L</th>
+              <th class="num basis-heading">
+                Option Adjusted Basis / Share
+                <small>(Cost Price − Option P/L) / Share Qty</small>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of filteredSymbols(); track trackSymbol($index, row)) {
+              <tr class="symbol-row" [class.expanded]="expandedSymbol === row.symbol">
+                <td class="col-sticky symbol-identity">
+                  <button type="button" class="expand-button" (click)="toggleSymbol(row.symbol)"
+                    [attr.aria-expanded]="expandedSymbol === row.symbol"
+                    [attr.aria-controls]="'combined-detail-' + row.symbol">
+                    <span class="expand-cue" aria-hidden="true">{{ expandedSymbol === row.symbol ? '−' : '+' }}</span>
+                    <strong>{{ row.symbol }}</strong>
+                  </button>
+                  <small>{{ row.accounts.join(' · ') || 'Account unavailable' }}</small>
+                </td>
+                <td class="num">
+                  {{ money(row.current_price_per_share) }}
+                  <small><span class="badge badge-neutral">{{ row.state === 'OPEN' ? 'Open' : 'Flat' }}</span></small>
+                </td>
+                <td class="num share-block-start">{{ quantity(row.share_quantity) }}</td>
+                <td class="num">{{ money(row.equity_cost_per_share) }}</td>
+                <td class="num">{{ money(row.equity_cost) }}</td>
+                <td class="num">{{ money(row.current_equity) }}</td>
+                <td class="num" [class]="pnlClass(row.equity_pnl)">{{ money(row.equity_pnl, true) }}</td>
+                <td class="num" [class]="pnlClass(row.equity_pnl_per_share)">{{ money(row.equity_pnl_per_share, true) }}</td>
+                <td class="num option-block-start positive">{{ money(row.net_credit) }}</td>
+                <td class="num negative">{{ money(row.net_debit) }}</td>
+                <td class="num" [class]="pnlClass(row.option_pnl)">{{ money(row.option_pnl, true) }}</td>
+                <td class="num combined-block-start" [class]="pnlClass(row.net_pnl)">
+                  {{ money(row.net_pnl, true) }}
+                  <small><span class="badge" [class]="'badge ' + completenessClass(row.pnl_completeness)">{{ completenessLabel(row.pnl_completeness) }}</span></small>
+                </td>
+                <td class="num">
+                  {{ money(row.option_adjusted_basis_per_share) }}
+                  <small>Live option-adjusted basis</small>
+                </td>
+              </tr>
+              @if (expandedSymbol === row.symbol) {
+                <tr class="component-detail-row" [id]="'combined-detail-' + row.symbol">
+                  <td colspan="13">
+                    <div class="component-detail-heading">
+                      <div>
+                        <strong>{{ row.symbol }} components</strong>
+                        <span>Broker values and smallFish completeness stay labelled separately.</span>
+                        @if (row.annotations.length) {
+                          <span class="symbol-notes"><strong>Notes:</strong> {{ annotationText(row.annotations) }}</span>
+                        }
+                      </div>
+                      <span class="badge" [class]="'badge ' + completenessClass(row.adjusted_basis.completeness)">
+                        Basis {{ completenessLabel(row.adjusted_basis.completeness) }}
+                      </span>
+                    </div>
+                    <div class="table-shell component-table-shell">
+                      <table class="data-table component-table">
+                        <thead><tr>
+                          <th class="col-sticky">Type</th><th>Account</th><th class="num">Qty</th><th>Contract</th>
+                          <th class="num">Cash in</th><th class="num">Cash out</th><th class="num">Mark / unit</th>
+                          <th class="num">Market value</th><th class="num">P/L</th><th class="num">Events</th><th>Notes</th>
+                        </tr></thead>
+                        <tbody>
+                          @for (component of row.components; track trackComponent($index, component)) {
+                            <tr>
+                              <td class="col-sticky">
+                                <strong>{{ componentType(component) }}</strong>
+                                <small>{{ componentState(component) }} · {{ cashBasisLabel(component) }}</small>
+                              </td>
+                              <td>{{ component.account || '—' }}<small>{{ sourceLabel(component) }}</small></td>
+                              <td class="num">{{ quantity(component.quantity) }}</td>
+                              <td>{{ contractLabel(component) }}<small>{{ component.open_leg_count }} open {{ component.open_leg_count === 1 ? 'leg' : 'legs' }}</small></td>
+                              <td class="num positive">{{ money(component.cash_in, true) }}</td>
+                              <td class="num negative">{{ money(component.cash_out) }}</td>
+                              <td class="num">{{ money(component.mark_per_unit) }}<small>Observed {{ timestamp(component.mark_observed_at) }}</small></td>
+                              <td class="num">{{ money(component.open_market_value, true) }}</td>
+                              <td class="num" [class]="pnlClass(component.total_pnl)">
+                                {{ money(component.total_pnl, true) }}
+                                <small><span class="badge" [class]="'badge ' + completenessClass(component.pnl_completeness)">{{ completenessLabel(component.pnl_completeness) }}</span></small>
+                                @if (component.missing.length) {
+                                  <small class="unavailable-reason">Missing: {{ component.missing.join(', ') }}</small>
+                                }
+                              </td>
+                              <td class="num">{{ component.event_count }}</td>
+                              <td class="component-notes">{{ notePreview(component.annotations) }}</td>
+                            </tr>
+                          } @empty {
+                            <tr><td colspan="11" class="empty-detail">No component decomposition is available for this symbol.</td></tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else if (basisSymbols().length) {
+      <div class="empty-state">
+        <h3>No symbols match these filters</h3>
+        <p>Reset the filters to return to all equity + options symbols.</p>
+        <button type="button" class="btn" (click)="resetFilters()">Reset filters</button>
+      </div>
+    } @else {
+      <div class="empty-state">
+        <h3>No equity + options positions</h3>
+        <p>This view includes a symbol only when it currently has both shares and option activity.</p>
+      </div>
+    }
+
+    <p class="combined-caveat">
+      Option-adjusted basis is a smallFish calculation, not broker or tax basis.
+      Activity as of {{ timestamp(ledger.as_of.activity) }}; market data as of {{ timestamp(ledger.as_of.market) }}.
+      Missing or incomplete inputs render as — rather than a partial total.
+    </p>
+  }
+</section>

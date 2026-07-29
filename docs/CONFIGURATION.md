@@ -90,6 +90,11 @@ specific artifact.
 | `SFP_RETIRED_SYMBOLS_CSV` | `$SFP_DATA_DIR/retired_symbols.csv` |
 | `SFP_OPTIONS_ACTIVITY` | `$SFP_DATA_DIR/ledger_options/options_activity.csv` |
 | `SFP_OPTIONS_GROUPS` | `$SFP_DATA_DIR/ledger_options/options_groups.csv` |
+| `SFP_OPTIONS_GROUP_MEMBERS` | `$SFP_DATA_DIR/ledger_options/options_group_members.csv` |
+| `SFP_TASTYTRADE_POSITIONS` | `$SFP_DATA_DIR/ledger_options/tastytrade_positions.csv` |
+| `SFP_TRADING_HOLDINGS_ENRICHMENT` | `$SFP_DATA_DIR/ledger_options/holdings_enrichment.csv` |
+| `SFP_TRADING_HOLDINGS_TREND` | `$SFP_DATA_DIR/ledger_options/holdings_trend.csv` |
+| `SFP_TRADING_HOLDINGS_GL_SNAPSHOTS` | `$SFP_DATA_DIR/ledger_options/holdings_gain_loss_snapshots.csv` |
 | `SFP_OPTIONS_GREEKS` | `$SFP_DATA_DIR/ledger_options/options_greeks.csv` |
 | `SFP_OPTIONS_BETAS` | `$SFP_DATA_DIR/ledger_options/options_betas.csv` |
 | `SFP_SNAPTRADE_HOLDINGS` | `$SFP_DATA_DIR/ledger_retirement/snaptrade_holdings.csv` |

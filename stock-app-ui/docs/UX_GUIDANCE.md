@@ -209,13 +209,42 @@ other textual state.
 
 ### Ledgers and portfolio risk
 
-- Preserve the distinction between broker-provided values and smallFish
-  computed values. Comparison layouts must not obscure which side is which.
+- Trading and Retirement expose the same three brokerage tabs in the same
+  order: Holdings, Options, and Option-Adjusted Basis. Holdings contain equity
+  information only; Options contain option information only.
+- Holdings uses one shared, chart-free table on both brokerage pages. Show the
+  Category or Account selector only when that field has more than one choice;
+  always retain search, Declining only, Snapshot G/L %, Copy Symbols, sortable
+  columns, snapshot columns, and deliberate modal editing for classification
+  and notes.
+- Options uses one shared Trade Groups table on both brokerage pages, including
+  Active/Archived filters, imported-event/group/ungrouped counts, fail-closed
+  filtered totals, and modal editing. Group edit dialogs use the same compact
+  edit/summary/event layout in both ledgers. The opened group defines the event
+  table context, so do not repeat a Group column or expose event reassignment
+  there. Keep the event table read-only and omit inert action columns; surface
+  current position values beside the contract rows they qualify. Use the same
+  option-event columns in both ledgers and show equity share lots in a separate,
+  consistently shaped table; equity values are context and never enter option
+  event rows or group totals. Retain same-symbol equity executions as brokerage
+  evidence when needed for assignment reconciliation, but do not render them as
+  option trades. Groups and event assignments remain smallFish-owned enrichment
+  even though the immutable broker-event shapes differ. Groups originate
+  automatically from imported activity; do not expose an ad hoc New Group
+  action in the ledger UX.
+- Broker Risk Positions uses one shared table on both brokerage pages and lists
+  open option legs only; equity/stock positions belong in Holdings. Keep the
+  account/group, symbol, leg, quantity, strike, expiry/DTE, option price,
+  spot/distance-to-strike, IV/source, and delta-shares columns. The ledger UX
+  intentionally omits beta comparisons, beta-delta totals, risk-status columns,
+  and the separate Portfolio Risk section.
+- Option-Adjusted Basis includes only symbols with both equity and option
+  exposure, so do not show a redundant Exposure column. Keep all Share Position
+  columns together before the Options columns, followed by Net P/L and the live
+  option-adjusted basis. Calculate that basis from equity cost less option P/L
+  only; do not include equity P/L.
 - Retain warnings for breaches, near-strike positions, missing marks, stale
   data, and incomplete transaction history.
-- State the scope of risk estimates near the output. Do not imply that
-  beta-delta, assignment cash, or another approximation is broker margin or
-  buying-power usage.
 - Editing should be deliberate. Prefer readable ledger rows with focused modal
   editing over dense per-row forms and repeated Save buttons.
 

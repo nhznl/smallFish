@@ -16,43 +16,10 @@ input, select, textarea {
   font: inherit; font-size: var(--text-sm); background: var(--surface-card); color: var(--text-primary); box-sizing: border-box;
 }
 
-.inline-actions { display: flex; gap: 10px; align-items: center; color: var(--text-secondary); font-size: var(--text-xs); }
-.status-filter { display: flex; align-items: center; gap: 7px; }
-.status-filter label { flex-direction: row; align-items: center; gap: 3px; font-weight: 600; text-transform: uppercase; }
-.status-filter input { width: auto; padding: 0; }
-
 .state, .empty { padding: 34px; text-align: center; color: var(--text-secondary); }
 .error, .modal-error { color: var(--neg); }
 
 .stat-strip { margin: 20px 0; }
-
-.activity-panel { overflow: visible; }
-.activity-summary {
-  display: flex; gap: 24px; flex-wrap: wrap; padding: 14px 18px;
-  background: var(--surface-sunken); border-bottom: 1px solid var(--border);
-  color: var(--text-secondary); font-size: var(--text-sm);
-}
-.activity-summary strong { color: var(--text-primary); font-size: var(--text-lg); margin-right: 4px; }
-/* The mismatch counter is a control, not a stat. Colour alone does not say
-   "clickable" — especially in the urgent red — so it carries a dashed
-   underline and an explicit affordance label. */
-.activity-summary .link-btn {
-  font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer;
-  border-bottom: 1px dashed currentColor;
-}
-/* Outlined so both the border and the text ride `currentColor` — the pill
-   picks up the urgent red automatically. A filled pill cannot work here:
-   `background: currentColor` resolves against the element's own colour, so
-   setting a contrasting text colour would repaint the fill to match it. */
-.activity-summary .link-btn .link-cue {
-  margin-left: 6px; padding: 1px 6px; border-radius: 999px;
-  border: 1px solid currentColor; font-size: 10.5px; font-weight: 700;
-  letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px;
-}
-.activity-summary .link-btn:not(:disabled):hover { border-bottom-style: solid; }
-.activity-summary .link-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
-.activity-summary .link-btn:disabled { cursor: default; border-bottom: 0; }
-.activity-summary .link-btn:disabled .link-cue { display: none; }
 
 /* The evidence column is the long one; let it wrap so the Fix action stays on
    screen instead of sitting past a horizontal scroll. */
@@ -69,13 +36,6 @@ input, select, textarea {
 .modal-status.ok { color: var(--pos); font-weight: 600; }
 .modal-status.error { color: var(--neg); font-weight: 600; }
 
-/* Manual rows sit among immutable broker facts, so they are marked as such. */
-.manual-row { background: var(--primary-soft); }
-.manual-tag {
-  display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 4px;
-  border: 1px solid var(--primary); color: var(--primary);
-  font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-}
 .row-actions { display: flex; gap: 6px; }
 
 /* Read-only context at the top of the manual reconciliation form. */
@@ -88,13 +48,6 @@ input, select, textarea {
 .manual-context dt { color: var(--text-secondary); font-weight: 600; }
 .manual-context dd { margin: 0; font-weight: 600; }
 .manual-context dd small { margin-left: 4px; color: var(--text-faint); font-weight: 400; }
-
-/* Sync/save confirmation, auto-dismissed by the component. */
-.sync-toast {
-  margin: 12px 18px 0; padding: 9px 12px;
-  border: 1px solid rgb(27 127 59 / .22); border-radius: var(--radius-sm);
-  background: var(--pos-soft); color: var(--pos); font-size: var(--text-sm);
-}
 
 /* ── Tables ────────────────────────────────────────────────────────────── */
 
@@ -109,16 +62,8 @@ th.num, td.num { text-align: right; }
 td { padding: 9px 10px; border-top: 1px solid var(--border); vertical-align: top; }
 td small { display: block; color: var(--text-faint); margin-top: 4px; }
 
-.group-table .totals-row { background: var(--surface-sunken); }
-.group-table .totals-row td { border-top: 0; border-bottom: 2px solid var(--border-strong); font-weight: 700; vertical-align: middle; }
-.group-table td { vertical-align: middle; }
 .symbol-cell { font-family: var(--font-mono); font-weight: 700; }
 .group-name { font-weight: 700; }
-.notes-cell {
-  max-width: 260px; overflow: hidden; text-overflow: ellipsis;
-  color: var(--text-secondary); font-weight: 400;
-}
-.archived-row { opacity: .6; }
 
 .icon-btn {
   width: 28px; height: 28px; padding: 0;
@@ -203,14 +148,22 @@ th.col-account { z-index: 3; background: var(--surface-sunken); }
 .create-form { display: grid; gap: 14px; }
 /* Field hints sit under their input and must not read as another label. */
 .create-form label small { font-weight: 400; color: var(--text-faint); }
-.group-card { display: grid; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; background: var(--surface-card); }
-.group-card.archived { opacity: .65; background: var(--surface-sunken); }
-.group-title { display: flex; justify-content: space-between; align-items: center; font-size: var(--text-lg); }
-.group-card dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; border-top: 1px solid var(--border); padding-top: 10px; }
-.group-card dt { color: var(--text-secondary); }
-.group-card dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
-.open-contracts { display: grid; gap: 3px; color: var(--text-secondary); font-size: var(--text-sm); overflow-wrap: anywhere; }
-.details-card { margin-bottom: 22px; }
+.details-edit { display: grid; grid-template-columns: 1fr 160px; gap: 12px; margin-bottom: 16px; }
+.details-edit .wide { grid-column: 1 / -1; }
+.details-edit label { display: grid; gap: 4px; font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); }
+.details-edit input, .details-edit select {
+  padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  font: inherit; font-size: var(--text-sm); background: var(--surface-card); color: var(--text-primary);
+}
+.details-summary {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
+  margin: 0 0 16px; padding: 12px 14px; background: var(--surface-sunken); border-radius: var(--radius-sm);
+}
+.details-summary > div { min-width: 0; }
+.details-summary dt { margin-bottom: 4px; color: var(--text-secondary); font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.details-summary dd { margin: 0; font-size: var(--text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+.details-summary dd small { margin-left: 4px; color: var(--text-faint); font-size: 10.5px; font-weight: 600; }
+.open-contracts { display: grid; gap: 3px; margin: 0 0 16px; color: var(--text-secondary); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .details-events-heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin: 0 0 10px; }
 .details-events-heading small { color: var(--text-secondary); }
 .details-events-heading h4 { font-size: var(--text-base); }

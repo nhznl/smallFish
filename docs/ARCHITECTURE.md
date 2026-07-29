@@ -117,7 +117,7 @@ A deliberate split in the ledgers:
 
 | Immutable | Editable |
 |---|---|
-| `options_activity.csv` — broker transactions | `options_groups.csv` — your grouping and notes |
+| `options_activity.csv` — broker transactions; `tastytrade_positions.csv` — all current positions for the combined ledger | `options_groups.csv` — your grouping and notes |
 | `options_greeks.csv`, `options_betas.csv` — timestamped observations | group status (active/archived) |
 | `snaptrade_holdings.csv` — normalized holdings | holding enrichment metadata and user-captured G/L snapshots |
 

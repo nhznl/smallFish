@@ -26,7 +26,7 @@ describe('App', () => {
       'Wheel',
       'Sectors',
       'Studies',
-      'Options',
+      'Trading',
       'Retirement',
       'Portfolios'
     ]);

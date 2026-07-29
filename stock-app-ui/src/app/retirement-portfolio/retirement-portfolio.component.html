@@ -4,8 +4,8 @@
   <header class="page-header">
     <div>
       <p class="page-eyebrow">Retirement ledger</p>
-      <h1 class="page-title">Retirement Holdings Ledger</h1>
-      <p class="page-subtitle">Holdings, allocation analysis, and the option positions held against them.</p>
+      <h1 class="page-title">Retirement Ledger</h1>
+      <p class="page-subtitle">Equity holdings, option positions and option-adjusted basis.</p>
     </div>
     <div class="page-actions">
       @if (data?.retrievedAt || syncedAt) {
@@ -42,25 +42,31 @@
   @if (syncMessage) {
     <div class="banner banner-pos" role="status">{{ syncMessage }}</div>
   }
-  @if (loading) {
-    <div class="loading">Loading portfolio…</div>
-  }
 
-  @if (data && !loading) {
-    <!-- ── Tab bar ──────────────────────────────────────────────────────── -->
-    <div class="tab-bar">
-      <button type="button" class="tab" [class.active]="tab === 'holdings'" (click)="tab = 'holdings'">
-        Holdings<span class="tab-count">{{ data.holdings.length }}</span>
-      </button>
-      <button type="button" class="tab" [class.active]="tab === 'analysis'" (click)="tab = 'analysis'">
-        Analysis &amp; Recommendations
-      </button>
-      <button type="button" class="tab" [class.active]="tab === 'options'" (click)="tab = 'options'">
-        Options<span class="tab-count">{{ optionsData?.summary?.position_count || 0 }}</span>
-      </button>
-    </div>
-    <!-- ══════════════════ HOLDINGS TAB ════════════════════════════════════ -->
-    @if (tab === 'holdings') {
+  <div class="tab-bar" role="tablist" aria-label="Retirement ledger views">
+    <button type="button" class="tab" role="tab" [class.active]="tab === 'holdings'"
+      [attr.aria-selected]="tab === 'holdings'" (click)="tab = 'holdings'">
+      Holdings<span class="tab-count">{{ data?.holdings?.length || 0 }}</span>
+    </button>
+    <button type="button" class="tab" role="tab" [class.active]="tab === 'options'"
+      [attr.aria-selected]="tab === 'options'" (click)="tab = 'options'">
+      Options<span class="tab-count">{{ optionsData?.summary?.position_count || 0 }}</span>
+    </button>
+    <button type="button" class="tab" role="tab" [class.active]="tab === 'basis'"
+      [attr.aria-selected]="tab === 'basis'" (click)="tab = 'basis'">Option-Adjusted Basis</button>
+  </div>
+
+  @if (tab === 'holdings') {
+    <app-brokerage-holdings portfolio="retirement" [refreshToken]="combinedRefreshToken" />
+  } @else if (tab === 'basis') {
+    <app-brokerage-ledger-combined portfolio="retirement" [refreshToken]="combinedRefreshToken" />
+  } @else if (loading) {
+    <div class="loading">Loading portfolio…</div>
+  } @else if (data) {
+    <!-- Legacy Retirement-only holdings markup retained temporarily for the
+         follow-up dead-code cleanup; the shared component above owns the live
+         Holdings tab for both brokerages. -->
+    @if (tab === 'analysis') {
       <div>
         <!-- ── Summary bar (stock/holdings totals; options live on their tab) ── -->
         <div class="stat-strip summary-bar">
@@ -501,83 +507,23 @@
     <!-- ══════════════════ OPTIONS TAB ═════════════════════════════════════ -->
     @if (tab === 'options') {
       <div class="options-tab">
-        @if (optionsError) {
-          <div class="error-banner">{{ optionsError }}</div>
-        }
-        @if (optionsMessage) {
-          <div class="banner banner-pos" role="status">{{ optionsMessage }}</div>
-        }
         <!-- ── Trade Groups ────────────────────────────────────────────────── -->
-        <section class="opt-panel">
-          <div class="opt-heading">
-            <div><h3>Trade Groups</h3><small>Broker positions are immutable; name, status, and notes are editable and grouped by underlying. Net credit is the premium received per the broker cost basis.</small></div>
-            @if (optionsData?.as_of) {
-              <span>As of {{ optionsData?.as_of }}</span>
-            }
-          </div>
-          @if (optionsData?.groups?.length) {
-            <div class="table-wrap">
-              <table class="data-table opt-table">
-                <thead><tr>
-                  <th>Symbol</th><th>Group Name</th><th>Status</th><th>Position</th><th class="num">Net credit received</th>
-                  <th class="num">Open marked value</th><th class="num">Total / Realized P/L</th><th class="num">Legs</th><th>Notes</th><th>Edit</th>
-                </tr></thead>
-                <tbody>
-                  <tr class="totals-row">
-                    <td colspan="4"><strong>Totals</strong></td>
-                    <td class="num" [class]="'num ' + pnlClass(groupsTotalNetCredit())">{{ money(groupsTotalNetCredit()) }}</td>
-                    <td class="num">{{ money(groupsTotalMarketValue()) }}</td>
-                    <td class="num" [class]="'num ' + pnlClass(groupsTotalPnl())">{{ money(groupsTotalPnl()) }}</td>
-                    <td colspan="3"></td>
-                  </tr>
-                  @for (group of optionsData!.groups; track group) {
-                    <tr [class.archived-row]="group.status === 'ARCHIVED'">
-                      <td><strong>{{ group.symbol }}</strong><small>{{ group.account }}</small></td>
-                      <td><strong class="group-name">{{ group.name || '—' }}</strong></td>
-                      <td>
-                        <span class="badge" [class]="group.status === 'ARCHIVED' ? 'badge badge-neutral' : 'badge badge-primary'">
-                          {{ group.status === 'ARCHIVED' ? 'Archived' : 'Active' }}
-                        </span>
-                      </td>
-                      <td><span class="pos-badge" [class.flat]="group.position_status === 'FLAT'">{{ group.position_status }}</span></td>
-                      <td [class]="'num ' + pnlClass(group.net_cash_flow)">{{ money(group.net_cash_flow) }}</td>
-                      <td class="num">{{ money(group.open_market_value) }}</td>
-                      <td [class]="'num ' + pnlClass(group.total_pnl)">
-                        {{ money(group.total_pnl) }}
-                        @if (group.pnl_completeness === 'COMPLETE') {
-                          <small>realized</small>
-                        }
-                        @if (group.pnl_completeness === 'INDICATIVE') {
-                          <small>indicative</small>
-                        }
-                        @if (group.pnl_completeness === 'UNAVAILABLE') {
-                          <small class="urgent"
-                            matTooltip="An open contract left the positions feed but its closing transaction has not posted yet."
-                          matTooltipPosition="above">awaiting close</small>
-                        }
-                      </td>
-                      <td class="num">{{ group.event_count }}</td>
-                      <td class="notes-cell" [matTooltip]="group.notes || ''" matTooltipPosition="above">{{ group.notes || '—' }}</td>
-                      <td>
-                        <button type="button" class="icon-btn" (click)="openOptionGroupDetails(group)"
-                          [attr.aria-label]="'Open ' + group.symbol + ' group details'"
-                        matTooltip="Broker events and group P/L" matTooltipPosition="above">✎</button>
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          } @else {
-            <app-capability-state
-              [capability]="snaptrade"
-              [emptyWhenAvailable]="true"
-              availableEmptyText="No option positions in the retirement account."
-              syncLabel="Sync from Fidelity">
-            </app-capability-state>
-          }
-          <p class="caveat">Group P/L is computed from the retained SnapTrade transaction event ledger, so a fully-closed (FLAT) contract keeps its realized P/L instead of disappearing with the current-positions feed. Open groups show an indicative total from current broker marks; a contract that has left the positions feed before its closing transaction posts reads “awaiting close”.</p>
-        </section>
+        <app-brokerage-option-groups
+          [groups]="optionsData?.groups || []"
+          [loading]="optionsLoading"
+          [error]="optionsError || ''"
+          [message]="optionsMessage"
+          [timestamp]="optionsData?.as_of || null"
+          timestampLabel="As of"
+          [eventCount]="optionsData?.events?.length || 0"
+          [ungroupedCount]="optionsData?.summary?.ungrouped_event_count || 0"
+          eventColumnLabel="Legs"
+          [capability]="snaptrade"
+          emptyText="No option positions in the retirement account."
+          syncLabel="Sync from Fidelity"
+          caveat="Group P/L is computed from the retained SnapTrade transaction event ledger, so a fully-closed (FLAT) contract keeps its realized P/L instead of disappearing with the current-positions feed. Open groups show an indicative total from current broker marks; a contract that has left the positions feed before its closing transaction posts reads “awaiting close”."
+          (editGroup)="openSharedOptionGroup($event)">
+        </app-brokerage-option-groups>
         <!-- ── Trade Group details drill-down ──────────────────────────────── -->
         @if (detailGroup; as group) {
           <app-modal width="min(780px, 94vw)"
@@ -613,7 +559,7 @@
               @if (group.pnl_completeness === 'UNAVAILABLE') {
                 <small class="urgent">awaiting close</small>
               }</dd></div>
-              <div><dt>Broker events</dt><dd>{{ group.event_count }}</dd></div>
+              <div><dt>Option trades</dt><dd>{{ detailOptionEvents().length }}</dd></div>
             </dl>
             @if (optionGroupMessage) {
               <div class="banner banner-pos" role="status">{{ optionGroupMessage }}</div>
@@ -621,11 +567,14 @@
             @if (optionsError) {
               <div class="error-banner">{{ optionsError }}</div>
             }
+            <h3 class="group-detail-section-title">Option trades
+              <small>Read-only broker events. Open marked value appears only for contracts with a current open position.</small>
+            </h3>
             @if (detailOptionEvents().length) {
               <div class="table-wrap">
                 <table class="data-table opt-table">
                   <thead><tr>
-                    <th>Date</th><th>Contract</th><th>Action</th><th>Qty</th><th>Price</th><th>Net cash</th><th>Fees</th>
+                    <th>Date</th><th>Contract</th><th>Action</th><th>Qty</th><th>Price</th><th>Net cash</th><th>Fees</th><th>Open marked value</th>
                   </tr></thead>
                   <tbody>
                     @for (event of detailOptionEvents(); track event) {
@@ -637,6 +586,7 @@
                         <td>{{ money(event.price) }}</td>
                         <td [class]="pnlClass(event.net_value)">{{ money(event.net_value) }}</td>
                         <td>{{ money(event.fee) }}</td>
+                        <td [class]="pnlClass(optionEventOpenMarketValue(event))">{{ money(optionEventOpenMarketValue(event)) }}</td>
                       </tr>
                     }
                   </tbody>
@@ -648,7 +598,7 @@
             <!-- Shares held in the underlying: context beside the options, and
             deliberately outside every total above, which is option cash only. -->
             @if (group.equity_holding; as holding) {
-              <h3 class="share-cover-title">Equity shares held
+              <h3 class="group-detail-section-title">Equity shares held
                 <small [class.urgent]="holding.covered_contracts < holding.short_call_contracts">
                   {{ shares(holding.total_shares) }} shares@if (holding.short_call_contracts) {
                     <span> · covers {{ holding.covered_contracts }} of
@@ -697,157 +647,15 @@
           </app-modal>
         }
         <!-- ── Broker Risk Positions ───────────────────────────────────────── -->
-        <section class="opt-panel">
-          <div class="opt-heading">
-            <div><h3>Broker Risk Positions</h3><small>Current open Fidelity option legs. Spot, IV (realized-vol), Black-Scholes delta, and computed beta come from the smallFish price cache; Tasty Beta from Tastytrade market metrics.</small></div>
-            <div class="risk-legend"><i class="legend-swatch breached"></i> Strike breached <i class="legend-swatch near"></i> Within {{ nearStrikeThresholdPercent }}%</div>
-          </div>
-          <!-- Partial risk inputs must be named where the decision is made, not
-          buried in a tooltip: these totals are not a complete risk picture. -->
-          @if (retirementRisk && retirementRisk.state === 'INCOMPLETE') {
-            <div class="banner banner-warn"
-              role="status">
-              <strong>Partial risk inputs.</strong>
-              {{ retirementRisk.reason }}
-              Connect Tastytrade for exact-contract Greeks and beta:
-              <code>{{ retirementRisk.action }}</code>
-            </div>
-          }
-          @if (optionsData?.rows?.length) {
-            <div class="table-wrap">
-              <table class="data-table opt-table">
-                <thead><tr>
-                  <th>Account / group</th><th>Symbol</th>
-                  <th matTooltip="A short call reads COVERED_CALL when long shares in the same account back every contract. Share coverage only — an offsetting option leg such as a call spread is not counted." matTooltipPosition="above">Leg</th>
-                  <th>Qty</th><th>Strike</th>
-                  <th><button type="button" class="sort-button" (click)="toggleExpirySort()">Expiry / DTE {{ riskSortIndicator('expiry') }}</button></th>
-                  <th>Option price</th>
-                  <th><button type="button" class="sort-button" (click)="toggleStrikeSort()">Spot / to strike {{ riskSortIndicator('strikeDistance') }}</button></th>
-                  <th>IV / source</th><th>Delta shares</th><th>Beta</th><th>Tasty Beta</th><th>Beta-delta $</th><th>Beta-delta $ (Tasty)</th><th>Risk status</th>
-                </tr></thead>
-                <tbody>
-                  <tr class="totals-row">
-                    <td colspan="12"><strong>Net beta-delta $</strong></td>
-                    <td [class]="pnlClass(riskTotalComputedBetaDelta())">{{ money(riskTotalComputedBetaDelta()) }}</td>
-                    <td [class]="pnlClass(riskTotalBetaDelta())">{{ money(riskTotalBetaDelta()) }}</td>
-                    <td></td>
-                  </tr>
-                  @for (row of sortedRiskRows(); track row) {
-                    <tr [class]="optionRowClass(row)">
-                      <td><span class="account-tag">{{ row.account }}</span><small>{{ row.wheel_id || 'Independent' }}</small></td>
-                      <td><strong>{{ row.symbol }}</strong>@if (row.non_standard) {
-                      <small class="risk-unavailable">Non-standard · risk unavailable</small>
-                    }</td>
-                    <td>{{ row.trade_type }}@if (coverageLabel(row)) {
-                      <small [class.urgent]="row.coverage === 'PARTIAL'">{{ coverageLabel(row) }}</small>
-                    }</td><td>{{ row.qty }}</td><td>{{ money(row.strike) }}</td>
-                    <td>{{ row.expiry || '—' }}@if (row.dte_remaining != null) {
-                      <small [class.urgent]="row.dte_remaining <= 7">{{ row.dte_remaining }} DTE</small>
-                    }</td>
-                    <td>{{ optionPrice(row.mark_price) }}<small>Retrieved {{ shortTs(row.mark_retrieved_at) }}</small></td>
-                    <td>{{ money(row.current_underlying_price) }}<small>{{ strikeDistanceLabel(row) }}</small>@if (row.price_as_of) {
-                    <small>Close · {{ row.price_as_of }}</small>
-                  }</td>
-                  <td>{{ pct($safeNavigationMigration(optionPositionRisk(row)?.vol_annual)) }}<small>{{ ivSourceLabel($safeNavigationMigration(optionPositionRisk(row)?.delta_source)) }} · {{ shortTs($safeNavigationMigration(optionPositionRisk(row)?.vol_as_of)) }}</small></td>
-                  <td>{{ num($safeNavigationMigration(optionPositionRisk(row)?.delta_shares), 1) }}</td>
-                  <td>{{ num($safeNavigationMigration(optionPositionRisk(row)?.computed_beta), 3) }}<small>Computed · {{ optionPositionRisk(row)?.computed_beta_as_of || '—' }}</small></td>
-                  <td>{{ num($safeNavigationMigration(optionPositionRisk(row)?.tasty_beta), 3) }}<small>Tastytrade · {{ shortTs($safeNavigationMigration(optionPositionRisk(row)?.tasty_beta_as_of)) }}</small></td>
-                  <td [class]="pnlClass($safeNavigationMigration(optionPositionRisk(row)?.computed_beta_weighted_delta_dollars))">{{ money($safeNavigationMigration(optionPositionRisk(row)?.computed_beta_weighted_delta_dollars)) }}@if (optionPositionRisk(row)?.computed_beta_fallback) {
-                    <small>Tasty fallback</small>
-                  }</td>
-                  <td [class]="pnlClass($safeNavigationMigration(optionPositionRisk(row)?.beta_weighted_delta_dollars))">{{ money($safeNavigationMigration(optionPositionRisk(row)?.beta_weighted_delta_dollars)) }}</td>
-                  <td [class.risk-unavailable]="optionPositionRisk(row)?.beta_weighted_delta_dollars == null">{{ riskStatus(optionPositionRisk(row)) }}@if (optionPositionRisk(row)?.short_gamma_warning) {
-                    <small class="urgent">Short-gamma warning</small>
-                  }</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      } @else {
-        <div class="empty">No open option legs.</div>
-      }
-    </section>
-    <!-- ── Portfolio Risk ──────────────────────────────────────────────── -->
-    @if (optionsData?.rows?.length) {
-      <section class="opt-panel">
-        <div class="opt-heading">
-          <div><h3>Portfolio Risk</h3><small>Approximate, point-in-time exposure—not broker margin. Cash limit is the retirement portfolio's total current value.</small></div>
-        </div>
-        <div class="risk-grid">
-          @for (entry of retirementAccountEntries(); track entry) {
-            <div class="risk-card">
-              <h4>{{ entry[0] }}</h4>
-              <dl class="risk-facts">
-                <dt>Cash limit <span class="help-dot" tabindex="0" role="img" aria-label="Cash limit explanation" matTooltip="The retirement portfolio's total current value, used as the capital base for normalized beta delta." matTooltipPosition="above">?</span></dt><dd>{{ money(entry[1].cash_limit) }} · {{ entry[1].cash_limit_status }}</dd>
-                <dt>Gross cash commitment <span class="help-dot" tabindex="0" role="img" aria-label="Gross cash commitment formula" matTooltip="Stock cash basis + sum of (short-put strike × 100 × contracts). The displayed percentage is total commitment ÷ cash limit." matTooltipPosition="above">?</span></dt><dd [class.negative]="entry[1].gross_cash_commitment.warn">{{ money(entry[1].gross_cash_commitment.total) }} · {{ pct(entry[1].gross_cash_commitment.ratio) }}</dd>
-                <dt>Risk completeness <span class="help-dot" tabindex="0" role="img" aria-label="Risk completeness formula" matTooltip="Included positions ÷ all open positions. Inclusion requires usable spot, IV, option delta, and fresh Tasty Beta inputs." matTooltipPosition="above">?</span></dt><dd>{{ entry[1].completeness }} ({{ entry[1].included_position_count }} included / {{ entry[1].excluded_position_count }} excluded)</dd>
-                <dt>SPY reference price <span class="help-dot" tabindex="0" role="img" aria-label="SPY reference price explanation" matTooltip="Latest available SPY closing price. It converts beta-delta dollars into SPY Delta Shares; it is not a portfolio-risk amount." matTooltipPosition="above">?</span></dt><dd>{{ money($safeNavigationMigration(optionsData?.risk?.spy_spot)) }}<small>As of {{ optionsData?.risk?.spy_as_of || '—' }}</small></dd>
-              </dl>
-              <table class="beta-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Metric</th>
-                    <th scope="col" class="num">Tasty</th>
-                    <th scope="col" class="num">Computed</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <th scope="row">SPY Delta Shares <span class="help-dot" tabindex="0" role="img" aria-label="SPY Delta Shares formula" matTooltip="SPY Beta-Delta Dollars ÷ SPY reference price, for each beta source. Current directional exposure as an equivalent number of SPY shares." matTooltipPosition="above">?</span></th>
-                    <td class="num">{{ num(entry[1].spy_equivalent_shares) }}</td>
-                    <td class="num">{{ num(entry[1].computed_spy_equivalent_shares) }}</td>
-                  </tr>
-                  <tr>
-                    <th scope="row">SPY Beta-Delta Dollars <span class="help-dot" tabindex="0" role="img" aria-label="SPY Beta-Delta Dollars formula" matTooltip="Sum of (delta shares × underlying price × beta) across included positions, using Tasty Beta or the smallFish computed beta. The computed side falls back to Tasty beta for symbols with too little price history." matTooltipPosition="above">?</span></th>
-                    <td class="num">{{ money(entry[1].beta_weighted_delta_dollars) }}</td>
-                    <td class="num">{{ money(entry[1].computed_beta_weighted_delta_dollars) }}</td>
-                  </tr>
-                  @if (entry[1].diagnostic_partial_beta_delta_dollars != null) {
-                    <tr>
-                      <th scope="row">Partial beta-delta diagnostic <span class="help-dot" tabindex="0" role="img" aria-label="Partial beta-delta formula" matTooltip="The beta-delta formula summed only over positions with complete inputs. It is diagnostic and is not promoted as the complete portfolio total." matTooltipPosition="above">?</span></th>
-                      <td class="num">{{ money(entry[1].diagnostic_partial_beta_delta_dollars) }}</td>
-                      <td class="num faint">—</td>
-                    </tr>
-                  }
-                  <tr>
-                    <th scope="row">Target Beta-Delta Minimum <span class="help-dot" tabindex="0" role="img" aria-label="Target Beta-Delta Minimum formula" matTooltip="Configured lower boundary for normalized beta delta. Dollar equivalent = cash limit × target minimum." matTooltipPosition="above">?</span></th>
-                    <td class="num">{{ pct(entry[1].band.band_min) }} · {{ money(targetBandDollars(entry[1], 'min')) }}</td>
-                    <td class="num">{{ pct(entry[1].computed_band.band_min) }} · {{ money(targetBandDollars(entry[1], 'min')) }}</td>
-                  </tr>
-                  <tr>
-                    <th scope="row">Target Beta-Delta Maximum <span class="help-dot" tabindex="0" role="img" aria-label="Target Beta-Delta Maximum formula" matTooltip="Configured upper boundary for normalized beta delta. Dollar equivalent = cash limit × target maximum." matTooltipPosition="above">?</span></th>
-                    <td class="num">{{ pct(entry[1].band.band_max) }} · {{ money(targetBandDollars(entry[1], 'max')) }}</td>
-                    <td class="num">{{ pct(entry[1].computed_band.band_max) }} · {{ money(targetBandDollars(entry[1], 'max')) }}</td>
-                  </tr>
-                  <tr>
-                    <th scope="row">Current Beta-Delta Value <span class="help-dot" tabindex="0" role="img" aria-label="Current Beta-Delta Value explanation" matTooltip="Current SPY Beta-Delta Dollars for each source, shown beside the target range for direct comparison." matTooltipPosition="above">?</span></th>
-                    <td class="num">{{ money(entry[1].beta_weighted_delta_dollars) }}</td>
-                    <td class="num">{{ money(entry[1].computed_beta_weighted_delta_dollars) }}</td>
-                  </tr>
-                  <tr class="normalized-row"
-                    [class.out-of-band]="entry[1].band.in_band === false || entry[1].computed_band.in_band === false">
-                    <th scope="row">Normalized beta delta <span class="help-dot" tabindex="0" role="img" aria-label="Normalized beta delta formula" matTooltip="Beta-delta dollars ÷ cash limit, compared with the target minimum and maximum." matTooltipPosition="above">?</span></th>
-                    <td class="num">
-                      {{ pct(entry[1].band.normalized_beta_delta) }}
-                      <span class="badge" [class]="'badge ' + bandBadgeClass(entry[1].band.in_band)">{{ entry[1].band.in_band == null ? 'Unavailable' : (entry[1].band.in_band ? 'In band' : 'Outside band') }}</span>
-                    </td>
-                    <td class="num">
-                      {{ pct(entry[1].computed_band.normalized_beta_delta) }}
-                      <span class="badge" [class]="'badge ' + bandBadgeClass(entry[1].computed_band.in_band)">{{ entry[1].computed_band.in_band == null ? 'Unavailable' : (entry[1].computed_band.in_band ? 'In band' : 'Outside band') }}</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              @if (entry[1].excluded_positions.length) {
-                <div class="excluded">{{ entry[1].excluded_positions.length }} position(s) have unavailable risk inputs.</div>
-              }
-            </div>
-          }
-        </div>
-        <p class="risk-caveat">{{ optionsData?.risk?.caveat }}</p>
-      </section>
-    }
+        <app-broker-risk-positions
+          [rows]="optionsData?.rows || []"
+          [metrics]="optionsData?.risk?.positions || []"
+          [asOf]="optionsData?.as_of || null"
+          brokerName="Fidelity"
+          [capability]="snaptrade"
+          emptyText="No open option positions in the retirement account."
+          syncLabel="Sync from Fidelity">
+        </app-broker-risk-positions>
   </div>
 }
 }

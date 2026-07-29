@@ -2,6 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { StockService } from '../api/stock.service';
 import { CapabilityService } from '../api/capability.service';
+import { BrokerageLedgerService } from '../api/brokerage-ledger.service';
+import { BrokerageHoldingsSnapshot } from '../model/brokerage-holdings';
 import { RetirementPortfolioData } from '../model/retirement';
 import { RetirementOptionsData } from '../model/retirement-options';
 import { RetirementPortfolioComponent } from './retirement-portfolio.component';
@@ -92,15 +94,23 @@ describe('RetirementPortfolioComponent G/L snapshots', () => {
     stockService.getRetirementOptions.and.returnValue(of({} as RetirementOptionsData));
     const capabilityService = jasmine.createSpyObj<CapabilityService>('CapabilityService', ['get']);
     capabilityService.get.and.returnValue(of(null));
+    const brokerageLedgerService = jasmine.createSpyObj<BrokerageLedgerService>(
+      'BrokerageLedgerService', ['getHoldings']
+    );
+    brokerageLedgerService.getHoldings.and.returnValue(
+      of(displayPortfolio as unknown as BrokerageHoldingsSnapshot)
+    );
 
     await TestBed.configureTestingModule({
       imports: [RetirementPortfolioComponent],
       providers: [
         { provide: StockService, useValue: stockService },
         { provide: CapabilityService, useValue: capabilityService },
+        { provide: BrokerageLedgerService, useValue: brokerageLedgerService },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(RetirementPortfolioComponent);
+    fixture.componentInstance.tab = 'holdings';
     fixture.detectChanges();
 
     const columns = Array.from(
@@ -108,19 +118,20 @@ describe('RetirementPortfolioComponent G/L snapshots', () => {
     ).map(element => element.textContent?.replace(/\s+/g, ' ').trim());
     expect(columns).toEqual([
       'G/L % as of Jul 27, 2026',
-      '-12.3%',
+      '−12.34%',
     ]);
 
     const headers = Array.from(
       fixture.nativeElement.querySelectorAll('.holdings-table th') as NodeListOf<HTMLElement>
     ).map(header => header.textContent?.replace(/[▲▼]/g, '').replace(/\s+/g, ' ').trim());
     expect(headers.slice(8, 13)).toEqual([
-      'Current', '% Port', 'G/L $', 'G/L %', 'G/L % as of Jul 27, 2026',
+      'Current', '% Portfolio', 'G/L $', 'G/L %', 'G/L % as of Jul 27, 2026',
     ]);
 
     const toolbarButtons = Array.from(
-      fixture.nativeElement.querySelectorAll('.filter-bar button') as NodeListOf<HTMLButtonElement>
+      fixture.nativeElement.querySelectorAll('.toolbar-actions button') as NodeListOf<HTMLButtonElement>
     ).map(button => button.textContent?.replace(/\s+/g, ' ').trim());
     expect(toolbarButtons).toEqual(['Snapshot G/L %', 'Copy Symbols']);
+    expect(fixture.nativeElement.querySelector('.charts-row')).toBeNull();
   });
 });
