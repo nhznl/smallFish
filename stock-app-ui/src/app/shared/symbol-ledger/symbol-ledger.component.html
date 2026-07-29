@@ -29,6 +29,10 @@
         <button type="button" class="btn" (click)="load()">Try again</button>
       </div>
     } @else if (data; as ledger) {
+      @if (statusMessage) {
+        <div class="banner banner-info ledger-status" role="status">{{ statusMessage }}</div>
+      }
+
       @if (ledger.availability.status !== 'AVAILABLE') {
         <div class="banner banner-warn" role="status">
           <strong>{{ ledger.availability.status === 'UNAVAILABLE' ? 'Nothing imported yet.' : 'Some data is missing.' }}</strong>
@@ -223,6 +227,29 @@
                           </div>
                         </div>
 
+                        <section class="archive-control" aria-label="Archive completed history">
+                          <div>
+                            <h4>Archive completed history</h4>
+                            <p>
+                              Sealing a completed period preserves imported events and creates
+                              a historical boundary; it does not delete or move broker activity.
+                            </p>
+                          </div>
+                          @if (symbol.reset_eligible) {
+                            <button type="button" class="btn btn-primary btn-sm"
+                              (click)="openArchiveConfirmation()">Archive completed history</button>
+                          } @else {
+                            <div class="archive-blocked" role="status">
+                              <strong>Not ready to archive</strong>
+                              <ul>
+                                @for (blocker of symbol.reset_blockers; track blocker) {
+                                  <li>{{ archiveBlocker(blocker) }}</li>
+                                }
+                              </ul>
+                            </div>
+                          }
+                        </section>
+
                         <h4 class="detail-subtitle">Positions and contracts</h4>
                         <div class="table-shell">
                           <table class="data-table component-table">
@@ -272,6 +299,125 @@
                             </tbody>
                           </table>
                         </div>
+
+                        <section class="history-section" aria-label="Symbol event history">
+                          <div class="history-heading">
+                            <div>
+                              <h4>Imported event history</h4>
+                              <p>Read-only broker evidence, newest first.</p>
+                            </div>
+                            <div class="tab-bar history-tabs" role="tablist" aria-label="Event history period">
+                              <button type="button" class="tab" role="tab"
+                                [class.active]="eventHistory?.period === 'current'"
+                                [attr.aria-selected]="eventHistory?.period === 'current'"
+                                (click)="selectEventPeriod('current')">Current</button>
+                              <button type="button" class="tab" role="tab"
+                                [class.active]="eventHistory?.period === 'all'"
+                                [attr.aria-selected]="eventHistory?.period === 'all'"
+                                (click)="selectEventPeriod('all')">All</button>
+                            </div>
+                          </div>
+
+                          @if (symbol.archives.length) {
+                            <div class="archive-list" aria-label="Archived periods">
+                              @for (archive of symbol.archives; track archive.archive_id) {
+                                <button type="button" class="archive-summary"
+                                  [class.selected]="selectedArchiveId === archive.archive_id"
+                                  (click)="selectEventPeriod(archive.archive_id)">
+                                  <span>
+                                    <strong>Archived period</strong>
+                                    <small>{{ archive.event_count }} events · ended {{ timestamp(archive.period_ended_at) }}</small>
+                                  </span>
+                                  <span [class]="pnlClass(archive.realized_pnl)">{{ money(archive.realized_pnl, true) }}</span>
+                                  <span [class]="archive.verification_status === 'CHANGED' ? 'badge badge-warn' : 'badge badge-neutral'">
+                                    {{ archive.verification_status === 'CHANGED' ? 'Changed' : 'Verified' }}
+                                  </span>
+                                </button>
+                                @if (archive.warnings.length) {
+                                  <div class="archive-warning">
+                                    @for (warning of archive.warnings; track warning) {
+                                      <span class="banner banner-warn inline-warning">{{ warning }}</span>
+                                    }
+                                  </div>
+                                }
+                              }
+                            </div>
+                          }
+
+                          @if (selectedArchive(); as archive) {
+                            <div class="selected-period" role="status">
+                              <strong>Archived period selected</strong>
+                              <span>{{ archive.event_count }} events · realized P/L {{ money(archive.realized_pnl, true) }}</span>
+                            </div>
+                          }
+
+                          @if (eventHistoryLoading) {
+                            <div class="skeleton history-skeleton" aria-busy="true" aria-label="Loading event history"></div>
+                          } @else if (eventHistoryError) {
+                            <div class="banner banner-neg" role="alert">
+                              <span>{{ eventHistoryError }}</span>
+                              <button type="button" class="btn btn-sm"
+                                (click)="selectEventPeriod(eventHistory?.period || 'current')">Try again</button>
+                            </div>
+                          } @else if (eventHistory; as history) {
+                            @if (history.items.length) {
+                              <div class="table-shell">
+                                <table class="data-table event-table">
+                                  <thead>
+                                    <tr>
+                                      <th scope="col">Executed</th>
+                                      <th scope="col">Action</th>
+                                      <th scope="col">Account</th>
+                                      <th scope="col">Type</th>
+                                      <th scope="col">Contract</th>
+                                      <th scope="col" class="num">Qty Δ</th>
+                                      <th scope="col" class="num">Net cash</th>
+                                      <th scope="col" class="num">Fees</th>
+                                      <th scope="col">Source</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    @for (event of history.items; track event.provider_event_id) {
+                                      <tr>
+                                        <td>{{ timestamp(event.executed_at) }}</td>
+                                        <td>
+                                          {{ event.action }}
+                                          @if (event.is_manual_reconciliation) {
+                                            <small class="badge badge-info">Manual reconciliation</small>
+                                          }
+                                        </td>
+                                        <td>{{ event.account }}</td>
+                                        <td>{{ eventLabel(event) }}</td>
+                                        <td>{{ eventContract(event) }}</td>
+                                        <td class="num">{{ number(event.quantity_delta) }}</td>
+                                        <td [class]="'num ' + pnlClass(event.net_cash_flow)">{{ money(event.net_cash_flow, true) }}</td>
+                                        <td [class]="'num ' + pnlClass(event.fees)">{{ money(event.fees, true) }}</td>
+                                        <td>
+                                          {{ event.source || '—' }}
+                                          @if (event.missing.length) {
+                                            <small class="urgent">Missing: {{ event.missing.join(', ') }}</small>
+                                          }
+                                        </td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              </div>
+                              @if (history.has_more) {
+                                <button type="button" class="btn btn-sm load-more"
+                                  [disabled]="eventHistoryLoadingMore" [attr.aria-busy]="eventHistoryLoadingMore"
+                                  (click)="loadMoreEvents()">
+                                  {{ eventHistoryLoadingMore ? 'Loading…' : 'Load more events' }}
+                                </button>
+                              }
+                            } @else {
+                              <div class="empty-state history-empty">
+                                <h5>No events in this period</h5>
+                                <p>Imported events remain read-only; there is simply no activity in the selected period.</p>
+                              </div>
+                            }
+                          }
+                        </section>
                         <p class="caveat">
                           Imported broker events are read-only. Values are smallFish
                           cash-flow P/L, not brokerage tax-lot or taxable realized P/L.
@@ -306,3 +452,32 @@
     }
   </div>
 </section>
+
+@if (archiveConfirmation; as archive) {
+  <app-modal title="Archive completed history" width="min(500px, 94vw)"
+    (closed)="closeArchiveConfirmation()">
+    <p class="confirm-text">
+      Archive the completed history for <strong>{{ archive.symbol }}</strong>? This preserves
+      every imported event and marks the current period as a historical boundary.
+    </p>
+    <dl class="archive-confirmation">
+      <div><dt>Events</dt><dd>{{ archive.current_period.event_count }}</dd></div>
+      <div><dt>Period</dt><dd>{{ timestamp(archive.current_period.started_at) }} to {{ timestamp(archive.current_period.last_event_at) }}</dd></div>
+      <div><dt>Realized P/L</dt><dd [class]="pnlClass(archive.current_period.realized_pnl)">{{ money(archive.current_period.realized_pnl, true) }}</dd></div>
+    </dl>
+    @if (archiveMessage) {
+      <div class="banner banner-warn" role="alert">{{ archiveMessage }}</div>
+    }
+    <ng-container modalActions>
+      <button type="button" class="btn" [disabled]="archiveSaving" (click)="closeArchiveConfirmation()">Cancel</button>
+      @if (archiveConflict) {
+        <button type="button" class="btn btn-primary" (click)="refreshAfterArchiveConflict()">Refresh ledger</button>
+      } @else {
+        <button type="button" class="btn btn-primary" [disabled]="archiveSaving"
+          [attr.aria-busy]="archiveSaving" (click)="archiveCurrentPeriod()">
+          {{ archiveSaving ? 'Archiving…' : archiveRetryBody ? 'Retry archive' : 'Archive completed history' }}
+        </button>
+      }
+    </ng-container>
+  </app-modal>
+}

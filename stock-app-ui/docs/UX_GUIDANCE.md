@@ -250,6 +250,13 @@ other textual state.
   basis. Calculate that basis from equity cost less option P/L only; do not
   include equity P/L. A `Basis unavailable` summary counts only genuinely
   unavailable calculations, not the normal indicative state of live marks.
+- Symbol Ledger history is immutable broker evidence. Default its paginated
+  history to the current period, allow an all-history view and an archived
+  period on demand, and surface a changed-archive warning beside the affected
+  summary. Offer Archive completed history only when the API marks the period
+  eligible; the confirmation must name the symbol, event count, period, and
+  realized P/L. A stale-period conflict refreshes facts, while an uncertain
+  retry reuses its request identity so it cannot create a second archive.
 - Retain warnings for breaches, near-strike positions, missing marks, stale
   data, and incomplete transaction history.
 - Editing should be deliberate. Prefer readable ledger rows with focused modal

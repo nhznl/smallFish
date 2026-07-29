@@ -3,7 +3,9 @@ import { of, throwError } from 'rxjs';
 
 import { BrokerageService } from '../../api/brokerage.service';
 import {
+  ArchiveCreatedResponse,
   BrokerageId,
+  LedgerEventsResponse,
   SymbolLedgerDetailResponse,
   SymbolLedgerListResponse,
   SymbolLedgerSummary,
@@ -109,10 +111,61 @@ function detailResponse(
   };
 }
 
+function eventsResponse(
+  brokerage = BROKERAGES[0],
+  overrides: Partial<LedgerEventsResponse> = {}
+): LedgerEventsResponse {
+  return {
+    schema_name: 'smallfish.symbol-ledger-events', schema_version: 1,
+    brokerage: {
+      id: brokerage.id, label: brokerage.label,
+      institution: brokerage.institution, portfolio_role: brokerage.role,
+    },
+    symbol: 'DEMO', period: 'current', total_event_count: 1,
+    items: [{
+      provider_event_id: 'event-1', account_id: 'main', account: 'Main', symbol: 'DEMO',
+      instrument: 'OPTION', contract_key: 'DEMO 260821P00050000', option_type: 'PUT',
+      strike: 50, expiry: '2026-08-21', action: 'SELL_TO_OPEN', quantity_delta: -1,
+      net_cash_flow: 600, fees: -1, executed_at: '2026-07-28T16:00:00Z',
+      imported_at: '2026-07-28T16:01:00Z', source: brokerage.institution,
+      is_manual_reconciliation: false, missing: [],
+    }],
+    next_cursor: null, has_more: false,
+    ...overrides,
+  };
+}
+
+function archiveCreatedResponse(
+  brokerage = BROKERAGES[0]
+): ArchiveCreatedResponse {
+  const detail = detailResponse(brokerage).symbol;
+  return {
+    schema_name: 'smallfish.symbol-ledger-archive-created', schema_version: 1,
+    archive: {
+      archive_id: 'archive-1', symbol: 'DEMO', period_started_at: '2026-01-15T15:30:00Z',
+      period_ended_at: '2026-07-28T16:00:00Z', event_count: 6, realized_pnl: 1425,
+      pnl_completeness: 'COMPLETE', verification_status: 'VERIFIED',
+      created_at: '2026-07-28T16:01:00Z', note: '', warnings: [],
+    },
+    symbol: {
+      ...detail, state: 'ARCHIVED', reset_eligible: false,
+      reset_blockers: ['PERIOD_EMPTY'], archived_period_count: 1,
+      archives: [{
+        archive_id: 'archive-1', symbol: 'DEMO', period_started_at: '2026-01-15T15:30:00Z',
+        period_ended_at: '2026-07-28T16:00:00Z', event_count: 6, realized_pnl: 1425,
+        pnl_completeness: 'COMPLETE', verification_status: 'VERIFIED',
+        created_at: '2026-07-28T16:01:00Z', note: '', warnings: [],
+      }],
+    },
+  };
+}
+
 function spyApi() {
-  return jasmine.createSpyObj<BrokerageService>('BrokerageService', [
-    'listSymbols', 'getSymbol', 'updateSymbolNotes',
+  const api = jasmine.createSpyObj<BrokerageService>('BrokerageService', [
+    'listSymbols', 'getSymbol', 'updateSymbolNotes', 'getSymbolEvents', 'createArchive',
   ]);
+  api.getSymbolEvents.and.returnValue(of(eventsResponse()));
+  return api;
 }
 
 async function mount(api: jasmine.SpyObj<BrokerageService>, brokerageId: BrokerageId) {
@@ -290,6 +343,145 @@ describe('SymbolLedgerComponent', () => {
     expect(text(fixture)).toContain('Note saved.');
     // The list row picks up the saved note without a second round trip.
     expect(component.data!.items[0].notes).toBe('watch assignment history');
+  });
+
+  it('loads more immutable history with the API cursor', async () => {
+    const api = spyApi();
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0])));
+    api.getSymbol.and.returnValue(of(detailResponse(BROKERAGES[0])));
+    api.getSymbolEvents.and.returnValues(
+      of(eventsResponse(BROKERAGES[0], { next_cursor: 'page-2', has_more: true })),
+      of(eventsResponse(BROKERAGES[0], {
+        items: [{ ...eventsResponse().items[0], provider_event_id: 'event-2' }],
+        next_cursor: null, has_more: false,
+      })),
+    );
+    const fixture = await mount(api, 'tastytrade');
+
+    (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(api.getSymbolEvents).toHaveBeenCalledWith(
+      'tastytrade', 'DEMO', { period: 'current', cursor: undefined, limit: 25 }
+    );
+
+    (fixture.nativeElement.querySelector('.load-more') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(api.getSymbolEvents).toHaveBeenCalledWith(
+      'tastytrade', 'DEMO', { period: 'current', cursor: 'page-2', limit: 25 }
+    );
+    expect(fixture.componentInstance.eventHistory?.items.length).toBe(2);
+  });
+
+  it('shows changed archive warnings and loads their history on demand', async () => {
+    const api = spyApi();
+    const detail = detailResponse(BROKERAGES[0]);
+    detail.symbol.archives = [{
+      archive_id: 'archive-changed', symbol: 'DEMO', period_started_at: '2026-01-15T15:30:00Z',
+      period_ended_at: '2026-07-28T16:00:00Z', event_count: 6, realized_pnl: 1425,
+      pnl_completeness: 'COMPLETE', verification_status: 'CHANGED',
+      created_at: '2026-07-28T16:01:00Z', note: '',
+      warnings: ['Broker activity in this archived period has changed since it was created.'],
+    }];
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0])));
+    api.getSymbol.and.returnValue(of(detail));
+    api.getSymbolEvents.and.returnValues(
+      of(eventsResponse()),
+      of(eventsResponse(BROKERAGES[0], { period: 'archive-changed' })),
+    );
+    const fixture = await mount(api, 'tastytrade');
+
+    (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Changed');
+    expect(text(fixture)).toContain('Broker activity in this archived period has changed');
+
+    (fixture.nativeElement.querySelector('.archive-summary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(api.getSymbolEvents).toHaveBeenCalledWith(
+      'tastytrade', 'DEMO', { period: 'archive-changed', cursor: undefined, limit: 25 }
+    );
+    expect(text(fixture)).toContain('Archived period selected');
+  });
+
+  it('confirms and archives only a reset-eligible completed period', async () => {
+    const api = spyApi();
+    const detail = detailResponse(BROKERAGES[0]);
+    detail.symbol.reset_eligible = true;
+    detail.symbol.reset_blockers = [];
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0])));
+    api.getSymbol.and.returnValue(of(detail));
+    api.createArchive.and.returnValue(of(archiveCreatedResponse()));
+    const fixture = await mount(api, 'tastytrade');
+
+    (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const archive = fixture.nativeElement.querySelector('.archive-control .btn-primary') as HTMLButtonElement;
+    expect(archive.textContent).toContain('Archive completed history');
+    archive.click();
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Events');
+    expect(text(fixture)).toContain('Realized P/L');
+
+    (fixture.nativeElement.querySelector('app-modal .btn-primary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const body = api.createArchive.calls.mostRecent().args[2];
+    expect(api.createArchive).toHaveBeenCalledWith('tastytrade', 'DEMO', body);
+    expect(body.expected_period_version).toBe('v1:abc');
+    expect(body.request_id).toBeTruthy();
+    expect(text(fixture)).toContain('DEMO completed history archived.');
+  });
+
+  it('offers a refresh when the archive period changed', async () => {
+    const api = spyApi();
+    const detail = detailResponse(BROKERAGES[0]);
+    detail.symbol.reset_eligible = true;
+    detail.symbol.reset_blockers = [];
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0])));
+    api.getSymbol.and.returnValue(of(detail));
+    api.createArchive.and.returnValue(throwError(() => ({
+      error: { detail: { code: 'PERIOD_CHANGED', message: 'This period changed since you loaded it. Refresh and try again.' } },
+    })));
+    const fixture = await mount(api, 'tastytrade');
+
+    (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.archive-control .btn-primary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('app-modal .btn-primary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Refresh ledger');
+
+    (fixture.nativeElement.querySelector('app-modal .btn-primary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(api.getSymbol.calls.count()).toBe(2);
+  });
+
+  it('retries an uncertain archive request with the original request identity', async () => {
+    const api = spyApi();
+    const detail = detailResponse(BROKERAGES[0]);
+    detail.symbol.reset_eligible = true;
+    detail.symbol.reset_blockers = [];
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0])));
+    api.getSymbol.and.returnValue(of(detail));
+    api.createArchive.and.returnValues(
+      throwError(() => ({ error: { detail: { code: 'NETWORK', message: 'Connection interrupted.' } } })),
+      of(archiveCreatedResponse()),
+    );
+    const fixture = await mount(api, 'tastytrade');
+
+    (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.archive-control .btn-primary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('app-modal .btn-primary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(text(fixture)).toContain('Retry archive');
+    const firstBody = api.createArchive.calls.mostRecent().args[2];
+
+    (fixture.nativeElement.querySelector('app-modal .btn-primary') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(api.createArchive.calls.mostRecent().args[2]).toEqual(firstBody);
+    expect(text(fixture)).toContain('DEMO completed history archived.');
   });
 
   it('shows a skeleton while loading', async () => {

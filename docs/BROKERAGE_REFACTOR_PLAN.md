@@ -1,6 +1,6 @@
 # Brokerage API and ledger refactor plan
 
-**Status:** In progress. Phases 1-5 are implemented and committed; the backend
+**Status:** In progress. Phases 1-6 are implemented and committed; the backend
 is complete and both brokerage pages run on it. This document is the source of
 truth for implementation, phase status, decisions, verification evidence, and
 the next action.
@@ -21,15 +21,16 @@ says where the work actually is.
 | `b671845` | 5 — shared Symbol Ledger UI on both brokerage pages |
 | `3917d77` | 5 fix — spent option leg reading as unreconciled |
 | `754bb09` | 5 fix — reconcile share lots rather than declaring closed equity unknowable |
+| `05f09b3` | 5 fix — retain adjusted basis after options close |
 
 **Current totals:** backend `stock-app/tests` 460 passing; Angular
-`npm run test:ci` 57 passing; `npm run build` clean. All 14 settled
+`npm run test:ci` 62 passing; `npm run build` clean. All 14 settled
 `/api/brokerages` routes are served and all 21 frozen legacy brokerage routes
 still answer. Worktree clean and all work committed on `main`; the latest Phase
 5 corrections are not pushed.
 
-**Next action:** Phase 6, once the owner's Phase 5 checkpoint is explicitly
-approved. See the dashboard row for what remains open.
+**Next action:** Phase 7 consumer audit and owner decision on legacy public
+route compatibility. See the dashboard row for what remains open.
 
 **Do not restart from Phase 1.** The kickoff prompt at the foot of this document
 has been rewritten for resumption; use that, not the original start-from-scratch
@@ -1015,8 +1016,8 @@ why they differ. Current totals are in "Resume here" at the top.
 | 2 | Brokerage registry, adapters, and canonical facts | COMPLETE | Phase 3 may begin | `stock-app/app/brokerages/` (contracts, registry, SnapTrade + Tastytrade adapters); shared conformance suite `test_brokerage_adapters.py` (32 tests) parametrized over the registry; full backend suite 360 passed |
 | 3 | Common projections and additive read APIs | COMPLETE | Phase 4 may begin | `app/brokerages/projections/` + `service.py` + `routers/brokerages.py`; `GET /api/brokerages`, `/holdings`, `/options`, `/option-adjusted-basis`; `test_brokerage_api.py` (35 tests) incl. parity against `/brokerage-ledgers/*/combined`; full backend suite 395 passed |
 | 4 | Symbol Ledger lifecycle, archives, and mutation APIs | COMPLETE | Phase 5 may begin | `projections/symbol_ledger.py`, `projections/events.py`, `store.py`, `sync.py`, `migration.py`; all 14 settled routes now served and all 21 frozen legacy routes still served; `test_symbol_ledger_api.py` (56 tests); full backend suite 452 passed |
-| 5 | First shared Trading/Retirement UI slice | COMPLETE — owner checkpoint partially confirmed | **Owner: confirm navigation, Active/Archived filtering, symbol detail and notes on both `/options` and `/retirement`.** Symbol/P-L behaviour already confirmed after `754bb09`. Phase 6 does not start until the rest is approved | `model/brokerage.ts`, `api/brokerage.service.ts`, `shared/symbol-ledger/` mounted on both pages; `npm run build` clean, `npm run test:ci` 55 passed; two owner-reported defects fixed and regression-tested (`3917d77`, `754bb09`) |
-| 6 | History/reset UX and shared UI consolidation | BLOCKED | Blocked until the owner approves the remaining Phase 5 checkpoint items. First task: paginated event history, then archive/reset UX | - |
+| 5 | First shared Trading/Retirement UI slice | COMPLETE — owner approved | Owner approved the Phase 5 checkpoint on 2026-07-29 and authorized Phase 6 | `model/brokerage.ts`, `api/brokerage.service.ts`, `shared/symbol-ledger/` mounted on both pages; later corrections preserve option-only scope and option-adjusted-basis semantics |
+| 6 | History/reset UX and shared UI consolidation | COMPLETE — automated checks passed; browser verification pending | Phase 7 requires a repository-wide consumer audit and owner decision before legacy public routes or artifacts change | Shared `SymbolLedgerComponent` implements current/all/archive history, compact archive summaries, on-demand archive detail, reset eligibility/confirmation, conflict refresh, and idempotent retry on both pages; focused tests 21 passed, full Angular suite 62 passed, build clean |
 | 7 | Compatibility cutover, cleanup, and current-behavior docs | NOT STARTED | Depends on Phase 6 and consumer audit | - |
 | 8 | Full regression, browser verification, and handoff closeout | NOT STARTED | Depends on Phase 7 | - |
 
@@ -1460,6 +1461,8 @@ Append entries; never rewrite older evidence to make progress look cleaner.
 | 2026-07-29 | 5 (fix 4) | COMPLETE | Owner requested a denser Option-Adjusted Basis table on both ledgers. Removed the redundant `Equity P/L / Share` display column, reduced the Share Position group and expanded-detail spans consistently, and shortened `Option Adjusted Basis / Share` to `Adjusted Basis / Share` without changing its formula or response field. Component coverage asserts the removed and retained headers plus the 12-column detail span. `npm run build` clean; `npm run test:ci` 57 passed. Live verification confirmed the corrected shared headers on both Trading and Retirement | Owner checkpoint still open; approve Phase 5 before Phase 6 |
 | 2026-07-29 | 5 (fix 5) | COMPLETE | Owner clarified that Option-Adjusted Basis is exclusively a current-position view: a symbol must have both open long shares and an open option position. The shared component now enforces that from account-aware components, removing rows with only historical/flat option or equity components. Removed the redundant State filter, Open row badge, and Open matched symbols card. Renamed the retained safety card to `Basis unavailable` and corrected it to count only adjusted-basis `UNAVAILABLE`; normal live `INDICATIVE` values no longer inflate the count. Component coverage distinguishes open/open from open/flat combinations and proves one unavailable calculation among two displayed open matched rows. `npm run build` clean; `npm run test:ci` 57 passed. Live verification: Trading currently has no open/open matches and reports zero unavailable; Retirement has six open/open matches and reports all six unavailable under its existing lifecycle limitation; both routes show three cards with no State selector or Open badge | Owner checkpoint still open; approve Phase 5 before Phase 6 |
 | 2026-07-29 | 5 (fix 6) | COMPLETE | Corrected the fix 5 scope after live Trading review showed that BTU disappeared: its shares are open and its completed option cycle still changes the adjusted basis, but it has no currently open option contract. Option-Adjusted Basis now requires open long shares plus option history, retaining completed option cycles until the related shares close while still excluding equity-only holdings and symbols without open shares. Updated the shared explanation, empty state, durable UX guidance, and component coverage for an open-equity/flat-option row. Focused component tests 2 passed; `npm run build` clean; `npm run test:ci` 57 passed; docs, secrets, and `git diff --check` clean. Live verification restored BTU in Trading and confirmed the shared Retirement view still loads with the corrected explanation | Owner checkpoint still open; approve Phase 5 before Phase 6 |
+| 2026-07-29 | 5 checkpoint | COMPLETE | Owner approved moving to the next phase after reviewing the shared ledger corrections | Phase 6 authorized |
+| 2026-07-29 | 6 | COMPLETE — automated checks passed; browser verification pending | Added the complete history/archive workflow to the brokerage-agnostic shared Symbol Ledger used by both Trading and Retirement. Detail loads immutable current-period history by default, supports All history and any archived period on demand, and paginates with the API's opaque cursor. Compact archive summaries show realized P/L, verification state, and late-event changed warnings. Archive completed history appears only when the API marks the loaded period eligible; a shared confirmation modal names the symbol, event count, period, and realized P/L. A `PERIOD_CHANGED` conflict prompts a fact refresh, while any uncertain retry reuses the same request ID so the backend returns the original archive rather than creating another. No imported event is editable, moved, or deleted. Component coverage adds pagination, archive detail, changed archive warnings, reset confirmation/success, conflict refresh, and idempotent retry. Focused suite 21 passed; `npm run build` clean; full `npm run test:ci` 62 passed | Phase 7 requires consumer audit and owner compatibility decision; Phase 8 will perform browser verification |
 
 ## Opus new-session kickoff prompt
 
