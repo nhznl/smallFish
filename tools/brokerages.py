@@ -432,26 +432,10 @@ def _verify_tastytrade(root: Path, settings: dict[str, str]) -> int:
     # different OAuth applications. Constructing a Session alone proves nothing
     # — the SDK authenticates lazily.
     script = (
-        "import asyncio, json\n"
-        "from utilities.options import tastytrade_quotes as q\n"
-        "from tastytrade import Session\n"
+        "import json\n"
+        "from services.tastytrade import io\n"
         "\n"
-        "async def main():\n"
-        "    creds = q.load_credentials()\n"
-        "    session = Session(creds.client_secret, creds.refresh_token,\n"
-        "                      is_test=(creds.environment == 'sandbox'))\n"
-        "    try:\n"
-        "        await session.refresh()\n"
-        "        return {'ok': True, 'accounts': None, 'env': creds.environment}\n"
-        "    except Exception as exc:\n"
-        "        return {'ok': False, 'error': type(exc).__name__, 'env': creds.environment}\n"
-        "    finally:\n"
-        "        try:\n"
-        "            await session._client.aclose()\n"
-        "        except Exception:\n"
-        "            pass\n"
-        "\n"
-        "print(json.dumps(asyncio.run(main())))\n"
+        "print(json.dumps(io.verify_session()))\n"
     )
     result = subprocess.run([str(python), "-c", script], cwd=root,
                             capture_output=True, text=True,

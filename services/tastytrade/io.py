@@ -69,6 +69,12 @@ class GreeksResult:
     error: str | None = None
 
 
+@dataclass(frozen=True)
+class QuotesResult:
+    events: dict[str, Any]
+    error: str | None = None
+
+
 SessionFactory = Callable[[TastytradeCredentials], Any]
 AccountGetter = Callable[[Any], Any]
 AccountSelector = Callable[[tuple[Any, ...]], Any]
@@ -255,3 +261,68 @@ def fetch_greeks(
         return GreeksResult(asyncio.run(_with_session(creds, read, session_factory)))
     except Exception as exc:  # Optional Greeks must remain best effort.
         return GreeksResult(latest, _safe_optional_error("Greek data", exc))
+
+
+def fetch_quotes(
+    streamer_symbols: list[str],
+    timeout_seconds: float,
+    *,
+    credentials: TastytradeCredentials | None = None,
+    session_factory: SessionFactory | None = None,
+    streamer_factory: StreamerFactory | None = None,
+    event_type: Any = None,
+) -> QuotesResult:
+    """Collect latest raw DXLink quote events for provider streamer symbols."""
+    symbols = sorted({symbol for symbol in streamer_symbols if symbol})
+    if not symbols:
+        return QuotesResult({})
+    creds = credentials or load_credentials()
+    latest: dict[str, Any] = {}
+
+    async def read(session: Any) -> dict[str, Any]:
+        nonlocal event_type
+        if event_type is None:
+            from tastytrade.dxfeed import Quote
+            event_type = Quote
+        if streamer_factory is None:
+            from tastytrade import DXLinkStreamer
+            streamer = DXLinkStreamer(session)
+        else:
+            streamer = streamer_factory(session)
+        async with streamer:
+            await streamer.subscribe(event_type, symbols)
+            loop, deadline = asyncio.get_running_loop(), asyncio.get_running_loop().time() + timeout_seconds
+            while set(symbols) - latest.keys():
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    break
+                try:
+                    event = await asyncio.wait_for(streamer.get_event(event_type), remaining)
+                except (asyncio.TimeoutError, TimeoutError):
+                    break
+                symbol = str(_event_value(event, "event_symbol") or "")
+                if symbol in symbols:
+                    latest[symbol] = event
+        return latest
+
+    try:
+        return QuotesResult(asyncio.run(_with_session(creds, read, session_factory)))
+    except Exception as exc:
+        return QuotesResult(latest, _safe_optional_error("quote data", exc))
+
+
+def verify_session(
+    *, credentials: TastytradeCredentials | None = None,
+    session_factory: SessionFactory | None = None,
+) -> dict[str, Any]:
+    """Refresh a session and return only safe verification status."""
+    creds = credentials or load_credentials()
+
+    async def refresh(session: Any) -> None:
+        await session.refresh()
+
+    try:
+        asyncio.run(_with_session(creds, refresh, session_factory))
+        return {"ok": True, "env": creds.environment}
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__, "env": creds.environment}

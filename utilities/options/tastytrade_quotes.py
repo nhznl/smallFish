@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from services.tastytrade import io as tastytrade_io
+
 SOURCE_TASTYTRADE_DXLINK = "TASTYTRADE_DXLINK"
 
 _OCC_SYMBOL = re.compile(
@@ -25,11 +27,7 @@ _OCC_SYMBOL = re.compile(
 )
 
 
-@dataclass(frozen=True)
-class TastytradeCredentials:
-    client_secret: str
-    refresh_token: str
-    environment: str
+TastytradeCredentials = tastytrade_io.TastytradeCredentials
 
 
 @dataclass
@@ -68,17 +66,7 @@ class QuoteBatch:
 
 
 def load_credentials() -> TastytradeCredentials:
-    secret = os.environ.get("TT_CLIENT_SECRET", "").strip()
-    token = os.environ.get("TT_REFRESH_TOKEN", "").strip()
-    if not secret or not token:
-        raise ValueError(
-            "Tastytrade credentials are not configured; set "
-            "TT_CLIENT_SECRET/TT_REFRESH_TOKEN in app.env"
-        )
-    environment = os.environ.get("TT_ENV", "").strip().lower() or "sandbox"
-    if environment not in {"live", "sandbox"}:
-        raise ValueError("TT_ENV must be live or sandbox")
-    return TastytradeCredentials(secret, token, environment)
+    return tastytrade_io.load_credentials()
 
 
 def streamer_symbol(contract_symbol: str) -> str:
@@ -152,49 +140,11 @@ def normalize_quote(event: Any, contract_symbol: str) -> dict[str, Any]:
 
 async def _fetch_batch(session: Any, symbols: dict[str, str], *,
                        timeout_seconds: float) -> tuple[dict[str, dict[str, Any]], str | None]:
-    from tastytrade import DXLinkStreamer
-    from tastytrade.dxfeed import Quote
-
-    latest: dict[str, Any] = {}
-    try:
-        async with DXLinkStreamer(session) as streamer:
-            await streamer.subscribe(Quote, sorted(symbols))
-            loop = asyncio.get_running_loop()
-            deadline = loop.time() + timeout_seconds
-            while symbols.keys() - latest.keys():
-                remaining = deadline - loop.time()
-                if remaining <= 0:
-                    break
-                try:
-                    event = await asyncio.wait_for(
-                        streamer.get_event(Quote), remaining
-                    )
-                except TimeoutError:
-                    break
-                event_symbol = str(getattr(event, "event_symbol", ""))
-                if event_symbol not in symbols:
-                    continue
-                prior = latest.get(event_symbol)
-                event_order = max(
-                    int(getattr(event, "bid_time", 0) or 0),
-                    int(getattr(event, "ask_time", 0) or 0),
-                    int(getattr(event, "event_time", 0) or 0),
-                )
-                prior_order = max(
-                    int(getattr(prior, "bid_time", 0) or 0),
-                    int(getattr(prior, "ask_time", 0) or 0),
-                    int(getattr(prior, "event_time", 0) or 0),
-                ) if prior is not None else -1
-                if event_order >= prior_order:
-                    latest[event_symbol] = event
-    except Exception as exc:  # noqa: BLE001 - partial batches remain useful
-        error = _safe_error(exc)
-    else:
-        error = None
+    result = tastytrade_io.fetch_quotes(list(symbols), timeout_seconds)
     return {
         symbols[event_symbol]: normalize_quote(event, symbols[event_symbol])
-        for event_symbol, event in latest.items()
-    }, error
+        for event_symbol, event in result.events.items()
+    }, result.error
 
 
 async def fetch_quotes_async(contract_symbols: list[str], *,
@@ -211,15 +161,8 @@ async def fetch_quotes_async(contract_symbols: list[str], *,
         batch.retrieved_at = datetime.now(timezone.utc).isoformat()
         return batch
 
-    creds: TastytradeCredentials | None = None
     try:
         creds = credentials or load_credentials()
-        from tastytrade import Session
-        session = Session(
-            creds.client_secret,
-            refresh_token=creds.refresh_token,
-            is_test=creds.environment != "live",
-        )
     except Exception as exc:  # noqa: BLE001 - surfaced as provider metadata
         batch.errors.append(_safe_error(exc))
         batch.retrieved_at = datetime.now(timezone.utc).isoformat()
@@ -242,7 +185,7 @@ async def fetch_quotes_async(contract_symbols: list[str], *,
             continue
         batch.batches += 1
         quotes, error = await _fetch_batch(
-            session, mapping, timeout_seconds=timeout_seconds,
+            None, mapping, timeout_seconds=timeout_seconds,
         )
         batch.quotes.update(quotes)
         if error:

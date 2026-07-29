@@ -1929,8 +1929,8 @@ def _runtime_metadata() -> dict:
     except Exception:  # noqa: BLE001 - the fetcher gives the actionable error
         yfinance_version = None
     try:
-        import tastytrade
-        tastytrade_version = tastytrade.__version__
+        from importlib.metadata import version
+        tastytrade_version = version("tastytrade")
     except Exception:  # noqa: BLE001 - provider failure is recorded separately
         tastytrade_version = None
     return {

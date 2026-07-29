@@ -382,15 +382,15 @@ def test_the_tastytrade_probe_calls_functions_that_exist():
         if isinstance(node, ast.Assign)
         and isinstance(node.value, ast.Constant)
         and isinstance(node.value.value, str)
-        and "tastytrade_quotes" in node.value.value
+        and "services.tastytrade" in node.value.value
     )
 
-    module = importlib.import_module("utilities.options.tastytrade_quotes")
+    module = importlib.import_module("services.tastytrade.io")
     for name in {n.attr for n in ast.walk(ast.parse(probe))
                  if isinstance(n, ast.Attribute)
-                 and isinstance(n.value, ast.Name) and n.value.id == "q"}:
+                 and isinstance(n.value, ast.Name) and n.value.id == "io"}:
         assert hasattr(module, name), \
-            f"the verify probe calls tastytrade_quotes.{name}(), which does not exist"
+            f"the verify probe calls services.tastytrade.io.{name}(), which does not exist"
 
 
 def test_verification_failure_uses_stable_remediation_not_provider_message():
@@ -411,3 +411,33 @@ def test_verification_failure_uses_stable_remediation_not_provider_message():
     assert "TastytradeError" in output
     assert "./setup-brokerages.sh setup" in output
     assert "live" in output
+
+
+def test_provider_sdk_imports_are_confined_to_services_and_tastytrade_pins_match():
+    import ast
+    import re
+
+    for path in REPO_ROOT.rglob("*.py"):
+        if any(part in {".venv", "__pycache__", "services"} for part in path.parts):
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            module = getattr(node, "module", "") or ""
+            names = [alias.name for alias in getattr(node, "names", ())
+                     if hasattr(alias, "name")]
+            assert not (
+                (getattr(node, "level", 0) == 0
+                 and (module == "tastytrade" or module.startswith("tastytrade.")
+                      or module == "snaptrade_client" or module.startswith("snaptrade_client.")))
+                or any(name == "tastytrade" or name.startswith("tastytrade.")
+                       or name == "snaptrade_client" or name.startswith("snaptrade_client.")
+                       for name in names)
+            ), path
+
+    pins = []
+    for requirements in (REPO_ROOT / "stock-app/requirements.txt",
+                         REPO_ROOT / "utilities/requirements.txt"):
+        match = re.search(r"^tastytrade==(.+)$", requirements.read_text(encoding="utf-8"), re.M)
+        assert match, requirements
+        pins.append(match.group(1))
+    assert pins[0] == pins[1]
