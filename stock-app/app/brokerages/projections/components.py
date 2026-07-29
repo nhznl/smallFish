@@ -28,6 +28,7 @@ EQUITY_COST_BASIS = "EQUITY_COST_BASIS"
 CURRENT_EQUITY_MARK = "CURRENT_EQUITY_MARK"
 CURRENT_OPTION_MARK = "CURRENT_OPTION_MARK"
 OPTION_ACTIVITY_HISTORY = "OPTION_ACTIVITY_HISTORY"
+EQUITY_ACTIVITY_HISTORY = "EQUITY_ACTIVITY_HISTORY"
 POSITION_ACTIVITY_MISMATCH = "POSITION_ACTIVITY_MISMATCH"
 
 #: Events that remove a position without the provider reporting a signed delta.
@@ -181,7 +182,7 @@ def _component(*, brokerage_id: str, position: PositionFact | None,
                account_id: str, account: str, contract_key: str | None,
                option_type: str | None, strike: Decimal | None,
                expiry: str | None, missing_mark_code: str,
-               reconcile_against_events: bool) -> Component:
+               cost_basis_fallback: bool) -> Component:
     position_quantity = position.signed_quantity if position else ZERO
     has_position = position is not None and position_quantity != 0
     event_quantity, deltas_resolved = resolve_position_deltas(events)
@@ -197,22 +198,12 @@ def _component(*, brokerage_id: str, position: PositionFact | None,
 
     missing: list[str] = []
     cash_values: list[Decimal] | None
-    if not reconcile_against_events:
-        # Equity. A closed equity lifecycle is not reconstructable from the
-        # executions this ledger retains — they only cover the fetch window and
-        # only for option-traded underlyings — so a current share position is
-        # valued from the broker's cost basis and nothing else. The retained
-        # executions stay as assignment evidence; turning them into a cash basis
-        # would produce a partial number, and comparing them to the current
-        # position would invent a mismatch that is really just missing history.
-        if has_position and position.open_cash_flow is not None:
-            cash_values = [position.open_cash_flow]
-            basis = "POSITION_COST_BASIS"
-        else:
-            cash_values = None
-            basis = "UNAVAILABLE"
-            missing.append(EQUITY_COST_BASIS)
-    elif events and deltas_resolved and event_quantity == position_quantity:
+    # Retained activity that accounts for the position exactly is a complete
+    # lifecycle, whatever the instrument. That is the evidence — not a guess
+    # about which instruments a provider happens to import.
+    reconciles = bool(events) and deltas_resolved and event_quantity == position_quantity
+
+    if reconciles:
         values = [fact.net_cash_flow for fact in events]
         if any(value is None for value in values):
             cash_values, basis = None, "UNAVAILABLE"
@@ -225,6 +216,14 @@ def _component(*, brokerage_id: str, position: PositionFact | None,
         basis = "POSITION_COST_BASIS"
         if instrument == "OPTION":
             missing.append(OPTION_ACTIVITY_HISTORY)
+    elif cost_basis_fallback and has_position and position.open_cash_flow is not None:
+        # Shares held whose imported executions do not explain the whole
+        # position — the ordinary consequence of a window that begins after the
+        # opening lots. The broker's cost basis still values what is held, so
+        # this is incomplete history rather than a disagreement with the broker.
+        cash_values = [position.open_cash_flow]
+        basis = "POSITION_COST_BASIS"
+        missing.append(EQUITY_ACTIVITY_HISTORY)
     else:
         cash_values = None
         basis = "UNAVAILABLE"
@@ -330,11 +329,6 @@ def build(snapshot: BrokerageSnapshot) -> list[Component]:
             position.symbol if position
             else next((fact.symbol for fact in events), identity)
         )
-        if instrument == "EQUITY" and position is None:
-            # Equity executions are retained for assignment evidence, but a
-            # closed equity lifecycle cannot be reconstructed from them, so
-            # they do not create a component of their own.
-            continue
         components.append(_component(
             brokerage_id=brokerage_id, position=position, events=events,
             instrument=instrument, symbol=symbol, account_id=account_id,
@@ -346,7 +340,9 @@ def build(snapshot: BrokerageSnapshot) -> list[Component]:
             missing_mark_code=(
                 CURRENT_OPTION_MARK if instrument == "OPTION" else CURRENT_EQUITY_MARK
             ),
-            reconcile_against_events=instrument == "OPTION",
+            # Only shares have a broker cost basis to fall back on when their
+            # imported executions do not cover the whole position.
+            cost_basis_fallback=instrument == "EQUITY",
         ))
     return components
 
@@ -357,15 +353,3 @@ def by_symbol(components: list[Component]) -> dict[str, list[Component]]:
         if component.symbol:
             grouped[component.symbol].append(component)
     return dict(sorted(grouped.items()))
-
-
-def equity_events_by_symbol(snapshot: BrokerageSnapshot) -> dict[str, int]:
-    """Retained equity executions per symbol, counted but never valued.
-
-    They are evidence for an assignment, not a closed equity lifecycle.
-    """
-    counts: dict[str, int] = defaultdict(int)
-    for fact in snapshot.activity:
-        if fact.instrument == "EQUITY" and fact.symbol:
-            counts[fact.symbol] += 1
-    return dict(counts)

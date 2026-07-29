@@ -867,56 +867,68 @@ def test_an_expiration_whose_opening_trade_predates_the_window_is_not_a_mismatch
     assert "POSITION_ACTIVITY_MISMATCH" not in component["missing"]
 
 
-def test_a_symbol_whose_shares_closed_never_reports_a_complete_total(adapter_env):
-    """The JOBY shape: an expired option leg, a share sale, and no position left.
+def test_a_share_round_trip_inside_retained_history_is_complete(adapter_env):
+    """Shares bought and sold within the imported window are a whole lifecycle.
 
-    The option legs alone are not this symbol's result. Closed equity is not
-    imported for any brokerage yet, so the total fails closed with a reason
-    rather than presenting the option-only figure as finished.
+    Its executions account for the position exactly, so its cash is real and the
+    symbol's total is complete. Refusing to count it merely because the shares
+    are gone would hide a result this ledger genuinely has.
     """
-    _write_tastytrade(activity=[_expiration_event("1"), _equity_event("2")])
+    _write_tastytrade(activity=[
+        _expiration_event("1"),
+        _equity_event("2", action="Buy to Open", delta="100", net_value="-1000",
+                      on="2026-04-02"),
+        _equity_event("3", action="Sell to Close", delta="-100", net_value="1400",
+                      on="2026-04-18"),
+    ])
 
     ledger = _symbol("tastytrade")
     assert ledger["reconciliation_status"] == "RECONCILED"
-    assert ledger["pnl_completeness"] == "UNAVAILABLE"
-    assert ledger["state"] == "ACTIVE"          # uncertainty fails toward Active
-    assert any("closed equity" in warning.lower() for warning in ledger["warnings"])
-    assert ledger["reset_eligible"] is False
-    assert "PERIOD_INCOMPLETE" in ledger["reset_blockers"]
+    assert ledger["pnl_completeness"] == "COMPLETE"
+    assert ledger["state"] == "ARCHIVED"
+    assert ledger["warnings"] == []
+    assert ledger["current_period"]["realized_pnl"] == pytest.approx(400)
+    equity = next(row for row in ledger["components"] if row["instrument"] == "EQUITY")
+    assert equity["cash_flow_basis"] == "BROKER_ACTIVITY"
+    assert equity["state"] == "FLAT"
 
 
-def test_a_manual_reconciliation_row_is_retained_and_identified(adapter_env):
-    """A user's correction is a first-class event, not a hidden adjustment."""
-    _write_tastytrade(activity=[
-        _expiration_event("1"),
-        _equity_event("2"),
-        {
-            "id": "manual:TRADING:fix", "source": options_activity.MANUAL_SOURCE,
-            "executed_at": "2025-11-21T21:00:00+00:00",
-            "transaction_date": "2025-11-21",
-            "transaction_type": "Manual Reconciliation",
-            "transaction_sub_type": "Pre-window assignment",
-            "instrument_type": "Equity", "contract_symbol": "ABC",
-            "underlying_symbol": "ABC", "action": "Manual Adjustment",
-            "quantity": "100", "position_delta": "100", "net_value": "-1300",
-        },
-    ])
-    events = client.get(
-        "/api/brokerages/tastytrade/symbols/ABC/events", params={"period": "all"}
-    ).json()["items"]
-    manual = [row for row in events if row["is_manual_reconciliation"]]
-    assert len(manual) == 1
-    assert manual[0]["action"] == "MANUAL_ADJUSTMENT"
-    assert manual[0]["quantity_delta"] == pytest.approx(100)
+def test_an_unbalanced_share_lot_is_a_reconciliation_gap_a_manual_row_can_close(
+        adapter_env):
+    """The JOBY shape: an expired option, a share sale, and no position left.
 
-
-def test_retained_share_executions_never_become_an_equity_cash_basis(adapter_env):
-    """Equity executions cover only the fetch window and only option-traded
-    underlyings, so a held position is valued from the broker's cost basis.
-
-    Using them as a basis would produce a partial number; comparing them to the
-    current position would invent a mismatch that is really missing history.
+    The sale has no matching purchase in retained history, so the ledger reads a
+    short share position the broker does not have. That is a reconciliation gap
+    with a stated cause and a remedy — not a permanent property of the symbol —
+    and entering the missing opening trade resolves it and releases its cash.
     """
+    _write_tastytrade(activity=[_expiration_event("1"), _equity_event("2")])
+
+    before = _symbol("tastytrade")
+    assert before["reconciliation_status"] == "UNRECONCILED"
+    assert before["pnl_completeness"] == "UNAVAILABLE"
+    assert before["state"] == "ACTIVE"          # uncertainty fails toward Active
+    assert any("reconcile" in warning.lower() for warning in before["warnings"])
+    assert "SYMBOL_NOT_RECONCILED" in before["reset_blockers"]
+
+    _write_tastytrade(activity=[
+        _expiration_event("1"), _equity_event("2"), _manual_equity_row(),
+    ])
+
+    after = _symbol("tastytrade")
+    assert after["reconciliation_status"] == "RECONCILED"
+    assert after["pnl_completeness"] == "COMPLETE"
+    assert after["state"] == "ARCHIVED"
+    assert after["warnings"] == []
+    # -900 share sale plus the -1300 opening cost the manual row supplies.
+    assert after["current_period"]["realized_pnl"] == pytest.approx(-2200)
+
+
+def test_shares_still_held_are_valued_from_the_broker_not_a_partial_window(
+        adapter_env):
+    """A window that starts after the opening lots is missing history, not a
+    disagreement with the broker: the position is real and the broker's cost
+    basis still values it."""
     _write_tastytrade(
         positions=[{
             "instrument_type": "Equity", "contract_symbol": "ABC",
@@ -924,7 +936,6 @@ def test_retained_share_executions_never_become_an_equity_cash_basis(adapter_env
             "signed_quantity": "300", "multiplier": "1", "mark_price": "12",
             "average_open_price": "10",
         }],
-        # A window that shows only a later 100-share purchase of a 300-share lot.
         activity=[_equity_event("2", action="Buy to Open", delta="100",
                                 net_value="-1000")],
     )
@@ -933,8 +944,25 @@ def test_retained_share_executions_never_become_an_equity_cash_basis(adapter_env
     assert equity["cash_flow_basis"] == "POSITION_COST_BASIS"
     assert equity["net_cash_flow"] == pytest.approx(-3000)   # broker cost, not -1000
     assert "POSITION_ACTIVITY_MISMATCH" not in equity["missing"]
+    assert "EQUITY_ACTIVITY_HISTORY" in equity["missing"]
     assert ledger["reconciliation_status"] == "RECONCILED"
-    assert equity["event_count"] == 1                        # retained as evidence
+    assert ledger["pnl_completeness"] == "INDICATIVE"
+
+
+def test_a_manual_reconciliation_row_is_retained_and_identified(adapter_env):
+    """A user's correction is a first-class event, not a hidden adjustment."""
+    _write_tastytrade(activity=[
+        _expiration_event("1"),
+        _equity_event("2"),
+        _manual_equity_row(),
+    ])
+    events = client.get(
+        "/api/brokerages/tastytrade/symbols/ABC/events", params={"period": "all"}
+    ).json()["items"]
+    manual = [row for row in events if row["is_manual_reconciliation"]]
+    assert len(manual) == 1
+    assert manual[0]["action"] == "MANUAL_ADJUSTMENT"
+    assert manual[0]["quantity_delta"] == pytest.approx(100)
 
 
 def test_a_closed_share_lot_stays_in_the_symbols_history(adapter_env):
@@ -946,14 +974,29 @@ def test_a_closed_share_lot_stays_in_the_symbols_history(adapter_env):
     ledger = _symbol("tastytrade")
     assert ledger["event_count_total"] == 2
     assert ledger["current_period"]["event_count"] == 2
-    assert [row["instrument"] for row in ledger["components"]] == ["OPTION"]
+    assert sorted(row["instrument"] for row in ledger["components"]) == [
+        "EQUITY", "OPTION"
+    ]
 
     events = client.get(
         "/api/brokerages/tastytrade/symbols/ABC/events", params={"period": "all"}
     ).json()
     assert events["total_event_count"] == 2
     assert {row["instrument"] for row in events["items"]} == {"OPTION", "EQUITY"}
-    # The share sale is visible and its cash is stated, even though the symbol's
-    # total is unavailable because the rest of the lifecycle is not imported.
+    # The share sale is visible and its cash is stated even while the symbol's
+    # total is unavailable, because its opening trade is not in retained history.
     sale = next(row for row in events["items"] if row["instrument"] == "EQUITY")
     assert sale["net_cash_flow"] == pytest.approx(-900)
+
+
+def _manual_equity_row():
+    """A user-entered correction for an opening trade the sync never delivered."""
+    return {
+        "id": "manual:TRADING:fix", "source": options_activity.MANUAL_SOURCE,
+        "executed_at": "2025-11-21T21:00:00+00:00", "transaction_date": "2025-11-21",
+        "transaction_type": "Manual Reconciliation",
+        "transaction_sub_type": "Pre-window assignment",
+        "instrument_type": "Equity", "contract_symbol": "ABC",
+        "underlying_symbol": "ABC", "action": "Manual Adjustment",
+        "quantity": "100", "position_delta": "100", "net_value": "-1300",
+    }
