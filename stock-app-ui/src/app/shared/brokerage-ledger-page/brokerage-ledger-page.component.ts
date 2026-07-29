@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 
 import { BrokerageService } from '../../api/brokerage.service';
 import { BrokerageId } from '../../model/brokerage';
-import { BrokerageLedgerPortfolioSlug } from '../../model/brokerage-ledger';
 import { BrokerageLedgerCombinedComponent } from '../brokerage-ledger-combined/brokerage-ledger-combined.component';
 import { BrokerageHoldingsComponent } from '../brokerage-holdings/brokerage-holdings.component';
 import { SymbolLedgerComponent } from '../symbol-ledger/symbol-ledger.component';
@@ -11,9 +10,8 @@ import { SymbolLedgerComponent } from '../symbol-ledger/symbol-ledger.component'
 type LedgerTab = 'holdings' | 'options' | 'basis';
 
 /**
- * Common brokerage shell. The only temporary compatibility input is the
- * legacy portfolio slug consumed by the retained holdings projection;
- * the shell itself never branches on a brokerage identity.
+ * Common brokerage shell. Every tab is now driven by the public brokerage id
+ * alone; the shell never branches on a brokerage identity to interpret data.
  */
 @Component({
   selector: 'app-brokerage-ledger-page',
@@ -28,7 +26,6 @@ type LedgerTab = 'holdings' | 'options' | 'basis';
 })
 export class BrokerageLedgerPageComponent {
   @Input({ required: true }) brokerageId!: BrokerageId;
-  @Input({ required: true }) portfolio!: BrokerageLedgerPortfolioSlug;
   @Input({ required: true }) title = '';
 
   tab: LedgerTab = 'holdings';

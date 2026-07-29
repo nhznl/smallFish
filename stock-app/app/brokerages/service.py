@@ -7,6 +7,7 @@ router, projection, or component.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -15,6 +16,8 @@ from . import registry, store, sync
 from .contracts import BrokerageSnapshot
 from .projections import (envelope, events, holdings, option_adjusted_basis,
                           options, symbol_ledger)
+
+logger = logging.getLogger(__name__)
 
 CATALOG_SCHEMA_NAME = "smallfish.brokerage-catalog"
 MAX_NOTE_LENGTH = 2000
@@ -83,6 +86,7 @@ def brokerage_holdings(brokerage_id: str, *,
     snapshot, entry = _snapshot(brokerage_id)
     return holdings.build(
         snapshot, metadata_path=entry.holdings_metadata_path(),
+        trend_path=entry.holdings_trend_path(),
         account_id=account_id,
     )
 
@@ -437,10 +441,23 @@ def run_sync(brokerage_id: str, payload: dict[str, Any] | None = None) -> dict[s
         resources = sync.normalize_resources((payload or {}).get("resources"))
     except ValueError as exc:
         raise BrokerageRequestError("INVALID_RESOURCES", str(exc), 422) from exc
-    return sync.run(
+    report = sync.run(
         brokerage_id=entry.descriptor.id, resources=resources,
         commands=entry.sync_commands, capabilities=entry.capabilities,
     )
+    # Captured gain/loss percentages predate the common store and cannot be
+    # recomputed. Carrying them over here is idempotent, so it self-heals on any
+    # sync rather than depending on a one-shot step having been run.
+    from . import migration
+
+    try:
+        moved = migration.migrate_gain_loss_snapshots()["summary"]["migrated_count"]
+    except OSError:
+        logger.exception("carrying over captured gain/loss snapshots failed")
+    else:
+        if moved:
+            report["migrated_gain_loss_snapshots"] = moved
+    return report
 
 
 # ------------------------------------------------------------- migration ---

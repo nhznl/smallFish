@@ -16,12 +16,12 @@
     <div class="holdings-heading">
       <div>
         <p class="section-kicker">Equity holdings</p>
-        <h2>{{ portfolio === 'trading' ? 'Trading' : 'Retirement' }} holdings</h2>
+        <h2>{{ holdings.brokerage.label }} holdings</h2>
         <p>Open holdings only; option economics are kept on their own tabs.</p>
       </div>
       <span class="snapshot-chip">
-        <span>{{ holdings.source || (portfolio === 'trading' ? 'TASTYTRADE' : 'FIDELITY') }} positions</span>
-        <strong>{{ timestamp(holdings.retrievedAt) }}</strong>
+        <span>{{ holdings.brokerage.institution }} positions</span>
+        <strong>{{ timestamp(holdings.as_of.positions) }}</strong>
       </span>
     </div>
 
@@ -31,27 +31,33 @@
     @if (error) {
       <div class="banner banner-warn" role="alert">{{ error }}</div>
     }
+    @if (holdings.availability.status !== 'AVAILABLE') {
+      <div class="banner banner-warn" role="status">
+        <strong>{{ holdings.availability.status === 'UNAVAILABLE' ? 'Nothing imported yet.' : 'Some data is missing.' }}</strong>
+        <span>{{ holdings.availability.reasons.join(' ') }}</span>
+      </div>
+    }
 
     <div class="stat-strip holdings-stats">
       <div class="stat-card">
         <span class="stat-label">Total invested</span>
-        <span class="stat-value">{{ money(holdings.totalInitial) }}</span>
+        <span class="stat-value">{{ money(holdings.summary.total_cost_basis) }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Current value</span>
-        <span class="stat-value">{{ money(holdings.totalCurrent) }}</span>
+        <span class="stat-value">{{ money(holdings.summary.total_market_value) }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Gain / loss</span>
-        <span class="stat-value" [class]="pnlClass(holdings.totalGainLoss)">{{ money(holdings.totalGainLoss, true) }}</span>
+        <span class="stat-value" [class]="pnlClass(holdings.summary.total_unrealized_pnl)">{{ money(holdings.summary.total_unrealized_pnl, true) }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Return</span>
-        <span class="stat-value" [class]="pnlClass(holdings.totalGainLossPct)">{{ percent(holdings.totalGainLossPct, true) }}</span>
+        <span class="stat-value" [class]="pnlClass(holdings.summary.total_unrealized_pnl_pct)">{{ percent(holdings.summary.total_unrealized_pnl_pct, true) }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Holdings</span>
-        <span class="stat-value">{{ holdings.holdings.length }}</span>
+        <span class="stat-value">{{ holdings.summary.holding_count }}</span>
         <span class="stat-delta">Open symbols</span>
       </div>
     </div>
@@ -90,10 +96,10 @@
       @if (search || category || account || decliningOnly) {
         <button type="button" class="btn btn-sm" (click)="resetFilters()">Reset</button>
       }
-      <span class="result-count">{{ filteredHoldings().length }} of {{ holdings.holdings.length }} holdings</span>
+      <span class="result-count">{{ filteredHoldings().length }} of {{ holdings.summary.holding_count }} holdings</span>
       <div class="toolbar-actions">
         <button type="button" class="btn btn-sm" (click)="captureSnapshot()"
-          [attr.aria-busy]="snapshotting" [disabled]="snapshotting || !holdings.retrievedAt"
+          [attr.aria-busy]="snapshotting" [disabled]="snapshotting || !holdings.as_of.positions"
           matTooltip="Save the current G/L % values for this brokerage sync date; up to three dates are retained."
           matTooltipPosition="above">
           @if (snapshotting) { <span class="btn-spinner" aria-hidden="true"></span> }
@@ -107,53 +113,53 @@
 
     <p class="price-note">
       <strong>Market Price / Share</strong> is the brokerage mark from the latest sync
-      @if (holdings.retrievedAt) { ({{ timestamp(holdings.retrievedAt) }}) }.
+      @if (holdings.as_of.positions) { ({{ timestamp(holdings.as_of.positions) }}) }.
     </p>
 
-    @if (holdings.holdings.length && filteredHoldings().length) {
+    @if (items.length && filteredHoldings().length) {
       <div class="table-shell holdings-table-shell">
         <table class="data-table holdings-table">
           <thead><tr>
             <th class="col-sticky sortable" [attr.aria-sort]="ariaSort('symbol')"><button type="button" class="sort-button" (click)="sortBy('symbol')">Symbol {{ sortIcon('symbol') }}</button></th>
             <th class="sortable" [attr.aria-sort]="ariaSort('category')"><button type="button" class="sort-button" (click)="sortBy('category')">Category {{ sortIcon('category') }}</button></th>
-            <th class="sortable" [attr.aria-sort]="ariaSort('accountType')"><button type="button" class="sort-button" (click)="sortBy('accountType')">Account {{ sortIcon('accountType') }}</button></th>
+            <th class="sortable" [attr.aria-sort]="ariaSort('account')"><button type="button" class="sort-button" (click)="sortBy('account')">Account {{ sortIcon('account') }}</button></th>
             <th class="sortable" [attr.aria-sort]="ariaSort('industry')"><button type="button" class="sort-button" (click)="sortBy('industry')">Industry {{ sortIcon('industry') }}</button></th>
-            <th class="num sortable" [attr.aria-sort]="ariaSort('qty')"><button type="button" class="sort-button" (click)="sortBy('qty')">Qty {{ sortIcon('qty') }}</button></th>
-            <th class="num sortable" [attr.aria-sort]="ariaSort('costPrice')"><button type="button" class="sort-button" (click)="sortBy('costPrice')">Cost / Share {{ sortIcon('costPrice') }}</button></th>
-            <th class="num sortable" [attr.aria-sort]="ariaSort('marketPrice')"><button type="button" class="sort-button" (click)="sortBy('marketPrice')">Market Price / Share {{ sortIcon('marketPrice') }}</button></th>
-            <th class="num sortable" [attr.aria-sort]="ariaSort('initialInvestment')"><button type="button" class="sort-button" (click)="sortBy('initialInvestment')">Invested {{ sortIcon('initialInvestment') }}</button></th>
-            <th class="num sortable" [attr.aria-sort]="ariaSort('currentValue')"><button type="button" class="sort-button" (click)="sortBy('currentValue')">Current {{ sortIcon('currentValue') }}</button></th>
-            <th class="num sortable" [attr.aria-sort]="ariaSort('pctOfTotal')"><button type="button" class="sort-button" (click)="sortBy('pctOfTotal')">% Portfolio {{ sortIcon('pctOfTotal') }}</button></th>
-            <th class="num sortable" [attr.aria-sort]="ariaSort('gainLoss')"><button type="button" class="sort-button" (click)="sortBy('gainLoss')">G/L $ {{ sortIcon('gainLoss') }}</button></th>
-            <th class="num sortable" [attr.aria-sort]="ariaSort('gainLossPct')"><button type="button" class="sort-button" (click)="sortBy('gainLossPct')">G/L % {{ sortIcon('gainLossPct') }}</button></th>
-            @for (snapshot of holdings.gainLossSnapshots; track snapshot.syncDate) {
-              <th class="num snapshot-col">G/L % <small>as of {{ snapshotDateLabel(snapshot.syncDate) }}</small></th>
+            <th class="num sortable" [attr.aria-sort]="ariaSort('quantity')"><button type="button" class="sort-button" (click)="sortBy('quantity')">Qty {{ sortIcon('quantity') }}</button></th>
+            <th class="num sortable" [attr.aria-sort]="ariaSort('cost_per_unit')"><button type="button" class="sort-button" (click)="sortBy('cost_per_unit')">Cost / Share {{ sortIcon('cost_per_unit') }}</button></th>
+            <th class="num sortable" [attr.aria-sort]="ariaSort('mark_per_unit')"><button type="button" class="sort-button" (click)="sortBy('mark_per_unit')">Market Price / Share {{ sortIcon('mark_per_unit') }}</button></th>
+            <th class="num sortable" [attr.aria-sort]="ariaSort('cost_basis')"><button type="button" class="sort-button" (click)="sortBy('cost_basis')">Invested {{ sortIcon('cost_basis') }}</button></th>
+            <th class="num sortable" [attr.aria-sort]="ariaSort('market_value')"><button type="button" class="sort-button" (click)="sortBy('market_value')">Current {{ sortIcon('market_value') }}</button></th>
+            <th class="num sortable" [attr.aria-sort]="ariaSort('pct_of_total')"><button type="button" class="sort-button" (click)="sortBy('pct_of_total')">% Portfolio {{ sortIcon('pct_of_total') }}</button></th>
+            <th class="num sortable" [attr.aria-sort]="ariaSort('unrealized_pnl')"><button type="button" class="sort-button" (click)="sortBy('unrealized_pnl')">G/L $ {{ sortIcon('unrealized_pnl') }}</button></th>
+            <th class="num sortable" [attr.aria-sort]="ariaSort('unrealized_pnl_pct')"><button type="button" class="sort-button" (click)="sortBy('unrealized_pnl_pct')">G/L % {{ sortIcon('unrealized_pnl_pct') }}</button></th>
+            @for (snapshot of snapshotDates(); track snapshot.sync_date) {
+              <th class="num snapshot-col">G/L % <small>as of {{ snapshotDateLabel(snapshot.sync_date) }}</small></th>
             }
             <th>Note</th>
           </tr></thead>
           <tbody>
-            @for (row of filteredHoldings(); track row.accountType + ':' + row.symbol) {
+            @for (row of filteredHoldings(); track row.id) {
               <tr [class.declining-row]="row.trend.alert">
                 <td class="col-sticky symbol-cell"><strong>{{ row.symbol }}</strong></td>
                 <td><span class="badge badge-neutral">{{ row.category }}</span></td>
-                <td>{{ row.accountType }}</td>
+                <td>{{ row.account }}</td>
                 <td>{{ row.industry }}</td>
-                <td class="num">{{ quantity(row.qty) }}</td>
-                <td class="num">{{ money(row.costPrice) }}</td>
-                <td class="num">{{ money(row.marketPrice) }}</td>
-                <td class="num">{{ money(row.initialInvestment) }}</td>
-                <td class="num">{{ money(row.currentValue) }}</td>
-                <td class="num">{{ percent(row.pctOfTotal) }}</td>
-                <td class="num" [class]="pnlClass(row.gainLoss)">{{ money(row.gainLoss, true) }}</td>
-                <td class="num" [class]="pnlClass(row.gainLossPct)">
-                  {{ percent(row.gainLossPct, true) }}
+                <td class="num">{{ quantity(row.quantity) }}</td>
+                <td class="num">{{ money(row.cost_per_unit) }}</td>
+                <td class="num">{{ money(row.mark_per_unit) }}</td>
+                <td class="num">{{ money(row.cost_basis) }}</td>
+                <td class="num">{{ money(row.market_value) }}</td>
+                <td class="num">{{ percent(row.pct_of_total) }}</td>
+                <td class="num" [class]="pnlClass(row.unrealized_pnl)">{{ money(row.unrealized_pnl, true) }}</td>
+                <td class="num" [class]="pnlClass(row.unrealized_pnl_pct)">
+                  {{ percent(row.unrealized_pnl_pct, true) }}
                   @if (row.trend.alert) {
-                    <small class="trend-alert" [matTooltip]="trendTooltip(row)" matTooltipPosition="above">Declining {{ percent(row.trend.dropPct) }}</small>
+                    <small class="trend-alert" [matTooltip]="trendTooltip(row)" matTooltipPosition="above">Declining {{ percent(row.trend.drop_pct) }}</small>
                   }
                 </td>
-                @for (snapshot of holdings.gainLossSnapshots; track snapshot.syncDate) {
-                  <td class="num snapshot-col" [class]="pnlClass(row.gainLossSnapshots[snapshot.syncDate])">
-                    {{ row.gainLossSnapshots[snapshot.syncDate] == null ? '—' : percent(row.gainLossSnapshots[snapshot.syncDate], true) }}
+                @for (snapshot of snapshotDates(); track snapshot.sync_date) {
+                  <td class="num snapshot-col" [class]="pnlClass(capturedPct(row, snapshot.sync_date))">
+                    {{ percent(capturedPct(row, snapshot.sync_date), true) }}
                   </td>
                 }
                 <td class="note-cell">
@@ -167,7 +173,7 @@
           </tbody>
         </table>
       </div>
-    } @else if (holdings.holdings.length) {
+    } @else if (items.length) {
       <div class="empty-state">
         <h3>No holdings match these filters</h3>
         <button type="button" class="btn" (click)="resetFilters()">Reset filters</button>

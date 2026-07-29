@@ -120,7 +120,8 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `GET /api/brokerages/{id}/symbols/{symbol}/events` | Immutable, cursor-paginated current, all, or archived event history. |
 | `POST /api/brokerages/{id}/symbols/{symbol}/archives` | Idempotently archive an eligible completed period. |
 | `POST /api/brokerages/{id}/sync` | Sync common holdings, activity, and market-data resources without creating group state. |
-| `/brokerage-ledgers/*`, `/options/activity`, `/retirement/options` | Internal compatibility reads retained during migration; the dashboard does not use their group workflow. |
+| `GET /api/brokerages/{id}/holdings` | Current equity positions with editable classifications, captured G/L comparison columns, and declining-trend state. |
+| `/brokerage-ledgers/{portfolio}/combined`, `/options/activity`, `/retirement/options` | Internal compatibility reads retained during migration; the dashboard does not use their group workflow. |
 | `GET /runWheel`, `/runChains` | Run the wheel job (with best-effort upcoming-earnings refresh) and manual prospective option-quote collection. |
 | `GET /runEarningsScan` | Refresh the shared upcoming-earnings calendar (Finnhub, only when stale), then report how many scanner symbols have an upcoming report. |
 
@@ -135,10 +136,14 @@ Ledger. Missing marks, activity, or reconciliation remain unavailable rather
 than becoming zero. Tastytrade sync materializes all current positions in
 `data/ledger_options/tastytrade_positions.csv`.
 
-The retained `/brokerage-ledgers/{portfolio}` views are internal compatibility
-projections while Holdings metadata and G/L snapshots finish moving to the
-common surface. They are not an external contract and their group write paths
-are retired.
+The legacy `/brokerage-ledgers/{portfolio}/holdings` read and its enrichment and
+gain/loss-snapshot write paths are retired: the common Holdings resource now
+carries the editable classifications, the captured comparison columns, and the
+declining-trend state they were the only source of, and captured percentages
+recorded before the move are carried into the common store on the next sync.
+`/brokerage-ledgers/{portfolio}/combined` remains as an internal compatibility
+projection and as the baseline the parity tests compare against. It is not an
+external contract and its group write paths are retired.
 
 `POST /options/activity/sync` remains an internal compatibility command and
 imports January 1 through today by default without creating or changing group

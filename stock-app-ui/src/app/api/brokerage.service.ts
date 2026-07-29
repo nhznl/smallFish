@@ -8,6 +8,8 @@ import {
   BrokerageCatalog,
   BrokerageId,
   BrokerageSyncResponse,
+  GainLossSnapshotResponse,
+  HoldingsMetadataResponse,
   HoldingsResponse,
   LedgerEventsResponse,
   OptionsResponse,
@@ -41,6 +43,27 @@ export class BrokerageService {
     return this.http.get<HoldingsResponse>(`${this.base(brokerageId)}/holdings`, {
       params: this.params({ account_id: accountId }),
     });
+  }
+
+  /** Edit one holding's classification. Broker facts stay immutable. */
+  updateHoldingsMetadata(
+    brokerageId: BrokerageId,
+    symbol: string,
+    body: { category?: string; industry?: string; note?: string }
+  ): Observable<HoldingsMetadataResponse> {
+    return this.http.patch<HoldingsMetadataResponse>(
+      `${this.base(brokerageId)}/holdings/${encodeURIComponent(symbol)}/metadata`,
+      body
+    );
+  }
+
+  /** Record every held position's gain/loss percentage under its sync date. */
+  captureGainLossSnapshot(
+    brokerageId: BrokerageId
+  ): Observable<GainLossSnapshotResponse> {
+    return this.http.post<GainLossSnapshotResponse>(
+      `${this.base(brokerageId)}/holdings/gain-loss-snapshots`, {}
+    );
   }
 
   getOptions(

@@ -1,9 +1,11 @@
 # Brokerage API and ledger refactor plan
 
-**Status:** Complete. All eight phases are implemented and committed; the
-backend is complete and both brokerage pages run on it. This document is the
-source of truth for implementation, phase status, decisions, and verification
-evidence.
+**Status:** Core refactor complete; consumer-first legacy cleanup in progress.
+All eight phases, including the synthetic lifecycle browser check, are complete
+and committed. Both brokerage pages run on the provider-neutral API for their
+Options and Option-Adjusted Basis tabs. This document is the source of truth
+for implementation, cleanup boundaries, phase status, decisions, and
+verification evidence.
 
 ## Resume here
 
@@ -23,15 +25,38 @@ says where the work actually is.
 | `754bb09` | 5 fix — reconcile share lots rather than declaring closed equity unknowable |
 | `05f09b3` | 5 fix — retain adjusted basis after options close |
 | `75db1d8` | 6 — history, archive, reset, and shared UI consolidation |
+| `9deb69b` | 7 — common shell cutover and group/risk UI removal |
+| `ae3fe96` | Adjusted-basis UI now uses the common projection |
+| `dea8d5c` | 8 — full regression and synthetic lifecycle browser verification |
+| `aab964e` | Lifecycle vocabulary and history-display follow-ups |
+| `df4830a` | Aggregate adjusted basis across brokerage accounts |
+| `5aeb6d8` | Start cleanup by removing the unused legacy Combined client |
+| `b6e719f` | Symbol Ledger action follow-ups: conditional review/archival UI |
 
-**Current totals:** backend `stock-app/tests` 461 passing; Angular
-`npm run test:ci` 55 passing; `npm run build` clean. All 14 settled
-`/api/brokerages` routes are served. Retained legacy brokerage routes are
-internal compatibility shims; group-mutation routes reject requests with 410.
+**Last broad verified baselines:** backend `stock-app/tests` 481 passing;
+Angular `npm run test:ci` 69 passing; `npm run build` clean, with docs, secret,
+and diff checks clean. Re-run the affected full suites before declaring a new
+cleanup step complete.
 
-**Next action:** none. The final regression and synthetic lifecycle browser
-check are complete. Do not reopen legacy compatibility cleanup without a new
-consumer audit.
+**Current architecture:** all 14 settled `/api/brokerages` routes are served.
+`/options` and `/retirement` share one shell, and every tab on it — Holdings,
+Symbol Ledger, and Option-Adjusted Basis — is driven by the public brokerage id
+alone through one Angular client. Group mutations are 410 tombstones and common
+sync creates no group/membership artifacts. **No Angular code calls
+`/brokerage-ledgers/*` any more**; the only route left on that prefix is
+`/combined`, retained as the baseline the projection parity tests compare
+against. The peak/adverse-move trend rule lives once in
+`app/brokerages/trend.py`, fed by each provider's own extraction.
+
+**Next action:** audit the legacy Retirement holdings surface —
+`/retirement/holdings/sync`, `/retirement/holdings/gain-loss-snapshots`,
+`/retirement/enrichment/{symbol}`, and `snaptrade_service.portfolio`. It has no
+Angular consumer, but unlike the Holdings routes it is still a frozen contract
+and `retirement_options.py` still calls `portfolio()` internally for a portfolio
+total, so removal needs that caller re-pointed at the common projection first.
+After that, the remaining group-only backend paths. Do not remove provider
+ingestion, parsers, canonical facts, or read-only rollback artifacts merely
+because they contain legacy terminology.
 
 **Do not restart from Phase 1.** The kickoff prompt at the foot of this document
 has been rewritten for resumption; use that, not the original start-from-scratch
@@ -64,15 +89,25 @@ reading the reasoning.
 6. **The Phase 1 automated gate was amended** to include
    `test_brokerage_adapter_contract.py`.
 
-### Known open questions for the owner
+### Current handoff boundary
 
-- Phase 5 checkpoint: the owner confirmed the corrected symbol/P-L behaviour on
-  the Trading ledger after `754bb09`. Explicit approval covering navigation,
-  Active/Closed filtering, symbol detail, and notes across **both** `/options`
-  and `/retirement` has not been recorded. Phase 6 must not begin until it is.
-- The owner confirmed on 2026-07-29 that legacy brokerage routes are not
-  externally consumable. Phase 7 retains read-only internal compatibility
-  projections and rollback artifacts, while rejecting legacy group mutations.
+The owner has confirmed that legacy brokerage routes are **not externally
+consumable**, authorizing their removal after their in-repository consumers
+migrate. This is not authorization to degrade behavior or remove brokerage
+ingestion.
+
+The Holdings routes met all three of their release conditions and were removed
+on 2026-07-29: the common contract carries the editable enrichment, gain/loss
+snapshot columns, and declining-trend state; `BrokerageHoldingsComponent`
+consumes only the common brokerage service for both brokerages; and route,
+component, and backend sweeps proved no caller remained. Apply the same three
+conditions, in that order, to every remaining legacy surface. A route with no
+Angular consumer is not thereby free to delete — check the backend callers too,
+which is what still holds `snaptrade_service.portfolio` in place.
+
+The recent Symbol Ledger UX decisions are deliberate: hide the `Needs review`
+summary when its count is zero; show the archive button only for an eligible
+period; otherwise show no archive card, blocker, or empty-state message.
 
 ## Handoff operating model
 
@@ -1022,6 +1057,7 @@ why they differ. Current totals are in "Resume here" at the top.
 | 6 | History/reset UX and shared UI consolidation | COMPLETE — automated checks passed; browser verification pending | Phase 7 completed; Phase 8 performs final browser verification | Shared `SymbolLedgerComponent` implements current/all/archive history, compact archive summaries, on-demand archive detail, reset eligibility/confirmation, conflict refresh, and idempotent retry on both pages; focused tests 21 passed, full Angular suite 62 passed, build clean |
 | 7 | Compatibility cutover, cleanup, and current-behavior docs | COMPLETE — automated checks passed; browser verification pending | Phase 8 final regression and route verification | Owner confirmed legacy routes have no external consumers. Production sync suppresses legacy group writes; legacy group mutation routes return 410; shared UI no longer imports groups or risk surfaces; old artifacts remain rollback-only. The later adjusted-basis follow-up removed the last legacy combined projection from the Brokerage tab; full automated-gate evidence is in the progress log. |
 | 8 | Full regression, browser verification, and handoff closeout | COMPLETE | No further action | Full backend 461, Angular build + 55 tests, docs, secrets, and diff checks passed. Isolated browser checks confirmed both routes, shared tabs, Symbol Ledger lifecycle filters/detail, absence of groups/risk UI, and narrow-width fit. A synthetic-only lifecycle check created an archive, verified a reopen starts one active period while retaining the archive, and surfaced a changed-archive warning for a backdated event. |
+| Post-phase cleanup | Consumer-first removal of remaining internal legacy compatibility | IN PROGRESS | Holdings is fully migrated and its legacy surface removed. Next: audit the legacy Retirement holdings routes (`/retirement/holdings/*`, `/retirement/enrichment/{symbol}`) and `snaptrade_service.portfolio`, which have no Angular consumer but are still frozen contracts and still called internally by `retirement_options.py`; then the remaining group-only backend paths | `5aeb6d8` removed the unused legacy Combined client. `b6e719f` completed the shared Symbol Ledger action cleanup. The Holdings contract comparison, all four gaps it found, the consumer cutover, and the removal of `/brokerage-ledgers/{portfolio}/holdings` and its write paths are done and browser-verified. `/brokerage-ledgers/{portfolio}/combined` is the only route left on that prefix and is retained deliberately as the parity-test baseline. |
 
 ## Phased implementation plan
 
@@ -1476,45 +1512,68 @@ Append entries; never rewrite older evidence to make progress look cleaner.
 | 2026-07-29 | Legacy cleanup start | IN PROGRESS | Consumer audit confirms both pages already use the common shared shell, Symbol Ledger, and Option-Adjusted Basis client. Removed the unused legacy Combined Ledger Angular client method and response models; no template or route called them. Holdings remains the final active `/brokerage-ledgers/*` consumer because its compatibility contract still supplies editable metadata, G/L snapshot columns, and declining-trend state. The common Holdings endpoint must acquire those values before its compatibility router and backend can be safely removed. | Extend the common Holdings contract, then cut over the shared Holdings component |
 | 2026-07-29 | Symbol Ledger summary follow-up | COMPLETE | Owner removed the zero-value `Needs review` summary as visual noise. The shared Symbol Ledger now renders it only when one or more option-capable rows need review; component coverage protects the zero-count case. Focused component suite 28 passed; Angular build, docs, and diff checks clean. | Continue legacy Holdings migration |
 | 2026-07-29 | Archive control follow-up | COMPLETE | Owner simplified archive affordance: the shared Symbol Ledger displays only an `Archive completed history` action when the API declares the loaded period eligible. Ineligible periods render no card, blocker, or status guidance. Focused component coverage (28 tests), Angular build, docs, secret scan, and diff checks passed. | Continue legacy Holdings migration |
+| 2026-07-29 | Handoff refresh | COMPLETE | Refreshed the top-level resume state, commit map, cleanup dashboard, handoff boundary, and new-session kickoff for the next agent. The next task is a consumer-first Holdings migration; Phase 8 and all lifecycle verification are complete and must not be repeated. Docs and diff checks passed. | Extend the common Holdings contract, then migrate its shared UI consumer |
+| 2026-07-29 | Holdings contract comparison | COMPLETE | Compared the legacy Holdings contract the UI consumes against the common endpoint, field by field, against the component template rather than the model file. Most of the table already maps cleanly: symbol, account, category/industry/note, qty, cost/share, market price, invested, current, G/L $ and %, and the three portfolio totals all have common equivalents, as do `retrievedAt` (`as_of.positions`) and `source` (`brokerage.institution`). Four genuine gaps remain: per-row `pctOfTotal`; portfolio `totalGainLossPct`; per-row and catalogue gain/loss snapshots (`holdings.read_snapshots` exists but is dead code, never wired into `build`); and `trend`, which has no representation in `brokerages/` at all and is written by two provider-specific writers into two differently-keyed CSVs. Two smaller ones: `enrichmentSymbol`, which the edit modal writes against, and the snapshot-capture response, which legacy returns as `{snapshot, portfolio}` so the UI can swap in refreshed holdings. `byCategory`/`byIndustry`/`byAccountType`/`topPositions` are computed by both legacy implementations but rendered by neither; they do not need porting. The Angular common client has no metadata or snapshot-capture method yet. | Close the four contract gaps before touching the component |
+| 2026-07-29 | Holdings gap 1 — flat equity | COMPLETE | The comparison found a defect rather than a missing feature, so it was fixed first. The common Holdings endpoint listed share lots that are no longer held: `build` took every `EQUITY` component, and since the Phase 5 fix 2 those are built for closed lots too so the Symbol Ledger can reconcile their cash. A sold lot therefore appeared as a zero-quantity row whose realized result was reported as `unrealized_pnl`, and — because a closed lot's cost basis is its net proceeds negated — it subtracted that profit from `total_cost_basis`. A worked case: one lot bought at 11000 and sold at 12000, beside a held lot invested 900 and marked 1000, reported invested −100 and unrealized 1100 instead of 900 and 100. `capture_snapshot` shared the fault and would have written a meaningless percentage for the sold lot into the retained comparison columns. Holdings now takes only `state == "OPEN"` equity through one `held_equity` helper used by both paths. Deliberate difference from legacy Trading: a short share position is now shown, matching the SnapTrade reference implementation, where legacy Tastytrade filtered to `signed_quantity > 0`. Four regressions added across both brokerages; the two Tastytrade cases fail without the fix, and the Fidelity cases pin the shared contract because SnapTrade imports no equity activity and drops zeroed positions at the adapter. Full backend suite 466 passed (was 462); docs, secret scan, and `git diff --check` clean. No UI change, so no route inspection was required. | Gap 2: `pct_of_total` and portfolio return percentage |
+| 2026-07-29 | Holdings gaps 2-4 and UI cutover | COMPLETE | Closed the remaining contract gaps and migrated the consumer. `pct_of_total` and `total_unrealized_pnl_pct` are computed once in the projection and fail closed: one unmarked holding makes the portfolio total unknown, so every row's share blanks rather than silently rebasing on a partial denominator — legacy divided by whatever it could add up. Captured gain/loss percentages now reach the response as a per-row map plus a retained-date catalogue in `summary`, wiring up `read_snapshots`, which had been dead code since Phase 3; the catalogue lives in `summary` because the envelope key set is frozen by the contract spec. Declining-trend state is read through a new registry-selected `holdings_trend_path`: both brokerages already wrote the same columns under the same `(account, symbol)` key to their own file, so no branch was needed. The two sync-time trend *writers* stay where they are for now — they are provider bookkeeping, and consolidating them belongs with the legacy removal. Pre-cutover captured percentages are carried into the common store by a new idempotent `migration.migrate_gain_loss_snapshots()`, invoked from `run_sync` so it self-heals rather than depending on a one-shot step; legacy snapshot files are read, never rewritten. `BrokerageHoldingsComponent` now consumes only `BrokerageService`, keyed by brokerage id, with new `updateHoldingsMetadata` and `captureGainLossSnapshot` client methods; it takes its heading, institution and timestamp from the response and shows the availability banner, so an unsynced brokerage reads "Nothing imported yet" instead of an empty portfolio. The legacy `portfolio` slug input is gone from the shell and both page shells. Backend 478 passed (was 462); Angular 69 passed (was 62); build clean; docs, secrets, diff checks clean. Browser verification on an isolated port-8001 server over a synthetic-only data root: Trading showed the Return card, % Portfolio column, the declining-row highlight with its badge, and the migrated `G/L % as of Jul 20, 2026` column with a `—` for the holding that had no measurement; Retirement showed the shared component with the Fidelity label and the nothing-imported banner; both routes requested only `/api/brokerages/{id}/holdings`; no console errors; at 375px the page did not scroll horizontally while the table scrolled inside its own container. | Remove the legacy Holdings route, client, and backend projection |
+| 2026-07-29 | Legacy Holdings removal | COMPLETE | Removed `/brokerage-ledgers/{portfolio}/holdings` and its enrichment and gain/loss-snapshot write paths, `app/brokerage_holdings.py`, and the Angular `BrokerageLedgerService` with the `brokerage-holdings` and `brokerage-ledger` models — all proven unreferenced by sweep first. The trend writer that lived in the deleted module did not move: the two providers turned out to hold the *same* rule, character for character, differing only in how a percentage is read off a provider row, so the rule now lives once in `brokerages/trend.py` and each provider contributes normalized observations. That also pulled the reader and display block out of the Holdings projection, which should calculate rather than parse. `snaptrade_service._update_trend` is now a thin adapter over the same function. `brokerage_contract_spec` gained `RETIRED_LEGACY_ROUTES` beside the frozen list, and a test asserting the retired routes are really unpublished, so a contract cannot be quietly dropped from one list and left half-served. The Phase 1 characterization that both legacy Holdings views shared one shape was deleted with the route it described; what it protected is asserted against the surviving contract by `test_each_resource_has_one_shape_across_brokerages`. Eight new tests cover the shared trend rule directly, including the cases neither old copy tested: a slow sub-threshold slide still accumulating to an alert, a recovery clearing one, a near-breakeven holding never alerting, and a holding no longer held being dropped rather than alerting against a position that does not exist. Retained deliberately: `/brokerage-ledgers/{portfolio}/combined` as the parity baseline, and `snaptrade_service.portfolio` because `/retirement/holdings/*` is still a frozen contract and `retirement_options.py` still calls it. Backend 481 passed; Angular 69 passed; build, docs, secrets, diff checks clean. Browser verification over a synthetic-only data root confirmed the published route table (`/combined` still JSON, the retired path now falling through to the SPA rather than answering), and both write paths end to end: a captured snapshot and a metadata edit each round-tripped through the common API, with the newly captured date and the migrated pre-cutover date showing side by side as two comparison columns. | Audit the legacy Retirement holdings routes, then group-only backend paths |
 
-## Opus new-session kickoff prompt
+## New-session kickoff prompt
 
-Phases 1-5 are implemented and committed. Copy the following into a new
-implementation session to **resume**. The original start-from-scratch version of
-this prompt has been replaced; there is nothing left to do in Phases 1-4.
+Copy the following into a new implementation session to continue the remaining
+cleanup. It replaces the old Phase 6/8 handoff; do not resume those completed
+phases.
 
 ```text
-Continue the smallFish Symbol Ledger migration. docs/BROKERAGE_REFACTOR_PLAN.md
-is the source of truth; read its "Resume here" section first, then AGENTS.md,
-Requirements.md, the rest of that plan, docs/BROKERAGE_LEDGER_COMBINED_VIEW.md,
-docs/ARCHITECTURE.md, and stock-app/README.md. Before any UI work also read
+Continue the smallFish brokerage legacy cleanup. Read the "Resume here" and
+"Current handoff boundary" sections of docs/BROKERAGE_REFACTOR_PLAN.md first,
+then AGENTS.md, Requirements.md, docs/BROKERAGE_LEDGER_COMBINED_VIEW.md,
+docs/ARCHITECTURE.md, and stock-app/README.md. Before UI work also read
 stock-app-ui/AGENTS.md and stock-app-ui/docs/UX_GUIDANCE.md.
 
 State when you pick this up:
-- Phases 1-7 are complete and committed on main. Nothing is pushed.
-- The backend serves all 14 routes under `/api/brokerages`. Legacy brokerage
-  reads are internal compatibility projections; legacy group mutations return
-  410, and common sync does not create group or membership artifacts.
-- Both `/options` and `/retirement` render the same shared brokerage shell and
-  Symbol Ledger. Holdings and adjusted-basis compatibility projections remain
-  until their consumer migration is separately authorized.
-- Baselines to preserve: stock-app/tests 461 passing, npm run test:ci 55
-  passing, npm run build clean. A drop in any of these is a regression.
-- Do NOT redo Phases 1-7. Do not "fix" the deviations listed under "Resume
-  here"; they are deliberate and test-covered.
+- Phases 1-8 are complete and committed on main. The final synthetic lifecycle
+  browser check is complete. Do not restart any phase or repeat Phase 8.
+- `/options` and `/retirement` use the shared brokerage shell and Symbol Ledger;
+  the Option-Adjusted Basis tab uses the common brokerage client. The Symbol
+  Ledger intentionally hides a zero `Needs review` card and renders archive
+  controls only for eligible periods.
+- All 14 `/api/brokerages` routes remain the target contract. Legacy group
+  mutations are 410 tombstones and common sync no longer writes group or
+  membership artifacts.
+- Holdings is fully migrated. The common endpoint carries editable enrichment,
+  gain/loss snapshot columns, and declining-trend state; the legacy route, its
+  write paths, `app/brokerage_holdings.py`, and the Angular legacy client and
+  models are removed. No Angular code calls `/brokerage-ledgers/*`; `/combined`
+  is all that remains there and is kept as the parity-test baseline.
+- The peak/adverse-move trend rule lives once in `app/brokerages/trend.py`.
+  Providers supply normalized observations; do not reintroduce a per-provider
+  copy of the rule.
+- Last broad verified baselines are backend 481 passing, Angular 69 passing,
+  and a clean Angular build. Re-run the full relevant suite before calling a
+  cleanup step complete.
 
-Start at Phase 8. It is the final full regression and browser checkpoint for
-both routes. Do not print real positions, account identifiers, or provider
-details while performing that verification.
+Start with the legacy Retirement holdings surface: `/retirement/holdings/sync`,
+`/retirement/holdings/gain-loss-snapshots`, `/retirement/enrichment/{symbol}`,
+and `snaptrade_service.portfolio`. It has no Angular consumer but is still a
+frozen contract, and `retirement_options.py` still calls `portfolio()` for a
+portfolio total, so re-point that caller at the common projection before
+removing anything. Apply the same order Holdings used — common contract first,
+then consumers, then route/reference sweeps, then removal — and record a
+retirement in `RETIRED_LEGACY_ROUTES` rather than silently dropping it from the
+frozen list. Audit group-only code separately; retain ingestion/parsing code
+that still produces canonical facts.
 
-Then continue under the existing protocol:
-1. One focused commit per phase. Run that phase's automated gate before
-   committing and stage only that phase's files.
-2. Update the dashboard and append the progress log in every phase commit.
-   Never rewrite older log evidence.
-3. Mark Phase 7's UI change as browser verification pending until Phase 8.
-4. Phase 8 runs the full regression and the final browser verification on both
-   routes. Fix and reverify anything it finds.
+Continue under this protocol:
+1. Keep each cleanup increment focused and independently reversible. Do not
+   mix a behavior change with unrelated deletion.
+2. Run the targeted backend/UI tests, relevant full suite, Angular build for UI
+   changes, `python3 tools/check_docs.py`, `python3 tools/scan_secrets.py`, and
+   `git diff --check` before committing.
+3. Update the dashboard and append a new progress-log row in every cleanup
+   commit. Never rewrite older log evidence.
+4. Inspect the affected route with representative/synthetic data for UI work;
+   never print real positions, accounts, or provider details.
 5. Do not push or open a PR unless asked.
 
 Non-negotiable boundaries (unchanged):
@@ -1522,8 +1581,9 @@ Non-negotiable boundaries (unchanged):
 - Never allow two symbol ledgers for the same brokerage and symbol.
 - Never hide missing history, marks, reconciliation, or staleness by showing a
   partial number as complete.
-- Preserve existing API shapes and routes until the Phase 7 compatibility audit
-  permits cleanup.
+- Remove legacy routes only after the corresponding consumer and compatibility
+  audit proves they are unused; the owner has authorized that cleanup but not a
+  loss of Holdings behavior.
 - stock-app must not import utilities or studies.
 - Tests must not contact the network or contain real financial data.
 - Do not infer brokerage tax lots, taxable realized P/L, assignment shapes, or

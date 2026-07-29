@@ -142,6 +142,21 @@ def test_frozen_legacy_routes_are_all_served_today():
     assert missing == []
 
 
+def test_retired_legacy_routes_are_really_gone():
+    """A retirement is only real when the route stops being published.
+
+    Retiring a contract is a deliberate, owner-approved act; this keeps the two
+    lists honest, so a route cannot be quietly dropped from the frozen set and
+    left half-served.
+    """
+    published = _published_routes()
+    still_served = [
+        entry for entry in spec.RETIRED_LEGACY_ROUTES if entry in published
+    ]
+    assert still_served == []
+    assert not (set(spec.RETIRED_LEGACY_ROUTES) & set(spec.FROZEN_LEGACY_ROUTES))
+
+
 # ---------------------------------------------------- symbol ledger contract ---
 
 def test_symbol_ledger_contract_has_no_group_identity():
@@ -288,18 +303,12 @@ def test_existing_completeness_vocabulary_is_inside_the_canonical_sets(ledger_en
             assert component["pnl_completeness"] in spec.PNL_COMPLETENESS
 
 
-def test_both_brokerages_already_share_one_holdings_contract(ledger_env):
-    """Per-resource response identity is the acceptance criterion the new
-    Holdings route inherits; the compatibility view must already satisfy it."""
-    _write_matched_symbol()
-    trading = client.get("/brokerage-ledgers/trading/holdings")
-    retirement = client.get("/brokerage-ledgers/retirement/holdings")
-    assert trading.status_code == retirement.status_code == 200
-    assert set(trading.json()) == set(retirement.json())
-    trading_rows = trading.json()["holdings"]
-    retirement_rows = retirement.json()["holdings"]
-    assert trading_rows and retirement_rows
-    assert set(trading_rows[0]) == set(retirement_rows[0])
+# The Phase 1 characterization that both legacy Holdings views already shared
+# one response shape was removed with the route it described. What it was
+# protecting — per-resource response identity across brokerages — is asserted
+# against the surviving contract by
+# `test_brokerage_api.test_each_resource_has_one_shape_across_brokerages`,
+# which covers Holdings along with the other resources.
 
 
 def test_unavailable_totals_are_null_rather_than_zero(ledger_env):

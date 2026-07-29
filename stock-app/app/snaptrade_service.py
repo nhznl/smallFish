@@ -860,63 +860,25 @@ def capture_gain_loss_snapshot() -> dict[str, Any]:
 def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[str, str], dict[str, str]]:
     """Advance each holding's gain/loss trend one sync and persist it.
 
-    The reference is a peak high-water mark of the gain/loss percentage. A
-    favorable move (gain grows or loss shrinks) ratchets the peak up and clears
-    any alert. An adverse move that worsens the percentage by at least the
-    relative threshold trips a sticky alert and re-baselines the peak, so a
-    further leg down alerts again; a sub-threshold adverse move holds the peak so
-    a slow multi-sync slide keeps accumulating toward the threshold.
+    The peak high-water rule is shared with every other brokerage and lives in
+    ``brokerages.trend``. Only reading a percentage off a SnapTrade ledger row
+    belongs here; options trend through their own event ledger, not this.
     """
-    threshold, min_base = _trend_threshold(), _trend_min_base()
-    previous = _read_trend()
-    updated: dict[tuple[str, str], dict[str, str]] = {}
-    for row in ledger_rows:
-        if row.get("asset_class") == "OPTION":
-            continue  # options trend via their own event ledger, not here
-        key = _trend_key(row)
-        if not key[1]:
-            continue
-        current = _decimal(row.get("open_pnl_pct"))
-        prior = previous.get(key)
-        if prior is None:
-            updated[key] = {
-                "account_id": key[0], "account_name": _text(row.get("account_name")),
-                "symbol": key[1], "peak_pct": _num(current), "peak_at": now,
-                "last_pct": _num(current), "last_synced_at": now,
-                "alert": "", "alert_from_pct": "", "alert_from_at": "",
-                "alert_to_pct": "", "alert_drop_pct": "", "alert_at": "",
-            }
-            continue
+    from .brokerages import trend
 
-        state = dict(prior)
-        state["account_name"] = _text(row.get("account_name")) or prior.get("account_name", "")
-        state["last_pct"] = _num(current)
-        state["last_synced_at"] = now
-        peak = _decimal(prior.get("peak_pct"))
-        if current > peak:  # favorable: new high-water mark clears the alert
-            state.update({
-                "peak_pct": _num(current), "peak_at": now,
-                "alert": "", "alert_from_pct": "", "alert_from_at": "",
-                "alert_to_pct": "", "alert_drop_pct": "", "alert_at": "",
-            })
-        else:
-            drop = (peak - current) / abs(peak) if abs(peak) >= min_base else Decimal("0")
-            if drop >= threshold:  # adverse move past the threshold: trip + re-baseline
-                state.update({
-                    "alert": "true",
-                    "alert_from_pct": _num(peak), "alert_from_at": prior.get("peak_at", ""),
-                    "alert_to_pct": _num(current), "alert_drop_pct": _num(drop * Decimal("100")),
-                    "alert_at": now,
-                    "peak_pct": _num(current), "peak_at": now,
-                })
-            # else: sub-threshold adverse move — hold the peak, keep any sticky alert
-        updated[key] = state
-
-    _atomic_write(
-        config.holdings_trend_csv(), TREND_HEADERS,
-        [updated[key] for key in sorted(updated)],
+    return trend.advance(
+        [
+            trend.Observation(
+                account_id=_text(row.get("account_id")),
+                account_name=_text(row.get("account_name")),
+                symbol=_text(row.get("symbol")),
+                gain_loss_pct=_decimal(row.get("open_pnl_pct")),
+            )
+            for row in ledger_rows
+            if row.get("asset_class") != "OPTION" and _text(row.get("symbol"))
+        ],
+        path=config.holdings_trend_csv(), now=now,
     )
-    return updated
 
 
 def _account_type(account_name: str) -> str:

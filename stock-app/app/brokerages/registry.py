@@ -36,6 +36,16 @@ class BrokerageRegistration:
     #: app-owned and per-brokerage, so the path belongs to the identity table
     #: rather than to a projection that would otherwise have to branch.
     holdings_metadata_path: Callable[[], Path] = config.holdings_enrichment_csv
+    #: Per-holding adverse-move state. Both brokerages already write the same
+    #: columns keyed the same way, to their own file, so the common projection
+    #: reads it through the identity table instead of branching.
+    holdings_trend_path: Callable[[], Path] = config.holdings_trend_csv
+    #: The pre-migration gain/loss snapshot file this brokerage used to write.
+    #: Read-only, and only so captured history survives the cutover; it is
+    #: retired with the rest of the legacy Holdings surface.
+    legacy_gain_loss_snapshots_path: Callable[[], Path] = (
+        config.holdings_gain_loss_snapshots_csv
+    )
     #: Common resource name -> the provider command that satisfies it. One
     #: command may serve several resources; the sync runner calls it once.
     sync_commands: dict[str, Callable[[], dict]] = field(default_factory=dict)
@@ -45,6 +55,8 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
                   portfolio_role: str, adapter: str,
                   factory: Callable[..., ArtifactAdapter],
                   holdings_metadata_path: Callable[[], Path],
+                  holdings_trend_path: Callable[[], Path],
+                  legacy_gain_loss_snapshots_path: Callable[[], Path],
                   sync_commands: dict[str, Callable[[], dict]],
                   capabilities: BrokerageCapabilities | None = None,
                   ) -> BrokerageRegistration:
@@ -56,6 +68,8 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
         capabilities=capabilities or BrokerageCapabilities(),
         factory=factory,
         holdings_metadata_path=holdings_metadata_path,
+        holdings_trend_path=holdings_trend_path,
+        legacy_gain_loss_snapshots_path=legacy_gain_loss_snapshots_path,
         sync_commands=sync_commands,
     )
 
@@ -76,6 +90,10 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         brokerage_id="tastytrade", label="Tastytrade", institution="TASTYTRADE",
         portfolio_role="TRADING", adapter="TASTYTRADE", factory=TastytradeAdapter,
         holdings_metadata_path=config.trading_holdings_enrichment_csv,
+        holdings_trend_path=config.trading_holdings_trend_csv,
+        legacy_gain_loss_snapshots_path=(
+            config.trading_holdings_gain_loss_snapshots_csv
+        ),
         sync_commands={
             "HOLDINGS": _tastytrade_sync,
             "ACTIVITY": _tastytrade_sync,
@@ -88,6 +106,8 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         brokerage_id="fidelity", label="Fidelity", institution="FIDELITY",
         portfolio_role="RETIREMENT", adapter="SNAPTRADE", factory=SnapTradeAdapter,
         holdings_metadata_path=config.holdings_enrichment_csv,
+        holdings_trend_path=config.holdings_trend_csv,
+        legacy_gain_loss_snapshots_path=config.holdings_gain_loss_snapshots_csv,
         sync_commands={
             "HOLDINGS": snaptrade_service.sync,
             "ACTIVITY": _fidelity_activity_sync,

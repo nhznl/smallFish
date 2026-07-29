@@ -16,8 +16,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import brokerage_ledger, config, options_activity
-from app.brokerages import contracts, registry
+from app.brokerages import contracts, migration, registry, trend
 from app.brokerages.projections import components as component_projection
+from app.brokerages.projections import holdings as holdings_projection
 from app.main import app
 from tests import brokerage_contract_spec as spec
 from tests.test_brokerage_adapters import (CONTRACT, _write_snaptrade,  # noqa: F401
@@ -153,6 +154,214 @@ def test_holdings_merge_each_brokerages_own_metadata_store(adapter_env, brokerag
     assert mine["note"] == "watch assignment"
     assert theirs["category"] == "UNCLASSIFIED"
     assert theirs["note"] == ""
+
+
+def _write_sold_out_lot(brokerage_id: str) -> None:
+    """A share lot that is no longer held, beside one that still is.
+
+    Tastytrade imports the executions, so its closed lot arrives as activity and
+    genuinely produced a flat holdings row before this rule existed. SnapTrade
+    imports no equity activity and drops a zeroed position at the adapter, so it
+    cannot reach that state today; its case pins the shared contract rather than
+    reproducing the defect.
+    """
+    if brokerage_id == "tastytrade":
+        _write_tastytrade(
+            positions=[
+                {"instrument_type": "Equity", "contract_symbol": "XYZ",
+                 "underlying_symbol": "XYZ", "quantity": "50", "direction": "Long",
+                 "signed_quantity": "50", "multiplier": "1", "mark_price": "20",
+                 "average_open_price": "18"},
+            ],
+            activity=[
+                {"id": "tastytrade:TRADING:1", "source_transaction_id": "1",
+                 "executed_at": "2026-02-01T16:00:00+00:00",
+                 "transaction_date": "2026-02-01", "transaction_type": "Trade",
+                 "transaction_sub_type": "Buy to Open", "instrument_type": "Equity",
+                 "contract_symbol": "ABC", "underlying_symbol": "ABC",
+                 "action": "Buy to Open", "quantity": "100",
+                 "position_delta": "100", "net_value": "-11000", "fee_effect": "0"},
+                {"id": "tastytrade:TRADING:2", "source_transaction_id": "2",
+                 "executed_at": "2026-03-01T16:00:00+00:00",
+                 "transaction_date": "2026-03-01", "transaction_type": "Trade",
+                 "transaction_sub_type": "Sell to Close", "instrument_type": "Equity",
+                 "contract_symbol": "ABC", "underlying_symbol": "ABC",
+                 "action": "Sell to Close", "quantity": "100",
+                 "position_delta": "-100", "net_value": "12000", "fee_effect": "0"},
+            ],
+        )
+    else:
+        _write_snaptrade(holdings=[
+            {"asset_class": "STOCK", "symbol": "XYZ", "quantity": "50",
+             "price": "20", "average_purchase_price": "18", "cost_basis": "900",
+             "market_value": "1000"},
+            {"asset_class": "STOCK", "symbol": "ABC", "quantity": "0",
+             "price": "120", "average_purchase_price": "110", "cost_basis": "0",
+             "market_value": "0"},
+        ])
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_holdings_exclude_a_lot_that_is_no_longer_held(adapter_env, brokerage_id):
+    """Holdings answers "what do I hold", not "what have I ever held".
+
+    The component projection keeps a sold lot so the Symbol Ledger can report
+    its realized cash. Listing it here would show a zero-quantity row and, worse,
+    count realized profit as unrealized and subtract it from invested capital.
+    """
+    _write_sold_out_lot(brokerage_id)
+    body = _get(brokerage_id, "holdings")
+
+    assert [item["symbol"] for item in body["items"]] == ["XYZ"]
+    assert {item["state"] for item in body["items"]} == {"OPEN"}
+    assert body["summary"]["holding_count"] == 1
+    assert body["summary"]["total_cost_basis"] == pytest.approx(900)
+    assert body["summary"]["total_market_value"] == pytest.approx(1000)
+    assert body["summary"]["total_unrealized_pnl"] == pytest.approx(100)
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_holdings_report_each_position_share_and_the_portfolio_return(
+        adapter_env, brokerage_id):
+    _write_sold_out_lot(brokerage_id)   # one held lot: 900 invested, 1000 marked
+    body = _get(brokerage_id, "holdings")
+
+    assert body["items"][0]["pct_of_total"] == pytest.approx(100)
+    assert body["summary"]["total_unrealized_pnl_pct"] == pytest.approx(
+        100 / 900 * 100
+    )
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_position_share_blanks_when_the_portfolio_total_is_unknown(
+        adapter_env, brokerage_id):
+    """A share of an unknown total is not a number we may invent.
+
+    Legacy divided by whatever it could add up, so one unmarked holding silently
+    rebased every other row's % Portfolio on a partial denominator.
+    """
+    if brokerage_id == "tastytrade":
+        _write_tastytrade(positions=[
+            {"instrument_type": "Equity", "contract_symbol": "XYZ",
+             "underlying_symbol": "XYZ", "quantity": "50", "direction": "Long",
+             "signed_quantity": "50", "multiplier": "1", "mark_price": "20",
+             "average_open_price": "18"},
+            {"instrument_type": "Equity", "contract_symbol": "ABC",
+             "underlying_symbol": "ABC", "quantity": "10", "direction": "Long",
+             "signed_quantity": "10", "multiplier": "1", "mark_price": "",
+             "average_open_price": "110"},
+        ])
+    else:
+        _write_snaptrade(holdings=[
+            {"asset_class": "STOCK", "symbol": "XYZ", "quantity": "50",
+             "price": "20", "average_purchase_price": "18", "cost_basis": "900",
+             "market_value": "1000"},
+            {"asset_class": "STOCK", "symbol": "ABC", "quantity": "10",
+             "price": "", "average_purchase_price": "110", "cost_basis": "1100",
+             "market_value": ""},
+        ])
+    body = _get(brokerage_id, "holdings")
+
+    assert body["summary"]["total_market_value"] is None
+    assert body["summary"]["total_unrealized_pnl_pct"] is None
+    assert [item["pct_of_total"] for item in body["items"]] == [None, None]
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_gain_loss_snapshot_records_only_held_lots(adapter_env, brokerage_id):
+    """A sold lot has no current gain to snapshot; recording one would put a
+    meaningless percentage into the comparison columns forever."""
+    _write_sold_out_lot(brokerage_id)
+    response = client.post(f"/api/brokerages/{brokerage_id}/holdings/gain-loss-snapshots")
+    assert response.status_code == 200, response.text
+    assert response.json()["holding_count"] == 1
+
+    rows = holdings_projection.read_snapshots(brokerage_id)
+    assert {row["symbol"] for row in rows} == {"XYZ"}
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_captured_percentages_come_back_as_comparison_columns(adapter_env,
+                                                              brokerage_id):
+    _write_sold_out_lot(brokerage_id)
+    captured = client.post(
+        f"/api/brokerages/{brokerage_id}/holdings/gain-loss-snapshots"
+    ).json()
+    body = _get(brokerage_id, "holdings")
+
+    catalog = body["summary"]["gain_loss_snapshots"]
+    assert [entry["sync_date"] for entry in catalog] == [captured["sync_date"]]
+    held = body["items"][0]
+    assert held["gain_loss_snapshots"] == {
+        captured["sync_date"]: pytest.approx(100 / 900 * 100)
+    }
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_holdings_carry_the_declining_trend_the_sync_recorded(adapter_env,
+                                                              brokerage_id):
+    """Both brokerages already write this state, with the same columns and the
+    same (account, symbol) key, so the projection reads it through the registry
+    rather than learning which brokerage it is rendering."""
+    _write_sold_out_lot(brokerage_id)
+    entry = registry.REGISTRY[brokerage_id]
+    account = _get(brokerage_id, "holdings")["items"][0]["account_id"]
+    path = entry.holdings_trend_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        ",".join(trend.HEADERS) + "\n"
+        f"{account},Legacy,XYZ,22.5,2026-06-01T20:00:00Z,11.1,"
+        "2026-07-28T20:00:00Z,true,22.5,2026-06-01T20:00:00Z,11.1,50.6,"
+        "2026-07-28T20:00:00Z\n",
+        encoding="utf-8",
+    )
+
+    recorded = _get(brokerage_id, "holdings")["items"][0]["trend"]
+    assert recorded["alert"] is True
+    assert recorded["direction"] == "GAIN"       # the lot is up 100 on 900
+    assert recorded["peak_pct"] == pytest.approx(22.5)
+    assert recorded["from_pct"] == pytest.approx(22.5)
+    assert recorded["to_pct"] == pytest.approx(11.1)
+    assert recorded["drop_pct"] == pytest.approx(50.6)
+    assert recorded["alert_at"] == "2026-07-28T20:00:00Z"
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_a_holding_with_no_recorded_trend_does_not_alert(adapter_env, brokerage_id):
+    _write_sold_out_lot(brokerage_id)
+    recorded = _get(brokerage_id, "holdings")["items"][0]["trend"]
+    assert recorded["alert"] is False
+    assert recorded["drop_pct"] is None
+    assert recorded["alert_at"] is None
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_captured_percentages_survive_the_cutover(adapter_env, brokerage_id):
+    """A captured percentage cannot be recomputed — the mark it was taken
+    against is gone — so the pre-cutover files are carried across on sync."""
+    _write_sold_out_lot(brokerage_id)
+    entry = registry.REGISTRY[brokerage_id]
+    path = entry.legacy_gain_loss_snapshots_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    account = _get(brokerage_id, "holdings")["items"][0]["account_id"]
+    path.write_text(
+        "sync_date,retrieved_at,captured_at,account_id,account_name,symbol,gain_loss_pct\n"
+        f"2026-07-01,2026-07-01T20:00:00Z,2026-07-01T20:05:00Z,{account},Legacy,XYZ,7.5\n",
+        encoding="utf-8",
+    )
+
+    moved = migration.migrate_gain_loss_snapshots()
+    assert moved["summary"]["migrated_count"] == 1
+    # Running it again must not duplicate a measurement.
+    assert migration.migrate_gain_loss_snapshots()["summary"]["migrated_count"] == 0
+
+    body = _get(brokerage_id, "holdings")
+    assert body["items"][0]["gain_loss_snapshots"] == {"2026-07-01": pytest.approx(7.5)}
+    assert [entry["sync_date"] for entry in body["summary"]["gain_loss_snapshots"]] == [
+        "2026-07-01"
+    ]
+    # The legacy file is a rollback artifact and is never rewritten.
+    assert "2026-07-01" in path.read_text(encoding="utf-8")
 
 
 # ----------------------------------------------------------------- options ---

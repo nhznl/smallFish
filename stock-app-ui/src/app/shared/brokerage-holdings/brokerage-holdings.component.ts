@@ -3,13 +3,15 @@ import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Out
 import { FormsModule } from '@angular/forms';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { BrokerageLedgerService } from '../../api/brokerage-ledger.service';
-import {
-  BrokerageHolding,
-  BrokerageHoldingsSnapshot,
-} from '../../model/brokerage-holdings';
-import { BrokerageLedgerPortfolioSlug } from '../../model/brokerage-ledger';
+import { BrokerageService } from '../../api/brokerage.service';
+import { BrokerageId, HoldingItem, HoldingsResponse } from '../../model/brokerage';
 import { ModalComponent } from '../ui/modal.component';
+
+/** Columns a user can sort by; the rest are display-only. */
+type SortColumn =
+  | 'symbol' | 'category' | 'account' | 'industry' | 'quantity' | 'cost_per_unit'
+  | 'mark_per_unit' | 'cost_basis' | 'market_value' | 'pct_of_total'
+  | 'unrealized_pnl' | 'unrealized_pnl_pct';
 
 @Component({
   selector: 'app-brokerage-holdings',
@@ -20,11 +22,11 @@ import { ModalComponent } from '../ui/modal.component';
   changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class BrokerageHoldingsComponent implements OnChanges {
-  @Input({ required: true }) portfolio!: BrokerageLedgerPortfolioSlug;
+  @Input({ required: true }) brokerageId!: BrokerageId;
   @Input() refreshToken = 0;
   @Output() countChange = new EventEmitter<number>();
 
-  data: BrokerageHoldingsSnapshot | null = null;
+  data: HoldingsResponse | null = null;
   loading = false;
   snapshotting = false;
   saving = false;
@@ -37,30 +39,28 @@ export class BrokerageHoldingsComponent implements OnChanges {
   decliningOnly = false;
   copySuccess = false;
   editing: { symbol: string; category: string; industry: string; note: string } | null = null;
-  sortColumn: keyof BrokerageHolding = 'currentValue';
+  sortColumn: SortColumn = 'market_value';
   sortAscending = false;
 
   private requestSequence = 0;
   private copyTimer?: ReturnType<typeof setTimeout>;
   private messageTimer?: ReturnType<typeof setTimeout>;
 
-  constructor(private readonly api: BrokerageLedgerService) {}
+  constructor(private readonly api: BrokerageService) {}
 
   ngOnChanges(): void {
-    if (this.portfolio) this.load();
+    if (this.brokerageId) this.load();
   }
 
   load(): void {
     const request = ++this.requestSequence;
     this.loading = true;
     this.error = '';
-    this.api.getHoldings(this.portfolio).subscribe({
+    this.api.getHoldings(this.brokerageId).subscribe({
       next: data => {
         if (request !== this.requestSequence) return;
-        data.gainLossSnapshots ??= [];
-        data.holdings.forEach(row => row.gainLossSnapshots ??= {});
         this.data = data;
-        this.countChange.emit(data.holdings.length);
+        this.countChange.emit(data.items.length);
         this.loading = false;
       },
       error: err => {
@@ -68,16 +68,20 @@ export class BrokerageHoldingsComponent implements OnChanges {
         this.data = null;
         this.countChange.emit(0);
         this.loading = false;
-        this.error = err?.error?.detail ?? 'The holdings view could not be loaded.';
+        this.error = this.message_(err, 'The holdings view could not be loaded.');
       },
     });
   }
 
-  filteredHoldings(): BrokerageHolding[] {
+  get items(): HoldingItem[] {
+    return this.data?.items ?? [];
+  }
+
+  filteredHoldings(): HoldingItem[] {
     const query = this.search.trim().toUpperCase();
-    const rows = (this.data?.holdings ?? []).filter(row => {
+    const rows = this.items.filter(row => {
       if (this.category && row.category !== this.category) return false;
-      if (this.account && row.accountType !== this.account) return false;
+      if (this.account && row.account !== this.account) return false;
       if (this.decliningOnly && !row.trend.alert) return false;
       return !query || `${row.symbol} ${row.industry} ${row.note}`.toUpperCase().includes(query);
     });
@@ -94,20 +98,25 @@ export class BrokerageHoldingsComponent implements OnChanges {
   }
 
   categories(): string[] {
-    return [...new Set((this.data?.holdings ?? []).map(row => row.category).filter(Boolean))].sort();
+    return [...new Set(this.items.map(row => row.category).filter(Boolean))].sort();
   }
 
   accounts(): string[] {
-    return [...new Set((this.data?.holdings ?? []).map(row => row.accountType).filter(Boolean))].sort();
+    return [...new Set(this.items.map(row => row.account).filter(Boolean))].sort();
   }
 
   industries(): string[] {
-    return [...new Set((this.data?.holdings ?? []).map(row => row.industry)
+    return [...new Set(this.items.map(row => row.industry)
       .filter(value => value && value !== 'UNCLASSIFIED'))].sort();
   }
 
   decliningCount(): number {
-    return (this.data?.holdings ?? []).filter(row => row.trend.alert).length;
+    return this.items.filter(row => row.trend.alert).length;
+  }
+
+  /** The retained capture dates, one comparison column each. */
+  snapshotDates(): { sync_date: string }[] {
+    return this.data?.summary.gain_loss_snapshots ?? [];
   }
 
   resetFilters(): void {
@@ -117,20 +126,20 @@ export class BrokerageHoldingsComponent implements OnChanges {
     this.decliningOnly = false;
   }
 
-  sortBy(column: keyof BrokerageHolding): void {
+  sortBy(column: SortColumn): void {
     if (this.sortColumn === column) this.sortAscending = !this.sortAscending;
     else {
       this.sortColumn = column;
-      this.sortAscending = ['symbol', 'category', 'accountType', 'industry'].includes(column);
+      this.sortAscending = ['symbol', 'category', 'account', 'industry'].includes(column);
     }
   }
 
-  ariaSort(column: keyof BrokerageHolding): 'ascending' | 'descending' | 'none' {
+  ariaSort(column: SortColumn): 'ascending' | 'descending' | 'none' {
     if (this.sortColumn !== column) return 'none';
     return this.sortAscending ? 'ascending' : 'descending';
   }
 
-  sortIcon(column: keyof BrokerageHolding): string {
+  sortIcon(column: SortColumn): string {
     if (this.sortColumn !== column) return '';
     return this.sortAscending ? '▲' : '▼';
   }
@@ -138,16 +147,16 @@ export class BrokerageHoldingsComponent implements OnChanges {
   captureSnapshot(): void {
     this.snapshotting = true;
     this.error = '';
-    this.api.captureHoldingSnapshot(this.portfolio).subscribe({
+    this.api.captureGainLossSnapshot(this.brokerageId).subscribe({
       next: response => {
         this.snapshotting = false;
-        this.data = response.portfolio;
-        const verb = response.snapshot.replaced ? 'replaced' : 'saved';
-        this.flash(`G/L snapshot for ${this.snapshotDateLabel(response.snapshot.syncDate)} ${verb}.`);
+        const verb = response.replaced ? 'replaced' : 'saved';
+        this.flash(`G/L snapshot for ${this.snapshotDateLabel(response.sync_date)} ${verb}.`);
+        this.load();
       },
       error: err => {
         this.snapshotting = false;
-        this.error = err?.error?.detail ?? 'The G/L snapshot could not be saved.';
+        this.error = this.message_(err, 'The G/L snapshot could not be saved.');
       },
     });
   }
@@ -166,9 +175,9 @@ export class BrokerageHoldingsComponent implements OnChanges {
     });
   }
 
-  openEditor(row: BrokerageHolding): void {
+  openEditor(row: HoldingItem): void {
     this.editing = {
-      symbol: row.enrichmentSymbol || row.symbol,
+      symbol: row.symbol,
       category: row.category === 'UNCLASSIFIED' ? '' : row.category,
       industry: row.industry === 'UNCLASSIFIED' ? '' : row.industry,
       note: row.note,
@@ -186,17 +195,18 @@ export class BrokerageHoldingsComponent implements OnChanges {
     const { symbol, category, industry, note } = this.editing;
     this.saving = true;
     this.editError = '';
-    this.api.updateHoldingEnrichment(this.portfolio, symbol, { category, industry, note }).subscribe({
-      next: () => {
-        this.saving = false;
-        this.editing = null;
-        this.load();
-      },
-      error: err => {
-        this.saving = false;
-        this.editError = err?.error?.detail ?? 'The holding note could not be saved.';
-      },
-    });
+    this.api.updateHoldingsMetadata(this.brokerageId, symbol, { category, industry, note })
+      .subscribe({
+        next: () => {
+          this.saving = false;
+          this.editing = null;
+          this.load();
+        },
+        error: err => {
+          this.saving = false;
+          this.editError = this.message_(err, 'The holding note could not be saved.');
+        },
+      });
   }
 
   snapshotDateLabel(value: string): string {
@@ -206,14 +216,21 @@ export class BrokerageHoldingsComponent implements OnChanges {
     });
   }
 
-  trendTooltip(row: BrokerageHolding): string {
+  capturedPct(row: HoldingItem, date: string): number | null {
+    const value = row.gain_loss_snapshots[date];
+    return value == null ? null : value;
+  }
+
+  trendTooltip(row: HoldingItem): string {
     const trend = row.trend;
-    if (!trend.alert || trend.fromPct == null || trend.toPct == null || trend.dropPct == null) return '';
+    if (!trend.alert || trend.from_pct == null || trend.to_pct == null || trend.drop_pct == null) {
+      return '';
+    }
     const signed = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
-    const when = trend.alertAt ? ` (${new Date(trend.alertAt).toLocaleDateString()})` : '';
+    const when = trend.alert_at ? ` (${new Date(trend.alert_at).toLocaleDateString()})` : '';
     return trend.direction === 'LOSS'
-      ? `Loss deepened ${trend.dropPct.toFixed(0)}%: ${signed(trend.fromPct)} → ${signed(trend.toPct)}${when}.`
-      : `Gain shrank ${trend.dropPct.toFixed(0)}%: ${signed(trend.fromPct)} → ${signed(trend.toPct)}${when}.`;
+      ? `Loss deepened ${trend.drop_pct.toFixed(0)}%: ${signed(trend.from_pct)} → ${signed(trend.to_pct)}${when}.`
+      : `Gain shrank ${trend.drop_pct.toFixed(0)}%: ${signed(trend.from_pct)} → ${signed(trend.to_pct)}${when}.`;
   }
 
   money(value: number | null | undefined, signed = false): string {
@@ -252,5 +269,14 @@ export class BrokerageHoldingsComponent implements OnChanges {
     this.message = message;
     clearTimeout(this.messageTimer);
     this.messageTimer = setTimeout(() => (this.message = ''), 6000);
+  }
+
+  /** Common errors carry a safe code and message; fall back to the default. */
+  private message_(err: unknown, fallback: string): string {
+    const detail = (err as { error?: { detail?: unknown } })?.error?.detail;
+    if (detail && typeof detail === 'object' && 'message' in detail) {
+      return String((detail as { message: unknown }).message);
+    }
+    return typeof detail === 'string' ? detail : fallback;
   }
 }

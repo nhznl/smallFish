@@ -30,7 +30,7 @@
   </div>
 
   @if (tab === 'holdings') {
-    <app-brokerage-holdings [portfolio]="portfolio" [refreshToken]="refreshToken"
+    <app-brokerage-holdings [brokerageId]="brokerageId" [refreshToken]="refreshToken"
       (countChange)="holdingsCount = $event" />
   } @else if (tab === 'options') {
     <app-symbol-ledger [brokerageId]="brokerageId" [refreshToken]="refreshToken" />

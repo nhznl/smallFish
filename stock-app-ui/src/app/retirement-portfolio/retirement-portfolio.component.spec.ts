@@ -2,13 +2,11 @@ import { Component, Input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { BrokerageId } from '../model/brokerage';
-import { BrokerageLedgerPortfolioSlug } from '../model/brokerage-ledger';
 import { RetirementPortfolioComponent } from './retirement-portfolio.component';
 
 @Component({ selector: 'app-brokerage-ledger-page', standalone: true, template: '' })
 class BrokerageLedgerPageStub {
   @Input() brokerageId!: BrokerageId;
-  @Input() portfolio!: BrokerageLedgerPortfolioSlug;
   @Input() title = '';
 }
 
@@ -24,7 +22,6 @@ describe('RetirementPortfolioComponent', () => {
     expect(shell).toBeTruthy();
     const instance = fixture.debugElement.children[0].componentInstance as BrokerageLedgerPageStub;
     expect(instance.brokerageId).toBe('fidelity');
-    expect(instance.portfolio).toBe('retirement');
     expect(instance.title).toBe('Retirement Ledger');
   });
 });

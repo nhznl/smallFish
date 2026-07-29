@@ -117,6 +117,29 @@ export interface BrokerageComponent {
 
 // --------------------------------------------------------------- holdings ---
 
+/**
+ * Adverse-move state recorded at sync time. `alert` is sticky: set on the last
+ * move past the configured threshold, cleared by a favorable one. The
+ * from/to/drop values describe that move and are null while none stands.
+ */
+export interface HoldingTrend {
+  alert: boolean;
+  peak_pct: number | null;
+  peak_at: string;
+  drop_pct: number | null;
+  from_pct: number | null;
+  to_pct: number | null;
+  alert_at: string | null;
+  direction: 'GAIN' | 'LOSS';
+}
+
+/** One retained capture date: one comparison column. */
+export interface GainLossSnapshotDate {
+  sync_date: string;
+  retrieved_at: string;
+  captured_at: string;
+}
+
 export interface HoldingItem extends BrokerageComponent {
   category: string;
   industry: string;
@@ -127,6 +150,10 @@ export interface HoldingItem extends BrokerageComponent {
   market_value: number | null;
   unrealized_pnl: number | null;
   unrealized_pnl_pct: number | null;
+  pct_of_total: number | null;
+  trend: HoldingTrend;
+  /** Captured percentage by sync date; a date with no measurement is absent. */
+  gain_loss_snapshots: Record<string, number>;
 }
 
 export interface HoldingsSummary {
@@ -135,10 +162,31 @@ export interface HoldingsSummary {
   total_cost_basis: number | null;
   total_market_value: number | null;
   total_unrealized_pnl: number | null;
+  total_unrealized_pnl_pct: number | null;
+  gain_loss_snapshots: GainLossSnapshotDate[];
   pnl_completeness: PnlCompleteness;
 }
 
 export type HoldingsResponse = BrokerageEnvelope<HoldingItem, HoldingsSummary>;
+
+export interface HoldingsMetadataResponse {
+  schema_name: string;
+  schema_version: number;
+  brokerage_id: BrokerageId;
+  metadata: Record<string, string>;
+}
+
+export interface GainLossSnapshotResponse {
+  schema_name: string;
+  schema_version: number;
+  brokerage_id: BrokerageId;
+  sync_date: string;
+  retrieved_at: string;
+  captured_at: string;
+  replaced: boolean;
+  holding_count: number;
+  retained_dates: string[];
+}
 
 // ---------------------------------------------------------------- options ---
 

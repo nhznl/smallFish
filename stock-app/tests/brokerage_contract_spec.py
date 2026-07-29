@@ -171,6 +171,9 @@ NEW_ROUTES = (
 # audit deliberately retires them. Nothing here may be removed or reshaped by
 # Phases 2-6. Paths are written as they appear in the published OpenAPI
 # document, which is what an external caller actually sees.
+#
+# Entries leave this list only by that deliberate audit, recorded in
+# RETIRED_LEGACY_ROUTES below — never because a phase found one inconvenient.
 FROZEN_LEGACY_ROUTES = (
     ("GET", "/options"),
     ("GET", "/options/activity"),
@@ -190,6 +193,17 @@ FROZEN_LEGACY_ROUTES = (
     ("PUT", "/retirement/options/groups/{symbol}"),
     ("PUT", "/retirement/options/activity/{event_id}/group"),
     ("GET", "/brokerage-ledgers/{portfolio}/combined"),
+)
+
+# Retired by the post-phase cleanup, after the owner confirmed these are not
+# externally consumable and a consumer sweep proved nothing calls them. They are
+# listed rather than deleted so a later reader can tell a deliberate retirement
+# from an accidental regression, and so the suite asserts they are really gone.
+#
+# Holdings moved to `/api/brokerages/{brokerage_id}/holdings`, which carries the
+# editable classifications, captured gain/loss percentages, and declining-trend
+# state these used to be the only source of.
+RETIRED_LEGACY_ROUTES = (
     ("GET", "/brokerage-ledgers/{portfolio}/holdings"),
     ("PUT", "/brokerage-ledgers/{portfolio}/holdings/{symbol}/enrichment"),
     ("POST", "/brokerage-ledgers/{portfolio}/holdings/gain-loss-snapshots"),

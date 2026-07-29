@@ -659,6 +659,35 @@ def remove_symbols(symbols: set[str]) -> dict[str, int]:
     }
 
 
+def _trend_observations(positions: list[dict[str, Any]]) -> list[Any]:
+    """Read each held Tastytrade share lot's gain/loss percentage.
+
+    Options trend through their own event ledger, and a lot with no cost has no
+    percentage to observe, so neither reaches the shared trend rule.
+    """
+    from .brokerages import trend
+
+    observations = []
+    for row in positions:
+        if "Option" in _text(row.get("instrument_type")):
+            continue
+        quantity = _decimal(row.get("signed_quantity"))
+        if quantity <= 0:
+            continue
+        average = _decimal(row.get("average_open_price"))
+        price = _decimal(row.get("mark_price"))
+        invested = quantity * average
+        if not invested:
+            continue
+        account = _text(row.get("account")) or "TRADING"
+        observations.append(trend.Observation(
+            account_id=account, account_name=account,
+            symbol=_text(row.get("underlying_symbol") or row.get("contract_symbol")),
+            gain_loss_pct=(quantity * price - invested) / invested * Decimal("100"),
+        ))
+    return observations
+
+
 def sync(start_date: date | None = None, end_date: date | None = None,
          *, provider: BrokerProvider | None = None,
          legacy_groups: bool = True) -> dict[str, Any]:
@@ -764,10 +793,15 @@ def sync(start_date: date | None = None, end_date: date | None = None,
     # Holdings trend is advisory metadata derived from the new broker snapshot.
     # Never fail a brokerage sync because the optional trend view could not
     # advance.
+    # The rule itself lives in `brokerages.trend`; only the reading of a
+    # Tastytrade position row belongs here.
     try:
-        from . import brokerage_holdings
+        from .brokerages import trend
 
-        brokerage_holdings.update_trading_trend(combined_positions, now=retrieved_at)
+        trend.advance(
+            _trend_observations(combined_positions),
+            path=config.trading_holdings_trend_csv(), now=retrieved_at,
+        )
     except Exception:  # noqa: BLE001 - holdings trend must not block broker sync
         pass
 
