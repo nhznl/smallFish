@@ -52,7 +52,10 @@ jobs:
         run: stock-app/.venv/bin/python -m pip check
 
       - name: Tests
-        run: stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app stock-app/tests
+        run: |
+          stock-app/.venv/bin/python -m pytest -q \
+            services/tests/test_tastytrade_io.py services/tests/test_snaptrade_io.py
+          stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app stock-app/tests
 
   utilities:
     name: Utilities tests (Python ${{ matrix.python-version }})
@@ -81,7 +84,9 @@ jobs:
 
       - name: Tests
         # Covers utilities, studies, and the repository tooling in tools/.
-        run: utilities/.venv/bin/python -m pytest -q utilities/tests
+        run: |
+          utilities/.venv/bin/python -m pytest -q services/tests/test_tastytrade_io.py
+          utilities/.venv/bin/python -m pytest -q utilities/tests
 
   ui:
     name: UI build and tests (Node ${{ matrix.node-version }})
@@ -207,7 +212,10 @@ jobs:
         env:
           SFP_BLOCK_NETWORK: "1"
         run: |
-          utilities/.venv/bin/python -m pytest -q utilities/tests
+          utilities/.venv/bin/python -m pytest -q \
+            services/tests/test_tastytrade_io.py utilities/tests
+          stock-app/.venv/bin/python -m pytest -q \
+            services/tests/test_tastytrade_io.py services/tests/test_snaptrade_io.py
           stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app stock-app/tests
 
       - name: Prove the guard actually blocks
