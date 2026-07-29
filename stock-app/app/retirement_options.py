@@ -388,7 +388,7 @@ def sync_events(provider=None, *, start_date: date | None = None,
 
 def _fetch_tasty_betas(symbols: list[str]) -> list[Any]:
     """Live Tastytrade market-metric beta objects for ``symbols``."""
-    secret, token, env, _account = options_activity._credentials()
+    secret, token, env = options_activity._credentials()
 
     async def fetch() -> list[Any]:
         from tastytrade import Session
@@ -458,7 +458,7 @@ def _fetch_tasty_greeks(legs: list[dict[str, str]], timeout_seconds: float) -> d
     from . import options_activity  # noqa: F401 — kept for import symmetry/credentials
 
     by_streamer = {leg["streamer"]: leg for leg in legs}
-    secret, token, env, _account = options_activity._credentials()
+    secret, token, env = options_activity._credentials()
 
     async def fetch() -> dict[str, Any]:
         from tastytrade import DXLinkStreamer, Session
@@ -582,9 +582,9 @@ def sync_market_data() -> dict[str, Any]:
     try:
         report["betas"] = sync_betas()
     except Exception as exc:  # noqa: BLE001 — betas are optional.
-        report["betas_error"] = f"{type(exc).__name__}: {exc}"[:200]
+        report["betas_error"] = options_activity._safe_market_data_error(exc)
     try:
         report["greeks"] = sync_greeks()
     except Exception as exc:  # noqa: BLE001 — greeks are optional.
-        report["greeks_error"] = f"{type(exc).__name__}: {exc}"[:200]
+        report["greeks_error"] = options_activity._safe_market_data_error(exc)
     return report

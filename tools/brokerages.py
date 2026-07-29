@@ -432,16 +432,9 @@ def _verify_tastytrade(root: Path, settings: dict[str, str]) -> int:
     # different OAuth applications. Constructing a Session alone proves nothing
     # — the SDK authenticates lazily.
     script = (
-        "import asyncio, json, os\n"
+        "import asyncio, json\n"
         "from utilities.options import tastytrade_quotes as q\n"
         "from tastytrade import Session\n"
-        "\n"
-        "def scrub(text):\n"
-        "    for name in ('TT_CLIENT_SECRET', 'TT_REFRESH_TOKEN'):\n"
-        "        value = os.environ.get(name, '')\n"
-        "        if len(value) >= 8:\n"
-        "            text = text.replace(value, '<REDACTED>')\n"
-        "    return text\n"
         "\n"
         "async def main():\n"
         "    creds = q.load_credentials()\n"
@@ -451,8 +444,7 @@ def _verify_tastytrade(root: Path, settings: dict[str, str]) -> int:
         "        await session.refresh()\n"
         "        return {'ok': True, 'accounts': None, 'env': creds.environment}\n"
         "    except Exception as exc:\n"
-        "        return {'ok': False, 'error': type(exc).__name__,\n"
-        "                'detail': scrub(str(exc))[:300], 'env': creds.environment}\n"
+        "        return {'ok': False, 'error': type(exc).__name__, 'env': creds.environment}\n"
         "    finally:\n"
         "        try:\n"
         "            await session._client.aclose()\n"
@@ -494,10 +486,6 @@ def _report_verification(label: str, result) -> int:
 
     print(f"  ERROR: {label} rejected the read-only call "
           f"({payload.get('error', 'unknown')}).")
-    detail = (payload.get("detail") or "").strip()
-    if detail:
-        # Already scrubbed of the configured secret values by the probe.
-        print(f"  Provider said: {detail}")
     if payload.get("env"):
         print(f"  Environment:   {payload['env']}")
     print()

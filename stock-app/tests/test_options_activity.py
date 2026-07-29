@@ -80,6 +80,22 @@ def test_credentials_read_inline_app_env_values(activity_env, monkeypatch):
     assert options_activity._credentials() == ("secret", "token", "live")
 
 
+def test_market_data_error_hides_provider_message():
+    secret = "test-refresh-token-123"
+    account = "account-identifier-987"
+
+    error = options_activity._safe_market_data_error(
+        RuntimeError(f"provider rejected {secret} for {account}")
+    )
+
+    assert error == (
+        "RuntimeError: Tastytrade market data is unavailable; "
+        "check the brokerage setup and retry the sync."
+    )
+    assert secret not in error
+    assert account not in error
+
+
 def _greek(*, event_symbol=".ABC260821P50", volatility="0.44"):
     observed = datetime(2026, 7, 20, 15, 0, tzinfo=timezone.utc)
     return {

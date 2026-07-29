@@ -247,6 +247,14 @@ def _credentials() -> tuple[str, str, str]:
     return secret, token, env
 
 
+def _safe_market_data_error(exc: Exception) -> str:
+    """Return a stable report-safe error for an optional provider call."""
+    return (
+        f"{type(exc).__name__}: Tastytrade market data is unavailable; "
+        "check the brokerage setup and retry the sync."
+    )
+
+
 async def _fetch_tasty_greeks(session: Any, positions: list[Any],
                               timeout_seconds: float = 8.0) -> tuple[list[Any], str | None]:
     """Collect one timestamped dxFeed Greeks event per open option contract."""
@@ -283,7 +291,7 @@ async def _fetch_tasty_greeks(session: Any, positions: list[Any],
                 if prior is None or _decimal(_value(event, "time")) >= _decimal(_value(prior, "time")):
                     latest[event_symbol] = event
     except Exception as exc:  # Greeks are optional; transaction sync must still succeed.
-        return list(latest.values()), f"{type(exc).__name__}: {exc}"[:300]
+        return list(latest.values()), _safe_market_data_error(exc)
     return list(latest.values()), None
 
 
@@ -301,7 +309,7 @@ async def _fetch_tasty_betas(session: Any, positions: list[Any]) -> tuple[list[A
     try:
         return list(await get_market_metrics(session, symbols)), None
     except Exception as exc:  # Beta is optional; transaction sync must still succeed.
-        return [], f"{type(exc).__name__}: {exc}"[:300]
+        return [], _safe_market_data_error(exc)
 
 
 def fetch_tastytrade(start_date: date, end_date: date) -> tuple[list[Any], list[Any], dict[str, Any]]:

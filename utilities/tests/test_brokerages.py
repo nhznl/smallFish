@@ -279,11 +279,14 @@ def test_verification_failure_names_the_exception_and_gives_guidance():
     assert "./setup-brokerages.sh setup" in output
 
 
-def test_a_secret_in_a_provider_message_is_never_printed():
-    """The probe scrubs configured values; this pins the reporting side."""
+def test_provider_message_is_never_printed():
+    """Provider details can carry more than the configured credential values."""
+    secret = "test-refresh-token-123"
+    account = "account-identifier-987"
+
     class Result:
         stdout = ('{"ok": false, "error": "TastytradeError", '
-                  '"detail": "rejected token <REDACTED>", "env": "live"}')
+                  f'"detail": "rejected {secret} for {account}", "env": "live"}}')
         returncode = 0
 
     import io
@@ -292,7 +295,10 @@ def test_a_secret_in_a_provider_message_is_never_printed():
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
         B._report_verification("Tastytrade", Result())
-    assert "<REDACTED>" in buffer.getvalue()
+    output = buffer.getvalue()
+    assert "TastytradeError" in output
+    assert secret not in output
+    assert account not in output
 
 
 def test_verification_success_reports_a_count_never_an_identifier():
@@ -387,11 +393,10 @@ def test_the_tastytrade_probe_calls_functions_that_exist():
             f"the verify probe calls tastytrade_quotes.{name}(), which does not exist"
 
 
-def test_verification_failure_shows_the_provider_message():
-    """Suppressing it entirely turned a diagnosable failure into a dead end."""
+def test_verification_failure_uses_stable_remediation_not_provider_message():
     class Result:
         stdout = ('{"ok": false, "error": "TastytradeError", '
-                  '"detail": "invalid_grant: Client secret mismatch", "env": "live"}')
+                  '"detail": "provider-only-diagnostic", "env": "live"}')
         returncode = 0
 
     import contextlib
@@ -402,6 +407,7 @@ def test_verification_failure_shows_the_provider_message():
         code = B._report_verification("Tastytrade", Result())
     output = buffer.getvalue()
     assert code == 1
-    assert "Client secret mismatch" in output
-    assert "same OAuth application" in output.lower() or "SAME application" in output
+    assert "provider-only-diagnostic" not in output
+    assert "TastytradeError" in output
+    assert "./setup-brokerages.sh setup" in output
     assert "live" in output

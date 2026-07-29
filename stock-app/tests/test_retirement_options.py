@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import csv
+import socket
+import sys
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
+from types import ModuleType
 
 import pytest
 
-from app import config, retirement_options, snaptrade_service
+from app import config, options_activity, retirement_options, snaptrade_service
 from app.options_market import SymbolMarket
 
 
@@ -48,6 +51,62 @@ def _greek_keys():
         config.retirement_option_greeks_csv(), retirement_options.GREEKS_HEADERS)}
 
 
+def _install_fake_tastytrade(monkeypatch):
+    """Install only the SDK surface the retirement market-data calls use."""
+    sessions = []
+    streamers = []
+
+    class Session:
+        def __init__(self, client_secret, *, refresh_token, is_test):
+            self.client_secret = client_secret
+            self.refresh_token = refresh_token
+            self.is_test = is_test
+            self.closed = False
+            sessions.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            self.closed = True
+
+    class DXLinkStreamer:
+        def __init__(self, session):
+            self.session = session
+            self.subscribed = None
+            self.closed = False
+            streamers.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            self.closed = True
+
+        async def subscribe(self, event_type, symbols):
+            self.subscribed = (event_type, symbols)
+
+        async def get_event(self, _event_type):
+            return SimpleNamespace(event_symbol=".SPCX260821P95", volatility=0.5)
+
+    metrics = ModuleType("tastytrade.metrics")
+
+    async def get_market_metrics(_session, symbols):
+        return [SimpleNamespace(symbol=symbol, beta=1.2) for symbol in symbols]
+
+    metrics.get_market_metrics = get_market_metrics
+    dxfeed = ModuleType("tastytrade.dxfeed")
+    dxfeed.Greeks = type("Greeks", (), {})
+    tastytrade = ModuleType("tastytrade")
+    tastytrade.Session = Session
+    tastytrade.DXLinkStreamer = DXLinkStreamer
+
+    monkeypatch.setitem(sys.modules, "tastytrade", tastytrade)
+    monkeypatch.setitem(sys.modules, "tastytrade.metrics", metrics)
+    monkeypatch.setitem(sys.modules, "tastytrade.dxfeed", dxfeed)
+    return sessions, streamers, dxfeed.Greeks
+
+
 @pytest.fixture
 def opts_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SFP_DATA_DIR", str(tmp_path))
@@ -58,6 +117,57 @@ def opts_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SFP_RETIREMENT_OPTION_BETAS", str(tmp_path / "betas.csv"))
     monkeypatch.setenv("SFP_RETIREMENT_OPTION_EVENTS", str(tmp_path / "events.csv"))
     return tmp_path
+
+
+def test_default_tastytrade_market_data_fetchers_use_three_credentials_and_close(monkeypatch):
+    monkeypatch.setenv("TT_CLIENT_SECRET", "test-client-secret")
+    monkeypatch.setenv("TT_REFRESH_TOKEN", "test-refresh-token")
+    monkeypatch.setenv("TT_ENV", "live")
+    sessions, streamers, greeks_type = _install_fake_tastytrade(monkeypatch)
+    monkeypatch.setattr(socket.socket, "connect",
+                        lambda *_args, **_kwargs: pytest.fail("unexpected network call"))
+    monkeypatch.setattr(socket, "create_connection",
+                        lambda *_args, **_kwargs: pytest.fail("unexpected network call"))
+
+    assert options_activity._credentials() == (
+        "test-client-secret", "test-refresh-token", "live"
+    )
+    betas = retirement_options._fetch_tasty_betas(["SPCX"])
+    events = retirement_options._fetch_tasty_greeks(
+        [{"streamer": ".SPCX260821P95"}], timeout_seconds=1.0
+    )
+
+    assert [(beta.symbol, beta.beta) for beta in betas] == [("SPCX", 1.2)]
+    assert set(events) == {".SPCX260821P95"}
+    assert [(session.client_secret, session.refresh_token, session.is_test) for session in sessions] == [
+        ("test-client-secret", "test-refresh-token", False),
+        ("test-client-secret", "test-refresh-token", False),
+    ]
+    assert all(session.closed for session in sessions)
+    assert streamers[0].subscribed == (greeks_type, [".SPCX260821P95"])
+    assert streamers[0].closed is True
+
+
+def test_market_data_sync_errors_hide_provider_message(monkeypatch):
+    secret = "test-refresh-token-123"
+    account = "account-identifier-987"
+
+    def fail():
+        raise RuntimeError(f"provider rejected {secret} for {account}")
+
+    monkeypatch.setattr(retirement_options, "sync_betas", fail)
+    monkeypatch.setattr(retirement_options, "sync_greeks", fail)
+
+    report = retirement_options.sync_market_data()
+
+    assert report == {
+        "betas_error": "RuntimeError: Tastytrade market data is unavailable; "
+                       "check the brokerage setup and retry the sync.",
+        "greeks_error": "RuntimeError: Tastytrade market data is unavailable; "
+                        "check the brokerage setup and retry the sync.",
+    }
+    assert secret not in repr(report)
+    assert account not in repr(report)
 
 
 def _ledger_rows():
