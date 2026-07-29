@@ -41,7 +41,8 @@ both expose exactly three brokerage-data tabs in the same order:
 - **Options:** option positions, groups, lifecycle activity, and risk. The
   current Trading options vocabulary is the reference for both brokerages.
 - **Option-Adjusted Basis:** only symbols with an open long-equity position and
-  an open option position.
+  option activity that affects its basis. A completed option cycle remains
+  relevant while the shares remain open.
 
 The Option-Adjusted Basis tabs render the same shared Angular component with a
 portfolio identifier (`TRADING` or `RETIREMENT`). Provider-specific sync
@@ -60,8 +61,8 @@ the user-captured G/L columns.
 
 The Option-Adjusted Basis table keeps share economics together first, option
 economics second, and combines them only in the final columns. Exposure and
-state are not shown because every included symbol has both open long shares and
-an open option position:
+state are not shown because every included symbol has open long shares and
+option history:
 
 | Column | Meaning |
 |---|---|
@@ -78,7 +79,8 @@ an open option position:
 | Net P/L | Equity P/L plus Option P/L, using only the applicable blocks |
 | Adjusted Basis / Share | `(Cost Price - Option P/L) / Share Qty` |
 
-Summary cards above the table include only the displayed open matched symbols.
+Summary cards above the table include only the displayed open share positions
+with option history.
 `Basis unavailable` counts only rows whose adjusted-basis completeness is
 `UNAVAILABLE`; the normal `INDICATIVE` state for a live marked position does
 not count as unavailable. Search is the only table filter. Warnings and

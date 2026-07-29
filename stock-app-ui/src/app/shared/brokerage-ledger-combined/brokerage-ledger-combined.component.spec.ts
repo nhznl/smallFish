@@ -100,7 +100,14 @@ describe('BrokerageLedgerCombinedComponent', () => {
           },
           option_adjusted_basis_per_share: 105,
         },
-        withComponentStates('OPTION_FLAT', 'OPEN', 'FLAT'),
+        {
+          ...withComponentStates('OPTION_HISTORY', 'OPEN', 'FLAT'),
+          adjusted_basis: {
+            realized_per_share: 105, marked_per_share: 105, history_start: '2026-01-01',
+            completeness: 'COMPLETE' as const, reason: null,
+          },
+          option_adjusted_basis_per_share: 105,
+        },
         withComponentStates('EQUITY_FLAT', 'FLAT', 'OPEN'),
         { ...SNAPSHOT.symbols[0], symbol: 'EQUITY_ONLY', exposure: 'EQUITY' },
       ],
@@ -118,7 +125,7 @@ describe('BrokerageLedgerCombinedComponent', () => {
     expect(text).toContain('Trading option-adjusted basis');
     expect(text).toContain('DEMO');
     expect(text).toContain('READY');
-    expect(text).not.toContain('OPTION_FLAT');
+    expect(text).toContain('OPTION_HISTORY');
     expect(text).not.toContain('EQUITY_FLAT');
     expect(text).not.toContain('EQUITY_ONLY');
     expect(text).not.toContain('Open matched symbols');

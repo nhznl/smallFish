@@ -16,9 +16,9 @@
   } @else if (data; as ledger) {
     <div class="combined-heading">
       <div>
-        <p class="section-kicker">Open equity + option positions</p>
+        <p class="section-kicker">Open equity + option history</p>
         <h2>{{ ledger.portfolio.label }} option-adjusted basis</h2>
-        <p>Only symbols with open long shares and open option positions are included.</p>
+        <p>Open long-share positions are included when option activity affects their basis, even after the option position closes.</p>
       </div>
       <span class="snapshot-chip">
         <span>{{ ledger.portfolio.brokerage }} positions</span>
@@ -197,13 +197,13 @@
     } @else if (basisSymbols().length) {
       <div class="empty-state">
         <h3>No symbols match these filters</h3>
-        <p>Reset the search to return to all open equity + option symbols.</p>
+        <p>Reset the search to return to all open share positions with option history.</p>
         <button type="button" class="btn" (click)="resetFilters()">Reset filters</button>
       </div>
     } @else {
       <div class="empty-state">
-        <h3>No open equity + option positions</h3>
-        <p>This view includes a symbol only when it has both open long shares and an open option position.</p>
+        <h3>No open shares with option history</h3>
+        <p>No open long-share position currently has option activity affecting its basis.</p>
       </div>
     }
 

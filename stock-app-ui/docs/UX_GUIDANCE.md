@@ -241,8 +241,10 @@ other textual state.
   spot/distance-to-strike, IV/source, and delta-shares columns. The ledger UX
   intentionally omits beta comparisons, beta-delta totals, risk-status columns,
   and the separate Portfolio Risk section.
-- Option-Adjusted Basis includes only symbols with both open long-equity and
-  open option positions, so do not show redundant Exposure or State controls.
+- Option-Adjusted Basis includes only symbols with open long-equity positions
+  and option activity that affects their basis. Keep completed option cycles
+  while the shares remain open; do not show redundant Exposure or State
+  controls.
   Search is its only table filter. Keep all Share Position columns together
   before the Options columns, followed by Net P/L and the live option-adjusted
   basis. Calculate that basis from equity cost less option P/L only; do not

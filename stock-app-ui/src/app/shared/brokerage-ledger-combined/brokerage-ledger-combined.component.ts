@@ -70,11 +70,7 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
         && component.state === 'OPEN'
         && component.quantity > 0
       )
-      && row.components.some(component =>
-        component.instrument === 'OPTION'
-        && component.state === 'OPEN'
-        && component.quantity !== 0
-      )
+      && row.components.some(component => component.instrument === 'OPTION')
     );
   }
 
