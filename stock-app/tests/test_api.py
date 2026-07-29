@@ -164,7 +164,7 @@ def test_wheel_candidates_horizon_filter(env_fixtures):
     assert data[0]["wheel"]["horizonDte"] == 37
 
 
-def test_native_options_routes_are_registered(env_fixtures, tmp_path, monkeypatch):
+def test_retired_options_routes_are_not_registered(env_fixtures, tmp_path, monkeypatch):
     """The grouped Options/Trading and Retirement projections, and every
     trade-group route including their former 410 tombstones, are fully
     retired -- not switched off, gone. What remains is the compatibility sync
@@ -178,14 +178,14 @@ def test_native_options_routes_are_registered(env_fixtures, tmp_path, monkeypatc
     monkeypatch.setenv("SFP_OPTIONS_BETAS", str(tmp_path / "options_betas.csv"))
     monkeypatch.setenv("SFP_EVENTS_CSV", str(tmp_path / "events.csv"))
 
-    # GET on a retired path falls to the Angular SPA catch-all rather than a
-    # fixed status code, so what proves the route is gone is that no JSON API
-    # answers it any more.
+    # A retired GET reaches the static-app fallback: 200 with a built UI, or
+    # its normal 404 when no bundle is present (as in CI). Prove no native API
+    # route owns the path before accepting either deployment-specific result.
+    native_paths = {route.path for route in app.routes if hasattr(route, "path")}
     for path in ("/options", "/options/activity", "/retirement/options"):
+        assert path not in native_paths
         response = client.get(path)
-        assert not response.headers.get("content-type", "").startswith(
-            "application/json"
-        ), path
+        assert response.status_code in (200, 404), path
     # A write verb has no SPA catch-all to fall through to, so it 404s or
     # 405s outright -- either way, not the 410 tombstone these used to return.
     for method, path in (

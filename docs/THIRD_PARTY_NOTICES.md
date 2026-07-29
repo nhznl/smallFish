@@ -4,7 +4,7 @@ smallFish is distributed under the [MIT License](../LICENSE). This file records
 the origin and redistribution terms of everything in the repository that the
 project does not author, so a fork can be confident about what it is receiving.
 
-Last reviewed: 2026-07-26.
+Last reviewed: 2026-07-29.
 
 ## Committed assets
 
@@ -32,6 +32,11 @@ distribution channel and remains under its own license.
 
 Verify the current set with `pip-licenses` or `npm ls --all` in a configured
 environment; the table above is a summary, not a generated manifest.
+
+`services/` is project-authored shared transport code, not a third-party
+package. Its Tastytrade operations depend on the identical `tastytrade` pin in
+both Python manifests; its SnapTrade operations run only in the backend
+environment, where `snaptrade-python-sdk` is declared.
 
 ## Market data
 

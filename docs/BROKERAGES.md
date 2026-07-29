@@ -33,6 +33,22 @@ One entry point for everything below:
 
 ---
 
+## Provider I/O ownership
+
+The command and API entry points load `app.env`; shared `services/` packages
+then read credentials only from the process environment. `services.tastytrade`
+owns Tastytrade session construction, account/market reads, DXLink streaming,
+and raw payloads. `services.snaptrade` owns SnapTrade client construction,
+registration, connection-portal, account, position, and paginated-activity
+calls.
+
+The backend and utilities retain provider-specific policy: normalization,
+Symbol Ledger selection, quote eligibility, artifact writes, CLI presentation,
+and public API responses. Services never place, modify, or cancel an order, and
+they never persist credentials or brokerage data.
+
+---
+
 ## Tastytrade
 
 Adds the options ledger, DXLink quotes, exact-contract Greeks, and market-metric

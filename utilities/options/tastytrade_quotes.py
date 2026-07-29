@@ -27,9 +27,6 @@ _OCC_SYMBOL = re.compile(
 )
 
 
-TastytradeCredentials = tastytrade_io.TastytradeCredentials
-
-
 @dataclass
 class QuoteBatch:
     source: str = SOURCE_TASTYTRADE_DXLINK
@@ -63,10 +60,6 @@ class QuoteBatch:
             "batches": self.batches,
             "errors": self.errors,
         }
-
-
-def load_credentials() -> TastytradeCredentials:
-    return tastytrade_io.load_credentials()
 
 
 def streamer_symbol(contract_symbol: str) -> str:
@@ -138,7 +131,7 @@ def normalize_quote(event: Any, contract_symbol: str) -> dict[str, Any]:
     }
 
 
-async def _fetch_batch(session: Any, symbols: dict[str, str], *,
+async def _fetch_batch(symbols: dict[str, str], *,
                        timeout_seconds: float) -> tuple[dict[str, dict[str, Any]], str | None]:
     result = tastytrade_io.fetch_quotes(list(symbols), timeout_seconds)
     return {
@@ -150,7 +143,7 @@ async def _fetch_batch(session: Any, symbols: dict[str, str], *,
 async def fetch_quotes_async(contract_symbols: list[str], *,
                              timeout_seconds: float = 8.0,
                              batch_size: int = 400,
-                             credentials: TastytradeCredentials | None = None) -> QuoteBatch:
+                             credentials: tastytrade_io.TastytradeCredentials | None = None) -> QuoteBatch:
     """Fetch current DXLink Quote snapshots in bounded subscription batches."""
     if timeout_seconds <= 0 or batch_size <= 0:
         raise ValueError("quote timeout and batch size must be positive")
@@ -162,7 +155,7 @@ async def fetch_quotes_async(contract_symbols: list[str], *,
         return batch
 
     try:
-        creds = credentials or load_credentials()
+        creds = credentials or tastytrade_io.load_credentials()
     except Exception as exc:  # noqa: BLE001 - surfaced as provider metadata
         batch.errors.append(_safe_error(exc))
         batch.retrieved_at = datetime.now(timezone.utc).isoformat()
@@ -184,9 +177,7 @@ async def fetch_quotes_async(contract_symbols: list[str], *,
         if not mapping:
             continue
         batch.batches += 1
-        quotes, error = await _fetch_batch(
-            None, mapping, timeout_seconds=timeout_seconds,
-        )
+        quotes, error = await _fetch_batch(mapping, timeout_seconds=timeout_seconds)
         batch.quotes.update(quotes)
         if error:
             batch.errors.append(error)

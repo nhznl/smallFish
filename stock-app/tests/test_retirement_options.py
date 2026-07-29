@@ -129,9 +129,6 @@ def test_default_tastytrade_market_data_fetchers_use_three_credentials_and_close
     monkeypatch.setattr(socket, "create_connection",
                         lambda *_args, **_kwargs: pytest.fail("unexpected network call"))
 
-    assert options_activity._credentials() == (
-        "test-client-secret", "test-refresh-token", "live"
-    )
     betas = retirement_options._fetch_tasty_betas(["SPCX"])
     events = retirement_options._fetch_tasty_greeks(
         [{"streamer": ".SPCX260821P95"}], timeout_seconds=1.0

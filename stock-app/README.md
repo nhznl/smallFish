@@ -8,8 +8,8 @@ analytics, and owns the options and retirement ledgers.
 
 - Stock-analysis endpoints: all stocks, classifications, price action, strategy
   rows, wheel candidates, stock details, slopes, and company information.
-- Read-only Tastytrade activity import with immutable broker events, editable
-  same-symbol groups, marked group P/L, and reconciliation state.
+- Read-only Tastytrade activity import with immutable broker events, manual
+  reconciliation, current marks, and Symbol Ledger metadata.
 - Broker-position options risk dashboard sourced from current Tastytrade marks
   and timestamped live DXLink Greeks/IV, with market inputs, warnings, and
   beta-delta analytics.
@@ -30,12 +30,12 @@ stock-app/
 │   ├── cache.py            # in-memory stock and trend cache
 │   ├── trend_engine.py     # technical trend calculations
 │   ├── stock_model.py      # stock, weekly, and gain/loss models
-│   ├── options_activity.py # Tastytrade import, marks, and manual reconciliation
+│   ├── options_activity.py # Tastytrade sync policy, normalization, marks, reconciliation
 │   ├── options_market.py   # market inputs for options positions
 │   ├── options_risk.py     # options-risk calculations
 │   ├── portfolios.py       # named symbol lists, returns, sector exposure
-│   ├── retirement_options.py # SnapTrade option event sync and market data
-│   ├── snaptrade_service.py  # read-only SnapTrade holdings import
+│   ├── retirement_options.py # retirement events and Tastytrade market-data normalization
+│   ├── snaptrade_service.py  # SnapTrade credential persistence, CLI, and holdings normalization
 │   ├── studies_read.py     # fail-closed Research Studies reader
 │   ├── capabilities.py     # optional-integration and core-data states
 │   ├── brokerages/         # brokerage registry, provider adapters, canonical facts
@@ -55,11 +55,14 @@ folder, and retirement ledger data. Every artifact location can be overridden
 individually; the full table is in
 [`../docs/CONFIGURATION.md`](../docs/CONFIGURATION.md).
 
-Broker sync reads the `TT_*` and `SNAPTRADE_*` settings directly from `app.env`.
-**All of them are optional.** With every credential blank the API still starts,
-every endpoint still responds, and the broker-backed endpoints return empty
-payloads while `GET /capabilities` reports why. A missing credential is a
-capability state, not an error — see
+The application entry points load `app.env`; the shared `services.tastytrade`
+and `services.snaptrade` packages then read `TT_*` and `SNAPTRADE_*` from the
+process environment to authenticate, stream/page, and return raw provider
+payloads. `app/` retains brokerage policy, normalization, artifact writes, and
+HTTP response shapes. **All credentials are optional.** With every credential
+blank the API still starts, every endpoint still responds, and the
+broker-backed endpoints return empty payloads while `GET /capabilities` reports
+why. A missing credential is a capability state, not an error — see
 [`../docs/BROKERAGES.md`](../docs/BROKERAGES.md).
 
 Research Studies resolve from the mutable studies root first and fall back to the
@@ -163,6 +166,9 @@ normalized broker facts written to
 `data/ledger_retirement/snaptrade_holdings.csv` by the last sync. Each row is an
 immutable holding (equity, option, or cash) with quantity, price, cost basis,
 market value, and open P/L; the summary groups value by account and asset class.
+`services.snaptrade` performs registration, portal, account, position, and
+activity I/O; this module persists credentials, normalizes rows, and writes the
+ledger.
 
 Setup is one-time and depends on which kind of SnapTrade API key you have —
 the client-id prefix tells you:
@@ -241,6 +247,8 @@ No test contacts a provider or the network; several assert that no socket is
 opened. Fixtures live in `tests/fixtures/`, and path settings are redirected at
 them with `monkeypatch.setenv`, so the suite is independent of your `app.env`
 and your `data/`.
+Provider transport is separately covered by `services/tests/` with fake SDK
+sessions and clients.
 
 This package must never import `utilities/` or `studies/`. It consumes generated
 artifacts instead; see [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).

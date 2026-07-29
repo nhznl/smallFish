@@ -810,18 +810,6 @@ def test_snapshot_without_holdings_is_a_conflict_not_an_empty_capture(adapter_en
 
 # --------------------------------------------------------- no regressions ---
 
-def test_every_legacy_brokerage_route_still_answers(adapter_env):
-    write_covered_put("tastytrade")
-    write_covered_put("fidelity")
-    for path in ("/options", "/options/activity", "/retirement/options",
-                 "/retirement/portfolio/live",
-                 "/brokerage-ledgers/trading/combined",
-                 "/brokerage-ledgers/retirement/combined",
-                 "/brokerage-ledgers/trading/holdings",
-                 "/brokerage-ledgers/retirement/holdings"):
-        assert client.get(path).status_code == 200, path
-
-
 def test_symbol_ledger_reads_never_call_a_provider(adapter_env, monkeypatch):
     monkeypatch.setattr(
         options_activity, "fetch_tastytrade",

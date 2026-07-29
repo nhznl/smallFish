@@ -166,18 +166,21 @@ no network call.
 Angular dashboard  ──HTTP──▶  FastAPI  ──reads──▶  data/  ◀──writes──  utilities/ + studies/
  stock-app-ui/                stock-app/           generated            batch pipeline
                                   │                                          │
-                                  └──────────▶ models/ ◀────────────────────┘
-                                        shared stdlib-only contracts
+                                  ├──▶ services/ ◀───────────────────────────┤
+                                  └──▶ models/ ◀─────────────────────────────┘
+                                      shared provider transport + stdlib contracts
 ```
 
 Dependencies point one way. The API reads generated artifacts and never imports
-the batch runtime; both depend only on `models/`.
+the batch runtime; both runtimes may use `services/` for raw provider transport
+and `models/` for contracts.
 
 | Directory | Purpose |
 |---|---|
 | [`utilities/`](utilities/README.md) | Batch pipeline: scraper, universe, indicators, options. Its own Python environment. |
 | [`studies/`](studies/README.md) | Research studies and their materialization. Shares the utilities environment. |
 | [`models/`](models/README.md) | Standard-library-only data contracts shared by everything. |
+| [`services/`](services/README.md) | Read-only provider credentials, SDK sessions/clients, streaming/paging, and raw payload transport. |
 | [`stock-app/`](stock-app/README.md) | FastAPI backend and API tests. Its own Python environment. |
 | [`stock-app-ui/`](stock-app-ui/README.md) | Angular 22 dashboard. |
 | `tools/` | Repository tooling: setup preflight, doctor, brokerages, secret scan. Standard library only. |

@@ -80,9 +80,6 @@ class SnapTradeValidationError(ValueError):
         self.status_code = status_code
 
 
-SnapTradeCredentials = snaptrade_io.SnapTradeCredentials
-
-
 # --------------------------------------------------------------------------- #
 # small value helpers (kept local, mirroring options_activity.py)             #
 # --------------------------------------------------------------------------- #
@@ -157,37 +154,6 @@ def _read_ledger(path: Path) -> list[dict[str, str]]:
                 f"{SNAPTRADE_HOLDINGS_SCHEMA_VERSION}", 409
             )
     return rows
-
-
-# --------------------------------------------------------------------------- #
-# credentials + SDK client                                                     #
-# --------------------------------------------------------------------------- #
-
-def _credentials() -> SnapTradeCredentials:
-    try:
-        return snaptrade_io.load_credentials()
-    except snaptrade_io.SnapTradeConfigurationError as exc:
-        raise SnapTradeValidationError(
-            str(exc),
-            503,
-        ) from exc
-
-
-def _is_personal_key(creds: SnapTradeCredentials) -> bool:
-    """Personal API keys (PERS- prefix) are single-user; commercial keys manage
-    registered users, each holding their own brokerage connections."""
-    return snaptrade_io.is_personal_key(creds)
-
-
-def _user_kwargs(creds: SnapTradeCredentials) -> dict[str, str]:
-    """Per-user auth arguments for data endpoints; empty for personal keys."""
-    try:
-        return snaptrade_io.user_kwargs(creds)
-    except snaptrade_io.SnapTradeConfigurationError as exc:
-        raise SnapTradeValidationError(
-            str(exc),
-            503,
-        ) from exc
 
 
 # --------------------------------------------------------------------------- #

@@ -71,15 +71,6 @@ def _mark(*, symbol="ABC   260821P00050000", underlying="ABC",
     }
 
 
-def test_credentials_read_inline_app_env_values(activity_env, monkeypatch):
-    monkeypatch.delenv("SFP_TASTY_ENV_FILE", raising=False)
-    monkeypatch.setenv("TT_CLIENT_SECRET", "secret")
-    monkeypatch.setenv("TT_REFRESH_TOKEN", "token")
-    monkeypatch.setenv("TT_ENV", "live")
-
-    assert options_activity._credentials() == ("secret", "token", "live")
-
-
 def test_market_data_error_hides_provider_message():
     secret = "test-refresh-token-123"
     account = "account-identifier-987"

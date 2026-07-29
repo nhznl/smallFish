@@ -234,17 +234,6 @@ def _atomic_write(path: Path, headers: list[str], rows: list[dict[str, Any]]) ->
         raise
 
 
-def _credentials() -> tuple[str, str, str]:
-    try:
-        credentials = tastytrade_io.load_credentials()
-    except tastytrade_io.TastytradeConfigurationError as exc:
-        raise ActivityValidationError(
-            str(exc),
-            503,
-        ) from exc
-    return credentials.client_secret, credentials.refresh_token, credentials.environment
-
-
 def _safe_market_data_error(exc: Exception) -> str:
     """Return a stable report-safe error for an optional provider call."""
     return (

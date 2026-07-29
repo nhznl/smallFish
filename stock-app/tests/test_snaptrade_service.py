@@ -107,44 +107,6 @@ def test_config_paths(tmp_path, monkeypatch):
     )
 
 
-# --------------------------------------------------------------------------- #
-# credentials                                                                  #
-# --------------------------------------------------------------------------- #
-
-def test_credentials_missing_app_keys(holdings_env):
-    with pytest.raises(snaptrade_service.SnapTradeValidationError) as exc:
-        snaptrade_service._credentials()
-    assert exc.value.status_code == 503
-
-
-def test_credentials_from_env_vars(holdings_env, monkeypatch):
-    monkeypatch.setenv("SNAPTRADE_CLIENT_ID", "cid")
-    monkeypatch.setenv("SNAPTRADE_CONSUMER_KEY", "ckey")
-    monkeypatch.setenv("SNAPTRADE_USER_ID", "uid")
-    monkeypatch.setenv("SNAPTRADE_USER_SECRET", "usecret")
-    creds = snaptrade_service._credentials()
-    assert (creds.client_id, creds.consumer_key) == ("cid", "ckey")
-    assert (creds.user_id, creds.user_secret) == ("uid", "usecret")
-
-
-def test_personal_key_needs_no_user(holdings_env):
-    creds = snaptrade_service.SnapTradeCredentials("PERS-ABC", "k", None, None)
-    assert snaptrade_service._is_personal_key(creds)
-    assert snaptrade_service._user_kwargs(creds) == {}
-
-
-def test_commercial_key_requires_registered_user(holdings_env):
-    creds = snaptrade_service.SnapTradeCredentials("c", "k", None, None)
-    assert not snaptrade_service._is_personal_key(creds)
-    with pytest.raises(snaptrade_service.SnapTradeValidationError) as exc:
-        snaptrade_service._user_kwargs(creds)
-    assert exc.value.status_code == 503
-    registered = snaptrade_service.SnapTradeCredentials("c", "k", "uid", "usecret")
-    assert snaptrade_service._user_kwargs(registered) == {
-        "user_id": "uid", "user_secret": "usecret",
-    }
-
-
 def test_register_rejected_for_personal_key(holdings_env, monkeypatch):
     monkeypatch.setenv("SNAPTRADE_CLIENT_ID", "PERS-ABC")
     monkeypatch.setenv("SNAPTRADE_CONSUMER_KEY", "ckey")

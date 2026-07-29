@@ -7,7 +7,7 @@ collection, immutable quote archives, and archive verification.
 |---|---|
 | `wheel.py` | Local OHLCV Wheel scan and immutable Wheel artifacts. |
 | `chains.py` | Exact-contract discovery, quote enrichment, and immutable premium artifacts. |
-| `tastytrade_quotes.py` | Tastytrade DXLink quote retrieval for exact provider symbols. |
+| `tastytrade_quotes.py` | Maps exact provider symbols and normalizes raw DXLink quotes from `services.tastytrade`. |
 | `verify_premiums.py` | Offline verification of immutable premium archives and their derived views. |
 | `exchange_calendar.py` | Deterministic NYSE session calendar used for Wheel horizons. |
 
@@ -29,6 +29,9 @@ non-zero when no requested Tastytrade quote arrives. Yahoo quotes are
 diagnostic-only — they cannot authorize entry economics. Running off-hours is
 allowed for diagnostics, but off-hours or untimestamped observations can never
 become entry-eligible.
+`chains` delegates Tastytrade credential loading, session lifetime, and DXLink
+streaming to `services.tastytrade`; this package retains normalization and
+archive semantics.
 
 See [`../../docs/BROKERAGES.md`](../../docs/BROKERAGES.md) for setup.
 
@@ -46,9 +49,11 @@ and fails on any mismatch. Offline, and safe to run at any time.
 
 Run these through the stable repository commands: `./commands.sh wheel`,
 `./commands.sh chains`, and `./commands.sh verify-premiums [run-id]`.
-Configuration is colocated in `config/`. Shared services such as price readers,
-artifact manifests, and the universe registry remain in the parent
-`utilities/` package.
+Configuration is colocated in `config/`. Price readers, artifact manifests, and
+the universe registry remain in the parent `utilities/` package.
+`services.tastytrade` owns credentials, session lifetime, and raw DXLink
+collection; this package keeps quote eligibility, timestamp normalization,
+coverage metadata, and archive policy.
 
 ## Outputs
 
@@ -70,3 +75,5 @@ utilities/.venv/bin/python -m pytest -q utilities/tests/test_wheel.py \
 ```
 
 No test contacts Tastytrade or Yahoo. Quote providers are injected; pass a fake.
+Run `services/tests/test_tastytrade_io.py` under the utilities environment when
+changing shared Tastytrade transport.

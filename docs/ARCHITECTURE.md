@@ -39,7 +39,9 @@ One way, and it is a hard rule:
 - `services/` owns provider credentials, SDK sessions, streaming, and raw
   payload envelopes. Both Python runtimes may import it when their matching SDK
   is installed; it imports neither runtime, project configuration, persistence,
-  FastAPI, pandas, numpy, nor project contracts.
+  FastAPI, pandas, numpy, nor project contracts. Consumers retain
+  normalization, financial/lifecycle policy, artifact writes, and public API
+  shapes.
 - `stock-app-ui/` talks only to the API over HTTP.
 
 The API's independence is what allows two Python environments. The moment the
@@ -61,6 +63,9 @@ interpreter, because it has to work *before* either environment exists.
 Some pins are duplicated deliberately. Adding a dependency to one environment
 because the other has it is a mistake.
 
+`services/tests/test_tastytrade_io.py` runs in both environments; the
+SnapTrade service suite runs in the API environment only.
+
 ## Data flow
 
 1. **Universe** — `utilities/universe.py` builds `data/universe.csv` from index
@@ -77,6 +82,10 @@ because the other has it is a mistake.
    values, and serves JSON. It also serves the built Angular bundle from
    `stock-app/static/`.
 5. **UI** — Angular fetches JSON and renders it.
+
+Brokerage sync consumers call `services/*` for raw provider payloads, then
+normalize and materialize their own ledger artifacts under `SFP_DATA_DIR`.
+Brokerage adapters read those artifacts only; they never call `services/`.
 
 Nothing in the API triggers a scrape as a side effect of a page load. Batch work
 is explicit, via `commands.sh`.
@@ -190,6 +199,7 @@ is not.
 |---|---|---|
 | `stock-app/tests` | API venv | endpoints, readers, risk arithmetic, capabilities, static serving |
 | `utilities/tests` | batch venv | scraper, universe, indicators, options, studies, repo tooling |
+| `services/tests` | matching Python venv | injected provider session/client transport; Tastytrade in both runtimes and SnapTrade in API |
 | `stock-app-ui/src/**/*.spec.ts` | Karma + ChromeHeadless | services and shared components |
 
 No suite contacts a provider. Fetchers are injected, fixtures are committed, and
@@ -203,6 +213,7 @@ also what makes CI possible without secrets.
 | A data source | A fetcher in `utilities/` writing a documented artifact. Inject the fetch function. |
 | An API endpoint | A router in `stock-app/app/routers/` reading an existing artifact. Do not import the pipeline. |
 | A shared type | `models/`, standard library only, with tests. |
+| Brokerage/provider I/O | `services/<provider>/`; keep normalization and artifact writes in the consumer runtime. |
 | A UI view | Read `stock-app-ui/AGENTS.md` and `stock-app-ui/docs/UX_GUIDANCE.md` first; reuse the shared primitives. |
 | An optional integration | A capability in `stock-app/app/capabilities.py` and a provider adapter in `tools/brokerages.py`, so it degrades gracefully. |
 | A study | A new pre-registered definition. Never edit a published one. |

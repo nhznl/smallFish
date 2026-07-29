@@ -1,7 +1,10 @@
 # Utilities
 
-The batch pipeline. This package owns network fetching, computation, and file
-generation, and writes stable artifacts under `SFP_DATA_DIR`.
+The batch pipeline. This package owns non-broker fetching, computation, and
+file generation, and writes stable artifacts under `SFP_DATA_DIR`. Shared
+`services/` packages own Tastytrade provider authentication, sessions,
+streaming, and raw payload collection; utilities owns their normalization and
+artifacts.
 
 **It must never import FastAPI application code**, and `stock-app/` must never
 import this package. The two communicate only through generated artifacts. See
@@ -48,7 +51,7 @@ utilities/.venv/bin/python -m utilities.scraper --help
 | `events.py` | Validated, atomic upcoming-earnings cache plus conditional Finnhub refresh |
 | `fetch_earnings_history.py` | Separately maintained multi-year Yahoo/yfinance earnings dates |
 | `manifest.py` | Artifact manifests and provenance |
-| `options/` | Wheel screen, quote collection, archive verification |
+| `options/` | Wheel screen, quote normalization and archives; Tastytrade DXLink transport comes from `services.tastytrade` |
 
 See [`options/README.md`](options/README.md).
 
@@ -104,16 +107,19 @@ through the scraper's validation and atomic-write paths.
 
 ## Network boundaries
 
-Every network call sits behind an **injected** fetch function
-(`make_yfinance_fetcher` and its equivalents). That is what makes the pipeline
-deterministically testable.
+Every non-broker network call sits behind an **injected** fetch function
+(`make_yfinance_fetcher` and its equivalents). Tastytrade transport is likewise
+injected through `services.tastytrade`, which owns credentials, SDK sessions,
+and raw DXLink collection while `utilities.options` owns symbol mapping,
+normalization, coverage policy, and archives. That separation keeps the
+pipeline deterministically testable.
 
 **No test in this package may contact a provider.** Pass a fake fetcher; several
 tests assert that no socket is opened. Live-provider checks are manual.
 
-Providers used: Yahoo Finance (prices, company info), Wikipedia and index
-providers (universe membership), Finnhub (earnings, optional), Tastytrade
-(quotes and Greeks, optional).
+Providers used directly here: Yahoo Finance (prices, company info), Wikipedia
+and index providers (universe membership), and Finnhub (earnings, optional).
+Tastytrade is optional provider transport supplied by `services.tastytrade`.
 
 ## Tests
 
@@ -123,6 +129,8 @@ utilities/.venv/bin/python -m pytest -q utilities/tests
 
 This suite also covers `studies/` and the repository tooling in `tools/`. It
 passes offline; if it does not, something has acquired a real network call.
+Run `services/tests/test_tastytrade_io.py` under this environment when changing
+Tastytrade transport or its quote consumer.
 
 A few tests skip when the git-ignored pinned study evidence is absent — expected
 on a clean clone. See

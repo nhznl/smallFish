@@ -13,12 +13,6 @@ a dated pre-registration.
 
 ## Active
 
-**Provider I/O extraction.** The completed brokerage refactor left provider SDK
-calls split across the API and batch runtimes. A focused, phased implementation
-plan is ready for owner handoff in
-[`docs/PROVIDER_IO_EXTRACTION_PLAN.md`](docs/PROVIDER_IO_EXTRACTION_PLAN.md).
-No provider code has moved yet.
-
 **Prospective RTH quote evidence.** Collect ordinary regular-trading-hours
 option-quote observations across several calendar dates, then inspect their
 side-specific timestamps, freshness, quality distribution, and eligibility
