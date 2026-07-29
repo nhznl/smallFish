@@ -1,11 +1,9 @@
 """Retirement option event sync and market-data support.
 
 SnapTrade option transaction events are pulled into an immutable local ledger.
-The grouped Broker Risk Positions view this module used to project is retired;
-the Symbol Ledger and Options resources under `/api/brokerages` are the current
-surface. What remains here is event sync, plus the current-option-leg reading
-that `sync_market_data` uses to decide which underlyings need fresh betas and
-greeks.
+The Symbol Ledger and Options resources under `/api/brokerages` are the current
+surface. This module owns event sync plus the current-option-leg reading that
+`sync_market_data` uses to decide which underlyings need fresh betas and greeks.
 """
 
 from __future__ import annotations
@@ -14,24 +12,16 @@ import csv
 import os
 import tempfile
 import threading
-import uuid
 from collections import defaultdict
-from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-import yaml
-
 from services.tastytrade import io as tastytrade_io
 
 from . import config, options_activity, snaptrade_service
-from .options_market import build_market_inputs
-from .options_risk import (COVERED_CALL, LIMIT_APPROVED, SHORT_CALL, RiskConfig,
-                           apply_call_coverage, build_risk_snapshot,
-                           evaluate_position)
+from .options_risk import apply_call_coverage
 
 EVENT_HEADERS = [
     "schema_version", "id", "source", "account_id", "account",
@@ -86,8 +76,6 @@ def _dec(value: Any) -> Decimal:
     return result if result.is_finite() else Decimal("0")
 
 
-
-
 def _atomic_write(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -121,14 +109,6 @@ def _read_rows(path: Path, headers: list[str]) -> list[dict[str, str]]:
         return [{key: row.get(key, "") for key in headers} for row in csv.DictReader(handle)]
 
 
-
-
-
-
-
-
-
-
 # --------------------------------------------------------------------------- #
 # risk rows from the SnapTrade holdings ledger                                  #
 # --------------------------------------------------------------------------- #
@@ -152,8 +132,6 @@ def _share_pool(ledger: list[dict[str, Any]]) -> dict[tuple[str, str], Decimal]:
         symbol = str(row.get("symbol") or "").upper().strip()
         pool[(str(row.get("account_name") or ""), symbol)] += _dec(row.get("quantity"))
     return dict(pool)
-
-
 
 
 def _option_rows() -> list[dict[str, Any]]:
@@ -193,54 +171,9 @@ def _option_rows() -> list[dict[str, Any]]:
             "status": "OPEN",
             "non_standard": False,
             "notes": "",
-            # ── carried through only for the trade-group aggregation ──
-            "_market_value": float(_dec(row.get("market_value"))),
-            "_cost_basis": float(_dec(row.get("cost_basis"))),
-            "_open_pnl": float(_dec(row.get("open_pnl"))),
         })
     apply_call_coverage(rows, _share_pool(ledger))
     return rows
-
-
-def _group_name(symbol: str, tags: dict[str, str], year: int) -> str:
-    """Editable name with the same automatic SYMBOL YEAR convention as Trading."""
-    return tags.get("name", "").strip() or f"{symbol} {year}"
-
-
-def _build_groups(rows: list[dict[str, Any]], meta: dict[str, dict[str, str]],
-                  *, year: int | None = None) -> list[dict[str, Any]]:
-    """One editable group row per underlying, aggregating its legs.
-
-    Net credit received comes from the broker cost basis: a short option carries
-    a negative cost basis (a credit), so the received premium is ``-cost_basis``.
-    """
-    by_underlying: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in rows:
-        by_underlying[row["symbol"]].append(row)
-
-    year = year or date.today().year
-    groups: list[dict[str, Any]] = []
-    for underlying, legs in by_underlying.items():
-        tags = meta.get(underlying, {})
-        status = (tags.get("status", "") or "ACTIVE").strip().upper()
-        groups.append({
-            "symbol": underlying,
-            "account": legs[0]["account"],
-            "name": _group_name(underlying, tags, year),
-            "status": status if status in {"ACTIVE", "ARCHIVED"} else "ACTIVE",
-            "net_cash_flow": round(-sum(l["_cost_basis"] for l in legs), 2),
-            "open_market_value": round(sum(l["_market_value"] for l in legs), 2),
-            "total_pnl": round(sum(l["_open_pnl"] for l in legs), 2),
-            # Live legs are open positions with marks: no realized P/L yet, and
-            # the mark lacks a defensible observation timestamp, so INDICATIVE.
-            "realized_pnl": None,
-            "position_status": "OPEN",
-            "pnl_completeness": "INDICATIVE",
-            "event_count": len(legs),
-            "notes": tags.get("notes", "").strip(),
-        })
-    groups.sort(key=lambda group: group["symbol"])
-    return groups
 
 
 # --------------------------------------------------------------------------- #
@@ -300,9 +233,7 @@ def sync_events(provider=None, *, start_date: date | None = None,
 
     Full-window + upsert-by-id is idempotent and self-heals batches that post
     late (SnapTrade serves Fidelity positions in real time but transactions on a
-    slower cadence, so a close can trail the position leaving the feed). This is
-    new work: the holdings ``sync()`` does not touch this endpoint, and the
-    greeks/betas purge to current contracts is unchanged.
+    slower cadence, so a close can trail the position leaving the feed).
     """
     end_date = end_date or date.today()
     start_date = start_date or date(end_date.year, 1, 1)
@@ -341,46 +272,6 @@ def sync_events(provider=None, *, start_date: date | None = None,
         "window": [start_date.isoformat(), end_date.isoformat()],
         "retrieved_at": retrieved_at,
     }
-
-
-
-
-
-
-
-
-
-
-
-
-# --------------------------------------------------------------------------- #
-# snapshot                                                                      #
-# --------------------------------------------------------------------------- #
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# --------------------------------------------------------------------------- #
-# editable trade-group metadata                                                 #
-# --------------------------------------------------------------------------- #
-
-
-
-
-
 
 
 # --------------------------------------------------------------------------- #

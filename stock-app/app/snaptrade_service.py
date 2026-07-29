@@ -1,15 +1,16 @@
 """SnapTrade-backed brokerage holdings import (Fidelity retirement and others).
 
-SnapTrade is an aggregator that exposes read (and optionally trade) access to a
-linked brokerage through an OAuth-style connection portal. This module keeps the
-recurring "pull my current holdings" path small and testable:
+SnapTrade is an aggregator that exposes read access to a linked brokerage
+through an OAuth-style connection portal. This module owns credential
+persistence, the setup/CLI path, holdings normalization, and the legacy
+``sync`` entry that also best-effort refreshes activity and market data:
 
     provider() -> [(account, holdings), ...]   # raw SnapTrade response objects
     sync(provider) -> writes the normalized holdings ledger, returns a summary
     snapshot() -> reads the ledger back into the same summary shape
 
-Normalized holdings are immutable broker facts; the retirement portfolio view is
-built entirely from them (via ``portfolio()``) plus the editable enrichment CSV.
+Normalized holdings are immutable broker facts. Editable classifications and
+the Symbol Ledger live outside this module under `/api/brokerages`.
 
 SnapTrade issues two kinds of API keys, distinguished by the client-id prefix:
 
@@ -539,48 +540,8 @@ def _sync_changes(previous: list[dict[str, Any]], current: list[dict[str, Any]])
 
 
 # --------------------------------------------------------------------------- #
-# enrichment + sheet-compatible portfolio view                                 #
-# --------------------------------------------------------------------------- #
-
-
-UNCLASSIFIED = "UNCLASSIFIED"
-
-
-def _read_enrichment() -> dict[str, dict[str, str]]:
-    """Editable symbol -> {category, industry, note} classifications."""
-    path = config.holdings_enrichment_csv()
-    if not path.is_file():
-        return {}
-    with path.open("r", newline="", encoding="utf-8") as handle:
-        return {
-            row.get("symbol", "").strip().upper(): row
-            for row in csv.DictReader(handle)
-            if row.get("symbol", "").strip()
-        }
-
-
-
-# --------------------------------------------------------------------------- #
 # gain/loss trend tracking (peak high-water mark + adverse-move alerts)         #
 # --------------------------------------------------------------------------- #
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[str, str], dict[str, str]]:
     """Advance each holding's gain/loss trend one sync and persist it.
@@ -604,21 +565,6 @@ def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[
         ],
         path=config.holdings_trend_csv(), now=now,
     )
-
-
-
-
-def _round2(value: Decimal | float) -> float:
-    return float(round(Decimal(str(value)), 2))
-
-
-
-
-
-
-
-
-
 
 
 def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:

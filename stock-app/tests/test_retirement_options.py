@@ -9,8 +9,7 @@ from types import ModuleType
 
 import pytest
 
-from app import config, options_activity, retirement_options, snaptrade_service
-from app.options_market import SymbolMarket
+from app import config, retirement_options, snaptrade_service
 
 
 def _betas_fetcher(include):
@@ -214,23 +213,8 @@ def _write_ledger(env):
         writer.writerows(_ledger_rows())
 
 
-def _fake_market_provider(rows, as_of, cfg):
-    """Deterministic market with spot/vol/beta, no price-cache dependency."""
-    market = {}
-    spot = {"SPCX": 124.0, "FLKR": 53.0}
-    for row in rows:
-        leg = SymbolMarket(spot=spot.get(row["symbol"]), price_as_of="2026-07-23")
-        leg.vol_annual = 0.5
-        leg.vol_source = "RV_FALLBACK"
-        leg.vol_as_of = "2026-07-23"
-        leg.vol_stale_sessions = 0
-        market[row["id"]] = leg
-        market.setdefault(row["symbol"], leg)
-    return market, 500.0
-
-
 # --------------------------------------------------------------------------- #
-# row mapping + groups                                                          #
+# row mapping                                                                  #
 # --------------------------------------------------------------------------- #
 
 def test_option_rows_map_trade_type_and_underlying(opts_env):
@@ -307,81 +291,12 @@ def test_short_calls_report_share_coverage_from_the_holdings_ledger(opts_env):
     assert by_symbol["AMD"]["coverage"] == "UNCOVERED"
 
 
-def _group(symbol="CLX"):
-    snapshot = retirement_options.snapshot(
-        market_provider=lambda rows, as_of, cfg: ({}, None))
-    return next(g for g in snapshot["groups"] if g["symbol"] == symbol)
-
-
-
-
-
-
-
-
 def test_cash_is_not_share_coverage(opts_env):
     _write_rows([_short_call("CLX"), _holding("FDRXX", "100000", asset_class="CASH")])
 
     rows = retirement_options._option_rows()
 
     assert rows[0]["coverage"] == "UNCOVERED"
-
-
-def test_build_groups_net_credit_from_cost_basis(opts_env):
-    _write_ledger(opts_env)
-    groups = retirement_options._build_groups(
-        retirement_options._option_rows(), {}, year=2026,
-    )
-    by_symbol = {g["symbol"]: g for g in groups}
-    # short put: cost basis -428.67 -> credit received +428.67
-    assert by_symbol["SPCX"]["net_cash_flow"] == pytest.approx(428.67)
-    assert by_symbol["SPCX"]["open_market_value"] == pytest.approx(-1008.0)
-    assert by_symbol["SPCX"]["total_pnl"] == pytest.approx(-579.33)
-    assert by_symbol["SPCX"]["event_count"] == 1
-    assert by_symbol["SPCX"]["status"] == "ACTIVE"
-    assert by_symbol["SPCX"]["name"] == "SPCX 2026"
-
-
-# --------------------------------------------------------------------------- #
-# editable group metadata                                                       #
-# --------------------------------------------------------------------------- #
-
-
-
-
-
-
-
-# --------------------------------------------------------------------------- #
-# snapshot shape                                                                #
-# --------------------------------------------------------------------------- #
-
-
-
-def _beta_market_provider(rows, as_of, cfg):
-    """Deterministic market with spot/vol plus Tasty + computed betas, so the
-    portfolio aggregation promotes both beta-delta totals."""
-    import pandas as pd
-    from app.options_risk import BetaResult, TASTYTRADE_BETA
-
-    spot = {"SPCX": 124.0, "FLKR": 53.0}
-    market: dict = {}
-    for row in rows:
-        leg = SymbolMarket(spot=spot.get(row["symbol"]), price_as_of="2026-07-23")
-        leg.vol_annual, leg.vol_source = 0.5, "RV_FALLBACK"
-        leg.vol_as_of, leg.vol_stale_sessions = "2026-07-23", 0
-        leg.beta = BetaResult(1.5, pd.Timestamp("2026-07-19T17:00:00Z"), None, None,
-                              TASTYTRADE_BETA)
-        leg.beta_stale_sessions = 0
-        leg.computed_beta = BetaResult(2.0, pd.Timestamp("2026-07-23"), 252, 0.9)
-        market[row["id"]] = leg
-        market.setdefault(row["symbol"], leg)
-    market["__SPY_REFERENCE__"] = SymbolMarket(spot=500.0, price_as_of="2026-07-23")
-    return market, 500.0
-
-
-
-
 
 
 def test_epoch_ms_to_iso_utc_date():

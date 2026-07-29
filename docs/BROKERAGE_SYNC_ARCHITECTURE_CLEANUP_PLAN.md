@@ -7,7 +7,7 @@ within the settled boundaries below and must pause at a listed stop condition.
 
 ## Resume here
 
-Begin with Phase 1. Work one phase and one focused commit at a time. Update the
+Begin with Phase 2. Work one phase and one focused commit at a time. Update the
 dashboard and progress log in the same commit as each completed phase. Do not
 restart the completed Symbol Ledger, common brokerage API, legacy-route
 retirement, or provider-I/O extraction projects.
@@ -525,7 +525,7 @@ Phase 1 re-confirms no external command reference.
 | `sync` | registry `HOLDINGS`; CLI | COMPAT orchestrator (Phase 2), then facade |
 | `snapshot` | CLI | MOVE → importer; COMPAT re-export |
 | `_main` | `python -m app.snaptrade_service` | COMPAT facade |
-| `UNCLASSIFIED`, `_read_enrichment`, `_round2` | none in production | DEAD (Phase 1) |
+| `UNCLASSIFIED`, `_read_enrichment`, `_round2` | none in production | DEAD — deleted in Phase 1 |
 | `SOURCE`, `OPTION_MULTIPLIER` | holdings normalization only | MOVE with holdings |
 
 ### `retirement_options.py`
@@ -536,9 +536,9 @@ Phase 1 re-confirms no external command reference.
 | `BETA_HEADERS`, `GREEKS_HEADERS`, `sync_betas`, `sync_greeks`, `sync_market_data`, `_option_rows`, `_fetch_tasty_*` | registry `MARKET_DATA`; holdings side-effect | MOVE → `brokerages.importers.held_option_market_data` |
 | `_read_rows`, `_atomic_write`, `_epoch_ms_to_iso`, `_greek_key`, share-coverage helpers | adapter + market-data path | MOVE with market-data / activity owners |
 | `RetirementOptionsError` | `sync_events` validation | MOVE with activity; rename only if a public import requires it |
-| `_group_name`, `_build_groups` | tests only (`test_build_groups_*`); no production caller | DEAD (Phase 1) |
-| Unused imports (`pandas`, `yaml`, `build_market_inputs`, risk-engine symbols except `apply_call_coverage`) | none | DEAD import cleanup (Phase 1) |
-| Empty legacy section scaffolding / retired `snapshot` | gone from production; dead `_group` test helper remains | DEAD (Phase 1) |
+| `_group_name`, `_build_groups` | tests only (`test_build_groups_*`); no production caller | DEAD — deleted in Phase 1 |
+| Unused imports (`pandas`, `yaml`, `build_market_inputs`, risk-engine symbols except `apply_call_coverage`) | none | DEAD — deleted in Phase 1 |
+| Empty legacy section scaffolding / retired `snapshot` | gone from production; dead `_group` test helper remains | DEAD — deleted in Phase 1 |
 
 ### Current Fidelity call counts (empty body)
 
@@ -557,8 +557,8 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | Phase | Scope | Status | Evidence / next action |
 |---|---|---|---|
 | 0 | Characterize ownership, compatibility, and provider call counts | COMPLETE | 13 characterization tests; golden artifacts under `stock-app/tests/fixtures/brokerage_sync/`; caller table above |
-| 1 | Delete proven-dead remnants | NOT STARTED | Begin here |
-| 2 | Make resource commands single-purpose | NOT STARTED | Blocked on Phase 1 |
+| 1 | Delete proven-dead remnants | COMPLETE | Removed `_group_name`/`_build_groups`, group-only row fields, unused retirement imports/scaffolding, and `UNCLASSIFIED`/`_read_enrichment`/`_round2`; deleted dead-only group/snapshot test helpers |
+| 2 | Make resource commands single-purpose | NOT STARTED | Begin here |
 | 3 | Move materialization into explicit modules | NOT STARTED | Blocked on Phase 2 |
 | 4 | Isolate setup/CLI and finish compatibility facade | NOT STARTED | Blocked on Phase 3 |
 | 5 | Enforcement, docs, and full regression | NOT STARTED | Blocked on Phase 4 |
@@ -569,6 +569,7 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 |---|---|---|---|---|
 | 2026-07-29 | Planning | COMPLETE | Current callers, registry commands, provider boundaries, dead remnants, CLI compatibility, and duplicate Fidelity orchestration were audited. The completed brokerage/provider refactor plans and unused coordination mailbox were retired. | Hand Phase 0 to the implementation agent |
 | 2026-07-29 | 0 | COMPLETE | Added `test_fidelity_sync_characterization.py` (13 tests): empty-body duplicate call counts (positions 1 / activities 2 / betas 2 / greeks 2), per-resource cases, CLI surface + secret redaction, sync return shape, and golden CSV fixtures for holdings/events/betas/greeks. Caller classification recorded above. Gate suites green; no production behavior change. | Phase 1 — delete proven-dead remnants |
+| 2026-07-29 | 1 | COMPLETE | Deleted dead group projection helpers and enrichment remnants; cleaned unused imports and empty scaffolding; removed `test_build_groups_*` and retired snapshot helpers. Fresh reference audit confirmed no production callers. Full stock-app suite + docs/secret gates green. | Phase 2 — single-purpose resource commands |
 
 ## Implementation-agent kickoff prompt
 
