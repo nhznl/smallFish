@@ -15,6 +15,7 @@ No production behavior is exercised beyond the endpoints already shipped.
 
 from __future__ import annotations
 
+import inspect
 from decimal import Decimal
 
 import pytest
@@ -96,6 +97,19 @@ def test_registry_sync_disables_legacy_group_writes(monkeypatch):
 
     assert calls["trading"] == {"legacy_groups": False}
     assert calls["retirement"] == {"legacy_groups": False}
+
+
+def test_group_writes_are_off_unless_a_caller_asks_for_them():
+    """Passing the flag is the belt; this is the braces.
+
+    Every production caller opts out explicitly, so the only thing the default
+    protects against is a *new* caller — one that forgets the flag entirely and
+    silently starts creating group state the Symbol Ledger replaced. That is
+    exactly the caller least likely to notice, so the default fails safe.
+    """
+    for function in (options_activity.sync, retirement_options.sync_events):
+        default = inspect.signature(function).parameters["legacy_groups"].default
+        assert default is False, f"{function.__qualname__} would resurrect groups"
 
 
 def test_canonical_vocabulary_carries_no_provider_terms():

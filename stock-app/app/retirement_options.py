@@ -389,9 +389,13 @@ def _normalize_activity(activity: Any, ctx: dict[str, str], retrieved_at: str,
 
 def sync_events(provider=None, *, start_date: date | None = None,
                 end_date: date | None = None,
-                legacy_groups: bool = True) -> dict[str, Any]:
+                legacy_groups: bool = False) -> dict[str, Any]:
     """Pull SnapTrade option transaction events over a full window and upsert them
     into the immutable ledger, keyed by activity id — never deleting.
+
+    ``legacy_groups`` defaults off: the Symbol Ledger is the production
+    lifecycle, and a caller that forgets the flag must not quietly start
+    creating group state again. Characterizations opt in.
 
     Full-window + upsert-by-id is idempotent and self-heals batches that post
     late (SnapTrade serves Fidelity positions in real time but transactions on a

@@ -302,7 +302,7 @@ def test_update_group_validation(opts_env):
 
 def test_retirement_supports_multiple_app_groups_and_event_assignment(opts_env):
     _write_empty_ledger(opts_env)
-    retirement_options.sync_events(provider=_provider(
+    retirement_options.sync_events(legacy_groups=True, provider=_provider(
         _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
                       "2026-07-24", "370.34", "-1"),
         _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
@@ -589,7 +589,7 @@ def test_sync_events_reactivates_archived_group_only_for_new_event(opts_env):
     group = {g["symbol"]: g for g in retirement_options.snapshot()["groups"]}["MSFT"]
     assert group["status"] == "ARCHIVED"
 
-    with_new_event = retirement_options.sync_events(provider=_provider(
+    with_new_event = retirement_options.sync_events(legacy_groups=True, provider=_provider(
         _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
                       "2026-07-24", "370.34", "-1"),
         _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
@@ -605,7 +605,7 @@ def test_closed_contract_persists_with_realized_pnl(opts_env):
     # Contract closed and gone from the positions feed (empty holdings ledger),
     # but the buy-to-close has posted to activities: group survives as realized.
     _write_empty_ledger(opts_env)
-    retirement_options.sync_events(provider=_provider(
+    retirement_options.sync_events(legacy_groups=True, provider=_provider(
         _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
                       "2026-07-24", "370.34", "-1"),
         _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
@@ -624,7 +624,7 @@ def test_closed_contract_persists_with_realized_pnl(opts_env):
 
 def test_closed_group_can_be_archived(opts_env):
     _write_empty_ledger(opts_env)
-    retirement_options.sync_events(provider=_provider(
+    retirement_options.sync_events(legacy_groups=True, provider=_provider(
         _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
                       "2026-07-24", "370.34", "-1"),
         _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
@@ -640,7 +640,7 @@ def test_open_event_without_mark_reads_unavailable(opts_env):
     # Transitional window: position already left the feed, only the opening
     # event has posted. P/L must not fabricate a realized figure.
     _write_empty_ledger(opts_env)
-    retirement_options.sync_events(provider=_provider(
+    retirement_options.sync_events(legacy_groups=True, provider=_provider(
         _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
                       "2026-07-24", "370.34", "-1"),
     ))
@@ -656,7 +656,7 @@ def test_open_group_marks_from_live_holdings_indicative(opts_env):
     # Open contract still in the holdings feed: total_pnl uses the live mark and
     # reads INDICATIVE, matching the live-leg path's numbers.
     _write_ledger(opts_env)  # SPCX short put open, market_value -1008
-    retirement_options.sync_events(provider=_provider(
+    retirement_options.sync_events(legacy_groups=True, provider=_provider(
         _opt_activity("a1", "SELL_TO_OPEN", "SELL", _SPCX_OCC, "SPCX", "PUT", 95,
                       "2026-08-21", "428.67", "-2"),
     ))
@@ -677,7 +677,7 @@ def test_snapshot_exposes_events_for_details(opts_env):
     # The Details drill-down needs the group's broker events in the snapshot,
     # newest first, with numeric fields typed for the UI.
     _write_empty_ledger(opts_env)
-    retirement_options.sync_events(provider=_provider(
+    retirement_options.sync_events(legacy_groups=True, provider=_provider(
         _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
                       "2026-07-24", "370.34", "-1", trade_date="2026-07-15T04:00:00Z"),
         _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
@@ -696,7 +696,7 @@ def test_snapshot_exposes_events_for_details(opts_env):
 
 def test_sync_events_rejects_inverted_window(opts_env):
     with pytest.raises(retirement_options.RetirementOptionsError):
-        retirement_options.sync_events(provider=_provider(),
+        retirement_options.sync_events(legacy_groups=True, provider=_provider(),
                                        start_date=date(2026, 7, 10),
                                        end_date=date(2026, 7, 1))
 
@@ -793,7 +793,7 @@ def test_closing_one_contract_leaves_the_underlying_open(opts_env):
     """Two contracts on one underlying: the closed one keeps its cash, and the
     symbol stays open and indicative because the other still has a mark."""
     _write_rows([_open_option_holding(_MSFT_OCC_2, "MSFT")])
-    retirement_options.sync_events(provider=_provider(
+    retirement_options.sync_events(legacy_groups=True, provider=_provider(
         _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
                       "2026-07-24", "370.34", "-1"),
         _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,

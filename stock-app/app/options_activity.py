@@ -690,7 +690,10 @@ def _trend_observations(positions: list[dict[str, Any]]) -> list[Any]:
 
 def sync(start_date: date | None = None, end_date: date | None = None,
          *, provider: BrokerProvider | None = None,
-         legacy_groups: bool = True) -> dict[str, Any]:
+         legacy_groups: bool = False) -> dict[str, Any]:
+    """Import broker activity. ``legacy_groups`` defaults off: the Symbol Ledger
+    is the production lifecycle, and a caller that forgets the flag must not
+    quietly start creating group state again. Characterizations opt in."""
     end_date = end_date or date.today()
     start_date = start_date or date(end_date.year, 1, 1)
     if start_date > end_date:
