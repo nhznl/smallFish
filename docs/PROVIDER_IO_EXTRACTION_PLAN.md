@@ -454,7 +454,7 @@ Pause and ask the owner before proceeding if:
 | 1 | Shared Tastytrade I/O for backend | COMPLETE | Phase 2 can begin | 11 service tests under API venv; 10 passed + 1 backend-only skip under utilities; 450 backend tests; docs, secret, and diff checks clean |
 | 2 | Shared SnapTrade I/O for backend | COMPLETE | Phase 3 can begin | 4 service tests; backend, utilities, docs, secret, and diff checks clean |
 | 3 | Utilities and verification migration | COMPLETE | Phase 4 can begin | 467 utilities tests; 10 service tests + 1 backend-only skip; status, docs, secret, and diff checks clean |
-| 4 | Enforcement, docs, full regression | NOT STARTED | Phase 3 passed | — |
+| 4 | Enforcement, docs, full regression | IN PROGRESS | Run final cross-runtime offline gate and complete final ownership docs | CI now runs Tastytrade service tests in both runtimes, SnapTrade service tests in backend, and both in offline coverage |
 
 ## Progress log
 
@@ -465,6 +465,7 @@ Pause and ask the owner before proceeding if:
 | 2026-07-29 | 1 | COMPLETE | Added the stdlib-only shared Tastytrade transport package with lazy SDK imports, redacted credentials, session lifecycle ownership, raw account/metric/Greek envelopes, and fake-SDK coverage under both runtimes. Backend consumers retain their account-selection, normalization, artifact, and response-shape policy. | Phase 2 |
 | 2026-07-29 | 2 | COMPLETE | Added shared SnapTrade transport with lazy SDK client/auth construction, raw setup/account/position/activity payloads, and defensive offset pagination. The backend retains status mapping, credential persistence, CLI output, normalization, artifacts, and provider injection seams. | Phase 3 |
 | 2026-07-29 | 3 | COMPLETE | Moved utilities quote streaming and verification to the shared Tastytrade service, replaced direct SDK version imports with package metadata, and enforced SDK-import confinement plus duplicated-pin parity. Quote normalization and archive semantics remain in utilities. | Phase 4 |
+| 2026-07-29 | 4 | IN PROGRESS | CI now executes each shared provider-service suite under its matching runtime and includes them in offline coverage. The remaining work is final ownership documentation, full automated cross-runtime regression, and closeout evidence. | Run final automated gate; live-provider verification remains optional and requires explicit owner permission |
 
 ## Terra kickoff prompt
 
