@@ -85,11 +85,14 @@ describe('BrokerageLedgerCombinedComponent', () => {
       fixture.nativeElement.querySelectorAll('.combined-table th') as NodeListOf<HTMLElement>
     ).map(header => header.textContent?.replace(/\s+/g, ' ').trim());
     expect(headers).not.toContain('Exposure');
-    expect(headers).toContain('Option Adjusted Basis / Share (Cost Price − Option P/L) / Share Qty');
+    expect(headers).not.toContain('Equity P/L / Share');
+    expect(headers).toContain('Adjusted Basis / Share (Cost Price − Option P/L) / Share Qty');
 
     (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     const detail = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
+    expect(fixture.nativeElement.querySelector('.component-detail-row > td')?.getAttribute('colspan'))
+      .toBe('12');
     expect(detail).toContain('Review after earnings');
     expect(detail).toContain('Short call');
     expect(detail).toContain('TASTYTRADE · TASTYTRADE_ACTIVITY · TASTYTRADE_MARK');

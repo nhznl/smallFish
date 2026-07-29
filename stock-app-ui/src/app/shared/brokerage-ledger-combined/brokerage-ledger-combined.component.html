@@ -96,7 +96,7 @@
             <tr>
               <th class="col-sticky" rowspan="2">Symbol</th>
               <th class="num" rowspan="2">Current Price / Share</th>
-              <th class="column-group" colspan="6">Share Position</th>
+              <th class="column-group" colspan="5">Share Position</th>
               <th class="column-group" colspan="3">Options</th>
               <th class="column-group" colspan="2">Combined</th>
             </tr>
@@ -106,13 +106,12 @@
               <th class="num">Cost Price</th>
               <th class="num">Current Equity</th>
               <th class="num">Equity P/L</th>
-              <th class="num">Equity P/L / Share</th>
               <th class="num">Net Credit</th>
               <th class="num">Net Debit</th>
               <th class="num">Option P/L</th>
               <th class="num">Net P/L</th>
               <th class="num basis-heading">
-                Option Adjusted Basis / Share
+                Adjusted Basis / Share
                 <small>(Cost Price − Option P/L) / Share Qty</small>
               </th>
             </tr>
@@ -138,7 +137,6 @@
                 <td class="num">{{ money(row.equity_cost) }}</td>
                 <td class="num">{{ money(row.current_equity) }}</td>
                 <td class="num" [class]="pnlClass(row.equity_pnl)">{{ money(row.equity_pnl, true) }}</td>
-                <td class="num" [class]="pnlClass(row.equity_pnl_per_share)">{{ money(row.equity_pnl_per_share, true) }}</td>
                 <td class="num option-block-start positive">{{ money(row.net_credit) }}</td>
                 <td class="num negative">{{ money(row.net_debit) }}</td>
                 <td class="num" [class]="pnlClass(row.option_pnl)">{{ money(row.option_pnl, true) }}</td>
@@ -153,7 +151,7 @@
               </tr>
               @if (expandedSymbol === row.symbol) {
                 <tr class="component-detail-row" [id]="'combined-detail-' + row.symbol">
-                  <td colspan="13">
+                  <td colspan="12">
                     <div class="component-detail-heading">
                       <div>
                         <strong>{{ row.symbol }} components</strong>
