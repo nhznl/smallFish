@@ -1,9 +1,9 @@
 # Brokerage API and ledger refactor plan
 
-**Status:** In progress. Phases 1-7 are implemented and committed; the backend
-is complete and both brokerage pages run on it. This document is the source of
-truth for implementation, phase status, decisions, verification evidence, and
-the next action.
+**Status:** Complete. All eight phases are implemented and committed; the
+backend is complete and both brokerage pages run on it. This document is the
+source of truth for implementation, phase status, decisions, and verification
+evidence.
 
 ## Resume here
 
@@ -29,9 +29,9 @@ says where the work actually is.
 `/api/brokerages` routes are served. Retained legacy brokerage routes are
 internal compatibility shims; group-mutation routes reject requests with 410.
 
-**Next action:** complete Phase 8's remaining destructive lifecycle check on a
-synthetic copy, or with explicit owner approval to create and reopen a real
-archive. See the dashboard row for the acceptance checklist.
+**Next action:** none. The final regression and synthetic lifecycle browser
+check are complete. Do not reopen legacy compatibility cleanup without a new
+consumer audit.
 
 **Do not restart from Phase 1.** The kickoff prompt at the foot of this document
 has been rewritten for resumption; use that, not the original start-from-scratch
@@ -1021,7 +1021,7 @@ why they differ. Current totals are in "Resume here" at the top.
 | 5 | First shared Trading/Retirement UI slice | COMPLETE — owner approved | Owner approved the Phase 5 checkpoint on 2026-07-29 and authorized Phase 6 | `model/brokerage.ts`, `api/brokerage.service.ts`, `shared/symbol-ledger/` mounted on both pages; later corrections preserve option-only scope and option-adjusted-basis semantics |
 | 6 | History/reset UX and shared UI consolidation | COMPLETE — automated checks passed; browser verification pending | Phase 7 completed; Phase 8 performs final browser verification | Shared `SymbolLedgerComponent` implements current/all/archive history, compact archive summaries, on-demand archive detail, reset eligibility/confirmation, conflict refresh, and idempotent retry on both pages; focused tests 21 passed, full Angular suite 62 passed, build clean |
 | 7 | Compatibility cutover, cleanup, and current-behavior docs | COMPLETE — automated checks passed; browser verification pending | Phase 8 final regression and route verification | Owner confirmed legacy routes have no external consumers. Production sync suppresses legacy group writes; legacy group mutation routes return 410; shared UI no longer imports groups or risk surfaces; old artifacts remain rollback-only. The later adjusted-basis follow-up removed the last legacy combined projection from the Brokerage tab; full automated-gate evidence is in the progress log. |
-| 8 | Full regression, browser verification, and handoff closeout | BLOCKED — non-mutating checks complete | Needs a synthetic-copy lifecycle check, or owner approval to reset and reopen a real symbol | Full backend 461, Angular build + 55 tests, docs, secrets, and diff checks passed. Isolated browser checks confirmed both routes, shared tabs, Symbol Ledger lifecycle filters/detail, absence of groups/risk UI, and narrow-width fit; no real archive was created. |
+| 8 | Full regression, browser verification, and handoff closeout | COMPLETE | No further action | Full backend 461, Angular build + 55 tests, docs, secrets, and diff checks passed. Isolated browser checks confirmed both routes, shared tabs, Symbol Ledger lifecycle filters/detail, absence of groups/risk UI, and narrow-width fit. A synthetic-only lifecycle check created an archive, verified a reopen starts one active period while retaining the archive, and surfaced a changed-archive warning for a backdated event. |
 
 ## Phased implementation plan
 
@@ -1468,6 +1468,7 @@ Append entries; never rewrite older evidence to make progress look cleaner.
 | 2026-07-29 | 7 | COMPLETE — automated checks passed; browser verification pending | Owner confirmed legacy brokerage routes are not externally consumable. Replaced the remaining per-brokerage pages with one shared brokerage shell: Holdings and Option-Adjusted Basis keep their internal compatibility projections, while Options is solely the brokerage-neutral Symbol Ledger. Common brokerage sync now suppresses legacy group/membership writes. Legacy group-creation, group-update, and event-reassignment routes remain explicit 410 tombstones; non-mutating legacy projections and CSV artifacts remain internal rollback compatibility. Removed the unused Trade Groups and Broker Risk Angular models/components, and updated all required behavior docs. Full Phase 7 gate passed: backend 461, Angular build, Angular 55, docs, secret scan, and diff check. | Phase 8 final regression and browser verification on `/options` and `/retirement` |
 | 2026-07-29 | 8 | BLOCKED — non-mutating checks complete | Re-ran the full automated gate: backend 461, Angular build, Angular 55, docs, secret scan, and diff check. After checking owners of ports 8000 and 4200, did not trust their noncanonical development processes. Built the UI with `./commands.sh build-ui`, served an isolated backend through `./commands.sh server --no-reload --port 8001`, and inspected both `/options` and `/retirement`. Both expose the common Holdings, Options, and Option-Adjusted Basis tabs; Options uses Symbol Ledger with Active, Archived, and All filters and an immutable-event detail, without Trade Groups or Broker Risk UI. Retirement also fit a narrow viewport. No archive/reset/reopen was performed against real brokerage data. | Owner: authorize a synthetic-copy lifecycle browser check, or a real-symbol reset/archive and reopen, before Phase 8 is marked COMPLETE |
 | 2026-07-29 | Adjusted-basis follow-up | COMPLETE | Replaced the last legacy combined UI projection with the brokerage-neutral Option-Adjusted Basis endpoint. The Retirement data has seven matched rows, but only two are genuinely unavailable, both because option P/L cannot be allocated safely across accounts. The shared table now presents the actual per-symbol basis reason instead of a provider-wide lifecycle warning. Focused test and full Angular suite (55) passed; build was clean. An isolated documented server confirmed the Retirement card reads 2 with the cross-account reason visible, and both Basis tabs request their brokerage-neutral endpoint. Docs, secrets, and diff checks passed. | Phase 8 remains blocked only on the separately authorized archive/reset/reopen lifecycle check |
+| 2026-07-29 | 8 completion | COMPLETE | Used a fresh synthetic-only data root and an isolated documented server; no brokerage artifact was read or written. In the browser, archived a flat reconciled symbol through the normal confirmation dialog, added a synthetic reopening event and confirmed exactly one active current period while the completed archive remained, then added a synthetic backdated event and confirmed the changed-archive warning. Removed the temporary fixture by moving it to Trash. Final full automated gate passed: backend 461, Angular build, Angular 55, docs, secret scan, and diff check. | No further action |
 
 ## Opus new-session kickoff prompt
 
