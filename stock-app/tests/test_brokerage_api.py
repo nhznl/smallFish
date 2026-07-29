@@ -220,6 +220,48 @@ def test_holdings_exclude_a_lot_that_is_no_longer_held(adapter_env, brokerage_id
     assert body["summary"]["total_unrealized_pnl"] == pytest.approx(100)
 
 
+def test_account_value_counts_cash_and_matches_the_legacy_total(adapter_env):
+    """The retirement risk cash limit is measured against this number.
+
+    Holdings lists what you hold, so it excludes cash; the account value asks
+    what the account is worth, so it includes it. Proving the two agree before
+    the legacy projection is deleted is what makes that deletion safe — reading
+    the Holdings total instead would have quietly tightened the risk bands.
+    """
+    _write_snaptrade(holdings=[
+        {"asset_class": "STOCK", "symbol": "ABC", "quantity": "100",
+         "price": "120", "average_purchase_price": "110", "cost_basis": "11000",
+         "market_value": "12000"},
+        {"asset_class": "CASH", "symbol": "USD", "quantity": "2500",
+         "price": "1", "cost_basis": "2500", "market_value": "2500"},
+        {"asset_class": "OPTION", "symbol": CONTRACT, "underlying_symbol": "ABC",
+         "option_type": "PUT", "strike": "50", "expiry": "2026-08-21",
+         "quantity": "-1", "price": "0.75", "cost_basis": "-600",
+         "market_value": "-75"},
+    ])
+    body = _get("fidelity", "holdings")
+
+    # Cash is not a holding and never becomes a component...
+    assert [item["symbol"] for item in body["items"]] == ["ABC"]
+    assert body["summary"]["total_market_value"] == pytest.approx(12000)
+    # ...but it is part of what the account is worth. The option is not.
+    # 12000 of equity plus 2500 of cash. This matched the legacy projection's
+    # `totalCurrent` field for field when both existed; that comparison was
+    # removed with the projection, and the figure is pinned here instead.
+    assert body["summary"]["total_account_value"] == pytest.approx(14500)
+
+
+def test_account_value_is_unknown_when_a_position_has_no_mark(adapter_env):
+    """A cash limit built on a partial total would read as a real allowance."""
+    _write_snaptrade(holdings=[
+        {"asset_class": "STOCK", "symbol": "ABC", "quantity": "100",
+         "price": "120", "cost_basis": "11000", "market_value": "12000"},
+        {"asset_class": "CASH", "symbol": "USD", "quantity": "2500",
+         "price": "1", "cost_basis": "2500", "market_value": ""},
+    ])
+    assert _get("fidelity", "holdings")["summary"]["total_account_value"] is None
+
+
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
 def test_holdings_report_each_position_share_and_the_portfolio_return(
         adapter_env, brokerage_id):
@@ -278,6 +320,95 @@ def test_gain_loss_snapshot_records_only_held_lots(adapter_env, brokerage_id):
 
     rows = holdings_projection.read_snapshots(brokerage_id)
     assert {row["symbol"] for row in rows} == {"XYZ"}
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_capturing_twice_for_one_sync_date_replaces_it(adapter_env, brokerage_id):
+    """Two partial captures of one date would compare a row against itself at
+    two different moments; the date is replaced wholesale instead."""
+    _write_sold_out_lot(brokerage_id)
+    url = f"/api/brokerages/{brokerage_id}/holdings/gain-loss-snapshots"
+    first = client.post(url).json()
+    second = client.post(url).json()
+
+    assert first["replaced"] is False
+    assert second["replaced"] is True
+    assert second["sync_date"] == first["sync_date"]
+    assert second["retained_dates"] == [first["sync_date"]]
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_only_the_three_newest_capture_dates_are_retained(adapter_env, brokerage_id):
+    """Three dates is enough to see a trend; more turns a comparison column
+    into an unbounded archive."""
+    _write_sold_out_lot(brokerage_id)
+    path = config.symbol_ledger_gain_loss_snapshots_csv()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = "".join(
+        f"{brokerage_id},2026-07-{day},2026-07-{day}T20:00:00Z,"
+        f"2026-07-{day}T20:05:00Z,acct,Acct,XYZ,5.0\n"
+        for day in ("01", "08", "15")
+    )
+    path.write_text(
+        ",".join(holdings_projection.SNAPSHOT_HEADERS) + "\n" + rows,
+        encoding="utf-8",
+    )
+    captured = client.post(
+        f"/api/brokerages/{brokerage_id}/holdings/gain-loss-snapshots"
+    ).json()
+
+    assert len(captured["retained_dates"]) == 3
+    assert "2026-07-01" not in captured["retained_dates"]   # oldest aged out
+    assert captured["sync_date"] in captured["retained_dates"]
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_capturing_with_nothing_synced_is_a_safe_refusal(adapter_env, brokerage_id):
+    response = client.post(
+        f"/api/brokerages/{brokerage_id}/holdings/gain-loss-snapshots"
+    )
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "NO_HOLDINGS"
+    assert "sync" in detail["message"].lower()
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_editing_one_classification_field_preserves_the_others(adapter_env,
+                                                               brokerage_id):
+    write_covered_put(brokerage_id)
+    base = f"/api/brokerages/{brokerage_id}/holdings/ABC/metadata"
+    client.patch(base, json={"category": "growth", "industry": "aviation",
+                             "note": "original note"})
+    client.patch(base, json={"note": "revised note"})
+
+    holding = _get(brokerage_id, "holdings")["items"][0]
+    assert holding["note"] == "revised note"
+    assert holding["category"] == "GROWTH"        # untouched by the second edit
+    assert holding["industry"] == "AVIATION"
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_a_metadata_edit_that_cannot_be_honored_is_rejected(adapter_env,
+                                                            brokerage_id):
+    write_covered_put(brokerage_id)
+    base = f"/api/brokerages/{brokerage_id}/holdings"
+    cases = {
+        f"{base}/%20%20/metadata": ({"note": "x"}, "INVALID_SYMBOL"),
+        f"{base}/ABC/metadata": ({}, "NOTHING_TO_UPDATE"),
+    }
+    for url, (payload, code) in cases.items():
+        response = client.patch(url, json=payload)
+        assert response.status_code == 422, response.text
+        assert response.json()["detail"]["code"] == code
+
+    typed = client.patch(f"{base}/ABC/metadata", json={"category": 42})
+    assert typed.status_code == 422
+    assert typed.json()["detail"]["code"] == "INVALID_FIELD"
+
+    unknown = client.patch(f"{base}/ABC/metadata", json={"lifecycle": "CLOSED"})
+    assert unknown.status_code == 422
+    assert unknown.json()["detail"]["code"] == "UNSUPPORTED_FIELD"
 
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)

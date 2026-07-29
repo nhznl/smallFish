@@ -53,6 +53,27 @@ def _number(value: Decimal | None) -> float | None:
     return None if value is None else float(value)
 
 
+def account_value(snapshot: BrokerageSnapshot, *,
+                  account_id: str | None = None) -> Decimal | None:
+    """Everything the account currently holds that is not an option.
+
+    Equity, cash, and anything a provider reports without an asset class. This
+    is deliberately wider than `items`: Holdings lists positions you hold, while
+    this answers what the account is worth, which is what a cash limit is
+    measured against. One unpriced position makes it unknown rather than low.
+    """
+    total = ZERO
+    for position in snapshot.positions:
+        if position.instrument == "OPTION":
+            continue
+        if account_id is not None and position.account.account_id != account_id:
+            continue
+        if position.market_value is None:
+            return None
+        total += position.market_value
+    return total
+
+
 def held_equity(snapshot: BrokerageSnapshot, *,
                 account_id: str | None = None) -> list[Any]:
     """Equity components that are still open, for one account or all of them."""
@@ -146,6 +167,9 @@ def build(snapshot: BrokerageSnapshot, *,
             else float(Decimal(str(total_gain)) / total_cost_exact * 100)
         ),
         "gain_loss_snapshots": snapshot_catalog(snapshot_rows),
+        "total_account_value": _number(
+            account_value(snapshot, account_id=account_id)
+        ),
         "pnl_completeness": completeness,
     }
     return envelope.build(

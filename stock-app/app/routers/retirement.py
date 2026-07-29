@@ -9,16 +9,6 @@ from .. import retirement_options, snaptrade_service
 router = APIRouter()
 
 
-@router.get("/retirement/portfolio/live")
-def get_portfolio() -> dict:
-    """SnapTrade holdings ledger + editable enrichment, in the retirement
-    portfolio shape the UI consumes."""
-    try:
-        return snaptrade_service.portfolio()
-    except snaptrade_service.SnapTradeValidationError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-
 @router.get("/retirement/options")
 def get_retirement_options() -> dict:
     """Trade groups + broker risk positions for the retirement option legs."""

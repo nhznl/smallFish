@@ -184,7 +184,6 @@ FROZEN_LEGACY_ROUTES = (
     ("POST", "/options/activity/manual"),
     ("PUT", "/options/activity/manual/{event_id}"),
     ("DELETE", "/options/activity/manual/{event_id}"),
-    ("GET", "/retirement/portfolio/live"),
     ("GET", "/retirement/options"),
     ("POST", "/retirement/options/groups"),
     ("PUT", "/retirement/options/groups/{symbol}"),
@@ -201,6 +200,7 @@ FROZEN_LEGACY_ROUTES = (
 # editable classifications, captured gain/loss percentages, and declining-trend
 # state these used to be the only source of.
 RETIRED_LEGACY_ROUTES = (
+    ("GET", "/retirement/portfolio/live"),
     ("PUT", "/retirement/enrichment/{symbol}"),
     ("POST", "/retirement/holdings/sync"),
     ("POST", "/retirement/holdings/gain-loss-snapshots"),

@@ -48,15 +48,14 @@ sync creates no group/membership artifacts. **No Angular code calls
 against. The peak/adverse-move trend rule lives once in
 `app/brokerages/trend.py`, fed by each provider's own extraction.
 
-**Next action:** audit the legacy Retirement holdings surface —
-`/retirement/holdings/sync`, `/retirement/holdings/gain-loss-snapshots`,
-`/retirement/enrichment/{symbol}`, and `snaptrade_service.portfolio`. It has no
-Angular consumer, but unlike the Holdings routes it is still a frozen contract
-and `retirement_options.py` still calls `portfolio()` internally for a portfolio
-total, so removal needs that caller re-pointed at the common projection first.
-After that, the remaining group-only backend paths. Do not remove provider
-ingestion, parsers, canonical facts, or read-only rollback artifacts merely
-because they contain legacy terminology.
+**Next action:** audit the remaining group-only backend paths — the
+`options_groups.csv` / `options_group_members.csv` writers and headers, the 410
+tombstone routes, and any legacy group projection with no consumer. Do not
+remove provider ingestion, parsers, canonical facts, or read-only rollback
+artifacts merely because they contain legacy terminology.
+
+After that, see **Follow-up: provider I/O extraction** below, which the owner
+raised on 2026-07-29 and which is deliberately sequenced after this cleanup.
 
 **Do not restart from Phase 1.** The kickoff prompt at the foot of this document
 has been rewritten for resumption; use that, not the original start-from-scratch
@@ -108,6 +107,55 @@ which is what still holds `snaptrade_service.portfolio` in place.
 The recent Symbol Ledger UX decisions are deliberate: hide the `Needs review`
 summary when its count is zero; show the archive button only for an eligible
 period; otherwise show no archive card, blocker, or empty-state message.
+
+### Follow-up: provider I/O extraction into `services/`
+
+Raised by the owner on 2026-07-29 and **agreed in principle**. Recorded here so
+it is not lost, and deliberately sequenced *after* the legacy cleanup.
+
+The shape: top-level `services/tastytrade/` and `services/snaptrade/`, siblings
+of `models/`, importable by both `stock-app/` and `utilities/`.
+
+Why it is worth doing — the duplication is already cross-runtime, not merely
+untidy. `tastytrade` is pinned in **both** `stock-app/requirements.txt` and
+`utilities/requirements.txt`, and `utilities/options/chains.py` and
+`utilities/options/tastytrade_quotes.py` drive the SDK entirely independently of
+`stock-app/app/options_activity.py`. Two venvs, two call sites, pins that agree
+today and can drift tomorrow. The import mechanism also already exists:
+`commands.sh` runs `cd $ROOT` with `--app-dir stock-app`, which is exactly how
+`models/` resolves as a top-level package, so no packaging work is required.
+
+**Scope it to provider I/O only** — authenticate, fetch, return raw provider
+payloads. This design already names that seam: *read adapters consume
+materialized artifacts only; provider calls belong to a separate sync/command
+capability*. So:
+
+| Layer | Home |
+|---|---|
+| session, auth, fetch, raw payloads | `services/<provider>/` |
+| provider terms to canonical facts | `app/brokerages/adapters/` |
+| artifact writes and config paths | `stock-app/app/` |
+
+Scale matters here. `options_activity.py` is roughly 1300 lines, but its actual
+provider I/O is a bounded region — the `Session`/`Account` calls and the greeks
+and market-metrics fetches. Moving that yields a thin, genuinely reusable
+package. Moving "everything Tastytrade" would drag `app/config.py` and the CSV
+layer across the boundary and leave `services/` importing back into the app.
+
+Two things to decide with open eyes before starting:
+
+1. Unlike `models/`, which is standard-library-only by rule, `services/` carries
+   the provider SDK dependency. It becomes a shared node that **couples the two
+   venvs' pins**: bumping the SDK then requires both suites to pass. That is a
+   feature — no more silent drift — but it is a new constraint.
+2. `AGENTS.md`'s dependency-direction diagram and hard rule do not forbid this
+   (`services/` is not `utilities/`), but the diagram becomes wrong the day it
+   lands and must be updated in the same change.
+
+Suggested order: extract `stock-app`'s provider I/O first; migrate `utilities/`
+opportunistically afterwards. `utilities/options/chains.py` is around 2100 lines
+of batch-pipeline code under the research-integrity rules, and the first step
+should not depend on touching it.
 
 ## Handoff operating model
 
@@ -1518,6 +1566,7 @@ Append entries; never rewrite older evidence to make progress look cleaner.
 | 2026-07-29 | Holdings gaps 2-4 and UI cutover | COMPLETE | Closed the remaining contract gaps and migrated the consumer. `pct_of_total` and `total_unrealized_pnl_pct` are computed once in the projection and fail closed: one unmarked holding makes the portfolio total unknown, so every row's share blanks rather than silently rebasing on a partial denominator — legacy divided by whatever it could add up. Captured gain/loss percentages now reach the response as a per-row map plus a retained-date catalogue in `summary`, wiring up `read_snapshots`, which had been dead code since Phase 3; the catalogue lives in `summary` because the envelope key set is frozen by the contract spec. Declining-trend state is read through a new registry-selected `holdings_trend_path`: both brokerages already wrote the same columns under the same `(account, symbol)` key to their own file, so no branch was needed. The two sync-time trend *writers* stay where they are for now — they are provider bookkeeping, and consolidating them belongs with the legacy removal. Pre-cutover captured percentages are carried into the common store by a new idempotent `migration.migrate_gain_loss_snapshots()`, invoked from `run_sync` so it self-heals rather than depending on a one-shot step; legacy snapshot files are read, never rewritten. `BrokerageHoldingsComponent` now consumes only `BrokerageService`, keyed by brokerage id, with new `updateHoldingsMetadata` and `captureGainLossSnapshot` client methods; it takes its heading, institution and timestamp from the response and shows the availability banner, so an unsynced brokerage reads "Nothing imported yet" instead of an empty portfolio. The legacy `portfolio` slug input is gone from the shell and both page shells. Backend 478 passed (was 462); Angular 69 passed (was 62); build clean; docs, secrets, diff checks clean. Browser verification on an isolated port-8001 server over a synthetic-only data root: Trading showed the Return card, % Portfolio column, the declining-row highlight with its badge, and the migrated `G/L % as of Jul 20, 2026` column with a `—` for the holding that had no measurement; Retirement showed the shared component with the Fidelity label and the nothing-imported banner; both routes requested only `/api/brokerages/{id}/holdings`; no console errors; at 375px the page did not scroll horizontally while the table scrolled inside its own container. | Remove the legacy Holdings route, client, and backend projection |
 | 2026-07-29 | Legacy Holdings removal | COMPLETE | Removed `/brokerage-ledgers/{portfolio}/holdings` and its enrichment and gain/loss-snapshot write paths, `app/brokerage_holdings.py`, and the Angular `BrokerageLedgerService` with the `brokerage-holdings` and `brokerage-ledger` models — all proven unreferenced by sweep first. The trend writer that lived in the deleted module did not move: the two providers turned out to hold the *same* rule, character for character, differing only in how a percentage is read off a provider row, so the rule now lives once in `brokerages/trend.py` and each provider contributes normalized observations. That also pulled the reader and display block out of the Holdings projection, which should calculate rather than parse. `snaptrade_service._update_trend` is now a thin adapter over the same function. `brokerage_contract_spec` gained `RETIRED_LEGACY_ROUTES` beside the frozen list, and a test asserting the retired routes are really unpublished, so a contract cannot be quietly dropped from one list and left half-served. The Phase 1 characterization that both legacy Holdings views shared one shape was deleted with the route it described; what it protected is asserted against the surviving contract by `test_each_resource_has_one_shape_across_brokerages`. Eight new tests cover the shared trend rule directly, including the cases neither old copy tested: a slow sub-threshold slide still accumulating to an alert, a recovery clearing one, a near-breakeven holding never alerting, and a holding no longer held being dropped rather than alerting against a position that does not exist. Retained deliberately: `/brokerage-ledgers/{portfolio}/combined` as the parity baseline, and `snaptrade_service.portfolio` because `/retirement/holdings/*` is still a frozen contract and `retirement_options.py` still calls it. Backend 481 passed; Angular 69 passed; build, docs, secrets, diff checks clean. Browser verification over a synthetic-only data root confirmed the published route table (`/combined` still JSON, the retired path now falling through to the SPA rather than answering), and both write paths end to end: a captured snapshot and a metadata edit each round-tripped through the common API, with the newly captured date and the migrated pre-cutover date showing side by side as two comparison columns. | Audit the legacy Retirement holdings routes, then group-only backend paths |
 | 2026-07-29 | Legacy Retirement holdings routes | COMPLETE — one item blocked | Retired `/retirement/enrichment/{symbol}`, `/retirement/holdings/sync`, and `/retirement/holdings/gain-loss-snapshots`, all replaced by the common brokerage surface and all consumer-free; recorded in `RETIRED_LEGACY_ROUTES`. `snaptrade_service.sync` itself stays, because the registry calls it. **`snaptrade_service.portfolio` could not follow**, and the reason is a real behavior difference rather than a missing consumer: `retirement_options._default_total_value` uses its `totalCurrent` as the retirement risk cash limit, and that total includes CASH rows, while the common Holdings projection deliberately drops them at the adapter (`_instrument` maps `CASH`, and `positions()` skips it) because Holdings is an equity-positions resource. Swapping the caller over as-is would silently *tighten* the risk bands on the options view by the cash balance, which the no-partial-risk-figure rule forbids doing quietly. Left `portfolio()`, `update_enrichment`, and `capture_gain_loss_snapshot` in place as one blob pending the owner's decision, rather than deleting the two that are now dead and leaving a half-migrated file. Backend 481 passed; docs check clean. | Owner: decide how the retirement risk cash limit should source its total |
+| 2026-07-29 | Legacy Retirement holdings projection | COMPLETE | Owner chose to give the common API an explicit account-value figure rather than accept tighter risk bands. `CASH` was already a legal canonical instrument and `components.build` already skipped anything that is not equity or option, so the fix was small and contained: the SnapTrade adapter stops dropping cash positions, and `holdings.account_value` sums every non-option position into `summary.total_account_value`. Holdings still lists only what you hold; the account value answers what the account is worth, which is the question a cash limit asks. One unpriced position makes it `null` rather than low. A parity test asserted the new figure equalled the legacy `totalCurrent` **while both existed**, and that is what made the deletion safe; the comparison went with the projection and the figure is now pinned directly. `retirement_options._default_total_value` reads the common projection, and `/retirement/portfolio/live`, `snaptrade_service.portfolio`, `update_enrichment`, and `capture_gain_loss_snapshot` are gone, along with every helper an AST reachability sweep then showed unreferenced — `snaptrade_service.py` fell from 1172 to 839 lines with nothing left dangling. Five invariants their tests protected were **ported, not dropped**, because they now belong to the common implementation: capturing twice for one sync date replaces it, only the three newest dates are retained, capturing with nothing synced refuses safely, editing one classification field preserves the others, and a malformed metadata edit is rejected with a stable code. Backend 484 passed. | Audit the remaining group-only backend paths |
 
 ## New-session kickoff prompt
 

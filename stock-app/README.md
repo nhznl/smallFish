@@ -154,8 +154,8 @@ They retain timestamped Greeks, beta, and marks as broker evidence.
 ### SnapTrade holdings (Fidelity retirement, etc.)
 
 SnapTrade is a brokerage-data aggregator used to import current holdings from a
-linked brokerage account. `GET /retirement/portfolio/live` serves normalized
-broker facts written to
+linked brokerage account. `GET /api/brokerages/fidelity/holdings` serves
+normalized broker facts written to
 `data/ledger_retirement/snaptrade_holdings.csv` by the last sync. Each row is an
 immutable holding (equity, option, or cash) with quantity, price, cost basis,
 market value, and open P/L; the summary groups value by account and asset class.
@@ -198,8 +198,7 @@ brokerage surface. Note: some employer-plan funds (e.g. 401(k)
 units) come back without a broker cost basis, so their open P/L equals market
 value.
 
-The retirement UI reads `GET /api/brokerages/fidelity/holdings`. The retained
-`GET /retirement/portfolio/live` merges the same
+The retirement UI reads `GET /api/brokerages/fidelity/holdings`, which merges the
 ledger with `data/ledger_retirement/holdings_enrichment.csv` — an editable
 symbol -> category/industry/note classification file (originally seeded from
 the Google Sheet). Broker rows stay immutable facts; your classifications live

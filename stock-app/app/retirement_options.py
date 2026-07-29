@@ -748,15 +748,24 @@ def _default_market_provider(rows: list[dict[str, Any]], as_of: date,
 def _default_total_value() -> float | None:
     """Retirement portfolio's total current value, used as the risk cash limit.
 
-    Sourced from the SnapTrade holdings ledger (the same feed the retirement
-    holdings view uses); any failure degrades gracefully to no cash limit (bands
-    then read Unavailable) rather than breaking the options view. A non-positive
-    total is treated as no limit."""
+    Read from the common brokerage projection over the same materialized ledger,
+    and deliberately the non-option account value rather than the Holdings
+    total: cash counts toward what the account is worth, so excluding it would
+    quietly tighten the risk bands. Any failure degrades to no cash limit (bands
+    then read Unavailable) rather than breaking the options view, and a
+    non-positive or unknown total is treated as no limit."""
+    from .brokerages import registry
+    from .brokerages.projections import holdings
+
     try:
-        total = float(snaptrade_service.portfolio().get("totalCurrent"))
-    except (RuntimeError, OSError, TypeError, ValueError):
+        entry = registry.registration("fidelity")
+        adapter = entry.factory(entry.descriptor, entry.capabilities)
+        total = holdings.account_value(adapter.snapshot())
+    except (RuntimeError, OSError, TypeError, ValueError, KeyError):
         return None
-    return total if total > 0 else None
+    if total is None:
+        return None
+    return float(total) if total > 0 else None
 
 
 def _retirement_risk_config(cfg: RiskConfig, rows: list[dict[str, Any]],

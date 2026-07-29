@@ -294,179 +294,22 @@ def test_snapshot_empty_when_no_ledger(holdings_env):
     assert summary["totalValue"] == 0.0
 
 
-def test_portfolio_merges_enrichment(holdings_env, monkeypatch):
-    monkeypatch.setenv("SFP_HOLDINGS_ENRICHMENT", str(holdings_env / "enrichment.csv"))
-    snaptrade_service.sync(provider=_provider)
-    (holdings_env / "enrichment.csv").write_text(
-        "symbol,category,industry,note,updated_at\n"
-        "JOBY,SPECULATIVE,AVIATION,watch dilution,2026-07-23T00:00:00+00:00\n"
-        "CLX,DIV,CONSUMER,steady,2026-07-23T00:00:00+00:00\n",
-        encoding="utf-8",
-    )
-
-    d = snaptrade_service.portfolio()
-    by_symbol = {h["symbol"]: h for h in d["holdings"]}
-
-    # Options are excluded from the holdings view (they get their own tables).
-    assert set(by_symbol) == {"JOBY", "FDRXX"}
-
-    equity = by_symbol["JOBY"]
-    assert (equity["category"], equity["industry"]) == ("SPECULATIVE", "AVIATION")
-    assert equity["note"] == "watch dilution"
-    assert equity["accountType"] == "BROKERAGE"
-    assert equity["qty"] == pytest.approx(600)
-    assert equity["currentValue"] == pytest.approx(4521.0)
-    assert equity["initialInvestment"] == pytest.approx(7716.0)
-    assert equity["gainLoss"] == pytest.approx(-3195.0)
-
-    cash = by_symbol["FDRXX"]
-    assert (cash["category"], cash["industry"]) == ("CASH", "CASH")
-
-    assert d["totalCurrent"] == pytest.approx(4521.0 + 179865.04)  # no option leg
-    assert set(d["byCategory"]) == {"SPECULATIVE", "CASH"}
-    assert d["byAccountType"]["BROKERAGE"]["holdingCount"] == 2
-    # Cash excluded from top positions, like the sheet endpoint.
-    assert [h["symbol"] for h in d["topPositions"]] == ["JOBY"]
-    assert d["source"] == "SNAPTRADE"
-    assert d["retrievedAt"]
 
 
-def test_portfolio_unclassified_without_enrichment(holdings_env, monkeypatch):
-    monkeypatch.setenv("SFP_HOLDINGS_ENRICHMENT", str(holdings_env / "missing.csv"))
-    snaptrade_service.sync(provider=_provider)
-    d = snaptrade_service.portfolio()
-    by_symbol = {h["symbol"]: h for h in d["holdings"]}
-    assert by_symbol["JOBY"]["category"] == snaptrade_service.UNCLASSIFIED
-    assert by_symbol["FDRXX"]["category"] == "CASH"  # cash still self-classifies
 
 
-def test_gain_loss_snapshot_captures_visible_holdings_and_projects_columns(holdings_env):
-    snaptrade_service.sync(provider=_provider)
-
-    captured = snaptrade_service.capture_gain_loss_snapshot()
-
-    assert captured["replaced"] is False
-    assert captured["snapshotCount"] == 1
-    rows = list(csv.DictReader(
-        config.holdings_gain_loss_snapshots_csv().open(encoding="utf-8")
-    ))
-    # Option legs have their own retirement tables and are not in this snapshot.
-    assert {row["symbol"] for row in rows} == {"JOBY", "FDRXX"}
-
-    portfolio = snaptrade_service.portfolio()
-    assert portfolio["gainLossSnapshots"] == [{
-        "syncDate": captured["syncDate"],
-        "retrievedAt": captured["retrievedAt"],
-        "capturedAt": captured["capturedAt"],
-    }]
-    by_symbol = {holding["symbol"]: holding for holding in portfolio["holdings"]}
-    assert by_symbol["JOBY"]["gainLossSnapshots"][captured["syncDate"]] == pytest.approx(-41.41)
-    assert by_symbol["FDRXX"]["gainLossSnapshots"][captured["syncDate"]] == 0
 
 
-def test_gain_loss_snapshot_replaces_same_sync_date(holdings_env):
-    snaptrade_service.sync(provider=_provider)
-    first = snaptrade_service.capture_gain_loss_snapshot()
-
-    ledger_rows = list(csv.DictReader(config.snaptrade_holdings_csv().open(encoding="utf-8")))
-    next(row for row in ledger_rows if row["symbol"] == "JOBY")["open_pnl_pct"] = "-12.5"
-    snaptrade_service._atomic_write(
-        config.snaptrade_holdings_csv(), snaptrade_service.HOLDINGS_HEADERS, ledger_rows
-    )
-
-    second = snaptrade_service.capture_gain_loss_snapshot()
-    assert second["syncDate"] == first["syncDate"]
-    assert second["replaced"] is True
-    assert second["snapshotCount"] == 1
-
-    rows = list(csv.DictReader(
-        config.holdings_gain_loss_snapshots_csv().open(encoding="utf-8")
-    ))
-    assert len(rows) == 2
-    joby = next(row for row in rows if row["symbol"] == "JOBY")
-    assert float(joby["gain_loss_pct"]) == pytest.approx(-12.5)
 
 
-def test_gain_loss_snapshot_retains_only_three_newest_sync_dates(holdings_env):
-    snaptrade_service.sync(provider=_provider)
-    ledger_rows = list(csv.DictReader(config.snaptrade_holdings_csv().open(encoding="utf-8")))
-
-    for day, pct in (("01", "-40"), ("08", "-30"), ("15", "-20"), ("22", "-10")):
-        for row in ledger_rows:
-            row["retrieved_at"] = f"2026-07-{day}T17:00:00+00:00"
-            if row["symbol"] == "JOBY":
-                row["open_pnl_pct"] = pct
-        snaptrade_service._atomic_write(
-            config.snaptrade_holdings_csv(), snaptrade_service.HOLDINGS_HEADERS, ledger_rows
-        )
-        snaptrade_service.capture_gain_loss_snapshot()
-
-    portfolio = snaptrade_service.portfolio()
-    assert [item["syncDate"] for item in portfolio["gainLossSnapshots"]] == [
-        "2026-07-22", "2026-07-15", "2026-07-08",
-    ]
-    rows = list(csv.DictReader(
-        config.holdings_gain_loss_snapshots_csv().open(encoding="utf-8")
-    ))
-    assert {row["sync_date"] for row in rows} == {
-        "2026-07-22", "2026-07-15", "2026-07-08",
-    }
 
 
-def test_gain_loss_snapshot_requires_synced_holdings(holdings_env):
-    with pytest.raises(snaptrade_service.SnapTradeValidationError) as exc:
-        snaptrade_service.capture_gain_loss_snapshot()
-    assert exc.value.status_code == 409
-    assert "sync from Fidelity first" in str(exc.value)
 
 
-def test_update_enrichment_upserts_and_preserves(holdings_env, monkeypatch):
-    path = holdings_env / "enrichment.csv"
-    monkeypatch.setenv("SFP_HOLDINGS_ENRICHMENT", str(path))
-    path.write_text(
-        "symbol,category,industry,note,updated_at\n"
-        "JOBY,SPECULATIVE,AVIATION,old note,2026-07-01T00:00:00+00:00\n",
-        encoding="utf-8",
-    )
-
-    # Update one field of an existing row; other fields survive.
-    updated = snaptrade_service.update_enrichment("joby", {"note": "new note"})
-    assert updated["symbol"] == "JOBY"
-    assert updated["category"] == "SPECULATIVE"
-    assert updated["note"] == "new note"
-
-    # Insert a brand-new symbol; category/industry normalize to uppercase.
-    created = snaptrade_service.update_enrichment("MSFT", {
-        "category": "growth", "industry": "tech", "note": "wheel underlying",
-    })
-    assert (created["category"], created["industry"]) == ("GROWTH", "TECH")
-
-    enrichment = snaptrade_service._read_enrichment()
-    assert set(enrichment) == {"JOBY", "MSFT"}
-    assert enrichment["JOBY"]["note"] == "new note"
-
-    # Merged holdings view reflects the edit.
-    snaptrade_service.sync(provider=_provider)
-    d = snaptrade_service.portfolio()
-    by_symbol = {h["symbol"]: h for h in d["holdings"]}
-    assert by_symbol["JOBY"]["note"] == "new note"
-    assert by_symbol["JOBY"]["enrichmentSymbol"] == "JOBY"
 
 
-def test_update_enrichment_rejects_bad_input(holdings_env, monkeypatch):
-    monkeypatch.setenv("SFP_HOLDINGS_ENRICHMENT", str(holdings_env / "e.csv"))
-    with pytest.raises(snaptrade_service.SnapTradeValidationError):
-        snaptrade_service.update_enrichment("  ", {"note": "x"})
-    with pytest.raises(snaptrade_service.SnapTradeValidationError):
-        snaptrade_service.update_enrichment("JOBY", {})
-    with pytest.raises(snaptrade_service.SnapTradeValidationError):
-        snaptrade_service.update_enrichment("JOBY", {"category": 42})
 
 
-def test_account_type_mapping():
-    assert snaptrade_service._account_type("ROTH IRA") == "ROTH IRA"
-    assert snaptrade_service._account_type("SALESFORCE 401(K) PLAN") == "PRE TAX"
-    assert snaptrade_service._account_type("BrokerageLink") == "BROKERAGE"
 
 
 # --------------------------------------------------------------------------- #

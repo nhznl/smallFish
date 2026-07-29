@@ -62,8 +62,9 @@ class SnapTradeAdapter(ArtifactAdapter):
                 continue
             asset_class = normalized_symbol(row.get("asset_class"))
             instrument = _instrument(asset_class)
-            if instrument == "CASH":
-                continue
+            # Cash is carried as a canonical fact, not dropped: it is not a
+            # holding and never becomes a component, but it is part of the
+            # account's value, which the risk cash limit is measured against.
             multiplier = (
                 DEFAULT_OPTION_MULTIPLIER if instrument == "OPTION" else Decimal("1")
             )

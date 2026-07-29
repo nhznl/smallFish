@@ -652,7 +652,6 @@ def _sync_changes(previous: list[dict[str, Any]], current: list[dict[str, Any]])
 # enrichment + sheet-compatible portfolio view                                 #
 # --------------------------------------------------------------------------- #
 
-ENRICHMENT_HEADERS = ["symbol", "category", "industry", "note", "updated_at"]
 
 UNCLASSIFIED = "UNCLASSIFIED"
 
@@ -670,191 +669,27 @@ def _read_enrichment() -> dict[str, dict[str, str]]:
         }
 
 
-def update_enrichment(symbol: str, payload: dict[str, Any]) -> dict[str, str]:
-    """Create or update one editable symbol classification.
-
-    Broker rows are immutable; this only rewrites the enrichment CSV. Options
-    display their underlying's tags, so pass the underlying symbol
-    (``enrichmentSymbol`` on each holding row).
-    """
-    symbol = symbol.strip().upper()
-    if not symbol:
-        raise SnapTradeValidationError("symbol is required")
-    updates = {}
-    for field in ("category", "industry", "note"):
-        if field in payload:
-            value = payload[field]
-            if value is not None and not isinstance(value, str):
-                raise SnapTradeValidationError(f"{field} must be a string")
-            text = (value or "").strip()
-            updates[field] = text.upper() if field != "note" else text
-    if not updates:
-        raise SnapTradeValidationError("nothing to update; send category, industry, or note")
-
-    with _lock:
-        enrichment = _read_enrichment()
-        row = enrichment.get(symbol) or {
-            "symbol": symbol, "category": "", "industry": "", "note": "",
-        }
-        row.update(updates)
-        row["updated_at"] = _now()
-        enrichment[symbol] = row
-        _atomic_write(
-            config.holdings_enrichment_csv(), ENRICHMENT_HEADERS,
-            [enrichment[key] for key in sorted(enrichment)],
-        )
-    return {key: row.get(key, "") for key in ENRICHMENT_HEADERS}
-
 
 # --------------------------------------------------------------------------- #
 # gain/loss trend tracking (peak high-water mark + adverse-move alerts)         #
 # --------------------------------------------------------------------------- #
 
-TREND_HEADERS = [
-    "account_id", "account_name", "symbol",
-    "peak_pct", "peak_at", "last_pct", "last_synced_at",
-    "alert", "alert_from_pct", "alert_from_at", "alert_to_pct",
-    "alert_drop_pct", "alert_at",
-]
-
-GAIN_LOSS_SNAPSHOT_HEADERS = [
-    "sync_date", "retrieved_at", "captured_at",
-    "account_id", "account_name", "asset_class", "symbol", "gain_loss_pct",
-]
-MAX_GAIN_LOSS_SNAPSHOTS = 3
 
 
-def _trend_threshold() -> Decimal:
-    """Relative adverse move that trips an alert, as a fraction (default 0.10 =
-    a 10% worsening of the holding's own gain/loss percentage)."""
-    return _decimal(os.environ.get("SFP_HOLDINGS_TREND_THRESHOLD"), Decimal("0.10"))
 
 
-def _trend_min_base() -> Decimal:
-    """Materiality floor in gain/loss percentage points: holdings whose peak is
-    within ±this of breakeven (and cash) are treated as flat and never alert,
-    which also avoids a divide-by-near-zero on the relative move."""
-    return _decimal(os.environ.get("SFP_HOLDINGS_TREND_MIN_BASE"), Decimal("5"))
 
 
-def _trend_key(row: dict[str, Any]) -> tuple[str, str]:
-    """A holding's trend identity: (account, symbol). The same symbol held in two
-    accounts trends independently."""
-    return (_text(row.get("account_id")), _text(row.get("symbol")).upper())
 
 
-def _read_trend() -> dict[tuple[str, str], dict[str, str]]:
-    path = config.holdings_trend_csv()
-    if not path.is_file():
-        return {}
-    with path.open("r", newline="", encoding="utf-8") as handle:
-        rows = [{key: row.get(key, "") for key in TREND_HEADERS} for row in csv.DictReader(handle)]
-    return {(row["account_id"], row["symbol"].upper()): row for row in rows}
 
 
-def _read_gain_loss_snapshots() -> list[dict[str, str]]:
-    path = config.holdings_gain_loss_snapshots_csv()
-    if not path.is_file():
-        return []
-    with path.open("r", newline="", encoding="utf-8") as handle:
-        return [
-            {key: row.get(key, "") for key in GAIN_LOSS_SNAPSHOT_HEADERS}
-            for row in csv.DictReader(handle)
-            if row.get("sync_date")
-        ]
 
 
-def _gain_loss_snapshot_catalog(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Return the retained snapshot dates newest-first for dynamic UI columns."""
-    by_date: dict[str, dict[str, str]] = {}
-    for row in rows:
-        sync_date = row.get("sync_date", "")
-        if not sync_date:
-            continue
-        current = by_date.get(sync_date)
-        if current is None or row.get("captured_at", "") > current.get("capturedAt", ""):
-            by_date[sync_date] = {
-                "syncDate": sync_date,
-                "retrievedAt": row.get("retrieved_at", ""),
-                "capturedAt": row.get("captured_at", ""),
-            }
-    return [
-        by_date[sync_date]
-        for sync_date in sorted(by_date, reverse=True)[:MAX_GAIN_LOSS_SNAPSHOTS]
-    ]
 
 
-def _gain_loss_snapshot_date(retrieved_at: str) -> str:
-    try:
-        # smallFish runs locally, so use the server machine's calendar date just
-        # as Angular does when it displays the same retrievedAt timestamp.
-        return datetime.fromisoformat(
-            retrieved_at.replace("Z", "+00:00")
-        ).astimezone().date().isoformat()
-    except (AttributeError, ValueError) as exc:
-        raise SnapTradeValidationError(
-            "Current holdings do not have a valid Fidelity sync timestamp; sync first.",
-            409,
-        ) from exc
 
 
-def capture_gain_loss_snapshot() -> dict[str, Any]:
-    """Persist the visible holdings' current G/L percentages for their sync date.
-
-    A repeat capture replaces the entire date, rather than leaving stale rows for
-    holdings removed between same-day syncs. Only the newest three distinct sync
-    dates are retained.
-    """
-    with _lock:
-        ledger_rows = [
-            row for row in _read_ledger(config.snaptrade_holdings_csv())
-            if row.get("asset_class") != "OPTION"
-        ]
-        if not ledger_rows:
-            raise SnapTradeValidationError(
-                "There are no retirement holdings to snapshot; sync from Fidelity first.",
-                409,
-            )
-
-        retrieved_at = _text(ledger_rows[0].get("retrieved_at"))
-        sync_date = _gain_loss_snapshot_date(retrieved_at)
-        captured_at = _now()
-        previous = _read_gain_loss_snapshots()
-        replaced = any(row.get("sync_date") == sync_date for row in previous)
-        rows = [row for row in previous if row.get("sync_date") != sync_date]
-        rows.extend({
-            "sync_date": sync_date,
-            "retrieved_at": retrieved_at,
-            "captured_at": captured_at,
-            "account_id": _text(row.get("account_id")),
-            "account_name": _text(row.get("account_name")),
-            "asset_class": _text(row.get("asset_class")),
-            "symbol": _text(row.get("symbol")),
-            "gain_loss_pct": _num(_decimal(row.get("open_pnl_pct"))),
-        } for row in ledger_rows)
-
-        retained_dates = sorted(
-            {row["sync_date"] for row in rows if row.get("sync_date")},
-            reverse=True,
-        )[:MAX_GAIN_LOSS_SNAPSHOTS]
-        retained = [row for row in rows if row.get("sync_date") in retained_dates]
-        retained.sort(key=lambda row: (
-            row.get("sync_date", ""), row.get("account_id", ""),
-            row.get("asset_class", ""), row.get("symbol", ""),
-        ), reverse=True)
-        _atomic_write(
-            config.holdings_gain_loss_snapshots_csv(),
-            GAIN_LOSS_SNAPSHOT_HEADERS,
-            retained,
-        )
-
-    return {
-        "syncDate": sync_date,
-        "retrievedAt": retrieved_at,
-        "capturedAt": captured_at,
-        "replaced": replaced,
-        "snapshotCount": len(retained_dates),
-    }
 
 
 def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[str, str], dict[str, str]]:
@@ -881,188 +716,20 @@ def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[
     )
 
 
-def _account_type(account_name: str) -> str:
-    """Map a brokerage account name onto the sheet's accountType vocabulary."""
-    name = account_name.upper()
-    if "ROTH" in name:
-        return "ROTH IRA"
-    if "401" in name:
-        return "PRE TAX"
-    return "BROKERAGE"
 
 
 def _round2(value: Decimal | float) -> float:
     return float(round(Decimal(str(value)), 2))
 
 
-def _classify(row: dict[str, Any], enrichment: dict[str, dict[str, str]]) -> dict[str, str]:
-    """Resolve category/industry/note for one ledger row.
-
-    Cash-equivalents classify themselves; options inherit their underlying's
-    tags; anything untagged surfaces as UNCLASSIFIED so gaps stay visible.
-    """
-    asset_class = row.get("asset_class", "")
-    symbol = row.get("symbol", "").strip().upper()
-    if asset_class == "CASH":
-        base = {"category": "CASH", "industry": "CASH", "note": ""}
-    else:
-        base = {"category": UNCLASSIFIED, "industry": UNCLASSIFIED, "note": ""}
-    lookup = symbol
-    if asset_class == "OPTION":
-        lookup = row.get("underlying_symbol", "").strip().upper()
-    tags = enrichment.get(lookup) or enrichment.get(symbol)
-    if tags:
-        base["category"] = tags.get("category", "").strip().upper() or base["category"]
-        base["industry"] = tags.get("industry", "").strip().upper() or base["industry"]
-        # Options inherit classification but not the underlying's commentary.
-        if asset_class != "OPTION":
-            base["note"] = tags.get("note", "").strip()
-    return base
 
 
-def _trend_display(state: dict[str, str] | None, current_pct: Decimal) -> dict[str, Any]:
-    """Project stored trend state onto the UI shape. ``alert`` is the sticky flag
-    set on the last adverse ≥threshold move and cleared by a favorable move."""
-    direction = "GAIN" if current_pct >= 0 else "LOSS"
-    if not state:
-        return {"alert": False, "peakPct": None, "peakAt": "", "dropPct": None,
-                "fromPct": None, "toPct": None, "alertAt": None, "direction": direction}
-    alert = _text(state.get("alert")).lower() == "true"
-
-    def _f(value: Any) -> float | None:
-        return float(_decimal(value)) if value not in (None, "") else None
-
-    return {
-        "alert": alert,
-        "peakPct": _f(state.get("peak_pct")),
-        "peakAt": state.get("peak_at", ""),
-        "dropPct": _f(state.get("alert_drop_pct")) if alert else None,
-        "fromPct": _f(state.get("alert_from_pct")) if alert else None,
-        "toPct": _f(state.get("alert_to_pct")) if alert else None,
-        "alertAt": (state.get("alert_at") or None) if alert else None,
-        "direction": direction,
-    }
 
 
-def _sheet_holding(row: dict[str, Any], tags: dict[str, str],
-                   total_current: Decimal,
-                   trend_state: dict[str, str] | None = None,
-                   gain_loss_snapshots: dict[str, float] | None = None) -> dict[str, Any]:
-    """Project one ledger row onto the sheet-era RetirementHolding shape."""
-    quantity = _decimal(row.get("quantity"))
-    market_value = _decimal(row.get("market_value"))
-    cost_basis = _decimal(row.get("cost_basis"))
-    open_pnl = _decimal(row.get("open_pnl"))
-    symbol = row.get("symbol", "")
-    enrichment_symbol = symbol.strip().upper()
-    if row.get("asset_class") == "OPTION":
-        enrichment_symbol = row.get("underlying_symbol", "").strip().upper()
-    return {
-        "enrichmentSymbol": enrichment_symbol,
-        "category": tags["category"],
-        "accountType": _account_type(row.get("account_name", "")),
-        "industry": tags["industry"],
-        "symbol": row.get("symbol", ""),
-        "costPrice": _round2(_decimal(row.get("average_purchase_price"))),
-        "qty": float(quantity),
-        "initialInvestment": _round2(cost_basis),
-        "marketPrice": _round2(_decimal(row.get("price"))),
-        "currentValue": _round2(market_value),
-        "pctOfTotal": _round2(market_value / total_current * 100) if total_current else 0.0,
-        "gainLossPct": _round2(_decimal(row.get("open_pnl_pct"))),
-        "gainLoss": _round2(open_pnl),
-        "gainLossSnapshots": gain_loss_snapshots or {},
-        "note": tags["note"],
-        "trend": _trend_display(trend_state, _decimal(row.get("open_pnl_pct"))),
-    }
 
 
-def _sheet_summary(holdings: list[dict[str, Any]], total_current: float, key: str) -> dict:
-    """Group merged holdings by ``key`` into category/industry/accountType summaries."""
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for holding in holdings:
-        name = holding.get(key)
-        if name:
-            grouped.setdefault(name, []).append(holding)
-    ordered = sorted(
-        grouped.items(),
-        key=lambda kv: sum(h["currentValue"] for h in kv[1]),
-        reverse=True,
-    )
-    result: dict[str, dict] = {}
-    for name, rows in ordered:
-        init = sum(h["initialInvestment"] for h in rows)
-        curr = sum(h["currentValue"] for h in rows)
-        result[name] = {
-            "initialValue": _round2(init),
-            "currentValue": _round2(curr),
-            "pctOfPortfolio": _round2(curr / total_current * 100) if total_current > 0 else 0,
-            "gainLossPct": _round2((curr - init) / init * 100) if init > 0 else 0,
-            "holdingCount": len(rows),
-        }
-    return result
 
 
-def portfolio() -> dict[str, Any]:
-    """SnapTrade ledger merged with editable enrichment, in the exact shape the
-    retirement UI consumed from the Google Sheet endpoint.
-
-    Option legs are excluded here — they have their own trade-groups and risk
-    tables (see ``retirement_options``) — so this stays a pure holdings view.
-    """
-    rows = [
-        row for row in _read_ledger(config.snaptrade_holdings_csv())
-        if row.get("asset_class") != "OPTION"
-    ]
-    enrichment = _read_enrichment()
-    trend = _read_trend()
-    snapshot_rows = _read_gain_loss_snapshots()
-    snapshots_by_holding: dict[tuple[str, str, str], dict[str, float]] = {}
-    for snapshot_row in snapshot_rows:
-        key = _holding_key(snapshot_row)
-        snapshots_by_holding.setdefault(key, {})[snapshot_row["sync_date"]] = _round2(
-            _decimal(snapshot_row.get("gain_loss_pct"))
-        )
-    total_current = sum(_decimal(row.get("market_value")) for row in rows)
-
-    holdings = [
-        _sheet_holding(
-            row,
-            _classify(row, enrichment),
-            total_current,
-            trend.get(_trend_key(row)),
-            snapshots_by_holding.get(_holding_key(row)),
-        )
-        for row in rows
-    ]
-    total_initial = sum(h["initialInvestment"] for h in holdings)
-    total_gain = float(total_current) - total_initial
-
-    top_positions = sorted(
-        (h for h in holdings if h["industry"] != "CASH" and h["category"] != "FUND"),
-        key=lambda h: h["currentValue"],
-        reverse=True,
-    )[:10]
-
-    return {
-        "holdings": holdings,
-        "totalInitial": _round2(total_initial),
-        "totalCurrent": _round2(total_current),
-        "totalGainLoss": _round2(total_gain),
-        "totalGainLossPct": _round2(total_gain / total_initial * 100) if total_initial > 0 else 0,
-        "byCategory": _sheet_summary(holdings, float(total_current), "category"),
-        "byIndustry": _sheet_summary(holdings, float(total_current), "industry"),
-        "byAccountType": _sheet_summary(holdings, float(total_current), "accountType"),
-        "topPositions": top_positions,
-        "gainLossSnapshots": _gain_loss_snapshot_catalog(snapshot_rows),
-        "retrievedAt": rows[0].get("retrieved_at", "") if rows else "",
-        "source": SOURCE,
-    }
-
-
-# --------------------------------------------------------------------------- #
-# public pipeline                                                              #
-# --------------------------------------------------------------------------- #
 
 def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:
     """Pull holdings, normalize them, write the ledger, and return a summary."""

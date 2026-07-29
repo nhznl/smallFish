@@ -331,7 +331,9 @@ compatible. Retirement already materializes all current positions.
 - Notes and provenance are visible without modifying imported broker facts.
 - Account identity remains visible and short-call coverage never crosses an
   account boundary.
-- Existing `/options`, `/options/activity`, `/retirement/portfolio/live`, and
-  `/retirement/options` response shapes do not change.
+- Existing `/options`, `/options/activity`, and `/retirement/options` response
+  shapes do not change. (`/retirement/portfolio/live` was in this list and was
+  retired later, once the common Holdings resource carried its behavior; that
+  retirement is recorded in `docs/BROKERAGE_REFACTOR_PLAN.md`.)
 - Backend tests, Angular build/tests, route inspection with representative
   data, docs checks, secret scan, and `git diff --check` pass.
