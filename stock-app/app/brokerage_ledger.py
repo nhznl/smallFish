@@ -455,14 +455,11 @@ def _adjusted_basis(portfolio_id: str, components: list[dict[str, Any]],
     equities = [row for row in components if row["instrument"] == "EQUITY" and row["quantity"] > 0]
     options = [row for row in components if row["instrument"] == "OPTION"]
     shares = sum((_dec(row["quantity"]) for row in equities), Decimal("0"))
-    accounts = {row["account_id"] for row in equities + options}
     reason = None
     realized: Decimal | None = None
     marked: Decimal | None = None
     if shares <= 0:
         reason = "No current long shares."
-    elif len(accounts) > 1:
-        reason = "Option P/L cannot be allocated safely across accounts."
     elif portfolio_id == "RETIREMENT" and options:
         reason = "Fidelity assignment and expiration lifecycle shapes remain unconfirmed."
     elif any(row["net_cash_flow"] is None for row in equities):

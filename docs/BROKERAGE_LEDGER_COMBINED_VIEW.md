@@ -25,9 +25,9 @@ within the applicable asset view.
 5. The user-facing term is **option-adjusted basis**, not "true price". The
    latter sounds authoritative even when transaction history or marks are
    incomplete.
-6. Account boundaries remain visible. A symbol may be summarized across a
-   brokerage portfolio, but share coverage and account-level basis are never
-   inferred across accounts.
+6. Account boundaries remain visible for provenance. For option-adjusted basis,
+   all equity and option components for the same symbol are combined within a
+   brokerage portfolio, regardless of account.
 
 ## Information architecture
 
@@ -81,10 +81,11 @@ option history:
 
 Summary cards above the table include only the displayed open share positions
 with option history.
-`Basis unavailable` counts only rows whose adjusted-basis completeness is
-`UNAVAILABLE`; the normal `INDICATIVE` state for a live marked position does
-not count as unavailable. Search is the only table filter. Warnings and
-completeness are not filter gates.
+When one or more rows have adjusted-basis completeness `UNAVAILABLE`, the
+`Basis unavailable` card counts them. It is omitted when the count is zero;
+the normal `INDICATIVE` state for a live marked position does not count as
+unavailable. Search is the only table filter. Warnings and completeness are
+not filter gates.
 
 ### Expanded symbol detail
 
@@ -93,7 +94,7 @@ The expanded region uses this normalized decomposition:
 | Column | Meaning |
 |---|---|
 | Type | Open/closed equity, short/long call, or short/long put |
-| Account | Broker account label; never used to imply cross-account coverage |
+| Account | Broker account label; provenance only; basis aggregates same-symbol components across accounts |
 | Qty | Signed shares for equity; signed contracts for options |
 | Contract | Strike and expiry/DTE for options; `-` for equity |
 | Cash in | Non-negative credits, including proceeds and premiums |

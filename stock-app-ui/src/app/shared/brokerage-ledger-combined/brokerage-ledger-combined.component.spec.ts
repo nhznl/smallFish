@@ -31,7 +31,7 @@ function item(symbol: string, overrides: Partial<AdjustedBasisItem> = {}): Adjus
     option_market_value: -75, option_pnl: 525, net_pnl: 1_425, pnl_completeness: 'INDICATIVE',
     adjusted_basis: {
       realized_per_share: null, marked_per_share: null, completeness: 'UNAVAILABLE',
-      reason: 'Option P/L cannot be allocated safely across accounts.',
+      reason: 'Option history, marks, or reconciliation is incomplete.',
     },
     components: [
       component({ id: `${symbol}-equity`, symbol }),
@@ -100,7 +100,7 @@ describe('BrokerageLedgerCombinedComponent', () => {
     expect(text).toContain('READY');
     expect(text).not.toContain('EQUITY_FLAT');
     expect(text).toContain('Basis unavailable');
-    expect(text).toContain('Option P/L cannot be allocated safely across accounts.');
+    expect(text).toContain('Option history, marks, or reconciliation is incomplete.');
     const unavailableCard = Array.from(
       fixture.nativeElement.querySelectorAll('.combined-stats .stat-card') as NodeListOf<HTMLElement>
     ).find(card => card.querySelector('.stat-label')?.textContent === 'Basis unavailable');
@@ -116,6 +116,29 @@ describe('BrokerageLedgerCombinedComponent', () => {
     expect(fixture.nativeElement.querySelector('.component-detail-row > td')?.getAttribute('colspan'))
       .toBe('11');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('OPTION_ACTIVITY_HISTORY');
+  });
+
+  it('hides the basis-unavailable card when every displayed calculation is usable', async () => {
+    const api = jasmine.createSpyObj<BrokerageService>('BrokerageService', ['getOptionAdjustedBasis']);
+    api.getOptionAdjustedBasis.and.returnValue(of(response([
+      item('READY', {
+        adjusted_basis: {
+          realized_per_share: null, marked_per_share: 105, completeness: 'INDICATIVE', reason: null,
+        },
+      }),
+    ])));
+    await TestBed.configureTestingModule({
+      imports: [BrokerageLedgerCombinedComponent],
+      providers: [{ provide: BrokerageService, useValue: api }],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(BrokerageLedgerCombinedComponent);
+    fixture.componentRef.setInput('brokerageId', 'fidelity');
+    fixture.detectChanges();
+
+    expect(Array.from(fixture.nativeElement.querySelectorAll('.combined-stats .stat-card') as NodeListOf<HTMLElement>)
+      .some(card => card.querySelector('.stat-label')?.textContent === 'Basis unavailable'))
+      .toBeFalse();
   });
 
   it('shows a retryable error state', async () => {

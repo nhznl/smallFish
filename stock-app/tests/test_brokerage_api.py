@@ -253,7 +253,7 @@ def test_options_only_symbol_is_absent_from_adjusted_basis(adapter_env):
     assert _get("tastytrade", "options")["items"]      # still an option position
 
 
-def test_adjusted_basis_refuses_to_allocate_across_accounts(adapter_env):
+def test_adjusted_basis_combines_matching_symbols_across_accounts(adapter_env):
     _write_snaptrade(holdings=[
         {"account_id": "acct-1", "account_name": "Roth IRA", "asset_class": "STOCK",
          "symbol": "ABC", "quantity": "100", "price": "120", "cost_basis": "11000",
@@ -263,11 +263,54 @@ def test_adjusted_basis_refuses_to_allocate_across_accounts(adapter_env):
          "option_type": "PUT", "strike": "50", "expiry": "2026-08-21",
          "quantity": "-1", "price": "0.75", "cost_basis": "-600",
          "market_value": "-75"},
+    ], events=[
+        {"id": "activity-1", "account_id": "acct-2", "account": "BrokerageLink",
+         "underlying_symbol": "ABC", "option_type": "PUT", "strike": "50",
+         "expiry": "2026-08-21", "occ_symbol": CONTRACT, "action": "SELL_TO_OPEN",
+         "units": "-1", "net_value": "600", "trade_date": "2026-07-01T16:00:00Z"},
     ])
     item = _get("fidelity", "option-adjusted-basis")["items"][0]
-    assert item["adjusted_basis"]["completeness"] == "UNAVAILABLE"
-    assert item["adjusted_basis"]["marked_per_share"] is None
-    assert "across accounts" in item["adjusted_basis"]["reason"]
+    assert item["accounts"] == ["BrokerageLink", "Roth IRA"]
+    assert item["adjusted_basis"] == {
+        "realized_per_share": None,
+        "marked_per_share": pytest.approx(104.75),
+        "completeness": "INDICATIVE",
+        "reason": None,
+    }
+
+
+def test_adjusted_basis_combines_matching_symbols_across_trading_accounts(adapter_env):
+    _write_tastytrade(
+        positions=[
+            {"account": "IRA", "instrument_type": "Equity", "contract_symbol": "ABC",
+             "underlying_symbol": "ABC", "quantity": "100", "direction": "Long",
+             "signed_quantity": "100", "multiplier": "1", "mark_price": "120",
+             "average_open_price": "110"},
+            {"account": "Margin", "instrument_type": "Equity Option",
+             "contract_symbol": CONTRACT, "underlying_symbol": "ABC", "quantity": "1",
+             "direction": "Short", "signed_quantity": "-1", "multiplier": "100",
+             "mark_price": "0.75", "average_open_price": "6"},
+        ],
+        activity=[
+            {"id": "tastytrade:Margin:1", "source_transaction_id": "1",
+             "account": "Margin", "executed_at": "2026-07-01T16:00:00+00:00",
+             "transaction_date": "2026-07-01", "transaction_type": "Trade",
+             "transaction_sub_type": "Sell to Open", "instrument_type": "Equity Option",
+             "contract_symbol": CONTRACT, "underlying_symbol": "ABC", "action": "Sell to Open",
+             "quantity": "1", "position_delta": "-1", "net_value": "600",
+             "fee_effect": "-1", "option_type": "PUT", "expiry": "2026-08-21",
+             "strike": "50"},
+        ],
+    )
+
+    item = _get("tastytrade", "option-adjusted-basis")["items"][0]
+    assert item["accounts"] == ["IRA", "Margin"]
+    assert item["adjusted_basis"] == {
+        "realized_per_share": None,
+        "marked_per_share": pytest.approx(104.75),
+        "completeness": "INDICATIVE",
+        "reason": None,
+    }
 
 
 def test_an_unconfirmed_lifecycle_blocks_adjusted_basis_without_naming_a_broker(

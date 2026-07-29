@@ -226,13 +226,14 @@ other textual state.
   reassignment, or broker-risk tables in this surface.
 - Option-Adjusted Basis includes only symbols with open long-equity positions
   and option activity that affects their basis. Keep completed option cycles
-  while the shares remain open; do not show redundant Exposure or State
-  controls.
+  while the shares remain open, and combine same-symbol components across
+  accounts within the brokerage; do not show redundant Exposure or State controls.
   Search is its only table filter. Keep all Share Position columns together
   before the Options columns, followed by Net P/L and the live option-adjusted
   basis. Calculate that basis from equity cost less option P/L only; do not
-  include equity P/L. A `Basis unavailable` summary counts only genuinely
-  unavailable calculations, not the normal indicative state of live marks.
+  include equity P/L. Show the `Basis unavailable` summary only when it counts
+  one or more genuinely unavailable calculations; normal indicative live marks
+  do not count as unavailable.
 - Symbol Ledger history is immutable broker evidence. Show current-period
   events directly, and let each archived-period summary expand its own events;
   only one archived period is expanded at a time. Surface a changed-archive

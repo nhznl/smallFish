@@ -58,11 +58,13 @@
         <span class="stat-value" [class]="pnlClass(basisTotal('net_pnl'))">{{ money(basisTotal('net_pnl'), true) }}</span>
         <span class="stat-delta">Equity P/L plus option P/L</span>
       </div>
-      <div class="stat-card" [class.stat-card-warn]="unavailableBasisCount()">
-        <span class="stat-label">Basis unavailable</span>
-        <span class="stat-value">{{ unavailableBasisCount() }}</span>
-        <span class="stat-delta">Missing cost, history, or reconciliation</span>
-      </div>
+      @if (unavailableBasisCount()) {
+        <div class="stat-card stat-card-warn">
+          <span class="stat-label">Basis unavailable</span>
+          <span class="stat-value">{{ unavailableBasisCount() }}</span>
+          <span class="stat-delta">Missing cost, history, or reconciliation</span>
+        </div>
+      }
     </div>
 
     <div class="filter-toolbar" aria-label="Option-adjusted basis filters">

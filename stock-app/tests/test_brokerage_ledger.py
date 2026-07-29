@@ -402,9 +402,8 @@ def test_several_contracts_under_one_underlying_stay_separate_components(ledger_
     assert len({component["id"] for component in row["components"]}) == 2
 
 
-def test_shares_never_cover_an_option_in_another_retirement_account(ledger_env):
-    """Account identity is part of the result: option P/L is not allocated
-    across accounts, so the adjusted basis fails closed with a stated reason."""
+def test_adjusted_basis_combines_matching_symbols_across_retirement_accounts(ledger_env):
+    """The legacy compatibility view no longer blocks on account boundaries."""
     snaptrade_service._atomic_write(
         config.snaptrade_holdings_csv(), snaptrade_service.HOLDINGS_HEADERS,
         [
@@ -437,6 +436,6 @@ def test_shares_never_cover_an_option_in_another_retirement_account(ledger_env):
     assert row["adjusted_basis"]["completeness"] == "UNAVAILABLE"
     assert row["adjusted_basis"]["marked_per_share"] is None
     assert row["adjusted_basis"]["reason"] == (
-        "Option P/L cannot be allocated safely across accounts."
+        "Fidelity assignment and expiration lifecycle shapes remain unconfirmed."
     )
-    assert row["option_adjusted_basis_per_share"] is not None  # main row still shown
+    assert row["option_adjusted_basis_per_share"] == pytest.approx(108.1)

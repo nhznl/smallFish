@@ -22,7 +22,6 @@ SCHEMA_NAME = "smallfish.brokerage-option-adjusted-basis"
 
 ZERO = Decimal("0")
 
-CROSS_ACCOUNT_REASON = "Option P/L cannot be allocated safely across accounts."
 EQUITY_COST_REASON = "Current equity cost basis is unavailable."
 OPTION_HISTORY_REASON = "Option history, marks, or reconciliation is incomplete."
 UNCONFIRMED_REASON = (
@@ -42,15 +41,12 @@ def _total(values: list[Decimal | None]) -> Decimal | None:
 
 def _adjusted_basis(equities, options) -> dict[str, Any]:
     shares = sum((row.quantity for row in equities), ZERO)
-    accounts = {row.account_id for row in (*equities, *options)}
     reason: str | None = None
     realized: Decimal | None = None
     marked: Decimal | None = None
 
     if shares <= 0:
         reason = "No current long shares."
-    elif len(accounts) > 1:
-        reason = CROSS_ACCOUNT_REASON
     elif any(row.net_cash_flow is None for row in equities):
         reason = EQUITY_COST_REASON
     elif any(UNCONFIRMED_PROVIDER_LIFECYCLE in row.missing for row in options):
