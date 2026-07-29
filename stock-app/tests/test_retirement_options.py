@@ -575,6 +575,32 @@ def test_sync_events_imports_options_and_is_idempotent(opts_env):
     assert len(retirement_options._read_events()) == 1
 
 
+def test_sync_events_reactivates_archived_group_only_for_new_event(opts_env):
+    first_provider = _provider(
+        _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
+                      "2026-07-24", "370.34", "-1"),
+    )
+    first = retirement_options.sync_events(provider=first_provider)
+    retirement_options.update_group("MSFT", {"status": "ARCHIVED"})
+
+    unchanged = retirement_options.sync_events(provider=first_provider)
+    assert first["groups_reactivated"] == 0
+    assert unchanged["groups_reactivated"] == 0
+    group = {g["symbol"]: g for g in retirement_options.snapshot()["groups"]}["MSFT"]
+    assert group["status"] == "ARCHIVED"
+
+    with_new_event = retirement_options.sync_events(provider=_provider(
+        _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
+                      "2026-07-24", "370.34", "-1"),
+        _opt_activity("a2", "BUY_TO_CLOSE", "BUY", _MSFT_OCC, "MSFT", "PUT", 380,
+                      "2026-07-24", "-259.00", "1"),
+    ))
+    assert with_new_event["events_inserted"] == 1
+    assert with_new_event["groups_reactivated"] == 1
+    group = {g["symbol"]: g for g in retirement_options.snapshot()["groups"]}["MSFT"]
+    assert group["status"] == "ACTIVE"
+
+
 def test_closed_contract_persists_with_realized_pnl(opts_env):
     # Contract closed and gone from the positions feed (empty holdings ledger),
     # but the buy-to-close has posted to activities: group survives as realized.

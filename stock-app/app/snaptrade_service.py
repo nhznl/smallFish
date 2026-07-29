@@ -1133,10 +1133,11 @@ def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:
     # keeps its realized P/L after it leaves the current-positions feed. Run
     # unconditionally — a fully-closed underlying has no current leg but still
     # needs its closing event. Never fail the holdings sync over it.
+    option_event_sync: dict[str, Any] | None = None
     try:
         from . import retirement_options
 
-        retirement_options.sync_events()
+        option_event_sync = retirement_options.sync_events()
     except Exception:  # noqa: BLE001 — event ledger is best-effort; holdings sync must succeed.
         pass
 
@@ -1156,6 +1157,7 @@ def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:
         "accounts_synced": len(accounts_synced),
         "positions_synced": len(rows),
         **_sync_changes(previous_rows, rows),
+        "groups_reactivated": int((option_event_sync or {}).get("groups_reactivated") or 0),
     }
     return summary
 

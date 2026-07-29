@@ -15,7 +15,7 @@ import { BrokerRiskPositionsComponent } from '../shared/broker-risk-positions/br
 import { BrokerageOptionGroup } from '../model/brokerage-option-groups';
 import { BrokerageHolding, BrokerageHoldingsSnapshot } from '../model/brokerage-holdings';
 import {
-  OptionsActivityEvent, OptionsActivitySnapshot,
+  OptionsActivityEvent, OptionsActivitySnapshot, OptionsActivitySyncReport,
   OptionsGroupPosition, OptionsReconciliationIssue,
   OptionsSnapshot, OptionsTradeGroup
 } from '../model/options-ledger';
@@ -167,13 +167,7 @@ export class OptionsComponent implements OnInit {
           return;
         }
         this.syncedAt = report.retrieved_at;
-        const ivMessage = report.greeks_error
-          ? ` Live IV unavailable; ${report.greeks_missing} open contract(s) missing.`
-          : ` ${report.greeks_observed} live IV observation(s); ` +
-            `${report.greeks_retained} prior observation(s) retained, ` +
-            `${report.greeks_missing} missing.`;
-        this.flashMessage(`${report.option_events_selected} option events synced; ` +
-          `${report.events_inserted} new, ${report.events_updated} refreshed.` + ivMessage);
+        this.flashMessage(this.activitySyncMessage(report));
         this.load();
       },
       error: err => {
@@ -181,6 +175,21 @@ export class OptionsComponent implements OnInit {
         this.activityError = err?.error?.detail ?? 'Tastytrade sync failed.';
       }
     });
+  }
+
+  private activitySyncMessage(report: OptionsActivitySyncReport): string {
+    const ivMessage = report.greeks_error
+      ? ` Live IV unavailable; ${report.greeks_missing} open contract(s) missing.`
+      : ` ${report.greeks_observed} live IV observation(s); ` +
+        `${report.greeks_retained} prior observation(s) retained, ` +
+        `${report.greeks_missing} missing.`;
+    const reactivatedMessage = report.groups_reactivated > 0
+      ? ` Updated ${report.groups_reactivated} archived ` +
+        `group${report.groups_reactivated === 1 ? '' : 's'} back to Active.`
+      : '';
+    return `${report.option_events_selected} option events synced; ` +
+      `${report.events_inserted} new, ${report.events_updated} refreshed.` +
+      reactivatedMessage + ivMessage;
   }
 
   openSharedGroup(group: BrokerageOptionGroup): void {

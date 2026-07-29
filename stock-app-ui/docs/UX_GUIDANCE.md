@@ -231,7 +231,10 @@ other textual state.
   option trades. Groups and event assignments remain smallFish-owned enrichment
   even though the immutable broker-event shapes differ. Groups originate
   automatically from imported activity; do not expose an ad hoc New Group
-  action in the ledger UX.
+  action in the ledger UX. A newly inserted broker event assigned to an
+  archived group reactivates that group during the sync; an idempotent refresh
+  of an existing event does not. Include the number of reactivated groups in
+  the sync confirmation when it is non-zero.
 - Broker Risk Positions uses one shared table on both brokerage pages and lists
   open option legs only; equity/stock positions belong in Holdings. Keep the
   account/group, symbol, leg, quantity, strike, expiry/DTE, option price,

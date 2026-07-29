@@ -279,5 +279,6 @@ export interface OptionsActivitySyncReport {
   betas_error: string | null;
   groups_created: number;
   events_auto_grouped: number;
+  groups_reactivated: number;
   retrieved_at: string;
 }

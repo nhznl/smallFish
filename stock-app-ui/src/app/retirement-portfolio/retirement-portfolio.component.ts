@@ -269,19 +269,24 @@ export class RetirementPortfolioComponent implements OnInit {
 
   private fidelitySyncMessage(report: { sync?: {
     accounts_synced: number; positions_synced: number; added: number;
-    changed: number; unchanged: number; removed: number;
+    changed: number; unchanged: number; removed: number; groups_reactivated: number;
   } } | null): string {
     const sync = report?.sync;
     if (!sync) return 'Fidelity sync complete; portfolio data refreshed.';
 
+    const reactivatedMessage = sync.groups_reactivated > 0
+      ? ` Updated ${sync.groups_reactivated} archived ` +
+        `group${sync.groups_reactivated === 1 ? '' : 's'} back to Active.`
+      : '';
     const positionLabel = `${sync.positions_synced} position${sync.positions_synced === 1 ? '' : 's'}`;
     if (sync.positions_synced === 0) {
-      return `Fidelity sync complete: no positions returned; ${sync.removed} prior position${sync.removed === 1 ? '' : 's'} removed from the local ledger.`;
+      return `Fidelity sync complete: no positions returned; ${sync.removed} prior position${sync.removed === 1 ? '' : 's'} removed from the local ledger.` + reactivatedMessage;
     }
 
     const accountLabel = `${sync.accounts_synced} account${sync.accounts_synced === 1 ? '' : 's'}`;
     return `Fidelity sync complete: ${positionLabel} across ${accountLabel}. ` +
-      `${sync.added} added, ${sync.changed} changed, ${sync.unchanged} unchanged, ${sync.removed} removed.`;
+      `${sync.added} added, ${sync.changed} changed, ${sync.unchanged} unchanged, ${sync.removed} removed.` +
+      reactivatedMessage;
   }
 
   private flashSyncMessage(message: string): void {

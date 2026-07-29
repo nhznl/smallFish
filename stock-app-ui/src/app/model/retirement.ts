@@ -84,5 +84,6 @@ export interface RetirementHoldingsSyncReport {
     changed: number;
     unchanged: number;
     removed: number;
+    groups_reactivated: number;
   };
 }

@@ -27,6 +27,28 @@ const PORTFOLIO: RetirementPortfolioData = {
 };
 
 describe('RetirementPortfolioComponent G/L snapshots', () => {
+  it('reports an archived group reactivated by a Fidelity sync', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: StockService,
+          useValue: jasmine.createSpyObj('StockService', ['getRetirementPortfolio']),
+        },
+        { provide: CapabilityService, useValue: jasmine.createSpyObj('CapabilityService', ['get']) },
+      ],
+    });
+    const component = TestBed.runInInjectionContext(() => new RetirementPortfolioComponent());
+
+    const message = (component as any).fidelitySyncMessage({
+      sync: {
+        accounts_synced: 1, positions_synced: 2, added: 0, changed: 0,
+        unchanged: 2, removed: 0, groups_reactivated: 1,
+      },
+    });
+
+    expect(message).toContain('Updated 1 archived group back to Active.');
+  });
+
   it('captures and reports replacement for the current sync date', () => {
     const stockService = jasmine.createSpyObj<StockService>('StockService', [
       'captureRetirementGainLossSnapshot',

@@ -232,7 +232,10 @@ Positions** table. Groups are smallFish enrichment rather than brokerage
 objects. Both ledgers use automatically created groups, Active/Archived
 filtering, and the same compact group editor. Group membership is persisted as
 smallFish enrichment but is not editable from the ledger dialog; the UI also
-does not expose ad hoc group creation. Shared group metadata lives
+does not expose ad hoc group creation. When a sync inserts a new broker event
+into an archived group, that group is returned to Active and the sync report
+includes the unique number of groups reactivated; refreshing already-known
+events does not change group status. Shared group metadata lives
 in `data/ledger_options/options_groups.csv`; provider-namespaced assignments
 live in `options_group_members.csv`. Existing one-row-per-symbol Retirement
 metadata is migrated into the first app group without losing its name, status,

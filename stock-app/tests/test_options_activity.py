@@ -116,6 +116,32 @@ def test_sync_is_idempotent_auto_groups_and_marks_open_pnl(activity_env):
     assert options_activity.snapshot()["reconciliation_issues"] == []
 
 
+def test_sync_reactivates_archived_group_only_for_new_event(activity_env):
+    first_provider = lambda _start, _end: ([_tx(1)], [_mark()], {"environment": "live"})
+    first = options_activity.sync(
+        date(2026, 1, 1), date(2026, 7, 20), provider=first_provider,
+    )
+    group_id = options_activity.snapshot("TRADING")["groups"][0]["group_id"]
+    options_activity.update_group(group_id, {"status": "ARCHIVED"})
+
+    unchanged = options_activity.sync(
+        date(2026, 1, 1), date(2026, 7, 20), provider=first_provider,
+    )
+    assert first["groups_reactivated"] == 0
+    assert unchanged["groups_reactivated"] == 0
+    assert options_activity.snapshot("TRADING")["groups"][0]["status"] == "ARCHIVED"
+
+    with_new_event = options_activity.sync(
+        date(2026, 1, 1), date(2026, 7, 20),
+        provider=lambda _start, _end: (
+            [_tx(1), _tx(2)], [_mark()], {"environment": "live"},
+        ),
+    )
+    assert with_new_event["events_inserted"] == 1
+    assert with_new_event["groups_reactivated"] == 1
+    assert options_activity.snapshot("TRADING")["groups"][0]["status"] == "ACTIVE"
+
+
 def test_sync_materializes_equity_only_positions_for_combined_ledger(activity_env,
                                                                      monkeypatch):
     combined = activity_env / "all_positions.csv"

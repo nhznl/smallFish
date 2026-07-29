@@ -406,7 +406,7 @@ def sync_events(provider=None, *, start_date: date | None = None,
     retrieved_at = _now()
     pairs = provider(start_date, end_date)
     sv, st = snaptrade_service._value, snaptrade_service._text
-    with _lock:
+    with _lock, options_activity._lock:
         existing = _read_events()
         existing_by_id = {row["id"]: row for row in existing}
         normalized: list[dict[str, Any]] = []
@@ -423,10 +423,33 @@ def sync_events(provider=None, *, start_date: date | None = None,
         merged.update({row["id"]: row for row in normalized})
         events = sorted(merged.values(), key=lambda row: (row["trade_date"], row["id"]))
         _atomic_write(config.retirement_option_events_csv(), EVENT_HEADERS, events)
+
+        # Materialize app-owned grouping before the sync report is returned so
+        # a new event can reactivate its archived group in the same operation.
+        # Multiple same-symbol groups remain ambiguous and therefore ungrouped.
+        _groups, memberships = _ensure_app_groups_unlocked(
+            events, _option_rows(), _read_groups(), start_date.year,
+        )
+        new_event_ids = {row["id"] for row in normalized if row["id"] not in existing_by_id}
+        group_ids = {
+            memberships[event_id] for event_id in new_event_ids
+            if event_id in memberships
+        }
+        all_groups = options_activity._read_csv(
+            config.options_groups_csv(), options_activity.GROUP_HEADERS,
+        )
+        groups_reactivated = options_activity._reactivate_archived_groups(
+            all_groups, group_ids, retrieved_at,
+        )
+        if groups_reactivated:
+            options_activity._atomic_write(
+                config.options_groups_csv(), options_activity.GROUP_HEADERS, all_groups,
+            )
     return {
         "events_received": len(normalized),
         "events_inserted": sum(1 for row in normalized if row["id"] not in existing_by_id),
         "events_updated": sum(1 for row in normalized if row["id"] in existing_by_id),
+        "groups_reactivated": groups_reactivated,
         "window": [start_date.isoformat(), end_date.isoformat()],
         "retrieved_at": retrieved_at,
     }

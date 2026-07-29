@@ -52,6 +52,28 @@ function event(id: string, contractKey: string, groupId: string): OptionsActivit
 }
 
 describe('OptionsComponent', () => {
+  it('reports archived groups reactivated by a sync', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: StockService, useValue: jasmine.createSpyObj('StockService', ['getOptions']) },
+        { provide: CapabilityService, useValue: jasmine.createSpyObj('CapabilityService', ['get']) },
+        {
+          provide: BrokerageLedgerService,
+          useValue: jasmine.createSpyObj('BrokerageLedgerService', ['getHoldings']),
+        },
+      ],
+    });
+    const component = TestBed.runInInjectionContext(() => new OptionsComponent());
+
+    const message = (component as any).activitySyncMessage({
+      option_events_selected: 5, events_inserted: 2, events_updated: 3,
+      groups_reactivated: 2, greeks_error: null, greeks_observed: 2,
+      greeks_retained: 0, greeks_missing: 0,
+    });
+
+    expect(message).toContain('Updated 2 archived groups back to Active.');
+  });
+
   it('shows the Tastytrade data timestamp before the sync action', async () => {
     const stockService = jasmine.createSpyObj<StockService>('StockService', [
       'getOptions', 'getOptionsActivity',

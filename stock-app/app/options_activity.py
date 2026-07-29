@@ -521,6 +521,30 @@ def _auto_group(events: list[dict[str, str]], groups: list[dict[str, str]],
     return created, assigned_count
 
 
+def _reactivate_archived_groups(groups: list[dict[str, str]],
+                                group_ids: set[str], now: str) -> int:
+    """Reactivate archived groups that received at least one new broker event.
+
+    ``group_ids`` must be derived only from newly inserted event ids. Keeping
+    that boundary here means an idempotent refresh of an old event cannot undo
+    a deliberate archive action. The count is per group, not per event.
+    """
+    reactivated = 0
+    for group in groups:
+        if group["group_id"] in group_ids and group["status"] == "ARCHIVED":
+            group["status"] = "ACTIVE"
+            group["updated_at"] = now
+            reactivated += 1
+    return reactivated
+
+
+def _group_ids_for_events(members: list[dict[str, str]], event_ids: set[str]) -> set[str]:
+    return {
+        member["group_id"] for member in members
+        if member["event_id"] in event_ids
+    }
+
+
 def import_broker_events(transactions: list[Any], *, account: str | None = None) -> dict[str, Any]:
     """Merge an explicitly selected set of broker events into the activity ledger.
 
@@ -556,9 +580,13 @@ def import_broker_events(transactions: list[Any], *, account: str | None = None)
 
         groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
         members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
+        new_event_ids = {row["id"] for row in normalized if row["id"] not in existing_by_id}
         years = [int(row["transaction_date"][:4]) for row in normalized if row["transaction_date"]]
         groups_created, events_grouped = _auto_group(
             events, groups, members, min(years, default=date.today().year), retrieved_at
+        )
+        groups_reactivated = _reactivate_archived_groups(
+            groups, _group_ids_for_events(members, new_event_ids), retrieved_at,
         )
         _atomic_write(config.options_groups_csv(), GROUP_HEADERS, groups)
         _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS, members)
@@ -568,6 +596,7 @@ def import_broker_events(transactions: list[Any], *, account: str | None = None)
         "events_updated": sum(1 for row in normalized if row["id"] in existing_by_id),
         "groups_created": groups_created,
         "events_auto_grouped": events_grouped,
+        "groups_reactivated": groups_reactivated,
         "retrieved_at": retrieved_at,
     }
 
@@ -716,7 +745,11 @@ def sync(start_date: date | None = None, end_date: date | None = None,
 
         groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
         members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
+        new_event_ids = {row["id"] for row in normalized if row["id"] not in existing_by_id}
         groups_created, events_grouped = _auto_group(events, groups, members, start_date.year, retrieved_at)
+        groups_reactivated = _reactivate_archived_groups(
+            groups, _group_ids_for_events(members, new_event_ids), retrieved_at,
+        )
         _atomic_write(config.options_groups_csv(), GROUP_HEADERS, groups)
         _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS, members)
 
@@ -737,7 +770,8 @@ def sync(start_date: date | None = None, end_date: date | None = None,
         "events_inserted": sum(1 for row in normalized if row["id"] not in existing_by_id),
         "events_updated": sum(1 for row in normalized if row["id"] in existing_by_id),
         "position_marks": len(marks), "groups_created": groups_created,
-        "events_auto_grouped": events_grouped, "retrieved_at": retrieved_at,
+        "events_auto_grouped": events_grouped,
+        "groups_reactivated": groups_reactivated, "retrieved_at": retrieved_at,
         "greeks_observed": len(newest_greeks),
         "greeks_retained": sum(
             1 for key in current_option_keys if key not in newest_greeks and key in previous_current

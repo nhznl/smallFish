@@ -233,6 +233,7 @@ def test_sync_writes_ledger_and_summary(holdings_env):
         "changed": 0,
         "unchanged": 0,
         "removed": 0,
+        "groups_reactivated": 0,
     }
 
     # Ledger persisted with schema version + immutable broker facts.
@@ -253,6 +254,7 @@ def test_sync_reports_unchanged_and_removed_positions(holdings_env):
         "changed": 0,
         "unchanged": 3,
         "removed": 0,
+        "groups_reactivated": 0,
     }
 
     removed = snaptrade_service.sync(provider=lambda: [(_account(), {"results": []})])
@@ -263,7 +265,20 @@ def test_sync_reports_unchanged_and_removed_positions(holdings_env):
         "changed": 0,
         "unchanged": 0,
         "removed": 3,
+        "groups_reactivated": 0,
     }
+
+
+def test_sync_includes_reactivated_option_group_count(holdings_env, monkeypatch):
+    from app import retirement_options
+
+    monkeypatch.setattr(
+        retirement_options, "sync_events", lambda: {"groups_reactivated": 2},
+    )
+
+    summary = snaptrade_service.sync(provider=_provider)
+
+    assert summary["sync"]["groups_reactivated"] == 2
 
 
 def test_snapshot_round_trips_written_ledger(holdings_env):
