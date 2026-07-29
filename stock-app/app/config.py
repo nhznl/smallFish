@@ -234,6 +234,38 @@ def retirement_option_greeks_csv() -> Path:
     )
 
 
+def symbol_ledger_metadata_csv() -> Path:
+    """Editable per-symbol notes for the brokerage-agnostic Symbol Ledger.
+
+    Keyed by ``(brokerage_id, symbol)``, so one file serves every configured
+    brokerage. App-owned metadata only: it never contains a broker fact.
+    """
+    return _under(
+        "SFP_SYMBOL_LEDGER_METADATA", data_dir(), "ledger_symbols/symbol_ledger_metadata.csv"
+    )
+
+
+def symbol_ledger_archives_csv() -> Path:
+    """Immutable reset boundaries sealing a completed, flat symbol period.
+
+    A boundary records where a period ended and what it contained; it never
+    copies, moves, or deletes a broker event. Displayed archive values are
+    recomputed and verified against the creation-time hash on every read.
+    """
+    return _under(
+        "SFP_SYMBOL_LEDGER_ARCHIVES", data_dir(), "ledger_symbols/symbol_ledger_archives.csv"
+    )
+
+
+def symbol_ledger_gain_loss_snapshots_csv() -> Path:
+    """User-captured holding G/L percentages for the brokerage-agnostic Holdings
+    resource, keyed by brokerage so Trading and Retirement stay separate."""
+    return _under(
+        "SFP_SYMBOL_LEDGER_GL_SNAPSHOTS", data_dir(),
+        "ledger_symbols/holdings_gain_loss_snapshots.csv",
+    )
+
+
 def options_activity_excluded_symbols() -> set[str]:
     """Symbols intentionally kept outside the imported broker-activity ledger."""
     return {

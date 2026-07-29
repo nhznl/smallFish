@@ -70,6 +70,9 @@ class Component:
     contract_key: str | None
     provenance: dict[str, Any]
     missing: tuple[str, ...]
+    #: The immutable events behind this component, in chronological order.
+    #: Period-scoped resources split these; nothing else may rewrite them.
+    events: tuple[ActivityFact, ...] = ()
 
     def serialize(self) -> dict[str, Any]:
         return {
@@ -257,6 +260,7 @@ def _component(*, brokerage_id: str, position: PositionFact | None,
         ),
         event_count=len(events), contract_key=contract_key,
         provenance=provenance, missing=tuple(sorted(set(missing))),
+        events=tuple(sorted(events, key=lambda fact: fact.order_key)),
     )
 
 

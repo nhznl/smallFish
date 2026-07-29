@@ -154,6 +154,18 @@ def test_app_owned_metadata_persists_the_settled_natural_key():
     assert spec.SYMBOL_PATCH_KEYS <= set(spec.SYMBOL_METADATA_CSV_HEADERS)
 
 
+def test_the_persisted_schemas_are_exactly_the_frozen_ones():
+    """The spec and the store cannot drift apart without failing here."""
+    from app.brokerages import store
+
+    assert tuple(store.ARCHIVE_HEADERS) == spec.ARCHIVE_CSV_HEADERS
+    assert tuple(store.METADATA_HEADERS) == spec.SYMBOL_METADATA_CSV_HEADERS
+    # Notes are the only thing a patch may touch, and the only editable column.
+    assert set(store.METADATA_HEADERS) - spec.SYMBOL_PATCH_KEYS == {
+        "brokerage_id", "symbol", "created_at", "updated_at"
+    }
+
+
 # ------------------------------------------- accounting identities, live data ---
 
 def _write_matched_symbol() -> None:

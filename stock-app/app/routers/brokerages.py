@@ -11,7 +11,7 @@ branching on `brokerage_id` would defeat the registry.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from ..brokerages import service
 
@@ -58,3 +58,103 @@ def get_option_adjusted_basis(brokerage_id: str,
         )
     except service.BrokerageRequestError as exc:
         raise _fail(exc) from exc
+
+
+@router.patch("/{brokerage_id}/holdings/{symbol}/metadata")
+def patch_holdings_metadata(brokerage_id: str, symbol: str,
+                            request: dict | None = None) -> dict:
+    try:
+        return service.update_holdings_metadata(brokerage_id, symbol, request or {})
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/{brokerage_id}/holdings/gain-loss-snapshots")
+def post_gain_loss_snapshot(brokerage_id: str) -> dict:
+    try:
+        return service.capture_gain_loss_snapshot(brokerage_id)
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/{brokerage_id}/sync")
+def post_sync(brokerage_id: str, request: dict | None = None) -> dict:
+    """Ask for common resource names; the adapter decides what that means."""
+    try:
+        return service.run_sync(brokerage_id, request or {})
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+# ----------------------------------------------------------- symbol ledger ---
+
+@router.get("/{brokerage_id}/symbols")
+def get_symbols(brokerage_id: str,
+                state: str = Query(default="active"),
+                account_id: str | None = Query(default=None)) -> dict:
+    try:
+        return service.list_symbols(brokerage_id, state=state, account_id=account_id)
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/{brokerage_id}/symbols/{symbol}")
+def get_symbol(brokerage_id: str, symbol: str,
+               account_id: str | None = Query(default=None)) -> dict:
+    try:
+        return service.get_symbol(brokerage_id, symbol, account_id=account_id)
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.patch("/{brokerage_id}/symbols/{symbol}")
+def patch_symbol(brokerage_id: str, symbol: str, request: dict | None = None) -> dict:
+    try:
+        return service.update_symbol(brokerage_id, symbol, request or {})
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/{brokerage_id}/symbols/{symbol}/events")
+def get_symbol_events(brokerage_id: str, symbol: str,
+                      period: str = Query(default="current"),
+                      cursor: str | None = Query(default=None),
+                      limit: int = Query(default=100)) -> dict:
+    try:
+        return service.symbol_events(
+            brokerage_id, symbol, period=period, cursor=cursor, limit=limit
+        )
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/{brokerage_id}/symbols/{symbol}/archives")
+def get_symbol_archives(brokerage_id: str, symbol: str) -> dict:
+    try:
+        return service.list_archives(brokerage_id, symbol)
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/{brokerage_id}/symbols/{symbol}/archives/{archive_id}")
+def get_symbol_archive(brokerage_id: str, symbol: str, archive_id: str) -> dict:
+    try:
+        return service.get_archive(brokerage_id, symbol, archive_id)
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/{brokerage_id}/symbols/{symbol}/archives", status_code=201)
+def post_symbol_archive(brokerage_id: str, symbol: str, response: Response,
+                        request: dict | None = None) -> dict:
+    """Seal the completed current period.
+
+    Retrying the same ``request_id`` answers 200 with the original archive, so a
+    dropped connection cannot produce two boundaries.
+    """
+    try:
+        status_code, body = service.create_archive(brokerage_id, symbol, request or {})
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+    response.status_code = status_code
+    return body

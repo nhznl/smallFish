@@ -8,11 +8,11 @@ a new router, projection, or UI component.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .. import config
+from .. import config, options_activity, retirement_options, snaptrade_service
 from .adapters.base import ArtifactAdapter, BrokerageAdapter
 from .adapters.snaptrade import SnapTradeAdapter
 from .adapters.tastytrade import TastytradeAdapter
@@ -36,12 +36,16 @@ class BrokerageRegistration:
     #: app-owned and per-brokerage, so the path belongs to the identity table
     #: rather than to a projection that would otherwise have to branch.
     holdings_metadata_path: Callable[[], Path] = config.holdings_enrichment_csv
+    #: Common resource name -> the provider command that satisfies it. One
+    #: command may serve several resources; the sync runner calls it once.
+    sync_commands: dict[str, Callable[[], dict]] = field(default_factory=dict)
 
 
 def _registration(*, brokerage_id: str, label: str, institution: str,
                   portfolio_role: str, adapter: str,
                   factory: Callable[..., ArtifactAdapter],
                   holdings_metadata_path: Callable[[], Path],
+                  sync_commands: dict[str, Callable[[], dict]],
                   capabilities: BrokerageCapabilities | None = None,
                   ) -> BrokerageRegistration:
     return BrokerageRegistration(
@@ -52,7 +56,13 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
         capabilities=capabilities or BrokerageCapabilities(),
         factory=factory,
         holdings_metadata_path=holdings_metadata_path,
+        sync_commands=sync_commands,
     )
+
+
+def _tastytrade_sync() -> dict:
+    """One provider call materializes positions, activity, and market data."""
+    return options_activity.sync()
 
 
 #: Ordered so the catalog is stable for the UI.
@@ -61,6 +71,11 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         brokerage_id="tastytrade", label="Tastytrade", institution="TASTYTRADE",
         portfolio_role="TRADING", adapter="TASTYTRADE", factory=TastytradeAdapter,
         holdings_metadata_path=config.trading_holdings_enrichment_csv,
+        sync_commands={
+            "HOLDINGS": _tastytrade_sync,
+            "ACTIVITY": _tastytrade_sync,
+            "MARKET_DATA": _tastytrade_sync,
+        },
     ),
     # SnapTrade is how Fidelity data is retrieved, not the identity the user
     # sees. Another institution reached the same way would be a sibling entry.
@@ -68,6 +83,11 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         brokerage_id="fidelity", label="Fidelity", institution="FIDELITY",
         portfolio_role="RETIREMENT", adapter="SNAPTRADE", factory=SnapTradeAdapter,
         holdings_metadata_path=config.holdings_enrichment_csv,
+        sync_commands={
+            "HOLDINGS": snaptrade_service.sync,
+            "ACTIVITY": retirement_options.sync_events,
+            "MARKET_DATA": retirement_options.sync_market_data,
+        },
     ),
 }
 

@@ -114,10 +114,14 @@ ARCHIVE_BOUNDARY_FIELDS = (
     "realized_pnl_at_creation", "event_set_hash_at_creation", "period_version",
     "request_id", "note", "created_at",
 )
+# ``boundary_event_id`` is not in the plan's suggested field list, but the plan
+# requires the boundary to be deterministic when several events share a
+# timestamp — which a date alone cannot be. The ordered boundary event identity
+# is what makes the cut reproducible.
 ARCHIVE_CSV_HEADERS = (
     "schema_version", "archive_id", "brokerage_id", "symbol",
     "period_started_at", "period_ended_at", "first_event_at", "last_event_at",
-    "event_count_at_creation", "realized_pnl_at_creation",
+    "boundary_event_id", "event_count_at_creation", "realized_pnl_at_creation",
     "event_set_hash_at_creation", "period_version", "request_id", "note",
     "created_at",
 )
