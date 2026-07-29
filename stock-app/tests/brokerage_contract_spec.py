@@ -1,10 +1,10 @@
 """The settled brokerage-agnostic API contract, frozen as test data.
 
-This module is the machine-readable form of the **Settled API decisions** in
-``docs/BROKERAGE_REFACTOR_PLAN.md``. It contains no assertions and imports
-nothing from ``app``: later phases import these constants so a route, a
-projection, and a characterization test all check the *same* vocabulary instead
-of each restating it.
+This module is the machine-readable form of the settled `/api/brokerages`
+contract documented in ``stock-app/README.md`` and ``docs/ARCHITECTURE.md``. It
+contains no assertions and imports nothing from ``app``: routes, projections,
+and characterization tests import these constants so they all check the *same*
+vocabulary instead of each restating it.
 
 Only values the plan states literally are recorded here. Anything the plan
 leaves to implementation is deliberately absent — freezing a guess would create

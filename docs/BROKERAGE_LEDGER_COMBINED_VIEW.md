@@ -4,7 +4,7 @@
 describes — `GET /brokerage-ledgers/{portfolio}/combined`, the grouped
 `GET /options` and `GET /options/activity` projections, and
 `GET /retirement/options` — is fully implemented and then fully retired; see
-`docs/BROKERAGE_REFACTOR_PLAN.md` for the retirement record and current
+`stock-app/README.md` and `docs/ARCHITECTURE.md` for the current
 `/api/brokerages` contract. Read this for the accounting reasoning, not as a
 description of what is live today.
 
@@ -343,7 +343,7 @@ compatible. Retirement already materializes all current positions.
   shapes do not change. (This criterion held through the migration; all three
   of these, along with `/retirement/portfolio/live`, were later retired
   outright once the common resources carried their behavior and a consumer
-  sweep found nothing left calling them. See `docs/BROKERAGE_REFACTOR_PLAN.md`
-  for the retirement record.)
+  sweep found nothing left calling them. The current surface is documented in
+  `stock-app/README.md`.)
 - Backend tests, Angular build/tests, route inspection with representative
   data, docs checks, secret scan, and `git diff --check` pass.
