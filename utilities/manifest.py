@@ -11,6 +11,7 @@ the 2026-07-17 audit found unreproducible artifacts.
 from __future__ import annotations
 
 import hashlib
+from importlib.metadata import version
 import json
 import subprocess
 import sys
@@ -46,11 +47,15 @@ def sha256_file(path: Path) -> str | None:
 
 def _dependency_versions() -> dict:
     versions = {"python": sys.version.split()[0]}
-    for mod in ("pandas", "numpy", "yaml", "yfinance", "tastytrade"):
+    for mod in ("pandas", "numpy", "yaml", "yfinance"):
         try:
             versions[mod] = __import__(mod).__version__
         except Exception:  # noqa: BLE001 - a missing optional dep is fine
             pass
+    try:
+        versions["tastytrade"] = version("tastytrade")
+    except Exception:  # noqa: BLE001 - a missing optional dep is fine
+        pass
     return versions
 
 

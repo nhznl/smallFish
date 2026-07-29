@@ -453,8 +453,8 @@ Pause and ask the owner before proceeding if:
 | 0 | Boundary characterization and two corrective fixes | COMPLETE | Phase 1 can begin | 32 backend + 40 utilities targeted tests; secret scan and diff check clean |
 | 1 | Shared Tastytrade I/O for backend | COMPLETE | Phase 2 can begin | 11 service tests under API venv; 10 passed + 1 backend-only skip under utilities; 450 backend tests; docs, secret, and diff checks clean |
 | 2 | Shared SnapTrade I/O for backend | COMPLETE | Phase 3 can begin | 4 service tests; backend, utilities, docs, secret, and diff checks clean |
-| 3 | Utilities and verification migration | NOT STARTED | Phase 2 passed | — |
-| 4 | Enforcement, docs, full regression | NOT STARTED | Phase 3 must pass | — |
+| 3 | Utilities and verification migration | COMPLETE | Phase 4 can begin | 467 utilities tests; 10 service tests + 1 backend-only skip; status, docs, secret, and diff checks clean |
+| 4 | Enforcement, docs, full regression | NOT STARTED | Phase 3 passed | — |
 
 ## Progress log
 
@@ -464,6 +464,7 @@ Pause and ask the owner before proceeding if:
 | 2026-07-29 | 0 | COMPLETE | Corrected the retirement beta/Greeks three-value credential unpack; fake SDK regression coverage proves the default fetchers stay offline and close sessions/streamers. Provider reports, verification output, and quote metadata now expose only exception type plus stable remediation, with token/account sentinel coverage. 32 backend and 40 utilities targeted tests passed. | Phase 1 |
 | 2026-07-29 | 1 | COMPLETE | Added the stdlib-only shared Tastytrade transport package with lazy SDK imports, redacted credentials, session lifecycle ownership, raw account/metric/Greek envelopes, and fake-SDK coverage under both runtimes. Backend consumers retain their account-selection, normalization, artifact, and response-shape policy. | Phase 2 |
 | 2026-07-29 | 2 | COMPLETE | Added shared SnapTrade transport with lazy SDK client/auth construction, raw setup/account/position/activity payloads, and defensive offset pagination. The backend retains status mapping, credential persistence, CLI output, normalization, artifacts, and provider injection seams. | Phase 3 |
+| 2026-07-29 | 3 | COMPLETE | Moved utilities quote streaming and verification to the shared Tastytrade service, replaced direct SDK version imports with package metadata, and enforced SDK-import confinement plus duplicated-pin parity. Quote normalization and archive semantics remain in utilities. | Phase 4 |
 
 ## Terra kickoff prompt
 
