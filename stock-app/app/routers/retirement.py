@@ -52,31 +52,7 @@ def put_retirement_option_event_group(event_id: str, request: dict) -> dict:
     )
 
 
-@router.put("/retirement/enrichment/{symbol}")
-def put_enrichment(symbol: str, request: dict) -> dict:
-    """Create or update the editable category/industry/note for one symbol."""
-    try:
-        return snaptrade_service.update_enrichment(symbol, request or {})
-    except snaptrade_service.SnapTradeValidationError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-
-@router.post("/retirement/holdings/sync")
-def post_holdings_sync() -> dict:
-    """Pull current holdings from SnapTrade and rewrite the ledger."""
-    try:
-        return snaptrade_service.sync()
-    except snaptrade_service.SnapTradeValidationError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001 — surface upstream failure as 502
-        raise HTTPException(status_code=502, detail="SnapTrade sync failed") from exc
-
-
-@router.post("/retirement/holdings/gain-loss-snapshots")
-def post_gain_loss_snapshot() -> dict:
-    """Capture current holding G/L percentages for the latest sync date."""
-    try:
-        snapshot = snaptrade_service.capture_gain_loss_snapshot()
-        return {"snapshot": snapshot, "portfolio": snaptrade_service.portfolio()}
-    except snaptrade_service.SnapTradeValidationError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+# Retired with the rest of the legacy Holdings surface: editing a
+# classification, syncing holdings, and capturing gain/loss percentages are all
+# served for every brokerage by `/api/brokerages/{brokerage_id}/...`. The
+# provider sync function itself stays — the registry calls it.

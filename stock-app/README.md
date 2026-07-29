@@ -191,12 +191,15 @@ If a step is missing, the CLI and the API return a 503 whose message names the
 exact setting or command needed next — the errors are the setup guide.
 
 `sync` is read-only at the broker (it never places trades) and rewrites the
-ledger from the current SnapTrade snapshot. `POST /retirement/holdings/sync`
-performs the same pull over HTTP. Note: some employer-plan funds (e.g. 401(k)
+ledger from the current SnapTrade snapshot. `POST /api/brokerages/fidelity/sync`
+performs the same pull over HTTP; the legacy `/retirement/holdings/*` and
+`/retirement/enrichment/{symbol}` routes are retired in favour of the common
+brokerage surface. Note: some employer-plan funds (e.g. 401(k)
 units) come back without a broker cost basis, so their open P/L equals market
 value.
 
-The retirement UI reads `GET /retirement/portfolio/live`, which merges the
+The retirement UI reads `GET /api/brokerages/fidelity/holdings`. The retained
+`GET /retirement/portfolio/live` merges the same
 ledger with `data/ledger_retirement/holdings_enrichment.csv` — an editable
 symbol -> category/industry/note classification file (originally seeded from
 the Google Sheet). Broker rows stay immutable facts; your classifications live
