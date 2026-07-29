@@ -50,6 +50,14 @@ verification package. The safety-critical parts — fail-closed quote quality,
 exact contract identity, immutable archives, deterministic archive
 verification — are done; these are the completeness items.
 
+The proposed brokerage-agnostic adapter/API migration and replacement of
+user-managed trade groups with one durable ledger per symbol, including
+reset/archive semantics, phased implementation dashboard, and new-session
+handoff, is tracked in
+[`docs/BROKERAGE_REFACTOR_PLAN.md`](docs/BROKERAGE_REFACTOR_PLAN.md). Implementation
+should follow its additive adapter/API migration and phase gates; the owner
+approved the brokerage-agnostic API direction on 2026-07-28.
+
 **Stock-strategy studies.** Closed 2026-07-18. Ticker-clustered trade
 confidence intervals, point-in-time data acquisition, full event-source parity,
 and a new prospective validation are all deferred.
