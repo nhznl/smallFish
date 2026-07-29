@@ -150,10 +150,16 @@ def resolve_position_deltas(events: list[ActivityFact]) -> tuple[Decimal, bool]:
         if fact.position_delta is not None:
             running += fact.position_delta
             continue
-        if fact.action in _CLOSING_LIFECYCLE and running != 0:
-            size = fact.quantity if fact.quantity is not None else abs(running)
-            step = min(abs(running), abs(size))
-            running += -step if running > 0 else step
+        if fact.action in _CLOSING_LIFECYCLE:
+            # A removal cannot take more than is held. When the opening trade
+            # predates the retained window there is nothing to remove, so the
+            # event moves the position by zero — which is a resolved answer,
+            # not an unexplained one. The broker comparison downstream still
+            # catches a genuine disagreement.
+            if running != 0:
+                size = fact.quantity if fact.quantity is not None else abs(running)
+                step = min(abs(running), abs(size))
+                running += -step if running > 0 else step
             continue
         # An unexplained blank delta is not silently treated as zero movement.
         resolved = False
@@ -174,7 +180,8 @@ def _component(*, brokerage_id: str, position: PositionFact | None,
                events: list[ActivityFact], instrument: str, symbol: str,
                account_id: str, account: str, contract_key: str | None,
                option_type: str | None, strike: Decimal | None,
-               expiry: str | None, missing_mark_code: str) -> Component:
+               expiry: str | None, missing_mark_code: str,
+               reconcile_against_events: bool) -> Component:
     position_quantity = position.signed_quantity if position else ZERO
     has_position = position is not None and position_quantity != 0
     event_quantity, deltas_resolved = resolve_position_deltas(events)
@@ -190,7 +197,22 @@ def _component(*, brokerage_id: str, position: PositionFact | None,
 
     missing: list[str] = []
     cash_values: list[Decimal] | None
-    if events and deltas_resolved and event_quantity == position_quantity:
+    if not reconcile_against_events:
+        # Equity. A closed equity lifecycle is not reconstructable from the
+        # executions this ledger retains — they only cover the fetch window and
+        # only for option-traded underlyings — so a current share position is
+        # valued from the broker's cost basis and nothing else. The retained
+        # executions stay as assignment evidence; turning them into a cash basis
+        # would produce a partial number, and comparing them to the current
+        # position would invent a mismatch that is really just missing history.
+        if has_position and position.open_cash_flow is not None:
+            cash_values = [position.open_cash_flow]
+            basis = "POSITION_COST_BASIS"
+        else:
+            cash_values = None
+            basis = "UNAVAILABLE"
+            missing.append(EQUITY_COST_BASIS)
+    elif events and deltas_resolved and event_quantity == position_quantity:
         values = [fact.net_cash_flow for fact in events]
         if any(value is None for value in values):
             cash_values, basis = None, "UNAVAILABLE"
@@ -324,6 +346,7 @@ def build(snapshot: BrokerageSnapshot) -> list[Component]:
             missing_mark_code=(
                 CURRENT_OPTION_MARK if instrument == "OPTION" else CURRENT_EQUITY_MARK
             ),
+            reconcile_against_events=instrument == "OPTION",
         ))
     return components
 

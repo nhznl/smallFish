@@ -194,7 +194,7 @@ def symbol_events(brokerage_id: str, symbol: str, *, period: str = "current",
                   cursor: str | None = None,
                   limit: int = events.DEFAULT_LIMIT) -> dict[str, Any]:
     snapshot, ledger = _one_ledger(brokerage_id, symbol)
-    every = [event for component in ledger.components for event in component.events]
+    every = ledger.all_events
     wanted = str(period or "current").strip()
 
     if wanted.lower() == "all":

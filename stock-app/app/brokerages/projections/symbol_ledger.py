@@ -41,6 +41,10 @@ INCOMPLETE_HISTORY = "Some cash flows, marks, or history are unavailable."
 UNCONFIRMED_LIFECYCLE = (
     "This brokerage's assignment and expiration lifecycle shapes are unconfirmed."
 )
+CLOSED_EQUITY_UNSUPPORTED = (
+    "Shares in this symbol were closed, and closed equity results are not "
+    "imported for this brokerage, so its total is incomplete."
+)
 
 
 def _number(value: Decimal | None) -> float | None:
@@ -122,9 +126,17 @@ def _component_period_cash(component: Component, *, after: tuple[str, str] | Non
     return total
 
 
-def _period_block(components: list[Component], *, after: tuple[str, str] | None,
+def _period_block(components: list[Component], events: list[ActivityFact], *,
+                  after: tuple[str, str] | None,
                   through: tuple[str, str] | None, is_current: bool,
                   version: str | None = None) -> dict[str, Any]:
+    """Counts come from every event the symbol has; money comes from components.
+
+    Those are different questions. A share sale is part of this symbol's history
+    and must be counted and readable, but it cannot contribute cash while closed
+    equity results are unimported — which is what makes the total unavailable
+    rather than quietly short.
+    """
     net_cash_flow = _sum([
         _component_period_cash(
             component, after=after, through=through, is_current=is_current
@@ -149,10 +161,7 @@ def _period_block(components: list[Component], *, after: tuple[str, str] | None,
     # required before returning a number at all — so a later reopening trade
     # cannot un-realize settled history.
     flat = all(row.state == "FLAT" for row in components) if is_current else True
-    period_events = events_in_period(
-        [event for component in components for event in component.events],
-        after=after, through=through,
-    )
+    period_events = events_in_period(events, after=after, through=through)
     block = {
         "started_at": period_events[0].executed_at if period_events else None,
         "event_count": len(period_events),
@@ -183,15 +192,23 @@ def _reconciliation(components: list[Component]) -> tuple[str, list[str]]:
     return ("UNRECONCILED" if reasons else "RECONCILED"), reasons
 
 
-def _lifecycle(components: list[Component]) -> tuple[str, str, list[str]]:
+def _lifecycle(components: list[Component], *,
+               closed_equity: bool = False) -> tuple[str, str, list[str]]:
     """``(state, pnl_completeness, warnings)`` — derived, never user-set."""
     open_exposure = any(component.state == "OPEN" for component in components)
     reconciliation, reasons = _reconciliation(components)
-    incomplete = any(
+    component_incomplete = any(
         component.pnl_completeness == "UNAVAILABLE" for component in components
     )
-    if incomplete and INCOMPLETE_HISTORY not in reasons:
+    if closed_equity:
+        # The shares are gone and their result is unknown. Reporting the option
+        # legs alone as this symbol's complete total would be a partial number
+        # wearing a finished label.
+        reasons.append(CLOSED_EQUITY_UNSUPPORTED)
+    if component_incomplete and INCOMPLETE_HISTORY not in reasons:
+        # Only when nothing more specific has already explained it.
         reasons.append(INCOMPLETE_HISTORY)
+    incomplete = component_incomplete or closed_equity
 
     if open_exposure:
         completeness = "UNAVAILABLE" if (incomplete or reasons) else "INDICATIVE"
@@ -214,7 +231,8 @@ def _exposure(components: list[Component]) -> str:
 
 # -------------------------------------------------------------- archives ---
 
-def verify_archive(boundary: ArchiveBoundary, components: list[Component], *,
+def verify_archive(boundary: ArchiveBoundary, components: list[Component],
+                   events: list[ActivityFact], *,
                    previous: tuple[str, str] | None) -> dict[str, Any]:
     """Recompute a sealed period and report honestly if the facts moved.
 
@@ -224,12 +242,12 @@ def verify_archive(boundary: ArchiveBoundary, components: list[Component], *,
     be the wrong trade.
     """
     period_events = events_in_period(
-        [event for component in components for event in component.events],
-        after=previous, through=boundary.order_key,
+        events, after=previous, through=boundary.order_key
     )
     current_hash = event_set_hash(period_events)
     block = _period_block(
-        components, after=previous, through=boundary.order_key, is_current=False
+        components, events, after=previous, through=boundary.order_key,
+        is_current=False,
     )
     changed = current_hash != boundary.event_set_hash_at_creation
     warnings: list[str] = []
@@ -266,26 +284,33 @@ class SymbolLedger:
     """One symbol's derived state, ready to serialize at list or detail depth."""
 
     def __init__(self, *, brokerage_id: str, symbol: str,
-                 components: list[Component], archives: list[ArchiveBoundary],
-                 notes: str) -> None:
+                 components: list[Component], events: list[ActivityFact],
+                 archives: list[ArchiveBoundary],
+                 notes: str, closed_equity: bool = False) -> None:
         self.brokerage_id = brokerage_id
         self.symbol = symbol
         self.components = sorted(
             components, key=lambda row: (row.account, row.instrument, row.id)
         )
+        # Every immutable event for this symbol, including the ones no current
+        # component can hold — a closed share lot, a manual reconciliation. They
+        # are the user's evidence and must stay readable.
+        self.all_events = sorted(events, key=lambda event: event.order_key)
         self.archives = archives
         self.notes = notes
+        self.closed_equity = closed_equity
         self.boundary = _current_boundary(archives)
-        self.state, self.pnl_completeness, self.warnings = _lifecycle(self.components)
+        self.state, self.pnl_completeness, self.warnings = _lifecycle(
+            self.components, closed_equity=closed_equity
+        )
         self.reconciliation_status, _reasons = _reconciliation(self.components)
         self.current_events = events_in_period(
-            [event for component in self.components for event in component.events],
-            after=self.boundary, through=None,
+            self.all_events, after=self.boundary, through=None
         )
         self.period_version = period_version(self.boundary, self.current_events)
         self.current_period = _period_block(
-            self.components, after=self.boundary, through=None, is_current=True,
-            version=self.period_version,
+            self.components, self.all_events, after=self.boundary, through=None,
+            is_current=True, version=self.period_version,
         )
         self.archive_summaries = self._verified_archives()
 
@@ -293,9 +318,9 @@ class SymbolLedger:
         summaries = []
         previous: tuple[str, str] | None = None
         for boundary in self.archives:
-            summaries.append(
-                verify_archive(boundary, self.components, previous=previous)
-            )
+            summaries.append(verify_archive(
+                boundary, self.components, self.all_events, previous=previous
+            ))
             previous = boundary.order_key
         return summaries
 
@@ -360,7 +385,7 @@ class SymbolLedger:
             "reset_blockers": self.reset_blockers(),
             "components": [row.serialize() for row in self.components],
             "archives": self.archive_summaries,
-            "event_count_total": sum(row.event_count for row in self.components),
+            "event_count_total": len(self.all_events),
         }
 
 
@@ -375,13 +400,25 @@ def build(snapshot: BrokerageSnapshot, *, archives: list[ArchiveBoundary],
     by_symbol = component_projection.by_symbol(all_components)
     archived_symbols = {boundary.symbol for boundary in archives}
 
+    events_by_symbol: dict[str, list[ActivityFact]] = {}
+    for fact in snapshot.activity:
+        if fact.symbol and (account_id is None or fact.account.account_id == account_id):
+            events_by_symbol.setdefault(fact.symbol, []).append(fact)
+
     ledgers = []
-    for symbol in sorted(set(by_symbol) | archived_symbols):
+    for symbol in sorted(set(by_symbol) | archived_symbols | set(events_by_symbol)):
+        components = by_symbol.get(symbol, [])
+        events = events_by_symbol.get(symbol, [])
+        # Share executions with no share position left: the equity lifecycle
+        # closed, and this brokerage does not import a closed equity result.
+        closed_equity = any(
+            fact.instrument == "EQUITY" for fact in events
+        ) and not any(row.instrument == "EQUITY" for row in components)
         ledgers.append(SymbolLedger(
-            brokerage_id=brokerage_id, symbol=symbol,
-            components=by_symbol.get(symbol, []),
-            archives=[row for row in archives if row.symbol == symbol],
+            brokerage_id=brokerage_id, symbol=symbol, components=components,
+            events=events, archives=[row for row in archives if row.symbol == symbol],
             notes=metadata.get((brokerage_id, symbol), {}).get("notes", ""),
+            closed_equity=closed_equity,
         ))
     return ledgers
 
