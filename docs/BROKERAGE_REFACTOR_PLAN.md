@@ -1,8 +1,74 @@
 # Brokerage API and ledger refactor plan
 
-**Status:** Proposed implementation handoff; no production behavior implements
-this contract yet. This document is the source of truth for implementation,
-phase status, decisions, verification evidence, and the next action.
+**Status:** In progress. Phases 1-5 are implemented and committed; the backend
+is complete and both brokerage pages run on it. This document is the source of
+truth for implementation, phase status, decisions, verification evidence, and
+the next action.
+
+## Resume here
+
+Read this section first. The rest of the document describes the *design*; this
+says where the work actually is.
+
+**Done and committed** (oldest first):
+
+| Commit | Phase |
+|---|---|
+| `10eec2c` | 1 — contract baseline and characterization |
+| `d43a46c` | 2 — registry, adapters, canonical facts |
+| `0a3740c` | 3 — common projections and additive read APIs |
+| `a0094c5` | 4 — Symbol Ledger lifecycle, archives, mutation APIs |
+| `b671845` | 5 — shared Symbol Ledger UI on both brokerage pages |
+| `3917d77` | 5 fix — spent option leg reading as unreconciled |
+| `754bb09` | 5 fix — reconcile share lots rather than declaring closed equity unknowable |
+
+**Current totals:** backend `stock-app/tests` 458 passing; Angular
+`npm run test:ci` 55 passing; `npm run build` clean. All 14 settled
+`/api/brokerages` routes are served and all 21 frozen legacy brokerage routes
+still answer. Worktree clean, all work committed on `main`, nothing pushed.
+
+**Next action:** Phase 6, once the owner's Phase 5 checkpoint is explicitly
+approved. See the dashboard row for what remains open.
+
+**Do not restart from Phase 1.** The kickoff prompt at the foot of this document
+has been rewritten for resumption; use that, not the original start-from-scratch
+version.
+
+### Deviations from the original design, and why
+
+These are deliberate and covered by tests. Do not "correct" them back without
+reading the reasoning.
+
+1. **`boundary_event_id` column on the archive artifact.** Not in the suggested
+   field list, but the design requires a boundary that is deterministic when
+   several events share a timestamp, which a date alone cannot be.
+2. **`ActivityFact.quantity`.** Added in Phase 3. A lifecycle removal reports
+   how much was removed without a signed delta; resolving that needs the size.
+3. **A closing lifecycle event with nothing open resolves to zero movement**
+   rather than being an unexplained delta. A removal cannot take more than is
+   held, and the broker comparison still catches genuine disagreement. Without
+   this, a contract whose opening trade predates the retained window reads as a
+   permanent mismatch that no manual reconciliation can clear.
+4. **Equity is reconciled against retained executions, with a cost-basis
+   fallback.** A share lot that opened and closed inside retained history
+   contributes its real cash. One whose opening trade predates the window reads
+   `UNRECONCILED` — the gap a manual reconciliation row exists to close. Shares
+   still held whose opening lots predate the window keep the broker's cost basis
+   and read indicative, because that is missing history rather than a
+   disagreement.
+5. **Public provenance names the institution, not the connector.** `SNAPTRADE`
+   must never reach a response; Angular would have an adapter name to branch on.
+6. **The Phase 1 automated gate was amended** to include
+   `test_brokerage_adapter_contract.py`.
+
+### Known open questions for the owner
+
+- Phase 5 checkpoint: the owner confirmed the corrected symbol/P-L behaviour on
+  the Trading ledger after `754bb09`. Explicit approval covering navigation,
+  Active/Archived filtering, symbol detail, and notes across **both** `/options`
+  and `/retirement` has not been recorded. Phase 6 must not begin until it is.
+- Phase 7 will need an owner decision on whether any legacy public route has an
+  external consumer, before anything is removed.
 
 ## Handoff operating model
 
@@ -935,14 +1001,17 @@ Update this table in the same commit that completes a phase. Valid states are
 tests, commits, or owner confirmation; do not write "verified" without the
 corresponding evidence.
 
+Per-phase evidence below records the suite totals **as of that phase**, which is
+why they differ. Current totals are in "Resume here" at the top.
+
 | Phase | Scope | Status | Next action / blocker | Evidence |
 |---|---|---|---|---|
 | 1 | Contract baseline and characterization | COMPLETE | Phase 2 may begin | `stock-app/tests/brokerage_contract_spec.py` + `test_brokerage_adapter_contract.py` (14 tests); new characterization cases in `test_options_activity.py`, `test_retirement_options.py`, `test_brokerage_ledger.py`; full backend suite 328 passed |
 | 2 | Brokerage registry, adapters, and canonical facts | COMPLETE | Phase 3 may begin | `stock-app/app/brokerages/` (contracts, registry, SnapTrade + Tastytrade adapters); shared conformance suite `test_brokerage_adapters.py` (32 tests) parametrized over the registry; full backend suite 360 passed |
 | 3 | Common projections and additive read APIs | COMPLETE | Phase 4 may begin | `app/brokerages/projections/` + `service.py` + `routers/brokerages.py`; `GET /api/brokerages`, `/holdings`, `/options`, `/option-adjusted-basis`; `test_brokerage_api.py` (35 tests) incl. parity against `/brokerage-ledgers/*/combined`; full backend suite 395 passed |
 | 4 | Symbol Ledger lifecycle, archives, and mutation APIs | COMPLETE | Phase 5 may begin | `projections/symbol_ledger.py`, `projections/events.py`, `store.py`, `sync.py`, `migration.py`; all 14 settled routes now served and all 21 frozen legacy routes still served; `test_symbol_ledger_api.py` (56 tests); full backend suite 452 passed |
-| 5 | First shared Trading/Retirement UI slice | COMPLETE (awaiting owner checkpoint) | **Owner: inspect `/options` and `/retirement`.** Phase 6 does not start until you approve | `model/brokerage.ts`, `api/brokerage.service.ts`, `shared/symbol-ledger/`; mounted on both pages; `npm run build` clean, `npm run test:ci` 55 passed (19 new). Automated checks passed; browser verification pending |
-| 6 | History/reset UX and shared UI consolidation | BLOCKED | Blocked until owner approves Phase 5 | - |
+| 5 | First shared Trading/Retirement UI slice | COMPLETE — owner checkpoint partially confirmed | **Owner: confirm navigation, Active/Archived filtering, symbol detail and notes on both `/options` and `/retirement`.** Symbol/P-L behaviour already confirmed after `754bb09`. Phase 6 does not start until the rest is approved | `model/brokerage.ts`, `api/brokerage.service.ts`, `shared/symbol-ledger/` mounted on both pages; `npm run build` clean, `npm run test:ci` 55 passed; two owner-reported defects fixed and regression-tested (`3917d77`, `754bb09`) |
+| 6 | History/reset UX and shared UI consolidation | BLOCKED | Blocked until the owner approves the remaining Phase 5 checkpoint items. First task: paginated event history, then archive/reset UX | - |
 | 7 | Compatibility cutover, cleanup, and current-behavior docs | NOT STARTED | Depends on Phase 6 and consumer audit | - |
 | 8 | Full regression, browser verification, and handoff closeout | NOT STARTED | Depends on Phase 7 | - |
 
@@ -1381,90 +1450,65 @@ Append entries; never rewrite older evidence to make progress look cleaner.
 | 2026-07-28 | 5 | COMPLETE — automated checks passed; browser verification pending | Added one brokerage-agnostic Angular client (`api/brokerage.service.ts`) and one set of TypeScript contracts (`model/brokerage.ts`) covering discovery, Holdings, Options, Option-Adjusted Basis, and Symbol Ledger; the brokerage id only ever selects a URL, asserted by service tests. Added `shared/symbol-ledger/` and mounted the same component on `/options` (`tastytrade`) and `/retirement` (`fidelity`), replacing the Trade Groups table. The new surface has no group name, no editable status, and no event-reassignment control; notes stay editable. Rows show derived Active/Archived, reconciliation state, accounts, event counts, current-period and lifetime P/L with completeness, coverage start beside lifetime, and warnings; detail adds account-aware components and provenance. Unproven rows are flagged on the row edge as well as by badge, and unavailable values render `—`. Component tests run the same assertions for both brokerage inputs and cover empty, loading, error, filter, search, notes, incomplete P/L, unsynced availability, and narrow-width scrolling; a test asserts the response never surfaces the connector name. Legacy `brokerage-option-groups` component retained on disk unmounted as the rollback boundary. Gate green: `npm run build` clean, `npm run test:ci` 55 passed; secrets and `git diff --check` clean | **Owner checkpoint: inspect `/options` and `/retirement` and confirm before Phase 6 starts** |
 | 2026-07-29 | 5 (fix) | COMPLETE — automated checks passed; browser verification pending | Owner reported a symbol reading Unreconciled despite a manual reconciliation row. Reproduced with synthetic data and found three defects, all mine, none in the manual-reconciliation path: (1) an expiration whose opening trade predates the retained window was treated as an unexplained blank delta instead of a removal that closes zero, producing a mismatch no manual row could ever clear; (2) equity components were reconciled against retained share executions and could take a cash basis from them, though those cover only the fetch window — equity now always uses the broker cost basis, matching the compatibility view; (3) events with no surviving component — a closed share lot, a manual correction — were dropped from the symbol's history entirely, so the user's own correction was invisible. The Symbol Ledger now retains every event for the symbol for counts and history while money still comes from components. Added a `CLOSED_EQUITY_UNSUPPORTED` reason so a symbol whose shares closed reports an unavailable total with a stated cause rather than presenting its option-only figure as complete; such a symbol stays Active and cannot be reset. Six regression tests added. Full backend suite 457 passed; `npm run build` clean, `npm run test:ci` 55 passed; docs, secrets, `git diff --check` clean | Owner checkpoint still open |
 | 2026-07-29 | 5 (fix 2) | COMPLETE — automated checks passed; browser verification pending | Owner reported the previous fix's `CLOSED_EQUITY_UNSUPPORTED` message firing on many symbols. It was the wrong rule: Tastytrade *does* import share executions for option-traded underlyings, so "closed equity is not imported" was false for that brokerage, and treating every closed share lot as unknowable also made the manual reconciliation row meaningless in the new ledger. Replaced it with the evidence that actually settles the question — reconciliation. Equity components are built again even with no current position, so retained share executions are compared to the broker like option contracts are: a lot that opened and closed inside retained history reconciles and contributes its real cash; one whose opening trade predates the window reads `UNRECONCILED` with a remedy, and entering the missing trade clears it and releases the cash. Shares still held keep the broker cost basis when the window does not cover their opening lots — incomplete history (`EQUITY_ACTIVITY_HISTORY`), not a disagreement. `CLOSED_EQUITY_UNSUPPORTED` and the now-unused `equity_events_by_symbol` helper removed; portfolio-level closed-equity coverage remains where it always was, in the coverage block. Full backend suite 458 passed; `npm run build` clean, `npm run test:ci` 55 passed; docs, secrets, `git diff --check` clean | Owner checkpoint still open |
+| 2026-07-29 | Handoff | COMPLETE | Owner confirmed the corrected symbol and P/L behaviour on the Trading ledger and asked for a handoff-ready document. Added a "Resume here" section (commit map, current suite totals, next action), a "Deviations from the original design" list so a later agent does not revert six deliberate, test-covered choices, and a "Known open questions for the owner" list. Rewrote the new-session kickoff prompt to resume at Phase 6 instead of restarting at Phase 1 — following the old prompt would have redone the whole backend. Dashboard now distinguishes per-phase historical totals from current ones, and records the Phase 5 checkpoint as partially confirmed rather than approved. Coordination mailbox annotated as deliberately empty. Docs check passed; no code changed | Owner to approve the remaining Phase 5 checkpoint items, then Phase 6 |
 
 ## Opus new-session kickoff prompt
 
-Copy the following into a new implementation session when implementation is
-requested:
+Phases 1-5 are implemented and committed. Copy the following into a new
+implementation session to **resume**. The original start-from-scratch version of
+this prompt has been replaced; there is nothing left to do in Phases 1-4.
 
 ```text
-Implement the smallFish Symbol Ledger migration using
-docs/BROKERAGE_REFACTOR_PLAN.md as the source of truth.
+Continue the smallFish Symbol Ledger migration. docs/BROKERAGE_REFACTOR_PLAN.md
+is the source of truth; read its "Resume here" section first, then AGENTS.md,
+Requirements.md, the rest of that plan, docs/BROKERAGE_LEDGER_COMBINED_VIEW.md,
+docs/ARCHITECTURE.md, and stock-app/README.md. Before any UI work also read
+stock-app-ui/AGENTS.md and stock-app-ui/docs/UX_GUIDANCE.md.
 
-Repository context:
-- Work in the existing smallFish checkout.
-- Read AGENTS.md, Requirements.md, docs/BROKERAGE_REFACTOR_PLAN.md,
-  docs/BROKERAGE_LEDGER_COMBINED_VIEW.md, docs/ARCHITECTURE.md, and
-  stock-app/README.md before editing.
-- Before Phase 5 UI work, also read stock-app-ui/AGENTS.md and
-  stock-app-ui/docs/UX_GUIDANCE.md.
-- Inspect git status first. Preserve unrelated user changes and remain on the
-  current branch unless the owner asks for a branch.
+State when you pick this up:
+- Phases 1-5 are complete and committed on main. Nothing is pushed.
+- The backend is finished: all 14 routes under /api/brokerages are served, and
+  all 21 legacy brokerage routes still answer. No legacy group file has stopped
+  being written.
+- Both /options and /retirement already render the shared Symbol Ledger through
+  one brokerage-agnostic Angular client.
+- Baselines to preserve: stock-app/tests 458 passing, npm run test:ci 55
+  passing, npm run build clean. A drop in any of these is a regression.
+- Do NOT redo Phases 1-4. Do not "fix" the deviations listed under "Resume
+  here"; they are deliberate and test-covered.
 
-Product outcome:
-- Add brokerage-agnostic APIs rooted at /api/brokerages/{brokerage_id} for
-  discovery, sync, Holdings, Options, Option-Adjusted Basis, and Symbol Ledger.
-- Use public brokerage IDs fidelity and tastytrade. Resolve them through a
-  backend registry to SnapTrade and Tastytrade adapters.
-- Make provider adapters emit canonical facts; compute final resource responses
-  once in common projections. Angular must never interpret provider fields.
-- Replace user-managed option trade groups with exactly one durable symbol
-  ledger per (brokerage_id, normalized symbol).
-- Associate immutable events through their normalized underlying, not a group
-  membership table.
-- Derive Active/Archived from reconciled exposure.
-- Preserve running current-period and retained-history lifetime P/L across
-  ordinary close/reopen cycles.
-- Allow an explicit reset only for a nonempty, flat, reconciled, complete, and
-  unchanged current period. Reset creates a logical archive boundary and never
-  rewrites or moves broker facts.
-- Keep account identity and coverage account-aware. Do not implement tax-lot
-  accounting or call a provider from a read endpoint.
+Start at Phase 6, but only after confirming with the owner that the Phase 5
+checkpoint is approved. That checkpoint covers navigation, Active/Archived
+filtering, symbol detail, notes, warnings, and P/L presentation across both
+routes. The owner has confirmed the corrected symbol and P/L behaviour on the
+Trading ledger; explicit approval of the rest is not recorded. If it is still
+open, ask, and do not begin Phase 6 until you have an answer.
 
-Execution protocol:
-1. Follow the eight phases in order. Update the dashboard and append the
-   progress log in every phase commit.
-2. Each phase is a focused commit. Run its automated gate before committing and
-   stage only that phase's files.
-3. Do not run browser checks after every phase. After the Phase 5 automated
-   checks and commit, pause and ask the owner to inspect /options and
-   /retirement. Do not start Phase 6 until the owner explicitly approves.
-4. After approval, continue through Phases 6-7 without additional browser
-   pauses when automated gates pass. Mark intermediate UI work as browser
+Then continue under the existing protocol:
+1. One focused commit per phase. Run that phase's automated gate before
+   committing and stage only that phase's files.
+2. Update the dashboard and append the progress log in every phase commit.
+   Never rewrite older log evidence.
+3. After Phase 5 approval, run Phases 6-7 without further browser pauses when
+   their automated gates pass. Mark intermediate UI work as browser
    verification pending.
-5. In Phase 8, run the full automated regression and final browser verification
-   on both routes. Fix and reverify any issue before closeout.
-6. Do not push or open a PR unless asked.
+4. Phase 8 runs the full regression and the final browser verification on both
+   routes. Fix and reverify anything it finds.
+5. Do not push or open a PR unless asked.
 
-Cross-agent questions:
-- Use docs/BROKERAGE_REFACTOR_COORDINATION.md as the shared mailbox with the
-  Codex architecture/coordination task.
-- Append questions using its exact template and a new sequential question ID.
-- For Blocking: yes, stop the current phase after leaving the checkout in a
-  safe state. Do not commit an unresolved interpretation.
-- For Blocking: no, continue only with the safe default already documented in
-  the plan and record that default in Provisional action.
-- Poll the file for a matching Response to Q-NNN section. An ANSWERED response
-  permits work within the stated boundary. OWNER_INPUT_REQUIRED remains blocked
-  until the owner decides and the plan is amended if necessary.
-- Include resolved question/response entries in the related phase commit; do
-  not mark or commit a blocked phase as complete while its decision is open.
-- Do not ask the monitor to edit code, make commits, relax tests, or override a
-  settled product decision.
-
-Non-negotiable boundaries:
+Non-negotiable boundaries (unchanged):
 - Never modify or delete imported broker facts.
 - Never allow two symbol ledgers for the same brokerage and symbol.
 - Never hide missing history, marks, reconciliation, or staleness by showing a
   partial number as complete.
-- Preserve existing API shapes and routes until their consumers are migrated
-  and the Phase 7 compatibility audit permits cleanup.
+- Preserve existing API shapes and routes until the Phase 7 compatibility audit
+  permits cleanup.
 - stock-app must not import utilities or studies.
 - Tests must not contact the network or contain real financial data.
 - Do not infer brokerage tax lots, taxable realized P/L, assignment shapes, or
   external API usage.
 
-Start with Phase 1 only. Confirm the owner-approved API decisions are recorded,
-run the baseline tests, make the focused Phase 1 commit when green, update the
-plan, and then continue phase by phase under the protocol above.
+Cross-agent questions go in docs/BROKERAGE_REFACTOR_COORDINATION.md using its
+template and a new sequential ID. Stop the phase for Blocking: yes; for
+Blocking: no proceed only with the documented safe default and record it.
 ```

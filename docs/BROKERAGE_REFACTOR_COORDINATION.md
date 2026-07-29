@@ -66,4 +66,9 @@ automated gate.
 
 ## Mailbox
 
-No questions yet.
+No questions yet. Phases 1-5 were implemented without reaching a blocking or
+ambiguous decision: every choice was either settled by
+[`BROKERAGE_REFACTOR_PLAN.md`](BROKERAGE_REFACTOR_PLAN.md) or resolved against
+existing code and tests. Deliberate departures from the plan's suggested shapes
+are recorded under "Deviations from the original design" in that document rather
+than here, because they were implementation detail rather than open questions.
