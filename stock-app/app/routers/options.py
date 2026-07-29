@@ -53,7 +53,6 @@ def post_options_activity_sync(request: dict | None = None) -> dict:
         return options_activity.sync(
             date.fromisoformat(start) if start else None,
             date.fromisoformat(end) if end else None,
-            legacy_groups=False,
         )
     except (options_activity.ActivityValidationError, ValueError) as exc:
         status_code = getattr(exc, "status_code", 422)

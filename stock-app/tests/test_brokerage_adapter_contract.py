@@ -78,38 +78,32 @@ def test_catalog_describes_the_portfolios_the_backend_configures_today():
     }
 
 
-def test_registry_sync_disables_legacy_group_writes(monkeypatch):
-    """The production sync path preserves facts without making group state."""
-    calls: dict[str, object] = {}
-
-    def trading_sync(*_args, **kwargs):
-        calls["trading"] = kwargs
-        return {}
-
-    def retirement_sync(*_args, **kwargs):
-        calls["retirement"] = kwargs
-        return {}
-
-    monkeypatch.setattr(options_activity, "sync", trading_sync)
-    monkeypatch.setattr(retirement_options, "sync_events", retirement_sync)
-    registry.REGISTRY["tastytrade"].sync_commands["ACTIVITY"]()
-    registry.REGISTRY["fidelity"].sync_commands["ACTIVITY"]()
-
-    assert calls["trading"] == {"legacy_groups": False}
-    assert calls["retirement"] == {"legacy_groups": False}
 
 
-def test_group_writes_are_off_unless_a_caller_asks_for_them():
-    """Passing the flag is the belt; this is the braces.
 
-    Every production caller opts out explicitly, so the only thing the default
-    protects against is a *new* caller — one that forgets the flag entirely and
-    silently starts creating group state the Symbol Ledger replaced. That is
-    exactly the caller least likely to notice, so the default fails safe.
+
+def test_a_sync_creates_no_group_state(ledger_env, monkeypatch):
+    """The write path is gone, not merely switched off.
+
+    The old flag made this a matter of every caller remembering to opt out. Now
+    there is nothing to opt out of, so a sync cannot leave group artifacts
+    behind however it is called.
     """
-    for function in (options_activity.sync, retirement_options.sync_events):
-        default = inspect.signature(function).parameters["legacy_groups"].default
-        assert default is False, f"{function.__qualname__} would resurrect groups"
+    def provider(_start, _end):
+        return ([], [], {"environment": "live"})
+
+    options_activity.sync(provider=provider)
+
+    for path in (config.options_groups_csv(), config.options_group_members_csv()):
+        assert not path.exists() or path.read_text(encoding="utf-8").strip() == ""
+    assert "legacy_groups" not in inspect.signature(options_activity.sync).parameters
+    assert "legacy_groups" not in inspect.signature(
+        retirement_options.sync_events
+    ).parameters
+    # And the mutation entry points are gone rather than merely unreachable.
+    for module in (options_activity, retirement_options):
+        for name in ("create_group", "update_group", "assign_event"):
+            assert not hasattr(module, name), f"{module.__name__}.{name} still exists"
 
 
 def test_canonical_vocabulary_carries_no_provider_terms():

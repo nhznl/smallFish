@@ -30,12 +30,12 @@ stock-app/
 │   ├── cache.py            # in-memory stock and trend cache
 │   ├── trend_engine.py     # technical trend calculations
 │   ├── stock_model.py      # stock, weekly, and gain/loss models
-│   ├── options_activity.py # Tastytrade import, grouping, and group P/L
+│   ├── options_activity.py # Tastytrade import, marks, and retained reads
 │   ├── options_portfolio.py # broker-position risk snapshot for /options
 │   ├── options_market.py   # market inputs for options positions
 │   ├── options_risk.py     # options-risk calculations
 │   ├── portfolios.py       # named symbol lists, returns, sector exposure
-│   ├── retirement_options.py # SnapTrade option positions and event groups
+│   ├── retirement_options.py # SnapTrade option positions and risk rows
 │   ├── snaptrade_service.py  # read-only SnapTrade holdings import
 │   ├── studies_read.py     # fail-closed Research Studies reader
 │   ├── capabilities.py     # optional-integration and core-data states
@@ -143,11 +143,15 @@ declining-trend state they were the only source of, and captured percentages
 recorded before the move are carried into the common store on the next sync.
 `/brokerage-ledgers/{portfolio}/combined` remains as an internal compatibility
 projection and as the baseline the parity tests compare against. It is not an
-external contract and its group write paths are retired.
+external contract, and every group write path in the backend is retired: the
+`options_groups.csv` and `options_group_members.csv` artifacts are read-only
+rollback state that `/options/activity` and `/options` still project, and that
+`remove_symbols` still purges, but that nothing writes.
 
 `POST /options/activity/sync` remains an internal compatibility command and
-imports January 1 through today by default without creating or changing group
-state. The common `POST /api/brokerages/tastytrade/sync` is the dashboard path.
+imports January 1 through today by default. Grouping is retired, so no sync
+path can create or change group state — the counters it reports stay at zero
+and are kept only because the response shape is frozen. The common `POST /api/brokerages/tastytrade/sync` is the dashboard path.
 Both are read-only at the broker and idempotent by Tastytrade transaction ID.
 They retain timestamped Greeks, beta, and marks as broker evidence.
 

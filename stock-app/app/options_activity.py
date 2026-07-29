@@ -1,8 +1,14 @@
-"""Tastytrade-backed options activity, editable groups, and marked group P/L.
+"""Tastytrade-backed options activity: immutable broker facts and their marks.
 
-Broker transactions are immutable facts keyed by the provider transaction ID.
-User grouping is stored separately, so regrouping a roll or management trade
-never rewrites the imported execution history.
+Broker transactions are facts keyed by the provider transaction ID, so a repeat
+sync merges rather than rewrites.
+
+Grouping is retired. Nothing here creates or mutates a group any more — the
+Symbol Ledger derives lifecycle from the events themselves, keyed by normalized
+underlying. The group artifacts are still *read* by `snapshot` and `risk_rows`,
+which serve retained compatibility contracts, and `remove_symbols` still purges
+them; a pre-cutover install therefore keeps projecting the rows it already has,
+and gains no new ones.
 """
 
 from __future__ import annotations
@@ -494,55 +500,10 @@ def _select_transactions(transactions: list[Any]) -> tuple[list[Any], set[str]]:
     return list(selected.values()), option_underlyings
 
 
-def _auto_group(events: list[dict[str, str]], groups: list[dict[str, str]],
-                members: list[dict[str, str]], year: int, now: str) -> tuple[int, int]:
-    assigned = {row["event_id"] for row in members}
-    by_key: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
-    for event in events:
-        if event["id"] not in assigned:
-            by_key[(event["account"], event["underlying_symbol"])].append(event)
-    created = assigned_count = 0
-    for (account, symbol), unassigned in sorted(by_key.items()):
-        matching = [g for g in groups if g["account"] == account and g["symbol"] == symbol]
-        if not matching:
-            group = {
-                "group_id": str(uuid.uuid4()), "account": account, "symbol": symbol,
-                "name": f"{symbol} {year}", "status": "ACTIVE", "notes": "",
-                "auto_created": "true", "created_at": now, "updated_at": now,
-            }
-            groups.append(group)
-            matching = [group]
-            created += 1
-        if len(matching) == 1:
-            for event in unassigned:
-                members.append({"event_id": event["id"], "group_id": matching[0]["group_id"],
-                                "assigned_at": now})
-                assigned_count += 1
-    return created, assigned_count
 
 
-def _reactivate_archived_groups(groups: list[dict[str, str]],
-                                group_ids: set[str], now: str) -> int:
-    """Reactivate archived groups that received at least one new broker event.
-
-    ``group_ids`` must be derived only from newly inserted event ids. Keeping
-    that boundary here means an idempotent refresh of an old event cannot undo
-    a deliberate archive action. The count is per group, not per event.
-    """
-    reactivated = 0
-    for group in groups:
-        if group["group_id"] in group_ids and group["status"] == "ARCHIVED":
-            group["status"] = "ACTIVE"
-            group["updated_at"] = now
-            reactivated += 1
-    return reactivated
 
 
-def _group_ids_for_events(members: list[dict[str, str]], event_ids: set[str]) -> set[str]:
-    return {
-        member["group_id"] for member in members
-        if member["event_id"] in event_ids
-    }
 
 
 def import_broker_events(transactions: list[Any], *, account: str | None = None) -> dict[str, Any]:
@@ -550,7 +511,8 @@ def import_broker_events(transactions: list[Any], *, account: str | None = None)
 
     This is used for narrowly scoped pre-window repairs after the provider
     transactions have been reviewed. Provider IDs keep repeated imports
-    idempotent, and existing same-symbol group membership is preserved.
+    idempotent. Grouping is retired, so a repaired event joins its Symbol Ledger
+    by its own underlying rather than needing a membership row.
     """
     account = _text(account or "TRADING").upper()
     if account not in {"RETIREMENT", "TRADING"}:
@@ -578,18 +540,7 @@ def import_broker_events(transactions: list[Any], *, account: str | None = None)
         events = sorted(merged.values(), key=lambda row: (row["executed_at"], row["id"]))
         _atomic_write(config.options_activity_csv(), ACTIVITY_HEADERS, events)
 
-        groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
-        members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
-        new_event_ids = {row["id"] for row in normalized if row["id"] not in existing_by_id}
-        years = [int(row["transaction_date"][:4]) for row in normalized if row["transaction_date"]]
-        groups_created, events_grouped = _auto_group(
-            events, groups, members, min(years, default=date.today().year), retrieved_at
-        )
-        groups_reactivated = _reactivate_archived_groups(
-            groups, _group_ids_for_events(members, new_event_ids), retrieved_at,
-        )
-        _atomic_write(config.options_groups_csv(), GROUP_HEADERS, groups)
-        _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS, members)
+        groups_created = events_grouped = groups_reactivated = 0
     return {
         "events_received": len(normalized),
         "events_inserted": sum(1 for row in normalized if row["id"] not in existing_by_id),
@@ -688,12 +639,9 @@ def _trend_observations(positions: list[dict[str, Any]]) -> list[Any]:
     return observations
 
 
-def sync(start_date: date | None = None, end_date: date | None = None,
-         *, provider: BrokerProvider | None = None,
-         legacy_groups: bool = False) -> dict[str, Any]:
-    """Import broker activity. ``legacy_groups`` defaults off: the Symbol Ledger
-    is the production lifecycle, and a caller that forgets the flag must not
-    quietly start creating group state again. Characterizations opt in."""
+def sync(start_date: date | None = None,
+         end_date: date | None = None,
+         *, provider: BrokerProvider | None = None) -> dict[str, Any]:
     end_date = end_date or date.today()
     start_date = start_date or date(end_date.year, 1, 1)
     if start_date > end_date:
@@ -776,22 +724,11 @@ def sync(start_date: date | None = None, end_date: date | None = None,
         _atomic_write(config.options_greeks_csv(), GREEKS_HEADERS, persisted_greeks)
         _atomic_write(config.options_betas_csv(), BETA_HEADERS, persisted_betas)
 
-        if legacy_groups:
-            groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
-            members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
-            new_event_ids = {row["id"] for row in normalized if row["id"] not in existing_by_id}
-            groups_created, events_grouped = _auto_group(
-                events, groups, members, start_date.year, retrieved_at,
-            )
-            groups_reactivated = _reactivate_archived_groups(
-                groups, _group_ids_for_events(members, new_event_ids), retrieved_at,
-            )
-            _atomic_write(config.options_groups_csv(), GROUP_HEADERS, groups)
-            _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS, members)
-        else:
-            # Symbol Ledger is the production lifecycle. Keep legacy artifacts
-            # readable for rollback, but do not create or mutate grouping state.
-            groups_created = events_grouped = groups_reactivated = 0
+        # Grouping is retired. The Symbol Ledger derives lifecycle from the
+        # events themselves, so nothing here creates or mutates group state;
+        # the artifacts stay readable for rollback. The counters remain in the
+        # response because callers of this frozen contract still read them.
+        groups_created = events_grouped = groups_reactivated = 0
 
     # Holdings trend is advisory metadata derived from the new broker snapshot.
     # Never fail a brokerage sync because the optional trend view could not
@@ -1103,74 +1040,12 @@ def risk_rows(account: str | None = None) -> list[dict[str, Any]]:
     return rows
 
 
-def _event_map() -> dict[str, dict[str, str]]:
-    return {row["id"]: row for row in _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)}
 
 
-def create_group(request: dict[str, Any]) -> dict[str, Any]:
-    account = _text(request.get("account") or "TRADING").upper()
-    symbol = _text(request.get("symbol")).upper().strip()
-    name = _text(request.get("name")).strip()
-    if account not in {"RETIREMENT", "TRADING"} or not symbol or not name:
-        raise ActivityValidationError("account, symbol, and name are required")
-    now = _now()
-    group = {
-        "group_id": str(uuid.uuid4()), "account": account, "symbol": symbol,
-        "name": name, "status": "ACTIVE", "notes": _text(request.get("notes")).strip(),
-        "auto_created": "false", "created_at": now, "updated_at": now,
-    }
-    with _lock:
-        groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
-        groups.append(group)
-        _atomic_write(config.options_groups_csv(), GROUP_HEADERS, groups)
-        for event_id in request.get("event_ids") or []:
-            assign_event(_text(event_id), group["group_id"])
-    return _group_summary(group, [], {})
 
 
-def update_group(group_id: str, request: dict[str, Any]) -> dict[str, str]:
-    with _lock:
-        groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
-        group = next((row for row in groups if row["group_id"] == group_id), None)
-        if group is None:
-            raise ActivityValidationError("trade group not found", 404)
-        if "name" in request:
-            name = _text(request.get("name")).strip()
-            if not name:
-                raise ActivityValidationError("group name cannot be blank")
-            group["name"] = name
-        if "notes" in request:
-            group["notes"] = _text(request.get("notes")).strip()
-        if "status" in request:
-            status = _text(request.get("status")).upper()
-            if status not in {"ACTIVE", "ARCHIVED"}:
-                raise ActivityValidationError("group status must be ACTIVE or ARCHIVED")
-            group["status"] = status
-        group["updated_at"] = _now()
-        _atomic_write(config.options_groups_csv(), GROUP_HEADERS, groups)
-        return group
 
 
-def assign_event(event_id: str, group_id: str | None) -> dict[str, Any]:
-    with _lock:
-        events = _event_map()
-        event = events.get(event_id)
-        if event is None:
-            raise ActivityValidationError("broker event not found", 404)
-        groups = _read_csv(config.options_groups_csv(), GROUP_HEADERS)
-        group = None
-        if group_id:
-            group = next((row for row in groups if row["group_id"] == group_id), None)
-            if group is None:
-                raise ActivityValidationError("trade group not found", 404)
-            if group["account"] != event["account"] or group["symbol"] != event["underlying_symbol"]:
-                raise ActivityValidationError("a broker event may only join a group for the same account and symbol")
-        members = _read_csv(config.options_group_members_csv(), MEMBER_HEADERS)
-        members = [row for row in members if row["event_id"] != event_id]
-        if group is not None:
-            members.append({"event_id": event_id, "group_id": group["group_id"], "assigned_at": _now()})
-        _atomic_write(config.options_group_members_csv(), MEMBER_HEADERS, members)
-        return {"event_id": event_id, "group_id": group["group_id"] if group else None}
 
 
 def _manual_value_fields(request: dict[str, Any], contract_symbol: str) -> dict[str, str]:
@@ -1241,15 +1116,22 @@ def create_manual_event(request: dict[str, Any]) -> dict[str, Any]:
         "imported_at": now, "retrieved_at": now,
         **_manual_value_fields(request, contract_symbol),
     }
-    group_id = _text(request.get("group_id")).strip()
+    if _text(request.get("group_id")).strip():
+        # Refused rather than ignored: a caller asking for grouping wants
+        # something this no longer does, and silently dropping it would leave
+        # them believing the row was filed somewhere it was not.
+        raise ActivityValidationError(
+            "Trade groups are retired. A manual row joins its symbol ledger by "
+            "its underlying; use Symbol Ledger notes for annotation."
+        )
     with _lock:
         events = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
         events.append(event)
         events.sort(key=lambda row: (row["executed_at"], row["id"]))
         _atomic_write(config.options_activity_csv(), ACTIVITY_HEADERS, events)
-    if group_id:
-        assign_event(event["id"], group_id)
-    return {"event_id": event["id"], "group_id": group_id or None}
+    # `group_id` stays in the response as a null: this is a frozen contract and
+    # removing a key is a shape change its callers did not ask for.
+    return {"event_id": event["id"], "group_id": None}
 
 
 def update_manual_event(event_id: str, request: dict[str, Any]) -> dict[str, Any]:

@@ -1,12 +1,15 @@
-"""Retirement options: a separate positions view with an editable Trade Groups
-table and a Broker Risk Positions table, mirroring the Options Ledger.
+"""Retirement options: a separate positions view and a Broker Risk Positions
+table, mirroring the Options Ledger.
 
 SnapTrade supplies the current option legs (from the holdings ledger). The
 broker-agnostic options risk engine then computes spot, realized-vol IV,
 Black-Scholes delta, smallFish's own computed beta, and — using Tastytrade
 market-metric betas fetched for the underlyings (SnapTrade provides no beta) —
-beta-weighted delta. Editable groups and event assignments share the app-owned
-group stores used by Trading, while immutable broker facts remain separate.
+beta-weighted delta.
+
+Grouping is retired here too: the projection still reads the app-owned group
+stores it shares with Trading, so retained rows keep showing, but nothing in
+this module writes one.
 """
 
 from __future__ import annotations
@@ -389,13 +392,9 @@ def _normalize_activity(activity: Any, ctx: dict[str, str], retrieved_at: str,
 
 def sync_events(provider=None, *, start_date: date | None = None,
                 end_date: date | None = None,
-                legacy_groups: bool = False) -> dict[str, Any]:
+                ) -> dict[str, Any]:
     """Pull SnapTrade option transaction events over a full window and upsert them
     into the immutable ledger, keyed by activity id — never deleting.
-
-    ``legacy_groups`` defaults off: the Symbol Ledger is the production
-    lifecycle, and a caller that forgets the flag must not quietly start
-    creating group state again. Characterizations opt in.
 
     Full-window + upsert-by-id is idempotent and self-heals batches that post
     late (SnapTrade serves Fidelity positions in real time but transactions on a
@@ -429,30 +428,9 @@ def sync_events(provider=None, *, start_date: date | None = None,
         events = sorted(merged.values(), key=lambda row: (row["trade_date"], row["id"]))
         _atomic_write(config.retirement_option_events_csv(), EVENT_HEADERS, events)
 
-        if legacy_groups:
-            # Legacy direct callers retain their historical behavior. Registry
-            # sync uses ``legacy_groups=False`` so normal production refreshes
-            # cannot create or mutate ambiguous group state.
-            _groups, memberships = _ensure_app_groups_unlocked(
-                events, _option_rows(), _read_groups(), start_date.year,
-            )
-            new_event_ids = {row["id"] for row in normalized if row["id"] not in existing_by_id}
-            group_ids = {
-                memberships[event_id] for event_id in new_event_ids
-                if event_id in memberships
-            }
-            all_groups = options_activity._read_csv(
-                config.options_groups_csv(), options_activity.GROUP_HEADERS,
-            )
-            groups_reactivated = options_activity._reactivate_archived_groups(
-                all_groups, group_ids, retrieved_at,
-            )
-            if groups_reactivated:
-                options_activity._atomic_write(
-                    config.options_groups_csv(), options_activity.GROUP_HEADERS, all_groups,
-                )
-        else:
-            groups_reactivated = 0
+        # Grouping is retired: the Symbol Ledger derives lifecycle from the
+        # events themselves. The counter stays in this frozen response.
+        groups_reactivated = 0
     return {
         "events_received": len(normalized),
         "events_inserted": sum(1 for row in normalized if row["id"] not in existing_by_id),
@@ -866,112 +844,10 @@ def snapshot(*, as_of: date | None = None, market_provider=_default_market_provi
 # editable trade-group metadata                                                 #
 # --------------------------------------------------------------------------- #
 
-def create_group(payload: dict[str, Any]) -> dict[str, Any]:
-    """Create an app-owned Retirement group; broker data remains untouched."""
-    symbol = str(payload.get("symbol") or "").strip().upper()
-    name = str(payload.get("name") or "").strip()
-    if not symbol or not name:
-        raise RetirementOptionsError("symbol and name are required")
-    now = _now()
-    group = {
-        "group_id": str(uuid.uuid4()), "account": "RETIREMENT", "symbol": symbol,
-        "name": name, "status": "ACTIVE", "notes": str(payload.get("notes") or "").strip(),
-        "auto_created": "false", "created_at": now, "updated_at": now,
-    }
-    with _lock, options_activity._lock:
-        groups = options_activity._read_csv(
-            config.options_groups_csv(), options_activity.GROUP_HEADERS,
-        )
-        groups.append(group)
-        options_activity._atomic_write(
-            config.options_groups_csv(), options_activity.GROUP_HEADERS, groups,
-        )
-        for event_id in payload.get("event_ids") or []:
-            assign_event(str(event_id), group["group_id"])
-    return _empty_group_summary(group)
 
 
-def update_group(group_key: str, payload: dict[str, Any]) -> dict[str, str]:
-    """Update one app group by id; a unique symbol remains a compatibility alias."""
-    group_key = group_key.strip()
-    if not group_key:
-        raise RetirementOptionsError("group id is required")
-    updates: dict[str, str] = {}
-    for field in ("name", "status", "notes"):
-        if field in payload:
-            value = payload[field]
-            if value is not None and not isinstance(value, str):
-                raise RetirementOptionsError(f"{field} must be a string")
-            updates[field] = (value or "").strip()
-    if "status" in updates:
-        status = updates["status"].upper()
-        if status not in {"ACTIVE", "ARCHIVED"}:
-            raise RetirementOptionsError("status must be ACTIVE or ARCHIVED")
-        updates["status"] = status
-    if not updates:
-        raise RetirementOptionsError("nothing to update; send name, status, or notes")
-
-    with _lock, options_activity._lock:
-        groups = options_activity._read_csv(
-            config.options_groups_csv(), options_activity.GROUP_HEADERS,
-        )
-        candidates = [
-            row for row in groups if row["account"] == "RETIREMENT"
-            and (row["group_id"] == group_key or row["symbol"] == group_key.upper())
-        ]
-        if not candidates:
-            # Preserve the legacy update-before-first-snapshot behavior by
-            # creating the first group when the compatibility key is a symbol.
-            if not group_key.replace(".", "").isalnum():
-                raise RetirementOptionsError("trade group not found", 404)
-            now = _now()
-            row = {
-                "group_id": str(uuid.uuid4()), "account": "RETIREMENT",
-                "symbol": group_key.upper(), "name": f"{group_key.upper()} {date.today().year}",
-                "status": "ACTIVE", "notes": "", "auto_created": "true",
-                "created_at": now, "updated_at": now,
-            }
-            groups.append(row)
-        elif len(candidates) > 1 and not any(row["group_id"] == group_key for row in candidates):
-            raise RetirementOptionsError("symbol identifies multiple groups; use group id")
-        else:
-            row = next((item for item in candidates if item["group_id"] == group_key), candidates[0])
-        row.update(updates)
-        row["updated_at"] = _now()
-        options_activity._atomic_write(
-            config.options_groups_csv(), options_activity.GROUP_HEADERS, groups,
-        )
-    return {key: row.get(key, "") for key in options_activity.GROUP_HEADERS}
 
 
-def assign_event(event_id: str, group_id: str | None) -> dict[str, str | None]:
-    """Move one immutable SnapTrade event between compatible app groups."""
-    with _lock, options_activity._lock:
-        event = next((row for row in _read_events() if row["id"] == event_id), None)
-        if event is None:
-            raise RetirementOptionsError("broker event not found", 404)
-        group = None
-        if group_id:
-            group = next((row for row in _app_groups() if row["group_id"] == group_id), None)
-            if group is None:
-                raise RetirementOptionsError("trade group not found", 404)
-            if group["symbol"] != event["underlying_symbol"]:
-                raise RetirementOptionsError(
-                    "a broker event may only join a group for the same symbol",
-                )
-        member_id = _retirement_member_id(event_id)
-        members = options_activity._read_csv(
-            config.options_group_members_csv(), options_activity.MEMBER_HEADERS,
-        )
-        members = [row for row in members if row["event_id"] != member_id]
-        if group is not None:
-            members.append({
-                "event_id": member_id, "group_id": group["group_id"], "assigned_at": _now(),
-            })
-        options_activity._atomic_write(
-            config.options_group_members_csv(), options_activity.MEMBER_HEADERS, members,
-        )
-        return {"event_id": event_id, "group_id": group["group_id"] if group else None}
 
 
 # --------------------------------------------------------------------------- #

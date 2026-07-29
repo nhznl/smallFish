@@ -76,12 +76,12 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
 
 def _tastytrade_sync() -> dict:
     """One provider call materializes positions, activity, and market data."""
-    return options_activity.sync(legacy_groups=False)
+    return options_activity.sync()
 
 
 def _fidelity_activity_sync() -> dict:
     """Production activity sync records facts, never mutable group state."""
-    return retirement_options.sync_events(legacy_groups=False)
+    return retirement_options.sync_events()
 
 
 #: Ordered so the catalog is stable for the UI.
