@@ -375,16 +375,6 @@ export class SymbolLedgerComponent implements OnChanges {
     this.archiveMessage = this.message(err, 'The completed history could not be archived.');
   }
 
-  archiveBlocker(code: string): string {
-    const labels: Record<string, string> = {
-      PERIOD_EMPTY: 'The current period has no imported events to archive.',
-      SYMBOL_NOT_FLAT: 'Open exposure remains, so this symbol is still active.',
-      SYMBOL_NOT_RECONCILED: 'Imported activity does not reconcile with the broker position yet.',
-      PERIOD_INCOMPLETE: 'The retained history is incomplete, so its result cannot be sealed.',
-    };
-    return labels[code] ?? 'This current period cannot be archived yet.';
-  }
-
   // -------------------------------------------------------------- render ---
 
   /** The component is mounted in the Options tab, where equity-only holdings

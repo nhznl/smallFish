@@ -222,7 +222,8 @@ other textual state.
   immutable broker facts, and keeps imported events read-only. Show current
   events directly and archived periods one at a time on demand; retain
   account-aware option and equity components as reconciliation context. Notes are the only editable
-  ledger metadata. Do not expose Trade Groups, manual lifecycle status, event
+  ledger metadata. Show the `Needs review` summary only when one or more rows
+  need review. Do not expose Trade Groups, manual lifecycle status, event
   reassignment, or broker-risk tables in this surface.
 - Option-Adjusted Basis includes only symbols with open long-equity positions
   and option activity that affects their basis. Keep completed option cycles
@@ -237,9 +238,9 @@ other textual state.
 - Symbol Ledger history is immutable broker evidence. Show current-period
   events directly, and let each archived-period summary expand its own events;
   only one archived period is expanded at a time. Surface a changed-archive
-  warning beside the affected summary. Hide the archive control when the
-  current period has no events; when current activity exists, show the archive
-  action or its blockers. The confirmation must name the symbol, event count,
+  warning beside the affected summary. Show the archive action only when the
+  loaded period is eligible; otherwise render no archive control or blocker
+  guidance. The confirmation must name the symbol, event count,
   period, and realized P/L. A stale-period conflict refreshes facts, while an
   uncertain retry reuses its request identity so it cannot create a second
   archive.

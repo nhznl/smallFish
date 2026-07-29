@@ -70,11 +70,13 @@
             Since {{ ledger.coverage.history_start || 'the first imported event' }}
           </span>
         </div>
-        <div class="stat-card" [class.stat-card-warn]="ledger.summary.needs_review_count">
-          <span class="stat-label">Needs review</span>
-          <span class="stat-value">{{ ledger.summary.needs_review_count }}</span>
-          <span class="stat-delta">Flatness or history could not be proven</span>
-        </div>
+        @if (ledger.summary.needs_review_count) {
+          <div class="stat-card stat-card-warn">
+            <span class="stat-label">Needs review</span>
+            <span class="stat-value">{{ ledger.summary.needs_review_count }}</span>
+            <span class="stat-delta">Flatness or history could not be proven</span>
+          </div>
+        }
       </div>
 
       <div class="filter-toolbar" aria-label="Symbol ledger filters">
@@ -227,29 +229,11 @@
                           </div>
                         </div>
 
-                        @if (symbol.current_period.event_count > 0) {
-                          <section class="archive-control" aria-label="Archive completed history">
-                            <div>
-                              <h4>Archive completed history</h4>
-                              <p>
-                                Sealing a completed period preserves imported events and creates
-                                a historical boundary; it does not delete or move broker activity.
-                              </p>
-                            </div>
-                            @if (symbol.reset_eligible) {
-                              <button type="button" class="btn btn-primary btn-sm"
-                                (click)="openArchiveConfirmation()">Archive completed history</button>
-                            } @else {
-                              <div class="archive-blocked" role="status">
-                                <strong>Not ready to archive</strong>
-                                <ul>
-                                  @for (blocker of symbol.reset_blockers; track blocker) {
-                                    <li>{{ archiveBlocker(blocker) }}</li>
-                                  }
-                                </ul>
-                              </div>
-                            }
-                          </section>
+                        @if (symbol.reset_eligible) {
+                          <div class="archive-action">
+                            <button type="button" class="btn btn-primary btn-sm"
+                              (click)="openArchiveConfirmation()">Archive completed history</button>
+                          </div>
                         }
 
                         <h4 class="detail-subtitle">Positions and contracts</h4>

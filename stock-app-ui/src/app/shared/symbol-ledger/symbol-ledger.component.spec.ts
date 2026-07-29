@@ -258,7 +258,7 @@ describe('SymbolLedgerComponent', () => {
         expect(body).toContain('not brokerage tax-lot or taxable realized P/L');
       });
 
-      it('hides archive controls when the current period has no events', async () => {
+      it('does not render an archive action when the current period has no events', async () => {
         const api = spyApi();
         const emptyPeriod = {
           ...summary().current_period,
@@ -276,11 +276,11 @@ describe('SymbolLedgerComponent', () => {
         (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.archive-control')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.archive-action')).toBeNull();
         expect(text(fixture)).not.toContain('Not ready to archive');
       });
 
-      it('shows archive blockers when the current period has activity', async () => {
+      it('does not render archive guidance when the current period is ineligible', async () => {
         const api = spyApi();
         api.listSymbols.and.returnValue(of(listResponse(brokerage)));
         api.getSymbol.and.returnValue(of(detailResponse(brokerage)));
@@ -289,9 +289,9 @@ describe('SymbolLedgerComponent', () => {
         (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.archive-control')).toBeTruthy();
-        expect(text(fixture)).toContain('Not ready to archive');
-        expect(text(fixture)).toContain('Open exposure remains, so this symbol is still active.');
+        expect(fixture.nativeElement.querySelector('.archive-action')).toBeNull();
+        expect(text(fixture)).not.toContain('Not ready to archive');
+        expect(text(fixture)).not.toContain('Open exposure remains, so this symbol is still active.');
       });
     });
   }
@@ -317,6 +317,16 @@ describe('SymbolLedgerComponent', () => {
     expect(body).toContain('does not reconcile');
     // A row whose flatness is unproven is flagged structurally, not by colour.
     expect(fixture.nativeElement.querySelector('.needs-review')).toBeTruthy();
+  });
+
+  it('hides the needs-review card when every displayed symbol is reconciled', async () => {
+    const api = spyApi();
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0])));
+    const fixture = await mount(api, BROKERAGES[0].id);
+
+    expect(Array.from(fixture.nativeElement.querySelectorAll('.stat-card') as NodeListOf<HTMLElement>)
+      .some(card => card.querySelector('.stat-label')?.textContent === 'Needs review'))
+      .toBeFalse();
   });
 
   it('refetches when the lifecycle filter changes', async () => {
@@ -516,7 +526,7 @@ describe('SymbolLedgerComponent', () => {
 
     (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    const archive = fixture.nativeElement.querySelector('.archive-control .btn-primary') as HTMLButtonElement;
+    const archive = fixture.nativeElement.querySelector('.archive-action .btn-primary') as HTMLButtonElement;
     expect(archive.textContent).toContain('Archive completed history');
     archive.click();
     fixture.detectChanges();
@@ -546,7 +556,7 @@ describe('SymbolLedgerComponent', () => {
 
     (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    (fixture.nativeElement.querySelector('.archive-control .btn-primary') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('.archive-action .btn-primary') as HTMLButtonElement).click();
     fixture.detectChanges();
     (fixture.nativeElement.querySelector('app-modal .btn-primary') as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -572,7 +582,7 @@ describe('SymbolLedgerComponent', () => {
 
     (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    (fixture.nativeElement.querySelector('.archive-control .btn-primary') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('.archive-action .btn-primary') as HTMLButtonElement).click();
     fixture.detectChanges();
     (fixture.nativeElement.querySelector('app-modal .btn-primary') as HTMLButtonElement).click();
     fixture.detectChanges();
