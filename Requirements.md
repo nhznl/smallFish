@@ -84,6 +84,13 @@ close lands.
 **Brokerage access is read-only.** smallFish never places, modifies, or cancels
 an order, and never receives a brokerage password.
 
+**Provider I/O boundary is complete** (2026-07-29). Production Tastytrade and
+SnapTrade SDK imports belong only in `services/`, which owns environment-backed
+credentials, session/client lifetime, streaming/paging, and raw payloads.
+Consumer runtimes retain normalization, policy, artifact writes, and public API
+shapes. Do not reintroduce SDK calls into `stock-app/`, `utilities/`, `studies/`,
+or `tools/`.
+
 ## Housekeeping
 
 Small, unblocked, no decision needed.
