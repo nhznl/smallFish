@@ -35,6 +35,6 @@
   } @else if (tab === 'options') {
     <app-symbol-ledger [brokerageId]="brokerageId" [refreshToken]="refreshToken" />
   } @else {
-    <app-brokerage-ledger-combined [portfolio]="portfolio" [refreshToken]="refreshToken" />
+    <app-brokerage-ledger-combined [brokerageId]="brokerageId" [refreshToken]="refreshToken" />
   }
 </div>

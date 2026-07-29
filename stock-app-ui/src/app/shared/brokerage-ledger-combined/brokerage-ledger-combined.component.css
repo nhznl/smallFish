@@ -66,7 +66,7 @@
 .result-count { margin-left: auto; color: var(--text-secondary); font-size: var(--text-sm); }
 
 .combined-table-shell { max-height: min(68vh, 760px); }
-.combined-table { min-width: 1760px; }
+.combined-table { min-width: 1580px; }
 .combined-table th.num, .combined-table td.num,
 .component-table th.num, .component-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .combined-table .col-sticky { min-width: 142px; }

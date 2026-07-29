@@ -1,6 +1,6 @@
 <section class="combined-ledger" aria-label="Option-adjusted basis">
   @if (loading) {
-    <div class="combined-loading" aria-busy="true" aria-label="Loading combined ledger">
+    <div class="combined-loading" aria-busy="true" aria-label="Loading option-adjusted basis">
       <div class="skeleton skeleton-stat"></div>
       <div class="skeleton skeleton-stat"></div>
       <div class="skeleton skeleton-stat"></div>
@@ -17,11 +17,11 @@
     <div class="combined-heading">
       <div>
         <p class="section-kicker">Open equity + option history</p>
-        <h2>{{ ledger.portfolio.label }} option-adjusted basis</h2>
+        <h2>{{ ledger.brokerage.label }} option-adjusted basis</h2>
         <p>Open long-share positions are included when option activity affects their basis, even after the option position closes.</p>
       </div>
       <span class="snapshot-chip">
-        <span>{{ ledger.portfolio.brokerage }} positions</span>
+        <span>{{ ledger.brokerage.institution }} positions</span>
         <strong>{{ timestamp(ledger.as_of.positions) }}</strong>
       </span>
     </div>
@@ -40,7 +40,7 @@
       <div class="warning-list" aria-label="Option-adjusted basis warnings">
         @for (warning of basisWarnings(); track warning.code + ':' + warning.symbol + ':' + warning.component_id) {
           <div class="banner banner-warn">
-            <strong>{{ warning.symbol || ledger.portfolio.label }}</strong>
+            <strong>{{ warning.symbol || ledger.brokerage.label }}</strong>
             <span>{{ warning.message }}</span>
           </div>
         }
@@ -50,8 +50,8 @@
     <div class="stat-strip combined-stats">
       <div class="stat-card">
         <span class="stat-label">Matched market value</span>
-        <span class="stat-value">{{ money(basisTotal('open_market_value'), true) }}</span>
-        <span class="stat-delta">Equity {{ money(basisTotal('equity_market_value'), true) }} · Options {{ money(basisTotal('option_market_value'), true) }}</span>
+        <span class="stat-value">{{ money(totalMarketValue(), true) }}</span>
+        <span class="stat-delta">Equity {{ money(basisTotal('current_equity'), true) }} · Options {{ money(basisTotal('option_market_value'), true) }}</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">Matched net P/L</span>
@@ -61,14 +61,14 @@
       <div class="stat-card" [class.stat-card-warn]="unavailableBasisCount()">
         <span class="stat-label">Basis unavailable</span>
         <span class="stat-value">{{ unavailableBasisCount() }}</span>
-        <span class="stat-delta">Missing history, marks, or reconciliation</span>
+        <span class="stat-delta">Missing cost, history, or reconciliation</span>
       </div>
     </div>
 
     <div class="filter-toolbar" aria-label="Option-adjusted basis filters">
       <label>
         <span>Search</span>
-        <input [(ngModel)]="search" type="search" placeholder="Symbol, account, or note">
+        <input [(ngModel)]="search" type="search" placeholder="Symbol or account">
       </label>
       @if (hasFilters()) {
         <button type="button" class="btn btn-sm" (click)="resetFilters()">Reset</button>
@@ -84,7 +84,7 @@
               <th class="col-sticky" rowspan="2">Symbol</th>
               <th class="num" rowspan="2">Current Price / Share</th>
               <th class="column-group" colspan="5">Share Position</th>
-              <th class="column-group" colspan="3">Options</th>
+              <th class="column-group" colspan="2">Options</th>
               <th class="column-group" colspan="2">Combined</th>
             </tr>
             <tr>
@@ -93,8 +93,7 @@
               <th class="num">Cost Price</th>
               <th class="num">Current Equity</th>
               <th class="num">Equity P/L</th>
-              <th class="num">Net Credit</th>
-              <th class="num">Net Debit</th>
+              <th class="num">Market Value</th>
               <th class="num">Option P/L</th>
               <th class="num">Net P/L</th>
               <th class="num basis-heading">
@@ -115,35 +114,37 @@
                   </button>
                   <small>{{ row.accounts.join(' · ') || 'Account unavailable' }}</small>
                 </td>
-                <td class="num">
-                  {{ money(row.current_price_per_share) }}
-                </td>
+                <td class="num">{{ money(currentPricePerShare(row)) }}</td>
                 <td class="num share-block-start">{{ quantity(row.share_quantity) }}</td>
                 <td class="num">{{ money(row.equity_cost_per_share) }}</td>
                 <td class="num">{{ money(row.equity_cost) }}</td>
                 <td class="num">{{ money(row.current_equity) }}</td>
                 <td class="num" [class]="pnlClass(row.equity_pnl)">{{ money(row.equity_pnl, true) }}</td>
-                <td class="num option-block-start positive">{{ money(row.net_credit) }}</td>
-                <td class="num negative">{{ money(row.net_debit) }}</td>
+                <td class="num option-block-start">{{ money(row.option_market_value, true) }}</td>
                 <td class="num" [class]="pnlClass(row.option_pnl)">{{ money(row.option_pnl, true) }}</td>
                 <td class="num combined-block-start" [class]="pnlClass(row.net_pnl)">
                   {{ money(row.net_pnl, true) }}
                   <small><span class="badge" [class]="'badge ' + completenessClass(row.pnl_completeness)">{{ completenessLabel(row.pnl_completeness) }}</span></small>
                 </td>
                 <td class="num">
-                  {{ money(row.option_adjusted_basis_per_share) }}
-                  <small>Live option-adjusted basis</small>
+                  {{ money(row.adjusted_basis.marked_per_share) }}
+                  <small><span class="badge" [class]="'badge ' + completenessClass(row.adjusted_basis.completeness)">Basis {{ completenessLabel(row.adjusted_basis.completeness) }}</span></small>
+                  @if (row.adjusted_basis.reason) {
+                    <small class="unavailable-reason">{{ row.adjusted_basis.reason }}</small>
+                  } @else {
+                    <small>Live option-adjusted basis</small>
+                  }
                 </td>
               </tr>
               @if (expandedSymbol === row.symbol) {
                 <tr class="component-detail-row" [id]="'combined-detail-' + row.symbol">
-                  <td colspan="12">
+                  <td colspan="11">
                     <div class="component-detail-heading">
                       <div>
                         <strong>{{ row.symbol }} components</strong>
-                        <span>Broker values and smallFish completeness stay labelled separately.</span>
-                        @if (row.annotations.length) {
-                          <span class="symbol-notes"><strong>Notes:</strong> {{ annotationText(row.annotations) }}</span>
+                        <span>Broker values and calculation completeness stay labelled separately.</span>
+                        @if (row.adjusted_basis.reason) {
+                          <span class="unavailable-reason">{{ row.adjusted_basis.reason }}</span>
                         }
                       </div>
                       <span class="badge" [class]="'badge ' + completenessClass(row.adjusted_basis.completeness)">
@@ -155,7 +156,7 @@
                         <thead><tr>
                           <th class="col-sticky">Type</th><th>Account</th><th class="num">Qty</th><th>Contract</th>
                           <th class="num">Cash in</th><th class="num">Cash out</th><th class="num">Mark / unit</th>
-                          <th class="num">Market value</th><th class="num">P/L</th><th class="num">Events</th><th>Notes</th>
+                          <th class="num">Market value</th><th class="num">P/L</th><th class="num">Events</th><th>Missing inputs</th>
                         </tr></thead>
                         <tbody>
                           @for (component of row.components; track trackComponent($index, component)) {
@@ -174,12 +175,12 @@
                               <td class="num" [class]="pnlClass(component.total_pnl)">
                                 {{ money(component.total_pnl, true) }}
                                 <small><span class="badge" [class]="'badge ' + completenessClass(component.pnl_completeness)">{{ completenessLabel(component.pnl_completeness) }}</span></small>
-                                @if (component.missing.length) {
-                                  <small class="unavailable-reason">Missing: {{ component.missing.join(', ') }}</small>
-                                }
                               </td>
-                              <td class="num">{{ component.event_count }}</td>
-                              <td class="component-notes">{{ notePreview(component.annotations) }}</td>
+                              <td class="component-notes">
+                                @if (component.missing.length) {
+                                  <span class="unavailable-reason">{{ component.missing.join(', ') }}</span>
+                                } @else { — }
+                              </td>
                             </tr>
                           } @empty {
                             <tr><td colspan="11" class="empty-detail">No component decomposition is available for this symbol.</td></tr>

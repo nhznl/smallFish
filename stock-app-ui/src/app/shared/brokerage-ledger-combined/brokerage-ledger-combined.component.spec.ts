@@ -1,175 +1,137 @@
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 
-import { BrokerageLedgerService } from '../../api/brokerage-ledger.service';
-import { BrokerageLedgerSnapshot } from '../../model/brokerage-ledger';
+import { BrokerageService } from '../../api/brokerage.service';
+import { AdjustedBasisItem, AdjustedBasisResponse, BrokerageComponent } from '../../model/brokerage';
 import { BrokerageLedgerCombinedComponent } from './brokerage-ledger-combined.component';
 
-const SNAPSHOT: BrokerageLedgerSnapshot = {
-  schema_name: 'smallfish.brokerage-ledger',
-  schema_version: 1,
-  portfolio: { id: 'TRADING', label: 'Trading', brokerage: 'TASTYTRADE' },
-  as_of: {
-    positions: '2026-07-28T16:00:00Z', activity: '2026-07-28T16:00:00Z', market: '2026-07-28',
-  },
-  coverage: {
-    open_equity: 'COMPLETE', closed_equity: 'UNAVAILABLE', options: 'INDICATIVE',
-    history_start: '2026-01-01', reasons: ['Closed equity activity is not imported.'],
-  },
-  summary: {
-    symbol_count: 1, incomplete_symbol_count: 1, equity_market_value: 12_000,
-    option_market_value: -75, total_market_value: 11_925, total_pnl: null,
-  },
-  symbols: [{
-    symbol: 'DEMO', exposure: 'EQUITY_AND_OPTIONS', state: 'OPEN', accounts: ['Trading'], shares: 100,
-    current_price_per_share: 120, share_quantity: 100, equity_cost_per_share: 111,
-    equity_cost: 11_100, current_equity: 12_000, equity_pnl: 900,
-    equity_pnl_per_share: 9, net_credit: 600, net_debit: 0, option_pnl: null,
-    net_pnl: null, option_adjusted_basis_per_share: null,
-    cash_in: 600, cash_out: -11_100, net_cash_flow: -10_500, equity_market_value: 12_000,
-    option_market_value: -75, open_market_value: 11_925, total_pnl: null,
-    pnl_completeness: 'INDICATIVE',
-    adjusted_basis: {
-      realized_per_share: null, marked_per_share: null, history_start: '2026-01-01',
-      completeness: 'UNAVAILABLE', reason: 'Option history is incomplete.',
-    },
-    annotations: [{
-      scope: 'SYMBOL', kind: 'NOTE', text: 'Review after earnings', source: 'USER', updated_at: null,
-    }],
-    components: [{
-      id: 'demo-equity', account_id: 'trading', account: 'Trading', instrument: 'EQUITY', side: 'LONG',
-      option_type: null, state: 'OPEN', quantity: 100, strike: null, expiry: null,
-      cash_in: 0, cash_out: -11_100, net_cash_flow: -11_100, mark_per_unit: 120,
-      mark_observed_at: '2026-07-28T16:00:00Z', open_market_value: 12_000,
-      realized_pnl: null, total_pnl: 900, pnl_completeness: 'INDICATIVE',
-      cash_flow_basis: 'POSITION_COST_BASIS', open_leg_count: 1, event_count: 0,
-      annotations: [], missing: [],
-      provenance: {
-        position_source: 'TASTYTRADE', activity_source: null, market_source: 'TASTYTRADE_MARK',
-        position_retrieved_at: '2026-07-28T16:00:00Z', activity_retrieved_at: null,
-        mark_observed_at: '2026-07-28T16:00:00Z', mark_retrieved_at: '2026-07-28T16:01:00Z',
-      },
-    }, {
-      id: 'demo-call', account_id: 'trading', account: 'Trading', instrument: 'OPTION', side: 'SHORT',
-      option_type: 'CALL', state: 'OPEN', quantity: -1, strike: 125, expiry: '2026-08-21',
-      cash_in: 600, cash_out: 0, net_cash_flow: 600, mark_per_unit: 0.75,
-      mark_observed_at: '2026-07-28T16:00:00Z', open_market_value: -75, realized_pnl: null,
-      total_pnl: 525, pnl_completeness: 'INDICATIVE', cash_flow_basis: 'BROKER_ACTIVITY',
-      open_leg_count: 1, event_count: 1, annotations: [], missing: ['closing activity'],
-      provenance: {
-        position_source: 'TASTYTRADE', activity_source: 'TASTYTRADE_ACTIVITY', market_source: 'TASTYTRADE_MARK',
-        position_retrieved_at: '2026-07-28T16:00:00Z', activity_retrieved_at: '2026-07-28T16:00:00Z',
-        mark_observed_at: '2026-07-28T16:00:00Z', mark_retrieved_at: '2026-07-28T16:01:00Z',
-      },
-    }],
-  }],
-  warnings: [{
-    code: 'INCOMPLETE_HISTORY', scope: 'SYMBOL', symbol: 'DEMO', component_id: null,
-    message: 'Option history is incomplete.',
-  }],
+const PROVENANCE = {
+  position_source: 'BROKER', activity_source: 'BROKER_ACTIVITY', market_source: 'BROKER_MARK',
+  position_retrieved_at: '2026-07-28T16:00:00Z', activity_retrieved_at: '2026-07-28T16:00:00Z',
+  mark_observed_at: '2026-07-28T16:00:00Z', mark_retrieved_at: '2026-07-28T16:01:00Z',
 };
 
-function withComponentStates(
-  symbol: string, equityState: 'OPEN' | 'FLAT', optionState: 'OPEN' | 'FLAT'
-) {
-  const base = SNAPSHOT.symbols[0];
+function component(overrides: Partial<BrokerageComponent>): BrokerageComponent {
   return {
-    ...base,
-    symbol,
-    state: equityState === 'OPEN' || optionState === 'OPEN' ? 'OPEN' as const : 'FLAT' as const,
-    components: base.components.map(component => ({
-      ...component,
-      id: `${symbol}:${component.instrument}`,
-      state: component.instrument === 'EQUITY' ? equityState : optionState,
-    })),
+    id: 'demo-equity', account_id: 'retirement', account: 'Retirement', instrument: 'EQUITY',
+    symbol: 'DEMO', side: 'LONG', option_type: null, state: 'OPEN', quantity: 100,
+    strike: null, expiry: null, contract_key: null, cash_in: 0, cash_out: -11_100,
+    net_cash_flow: -11_100, mark_per_unit: 120, mark_observed_at: '2026-07-28T16:00:00Z',
+    open_market_value: 12_000, realized_pnl: null, total_pnl: 900,
+    pnl_completeness: 'INDICATIVE', cash_flow_basis: 'POSITION_COST_BASIS',
+    open_leg_count: 1, event_count: 0, provenance: PROVENANCE, missing: [],
+    ...overrides,
+  };
+}
+
+function item(symbol: string, overrides: Partial<AdjustedBasisItem> = {}): AdjustedBasisItem {
+  return {
+    symbol, accounts: ['Retirement'], share_quantity: 100, equity_cost: 11_100,
+    equity_cost_per_share: 111, current_equity: 12_000, equity_pnl: 900,
+    option_market_value: -75, option_pnl: 525, net_pnl: 1_425, pnl_completeness: 'INDICATIVE',
+    adjusted_basis: {
+      realized_per_share: null, marked_per_share: null, completeness: 'UNAVAILABLE',
+      reason: 'Option P/L cannot be allocated safely across accounts.',
+    },
+    components: [
+      component({ id: `${symbol}-equity`, symbol }),
+      component({
+        id: `${symbol}-put`, symbol, instrument: 'OPTION', side: 'SHORT', option_type: 'PUT',
+        quantity: -1, strike: 100, expiry: '2026-08-21', contract_key: `${symbol}-put`, cash_in: 600,
+        cash_out: 0, net_cash_flow: 600, mark_per_unit: 0.75, open_market_value: -75,
+        realized_pnl: null, total_pnl: 525, cash_flow_basis: 'BROKER_ACTIVITY', open_leg_count: 1,
+        event_count: 1, missing: ['OPTION_ACTIVITY_HISTORY'],
+      }),
+    ],
+    ...overrides,
+  };
+}
+
+function response(items: AdjustedBasisItem[]): AdjustedBasisResponse {
+  return {
+    schema_name: 'smallfish.brokerage-option-adjusted-basis', schema_version: 1,
+    brokerage: { id: 'fidelity', label: 'Fidelity', institution: 'FIDELITY', portfolio_role: 'RETIREMENT' },
+    availability: { status: 'AVAILABLE', reasons: [] },
+    as_of: {
+      positions: '2026-07-28T16:00:00Z', activity: '2026-07-28T16:00:00Z', market: '2026-07-28',
+    },
+    coverage: {
+      status: 'INDICATIVE', history_start: '2026-01-01', equity_activity: 'INDICATIVE',
+      option_activity: 'INDICATIVE', reached_provider_boundary: null, reasons: [],
+    },
+    summary: { symbol_count: items.length, incomplete_symbol_count: 0, net_pnl: null, pnl_completeness: 'INDICATIVE' },
+    items, warnings: [],
   };
 }
 
 describe('BrokerageLedgerCombinedComponent', () => {
-  it('renders normalized summary fields and expands component provenance without calculating partial totals', async () => {
-    const api = jasmine.createSpyObj<BrokerageLedgerService>('BrokerageLedgerService', ['getCombined']);
-    api.getCombined.and.returnValue(of({
-      ...SNAPSHOT,
-      symbols: [
-        ...SNAPSHOT.symbols,
-        {
-          ...withComponentStates('READY', 'OPEN', 'OPEN'),
-          adjusted_basis: {
-            realized_per_share: null, marked_per_share: 105, history_start: '2026-01-01',
-            completeness: 'INDICATIVE' as const, reason: null,
-          },
-          option_adjusted_basis_per_share: 105,
+  it('uses the brokerage-neutral adjusted-basis response and counts only genuine unavailable rows', async () => {
+    const api = jasmine.createSpyObj<BrokerageService>('BrokerageService', ['getOptionAdjustedBasis']);
+    api.getOptionAdjustedBasis.and.returnValue(of(response([
+      item('UNAVAILABLE'),
+      item('READY', {
+        adjusted_basis: {
+          realized_per_share: null, marked_per_share: 105, completeness: 'INDICATIVE', reason: null,
         },
-        {
-          ...withComponentStates('OPTION_HISTORY', 'OPEN', 'FLAT'),
-          adjusted_basis: {
-            realized_per_share: 105, marked_per_share: 105, history_start: '2026-01-01',
-            completeness: 'COMPLETE' as const, reason: null,
-          },
-          option_adjusted_basis_per_share: 105,
-        },
-        withComponentStates('EQUITY_FLAT', 'FLAT', 'OPEN'),
-        { ...SNAPSHOT.symbols[0], symbol: 'EQUITY_ONLY', exposure: 'EQUITY' },
-      ],
-    }));
+      }),
+      item('EQUITY_FLAT', {
+        components: [
+          component({ id: 'EQUITY_FLAT-equity', symbol: 'EQUITY_FLAT', state: 'FLAT', quantity: 0 }),
+          component({
+            id: 'EQUITY_FLAT-put', symbol: 'EQUITY_FLAT', instrument: 'OPTION', side: 'SHORT',
+            option_type: 'PUT', quantity: -1, strike: 100, expiry: '2026-08-21', contract_key: 'flat-put',
+          }),
+        ],
+      }),
+    ])));
     await TestBed.configureTestingModule({
       imports: [BrokerageLedgerCombinedComponent],
-      providers: [{ provide: BrokerageLedgerService, useValue: api }],
+      providers: [{ provide: BrokerageService, useValue: api }],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(BrokerageLedgerCombinedComponent);
-    fixture.componentRef.setInput('portfolio', 'trading');
+    fixture.componentRef.setInput('brokerageId', 'fidelity');
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
-    expect(text).toContain('Trading option-adjusted basis');
-    expect(text).toContain('DEMO');
+    expect(api.getOptionAdjustedBasis).toHaveBeenCalledWith('fidelity');
+    expect(text).toContain('Fidelity option-adjusted basis');
+    expect(text).toContain('UNAVAILABLE');
     expect(text).toContain('READY');
-    expect(text).toContain('OPTION_HISTORY');
     expect(text).not.toContain('EQUITY_FLAT');
-    expect(text).not.toContain('EQUITY_ONLY');
-    expect(text).not.toContain('Open matched symbols');
-    expect(text).not.toContain('Incomplete matched symbols');
     expect(text).toContain('Basis unavailable');
-    expect(fixture.nativeElement.querySelector('.filter-toolbar select')).toBeNull();
+    expect(text).toContain('Option P/L cannot be allocated safely across accounts.');
     const unavailableCard = Array.from(
       fixture.nativeElement.querySelectorAll('.combined-stats .stat-card') as NodeListOf<HTMLElement>
     ).find(card => card.querySelector('.stat-label')?.textContent === 'Basis unavailable');
     expect(unavailableCard?.querySelector('.stat-value')?.textContent?.trim()).toBe('1');
-    expect(text).toContain('Indicative');
-    expect(text).toContain('—');
     const headers = Array.from(
       fixture.nativeElement.querySelectorAll('.combined-table th') as NodeListOf<HTMLElement>
     ).map(header => header.textContent?.replace(/\s+/g, ' ').trim());
-    expect(headers).not.toContain('Exposure');
     expect(headers).not.toContain('Equity P/L / Share');
     expect(headers).toContain('Adjusted Basis / Share (Cost Price − Option P/L) / Share Qty');
 
     (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
     fixture.detectChanges();
-    const detail = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
     expect(fixture.nativeElement.querySelector('.component-detail-row > td')?.getAttribute('colspan'))
-      .toBe('12');
-    expect(detail).toContain('Review after earnings');
-    expect(detail).toContain('Short call');
-    expect(detail).toContain('TASTYTRADE · TASTYTRADE_ACTIVITY · TASTYTRADE_MARK');
-    expect(detail).toContain('Missing: closing activity');
+      .toBe('11');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('OPTION_ACTIVITY_HISTORY');
   });
 
   it('shows a retryable error state', async () => {
-    const api = jasmine.createSpyObj<BrokerageLedgerService>('BrokerageLedgerService', ['getCombined']);
-    api.getCombined.and.returnValue(throwError(() => ({ error: { detail: 'Combined artifact unavailable.' } })));
+    const api = jasmine.createSpyObj<BrokerageService>('BrokerageService', ['getOptionAdjustedBasis']);
+    api.getOptionAdjustedBasis.and.returnValue(throwError(() => ({ error: { detail: 'Adjusted basis unavailable.' } })));
     await TestBed.configureTestingModule({
       imports: [BrokerageLedgerCombinedComponent],
-      providers: [{ provide: BrokerageLedgerService, useValue: api }],
+      providers: [{ provide: BrokerageService, useValue: api }],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(BrokerageLedgerCombinedComponent);
-    fixture.componentRef.setInput('portfolio', 'retirement');
+    fixture.componentRef.setInput('brokerageId', 'fidelity');
     fixture.detectChanges();
 
     const error = fixture.nativeElement.querySelector('[role="alert"]') as HTMLElement;
-    expect(error.textContent).toContain('Combined artifact unavailable.');
+    expect(error.textContent).toContain('Adjusted basis unavailable.');
     expect(error.querySelector('button')?.textContent).toContain('Try again');
   });
 });

@@ -2,16 +2,15 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { BrokerageLedgerService } from '../../api/brokerage-ledger.service';
+import { BrokerageService } from '../../api/brokerage.service';
 import {
-  BrokerageLedgerAnnotation,
-  BrokerageLedgerCompleteness,
-  BrokerageLedgerComponent,
-  BrokerageLedgerPortfolioSlug,
-  BrokerageLedgerSnapshot,
-  BrokerageLedgerSymbol,
-  BrokerageLedgerWarning,
-} from '../../model/brokerage-ledger';
+  AdjustedBasisItem,
+  AdjustedBasisResponse,
+  BrokerageComponent,
+  BrokerageId,
+  BrokerageWarning,
+  PnlCompleteness,
+} from '../../model/brokerage';
 
 @Component({
   selector: 'app-brokerage-ledger-combined',
@@ -22,10 +21,10 @@ import {
   changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class BrokerageLedgerCombinedComponent implements OnChanges {
-  @Input({ required: true }) portfolio!: BrokerageLedgerPortfolioSlug;
+  @Input({ required: true }) brokerageId!: BrokerageId;
   @Input() refreshToken = 0;
 
-  data: BrokerageLedgerSnapshot | null = null;
+  data: AdjustedBasisResponse | null = null;
   loading = false;
   error = '';
   search = '';
@@ -33,22 +32,22 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
 
   private requestSequence = 0;
 
-  constructor(private readonly api: BrokerageLedgerService) {}
+  constructor(private readonly api: BrokerageService) {}
 
   ngOnChanges(): void {
-    if (this.portfolio) this.load();
+    if (this.brokerageId) this.load();
   }
 
   load(): void {
     const request = ++this.requestSequence;
     this.loading = true;
     this.error = '';
-    this.api.getCombined(this.portfolio).subscribe({
+    this.api.getOptionAdjustedBasis(this.brokerageId).subscribe({
       next: data => {
         if (request !== this.requestSequence) return;
         this.data = data;
         this.loading = false;
-        if (this.expandedSymbol && !data.symbols.some(row => row.symbol === this.expandedSymbol)) {
+        if (this.expandedSymbol && !data.items.some(row => row.symbol === this.expandedSymbol)) {
           this.expandedSymbol = '';
         }
       },
@@ -61,10 +60,9 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
     });
   }
 
-  basisSymbols(): BrokerageLedgerSymbol[] {
-    return (this.data?.symbols ?? []).filter(row =>
-      row.exposure === 'EQUITY_AND_OPTIONS'
-      && row.components.some(component =>
+  basisSymbols(): AdjustedBasisItem[] {
+    return (this.data?.items ?? []).filter(row =>
+      row.components.some(component =>
         component.instrument === 'EQUITY'
         && component.side === 'LONG'
         && component.state === 'OPEN'
@@ -74,12 +72,11 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
     );
   }
 
-  filteredSymbols(): BrokerageLedgerSymbol[] {
+  filteredSymbols(): AdjustedBasisItem[] {
     const query = this.search.trim().toUpperCase();
     return this.basisSymbols().filter(row => {
       if (!query) return true;
-      const notes = row.annotations.map(annotation => annotation.text).join(' ');
-      return `${row.symbol} ${row.accounts.join(' ')} ${notes}`.toUpperCase().includes(query);
+      return `${row.symbol} ${row.accounts.join(' ')}`.toUpperCase().includes(query);
     });
   }
 
@@ -101,14 +98,14 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
     ).length;
   }
 
-  basisWarnings(): BrokerageLedgerWarning[] {
+  basisWarnings(): BrokerageWarning[] {
     const symbols = new Set(this.basisSymbols().map(row => row.symbol));
     return (this.data?.warnings ?? []).filter(warning =>
       warning.scope === 'PORTFOLIO' || (!!warning.symbol && symbols.has(warning.symbol))
     );
   }
 
-  basisTotal(field: 'equity_market_value' | 'option_market_value' | 'open_market_value' | 'net_pnl'): number | null {
+  basisTotal(field: 'current_equity' | 'option_market_value' | 'net_pnl'): number | null {
     const rows = this.basisSymbols();
     if (!rows.length) return 0;
     const values = rows.map(row => row[field]);
@@ -116,7 +113,18 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
     return values.reduce<number>((total, value) => total + (value ?? 0), 0);
   }
 
-  componentType(component: BrokerageLedgerComponent): string {
+  totalMarketValue(): number | null {
+    const equity = this.basisTotal('current_equity');
+    const options = this.basisTotal('option_market_value');
+    return equity == null || options == null ? null : equity + options;
+  }
+
+  currentPricePerShare(row: AdjustedBasisItem): number | null {
+    return row.current_equity == null || row.share_quantity <= 0
+      ? null : row.current_equity / row.share_quantity;
+  }
+
+  componentType(component: BrokerageComponent): string {
     if (component.instrument === 'EQUITY') {
       return `${component.side === 'LONG' ? 'Long' : 'Short'} equity`;
     }
@@ -125,18 +133,18 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
     return `${side} ${optionType}`;
   }
 
-  componentState(component: BrokerageLedgerComponent): string {
+  componentState(component: BrokerageComponent): string {
     return component.state === 'OPEN' ? 'Open' : 'Flat';
   }
 
-  contractLabel(component: BrokerageLedgerComponent): string {
+  contractLabel(component: BrokerageComponent): string {
     if (component.instrument === 'EQUITY') return '—';
     const strike = component.strike == null ? '—' : this.money(component.strike);
     return `${component.expiry || '—'} · ${strike}`;
   }
 
-  completenessLabel(value: BrokerageLedgerCompleteness): string {
-    const labels: Record<BrokerageLedgerCompleteness, string> = {
+  completenessLabel(value: PnlCompleteness): string {
+    const labels: Record<PnlCompleteness, string> = {
       COMPLETE: 'Complete',
       INDICATIVE: 'Indicative',
       UNAVAILABLE: 'Unavailable',
@@ -144,37 +152,28 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
     return labels[value];
   }
 
-  completenessClass(value: BrokerageLedgerCompleteness): string {
+  completenessClass(value: PnlCompleteness): string {
     if (value === 'COMPLETE') return 'badge-pos';
     if (value === 'INDICATIVE') return 'badge-warn';
     return 'badge-neg';
   }
 
-  cashBasisLabel(component: BrokerageLedgerComponent): string {
-    const labels: Record<BrokerageLedgerComponent['cash_flow_basis'], string> = {
+  cashBasisLabel(component: BrokerageComponent): string {
+    const labels: Record<string, string> = {
       BROKER_ACTIVITY: 'Broker activity',
       POSITION_COST_BASIS: 'Broker position basis',
       UNAVAILABLE: 'Cash history unavailable',
     };
-    return labels[component.cash_flow_basis];
+    return labels[component.cash_flow_basis] ?? component.cash_flow_basis;
   }
 
-  sourceLabel(component: BrokerageLedgerComponent): string {
+  sourceLabel(component: BrokerageComponent): string {
     const sources = [
       component.provenance.position_source,
       component.provenance.activity_source,
       component.provenance.market_source,
     ].filter((source): source is string => !!source);
     return [...new Set(sources)].join(' · ') || 'Source unavailable';
-  }
-
-  annotationText(annotations: BrokerageLedgerAnnotation[]): string {
-    return annotations.map(annotation => annotation.text).filter(Boolean).join(' · ');
-  }
-
-  notePreview(annotations: BrokerageLedgerAnnotation[]): string {
-    const text = this.annotationText(annotations);
-    return text || '—';
   }
 
   money(value: number | null | undefined, signed = false): string {
@@ -202,11 +201,11 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
     return value > 0 ? 'positive' : 'negative';
   }
 
-  trackSymbol(_index: number, row: BrokerageLedgerSymbol): string {
+  trackSymbol(_index: number, row: AdjustedBasisItem): string {
     return row.symbol;
   }
 
-  trackComponent(_index: number, row: BrokerageLedgerComponent): string {
+  trackComponent(_index: number, row: BrokerageComponent): string {
     return row.id;
   }
 }

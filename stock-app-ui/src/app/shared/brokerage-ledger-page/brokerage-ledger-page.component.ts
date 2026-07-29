@@ -12,7 +12,7 @@ type LedgerTab = 'holdings' | 'options' | 'basis';
 
 /**
  * Common brokerage shell. The only temporary compatibility input is the
- * legacy portfolio slug consumed by the retained holdings/basis projections;
+ * legacy portfolio slug consumed by the retained holdings projection;
  * the shell itself never branches on a brokerage identity.
  */
 @Component({
