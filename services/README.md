@@ -19,3 +19,11 @@ credential, authenticate, or contact a provider.
 
 The Tastytrade pin remains identical in `stock-app/requirements.txt` and
 `utilities/requirements.txt`; both runtimes run its fake-SDK tests.
+
+## SnapTrade
+
+`services.snaptrade` supplies lazy, read-only setup and transport calls for
+registration, connection portal creation, linked accounts, positions, and
+paginated activities. It is installed only in the backend environment; the
+backend retains credential persistence, CLI output, normalization, and artifact
+writes.

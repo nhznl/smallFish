@@ -34,12 +34,12 @@ import csv
 import os
 import tempfile
 import threading
-import uuid
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
+
+from services.snaptrade import io as snaptrade_io
 
 from . import config
 
@@ -80,12 +80,7 @@ class SnapTradeValidationError(ValueError):
         self.status_code = status_code
 
 
-@dataclass(frozen=True)
-class SnapTradeCredentials:
-    client_id: str
-    consumer_key: str
-    user_id: str | None
-    user_secret: str | None
+SnapTradeCredentials = snaptrade_io.SnapTradeCredentials
 
 
 # --------------------------------------------------------------------------- #
@@ -169,58 +164,30 @@ def _read_ledger(path: Path) -> list[dict[str, str]]:
 # --------------------------------------------------------------------------- #
 
 def _credentials() -> SnapTradeCredentials:
-    get = lambda key: os.environ.get(key, "").strip()
-    client_id = get("SNAPTRADE_CLIENT_ID")
-    consumer_key = get("SNAPTRADE_CONSUMER_KEY")
-    if not client_id or not consumer_key:
+    try:
+        return snaptrade_io.load_credentials()
+    except snaptrade_io.SnapTradeConfigurationError as exc:
         raise SnapTradeValidationError(
-            "SnapTrade app credentials are not configured; set "
-            "SNAPTRADE_CLIENT_ID and SNAPTRADE_CONSUMER_KEY in app.env",
+            str(exc),
             503,
-        )
-    return SnapTradeCredentials(
-        client_id=client_id,
-        consumer_key=consumer_key,
-        user_id=get("SNAPTRADE_USER_ID") or None,
-        user_secret=get("SNAPTRADE_USER_SECRET") or None,
-    )
+        ) from exc
 
 
 def _is_personal_key(creds: SnapTradeCredentials) -> bool:
     """Personal API keys (PERS- prefix) are single-user; commercial keys manage
     registered users, each holding their own brokerage connections."""
-    return creds.client_id.upper().startswith("PERS-")
+    return snaptrade_io.is_personal_key(creds)
 
 
 def _user_kwargs(creds: SnapTradeCredentials) -> dict[str, str]:
     """Per-user auth arguments for data endpoints; empty for personal keys."""
-    if _is_personal_key(creds):
-        return {}
-    if not creds.user_id or not creds.user_secret:
+    try:
+        return snaptrade_io.user_kwargs(creds)
+    except snaptrade_io.SnapTradeConfigurationError as exc:
         raise SnapTradeValidationError(
-            "SnapTrade user is not registered; run "
-            "'python -m app.snaptrade_service register' and save "
-            "SNAPTRADE_USER_ID/SNAPTRADE_USER_SECRET to app.env",
+            str(exc),
             503,
-        )
-    return {"user_id": creds.user_id, "user_secret": creds.user_secret}
-
-
-def _client(creds: SnapTradeCredentials) -> Any:
-    # Imported lazily so the FastAPI app still starts without the SDK installed.
-    from snaptrade_client import SnapTrade
-    from snaptrade_client.auth import SnapTradeAuth
-
-    # SnapTrade issues personal API keys with a PERS- client-id prefix; the SDK
-    # refuses to sign requests unless the matching auth mode is selected.
-    make_auth = (
-        SnapTradeAuth.personal_api_key
-        if creds.client_id.upper().startswith("PERS-")
-        else SnapTradeAuth.commercial_api_key
-    )
-    return SnapTrade(
-        auth=make_auth(consumer_key=creds.consumer_key, client_id=creds.client_id)
-    )
+        ) from exc
 
 
 # --------------------------------------------------------------------------- #
@@ -233,19 +200,14 @@ def register_user(user_id: str | None = None) -> dict[str, str]:
     Only meaningful for commercial API keys; personal keys are single-user and
     have no registration step (brokerages are linked on the SnapTrade dashboard).
     """
-    creds = _credentials()
-    if _is_personal_key(creds):
-        raise SnapTradeValidationError(
-            "registration does not apply to personal API keys (PERS- prefix); "
-            "link brokerages on the SnapTrade dashboard, then run 'sync'"
-        )
-    resolved_id = user_id or creds.user_id or f"smallfish-{uuid.uuid4()}"
-    response = _client(creds).authentication.register_snap_trade_user(
-        user_id=resolved_id
-    )
-    body = response.body
+    try:
+        body = snaptrade_io.register_user(user_id)
+    except snaptrade_io.SnapTradeConfigurationError as exc:
+        raise SnapTradeValidationError(str(exc)) from exc
+    except snaptrade_io.SnapTradeServiceError as exc:
+        raise SnapTradeValidationError(str(exc), 502) from exc
     return {
-        "userId": _text(_value(body, "userId")) or resolved_id,
+        "userId": _text(_value(body, "userId")),
         "userSecret": _text(_value(body, "userSecret")),
     }
 
@@ -321,13 +283,13 @@ def _save_registration_credentials(env_path: Path, credentials: dict[str, str]) 
 def connection_portal_url(broker: str | None = None,
                           custom_redirect: str | None = None) -> str:
     """Return the connection-portal URL the user opens to link a brokerage."""
-    creds = _credentials()
-    response = _client(creds).authentication.login_snap_trade_user(
-        **_user_kwargs(creds),
-        broker=broker or None,
-        custom_redirect=custom_redirect or None,
-    )
-    url = _text(_value(response.body, "redirectURI"))
+    try:
+        body = snaptrade_io.connection_portal(broker, custom_redirect)
+    except snaptrade_io.SnapTradeConfigurationError as exc:
+        raise SnapTradeValidationError(str(exc), 503) from exc
+    except snaptrade_io.SnapTradeServiceError as exc:
+        raise SnapTradeValidationError(str(exc), 502) from exc
+    url = _text(_value(body, "redirectURI"))
     if not url:
         raise SnapTradeValidationError(
             "SnapTrade did not return a connection portal URL", 502
@@ -349,11 +311,12 @@ def _account_summary(account: Any) -> dict[str, Any]:
 
 def list_accounts() -> list[dict[str, Any]]:
     """List brokerage accounts linked to the SnapTrade user."""
-    creds = _credentials()
-    response = _client(creds).account_information.list_user_accounts(
-        **_user_kwargs(creds)
-    )
-    return [_account_summary(account) for account in (response.body or [])]
+    try:
+        return [_account_summary(account) for account in snaptrade_io.list_accounts()]
+    except snaptrade_io.SnapTradeConfigurationError as exc:
+        raise SnapTradeValidationError(str(exc), 503) from exc
+    except snaptrade_io.SnapTradeServiceError as exc:
+        raise SnapTradeValidationError(str(exc), 502) from exc
 
 
 # --------------------------------------------------------------------------- #
@@ -368,22 +331,12 @@ def fetch_snaptrade(account_ids: list[str] | None = None) -> list[tuple[Any, Any
     ``instrument.kind`` distinguishes stocks, ETFs, options, and money-market
     cash (``cash_equivalent``), so no separate balance call is needed.
     """
-    creds = _credentials()
-    user_kwargs = _user_kwargs(creds)
-    client = _client(creds)
-    accounts = client.account_information.list_user_accounts(**user_kwargs).body or []
-    wanted = {a for a in account_ids} if account_ids else None
-
-    pairs: list[tuple[Any, Any]] = []
-    for account in accounts:
-        account_id = _text(_value(account, "id"))
-        if wanted is not None and account_id not in wanted:
-            continue
-        positions = client.account_information.get_all_account_positions(
-            account_id=account_id, **user_kwargs
-        ).body
-        pairs.append((account, positions))
-    return pairs
+    try:
+        return snaptrade_io.fetch_positions(account_ids)
+    except snaptrade_io.SnapTradeConfigurationError as exc:
+        raise SnapTradeValidationError(str(exc), 503) from exc
+    except snaptrade_io.SnapTradeServiceError as exc:
+        raise SnapTradeValidationError(str(exc), 502) from exc
 
 
 # activities() yields (account, [activity, ...]) pairs of raw SnapTrade bodies.
@@ -391,17 +344,6 @@ ActivitiesProvider = Callable[[Any, Any], list[tuple[Any, list[Any]]]]
 
 # Page size for the paginated activities pull. The endpoint returns a single
 # window by default; we still page defensively so a capped response is complete.
-_ACTIVITIES_PAGE_SIZE = 1000
-
-
-def _activities_page(body: Any) -> list[Any]:
-    """The activity list from a get_account_activities response body, which may
-    be a bare list or an object wrapping the rows under ``data``."""
-    if isinstance(body, list):
-        return body
-    return list(_value(body, "data") or [])
-
-
 def fetch_activities(start_date: Any, end_date: Any,
                      account_ids: list[str] | None = None) -> list[tuple[Any, list[Any]]]:
     """Read each linked account's transaction activities over a date window.
@@ -412,32 +354,12 @@ def fetch_activities(start_date: Any, end_date: Any,
     rows it cares about (option transactions). Paginated by ``offset``/``limit``
     so a capped page still yields the complete window.
     """
-    creds = _credentials()
-    user_kwargs = _user_kwargs(creds)
-    client = _client(creds)
-    accounts = client.account_information.list_user_accounts(**user_kwargs).body or []
-    wanted = {a for a in account_ids} if account_ids else None
-
-    pairs: list[tuple[Any, list[Any]]] = []
-    for account in accounts:
-        account_id = _text(_value(account, "id"))
-        if wanted is not None and account_id not in wanted:
-            continue
-        rows: list[Any] = []
-        offset = 0
-        while True:
-            page = _activities_page(
-                client.account_information.get_account_activities(
-                    account_id=account_id, start_date=start_date, end_date=end_date,
-                    offset=offset, limit=_ACTIVITIES_PAGE_SIZE, **user_kwargs,
-                ).body
-            )
-            rows.extend(page)
-            if len(page) < _ACTIVITIES_PAGE_SIZE:
-                break
-            offset += _ACTIVITIES_PAGE_SIZE
-        pairs.append((account, rows))
-    return pairs
+    try:
+        return snaptrade_io.fetch_activities(start_date, end_date, account_ids)
+    except snaptrade_io.SnapTradeConfigurationError as exc:
+        raise SnapTradeValidationError(str(exc), 503) from exc
+    except snaptrade_io.SnapTradeServiceError as exc:
+        raise SnapTradeValidationError(str(exc), 502) from exc
 
 
 # --------------------------------------------------------------------------- #
