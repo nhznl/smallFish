@@ -147,6 +147,7 @@ class SnapTradeAdapter(ArtifactAdapter):
                     expiry=row.get("expiry"),
                 ),
                 position_delta=delta,
+                quantity=None if delta is None else abs(delta),
                 net_cash_flow=net_cash,
                 fees=optional_decimal(row.get("fee")),
                 provenance=self.provenance(

@@ -272,7 +272,12 @@ def test_activity_normalizes_to_identical_canonical_facts(adapter_env, brokerage
     assert fact.contract.occ_symbol == options_activity._contract_key(CONTRACT)
     assert fact.is_manual is False
     assert fact.missing == ()
-    assert fact.provenance.source == registry.REGISTRY[brokerage_id].descriptor.adapter
+    # Provenance names the institution the fact came from. The adapter that
+    # read it is a backend detail and must not reach a response.
+    descriptor = registry.REGISTRY[brokerage_id].descriptor
+    assert fact.provenance.source == descriptor.institution
+    if brokerage_id == "fidelity":
+        assert fact.provenance.source != descriptor.adapter
 
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)

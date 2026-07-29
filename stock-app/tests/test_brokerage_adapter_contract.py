@@ -89,19 +89,27 @@ def test_canonical_vocabulary_carries_no_provider_terms():
 # -------------------------------------------------------------------- routes ---
 
 def test_new_routes_are_additive_and_brokerage_agnostic():
-    published = _published_routes()
+    """Additive means the new surface never occupies a legacy one.
+
+    Each phase implements more of ``NEW_ROUTES``; what must hold at every phase
+    is that they live under one identity segment, name no adapter, and shadow
+    nothing a current caller depends on.
+    """
+    legacy_paths = {path for _method, path in spec.FROZEN_LEGACY_ROUTES}
     for method, path in spec.NEW_ROUTES:
-        assert (method, path) not in published, (
-            f"{method} {path} already exists; the migration must be additive"
-        )
         assert path == "/api/brokerages" or path.startswith("/api/brokerages/{brokerage_id}")
+        assert path not in legacy_paths, (
+            f"{method} {path} would shadow a legacy contract"
+        )
         for adapter in spec.ADAPTER_TYPES:
             assert adapter.lower() not in path
-    # Every new resource is reached through the same identity segment, so adding
-    # a brokerage is a registry entry rather than a router.
-    assert len({path for _method, path in spec.NEW_ROUTES}) == len(
-        {path for _method, path in spec.NEW_ROUTES}
-    )
+    # Nothing may appear on the new surface that the settled contract does not
+    # describe. Phases add routes from NEW_ROUTES; they do not invent them.
+    published_new = {
+        entry for entry in _published_routes()
+        if entry[1].startswith("/api/brokerages")
+    }
+    assert published_new <= set(spec.NEW_ROUTES)
 
 
 def test_frozen_legacy_routes_are_all_served_today():

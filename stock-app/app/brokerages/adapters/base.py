@@ -209,7 +209,13 @@ class ArtifactAdapter:
 
     @property
     def source(self) -> str:
-        return self._descriptor.adapter
+        """What provenance publishes: the institution, never the connector.
+
+        A fact came from Fidelity. That it arrived through SnapTrade is a
+        backend detail, and putting it in a response would hand Angular an
+        adapter name to branch on.
+        """
+        return self._descriptor.institution
 
     def provenance(self, *, retrieved_at: Any = None, observed_at: Any = None,
                    imported_at: Any = None) -> Provenance:

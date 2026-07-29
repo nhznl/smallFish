@@ -9,8 +9,10 @@ a new router, projection, or UI component.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
+from .. import config
 from .adapters.base import ArtifactAdapter, BrokerageAdapter
 from .adapters.snaptrade import SnapTradeAdapter
 from .adapters.tastytrade import TastytradeAdapter
@@ -30,11 +32,16 @@ class BrokerageRegistration:
     descriptor: BrokerageDescriptor
     capabilities: BrokerageCapabilities
     factory: Callable[[BrokerageDescriptor, BrokerageCapabilities], ArtifactAdapter]
+    #: Where this brokerage's editable symbol classifications live. Metadata is
+    #: app-owned and per-brokerage, so the path belongs to the identity table
+    #: rather than to a projection that would otherwise have to branch.
+    holdings_metadata_path: Callable[[], Path] = config.holdings_enrichment_csv
 
 
 def _registration(*, brokerage_id: str, label: str, institution: str,
                   portfolio_role: str, adapter: str,
                   factory: Callable[..., ArtifactAdapter],
+                  holdings_metadata_path: Callable[[], Path],
                   capabilities: BrokerageCapabilities | None = None,
                   ) -> BrokerageRegistration:
     return BrokerageRegistration(
@@ -44,6 +51,7 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
         ),
         capabilities=capabilities or BrokerageCapabilities(),
         factory=factory,
+        holdings_metadata_path=holdings_metadata_path,
     )
 
 
@@ -52,12 +60,14 @@ REGISTRY: dict[str, BrokerageRegistration] = {
     "tastytrade": _registration(
         brokerage_id="tastytrade", label="Tastytrade", institution="TASTYTRADE",
         portfolio_role="TRADING", adapter="TASTYTRADE", factory=TastytradeAdapter,
+        holdings_metadata_path=config.trading_holdings_enrichment_csv,
     ),
     # SnapTrade is how Fidelity data is retrieved, not the identity the user
     # sees. Another institution reached the same way would be a sibling entry.
     "fidelity": _registration(
         brokerage_id="fidelity", label="Fidelity", institution="FIDELITY",
         portfolio_role="RETIREMENT", adapter="SNAPTRADE", factory=SnapTradeAdapter,
+        holdings_metadata_path=config.holdings_enrichment_csv,
     ),
 }
 

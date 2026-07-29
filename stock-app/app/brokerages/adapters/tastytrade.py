@@ -153,6 +153,7 @@ class TastytradeAdapter(ArtifactAdapter):
                     strike=row.get("strike"), expiry=row.get("expiry"),
                 ) if is_option else None,
                 position_delta=delta,
+                quantity=optional_decimal(row.get("quantity")),
                 net_cash_flow=net_cash,
                 fees=optional_decimal(row.get("fee_effect")),
                 is_manual=text(row.get("source")) == options_activity.MANUAL_SOURCE,

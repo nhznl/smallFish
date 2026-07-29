@@ -161,6 +161,10 @@ class ActivityFact:
     provenance: Provenance
     contract: OptionContract | None = None
     position_delta: Decimal | None = None
+    #: Unsigned size the provider reported. Kept alongside ``position_delta``
+    #: because a lifecycle event such as an expiration or a partial assignment
+    #: reports how much was removed without reporting a signed delta.
+    quantity: Decimal | None = None
     #: Signed net cash including fees: credits positive, debits negative.
     net_cash_flow: Decimal | None = None
     fees: Decimal | None = None
