@@ -11,6 +11,12 @@ Standing decisions are included because they constrain future work. A closed
 item is not dormant — reopening one takes an explicit decision, and where noted,
 a dated pre-registration.
 
+There is no active refactoring program. The architecture, brokerage, dead-code,
+and documentation refactors are complete as of 2026-07-30, and their temporary
+plans and phase documents have been retired. Architecture-shaped items under
+**Deferred** are optional future decisions, not unfinished phases or migration
+work.
+
 ## Active
 
 **Prospective RTH quote evidence.** Collect ordinary regular-trading-hours
@@ -64,7 +70,7 @@ by projection functions. Decide whether stronger response models provide enough
 compatibility and maintenance value to justify the migration. Preserve existing
 wire shapes.
 
-**Remaining Angular view-model decomposition.** Wheel has the first extracted
+**Optional Angular view-model decomposition.** Wheel has the first extracted
 view model. Momentum Scanner, Stock Detail, Sector Rotation, Portfolios, and
 Studies still mix transport, transformation, and presentation state. Extract
 facades only where behavior tests demonstrate a concrete lifecycle, loading, or

@@ -1,17 +1,19 @@
-# Beta / Greek consumer measurement (Phase 7)
+# Beta / Greek consumer decision record
 
-**Status:** 7a–7c complete (measurement only; no fetch/schema deletions)  
-**Date:** 2026-07-30  
+**Status:** Measurement complete; materialization retained by decision
+
+**Date:** 2026-07-30
+
 **Current decision:** the owner confirmed on 2026-07-30 that there are no
 external consumers and chose to retain Layer A materialization for now. Any
 future trim requires a new explicit decision; tracked in
 [`../Requirements.md`](../Requirements.md).
 
-## Goal
+## Purpose
 
 Document in-repo consumers of exact-contract Greeks/IV and market-metric beta by
 layer, run a static evidence checklist for out-of-tree use, and record a
-retain-vs-trim recommendation. This phase does **not** delete fetches, CSV
+retain-vs-trim decision. This decision does **not** delete fetches, CSV
 columns, JSON fields, or capability ids.
 
 ## Artifact map
@@ -81,7 +83,7 @@ neither IV nor beta/Greek fields.
 | Production components | Use Symbol Ledger / holdings / combined routes — never `getOptions()` |
 | Templates | No `implied_volatility`, beta, or Greek field binds |
 
-## Evidence checklist (7b)
+## Evidence checklist
 
 Static run against this machine and the repository only. No provider network.
 Hit counts only; no absolute data-dir or account paths.
@@ -109,25 +111,25 @@ Hit counts only; no absolute data-dir or account paths.
 | C — `as_of.market` | In-repo live (envelope + combined-ledger UI) |
 | C — Sync `greeks_*` / `betas_*` counts | In-repo live (sync response / CLI presentation) |
 
-## Recommendation (7c)
+## Decision
 
 **Retain Layer A materialization and `services.options_market` fetches for
 now.** The owner confirmed there are no external consumers but chose not to trim
 the materialized contract at this time.
 
-A **future** trim candidate (separate phase, owner gate) would be: stop
+A **future** trim candidate (requiring a new owner decision) would be: stop
 persisting unused Greek scalar columns and/or beta **values** while keeping IV
 and the `as_of.market` semantics that depend on market observations. Starting
 that trim requires a new explicit owner decision.
 
-**Phase 7 does not remove** CSV columns, sync fetches, `/options` IV fields, or
-capability ids.
+**The current decision does not remove** CSV columns, sync fetches, `/options`
+IV fields, or capability ids.
 
 ## Explicit non-goals
 
 - Deleting or narrowing `fetch_greeks` / beta metrics / CSV headers
 - Changing brokerage JSON or Angular models
-- Phase 8+ work (unused helpers, lazy routes, company-info exception, etc.)
+- Unrelated architecture changes such as lazy routes or the company-info exception
 - Merging runtimes or touching frozen studies
 
 ## Verification

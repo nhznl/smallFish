@@ -109,8 +109,8 @@ user-captured gain/loss snapshot percentages (`SFP_SYMBOL_LEDGER_GL_SNAPSHOTS`).
 Broker events live in the provider artifacts above and are never written here.
 
 Per-brokerage gain/loss snapshot files (`SFP_HOLDINGS_GL_SNAPSHOTS`,
-`SFP_TRADING_HOLDINGS_GL_SNAPSHOTS`) were retired in Phase 21b; captured
-percentages now live only in the common store.
+`SFP_TRADING_HOLDINGS_GL_SNAPSHOTS`) are retired; captured percentages now live
+only in the common store.
 
 Research Studies are a special case. `SFP_STUDIES_DIR` is the *mutable* root —
 local rebuilds and scan snapshots are written there — but the bundled study

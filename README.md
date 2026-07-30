@@ -255,10 +255,12 @@ an issue, a pull request, or a screenshot.
 
 ## Status and roadmap
 
-Working and in daily use. Known follow-ups, none of them blocking: Docker and
-devcontainer support, native Windows outside WSL, and broader Angular test
-coverage. [`Requirements.md`](Requirements.md) records what is still open,
-deferred, or decided-and-closed.
+Working and in daily use. The repository-wide architecture, brokerage, dead-code,
+and documentation refactoring program is complete; no refactoring plan remains
+active. Known follow-ups, none of them blocking: Docker and devcontainer support,
+native Windows outside WSL, and broader Angular test coverage.
+[`Requirements.md`](Requirements.md) records the remaining evidence gaps,
+optional deferred decisions, and standing constraints.
 
 ## License
 
