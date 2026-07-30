@@ -1,17 +1,21 @@
 # Brokerage sync architecture cleanup plan
 
-**Status:** Ready for implementation handoff.
+**Status:** COMPLETE. Phases 0 through 5 are done; this document is now a record
+of the settled boundaries and the evidence behind them.
 
 **Owner:** smallFish owner. The implementation agent may work autonomously
 within the settled boundaries below and must pause at a listed stop condition.
 
 ## Resume here
 
-Begin with Phase 5. Work one phase and one focused commit at a time. Update the
-dashboard and progress log in the same commit as each completed phase. Do not
-restart completed Symbol Ledger, common brokerage API, legacy-route retirement,
-provider-I/O extraction, options market-data, importer-move, or setup-facade
-projects.
+Nothing to resume. There is no further phase in this cleanup, and every
+completion criterion below is met. Treat the settled boundaries, target
+ownership, and out-of-scope list as standing constraints rather than a backlog:
+they are enforced by `stock-app/tests/test_brokerage_architecture_enforcement.py`
+and `utilities/tests/test_brokerages.py`, so a regression fails a suite rather
+than reopening a phase. Do not restart the completed Symbol Ledger, common
+brokerage API, legacy-route retirement, provider-I/O extraction, options
+market-data, importer-move, or setup-facade projects.
 
 ## Objective
 
@@ -696,6 +700,9 @@ The cleanup is complete only when:
 - documentation, secret, dependency, brokerage-status, and diff gates pass; and
 - no live provider call was made without explicit owner authorization.
 
+Every criterion above was verified at Phase 5 against the final gate recorded in
+the progress log. No live provider call was made in any phase.
+
 ## Phase 0 caller classification
 
 Production callers only. Tests are consumers of the characterization, not
@@ -754,7 +761,20 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 2.5 | Provider-neutral quotes, Greeks/IV, and beta API/model | COMPLETE | `services/options_market/` + tastytrade adapter; consumers routed; `market_quotes` rename; both-runtime `test_options_market.py` |
 | 3 | Move materialization into explicit modules | COMPLETE | `brokerages.importers.snaptrade` + `held_option_market_data`; `retirement_options.py` deleted; registry/adapter retargeted; 461 stock-app tests |
 | 4 | Isolate setup/CLI and finish compatibility facade | COMPLETE | `snaptrade_setup.py` owns setup/CLI; `snaptrade_service` is thin facade (116 lines) + structural tests; gate 124+38 |
-| 5 | Enforcement, docs, and full regression | NOT STARTED | Begin here |
+| 5 | Enforcement, docs, and full regression | COMPLETE | `stock-app/tests/test_brokerage_architecture_enforcement.py` (18 structural tests); full gate 501 stock-app + 466 utilities, identical with `SFP_BLOCK_NETWORK=1`; services 22 (backend) and 17+1 skipped (utilities); pip check, brokerage status, docs, secrets, diff-check clean |
+
+## Deliberate deviations from the proposed layout
+
+The delivered file layout matches "Target ownership" exactly. Four rules were
+read more precisely than the prose stated, and each is now enforced as written
+here rather than as originally worded.
+
+| Deviation | Why | Enforced by |
+|---|---|---|
+| `brokerages.importers.snaptrade` imports `services.snaptrade` | "No provider-specific transport in an importer" was aimed at *market data*. SnapTrade is how the Fidelity account itself is read, exactly as Tastytrade is for `options_activity`. The rule that matters — no market-data transport, no provider symbol syntax — holds. | `test_snaptrade_importer_uses_account_transport_only` |
+| `utilities/options/chains.py` imports `occ_to_dxfeed_symbol` from the Tastytrade adapter | The premium archive records the exact streamer identity a quote came from as a diagnostic column. Importing the one converter is what keeps the *definition* in the adapter; re-deriving it locally is what the rule forbids. Yahoo chain discovery itself stays independent of the market-data provider. | `test_yahoo_chain_discovery_stays_separate_from_the_market_data_provider` |
+| `options_activity.py` imports the same converter | It kept a private `_streamer_symbol` duplicate of the adapter's regex, used to map raw DXLink events from an injected provider back to OCC identity. Phase 5 deleted the duplicate and imported the adapter's function; behaviour is unchanged. | `test_occ_to_dxfeed_conversion_is_defined_only_in_the_provider_adapter` |
+| The structural suite lives in `stock-app/tests` | It scans the whole tree, so one runtime is enough. Provider SDK confinement stays additionally in `utilities/tests/test_brokerages.py` so both runtimes fail if an SDK escapes `services/`. | both suites |
 
 ## Progress log
 
@@ -768,8 +788,12 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 2026-07-29 | 2.5 | COMPLETE | Added `services/options_market/` (stdlib contracts, explicit tastytrade routing, OCC→dxFeed in adapter). Routed `retirement_options`, `options_activity` market-data, and `utilities.options.market_quotes` through it. Renamed tastytrade_quotes→`market_quotes`. Gate: services 18+17 pass both runtimes; stock-app 45; utilities 61; docs/secrets/diff-check clean. No production module outside the adapter calls Tastytrade quote/Greek/metric transport. | Phase 3 — move materialization into explicit modules |
 | 2026-07-29 | 3 | COMPLETE | Created `brokerages.importers.snaptrade` (holdings+activity) and `held_option_market_data` (beta/Greeks via options_market). Deleted `retirement_options.py`; registry/adapter use public importer readers; `snaptrade_service` is setup/CLI + COMPAT re-exports/orchestrator. Gate: services 22; targeted 159; full stock-app 461; docs/secrets/diff-check clean. | Phase 4 — isolate setup/CLI facade |
 | 2026-07-29 | 4 | COMPLETE | Moved setup/credential persistence/CLI into `snaptrade_setup.py`; `snaptrade_service` is re-exports + `sync` orchestrator + `_main` delegation (116 lines) with AST thinness tests. `tools/brokerages.py` verify uses setup owner; module path `python -m app.snaptrade_service` preserved. Gate: 124 stock-app targeted + 38 brokerages + setup status masked. | Phase 5 — enforcement and full regression |
+| 2026-07-29 | 5 | COMPLETE | Added `stock-app/tests/test_brokerage_architecture_enforcement.py` (18 AST/source tests): SDK confinement plus lazy SDK import inside `services/`, market-data transport only via `services.options_market`, adapters free of `services/`, importer transport/symbol rules, `options_activity` Tastytrade use limited to `fetch_account_data`/`TastytradeConfigurationError`, utilities quote enrichment vs Yahoo discovery, one OCC→dxFeed definition, registry resource-command identity, holdings calling no sibling, and no `retirement_options` reference. Caller sweep found and removed a duplicated `from services import options_market` and the private `_streamer_symbol` copy of the adapter's converter in `options_activity.py`; behaviour unchanged. Final gate: pip check clean both runtimes; services 22 (backend) and 17 passed/1 skipped (utilities); 501 stock-app and 466 utilities, identical under `SFP_BLOCK_NETWORK=1`; `./setup-brokerages.sh status` masked and network-free; docs, secrets, and `git diff --check` clean. No Angular change. | None — cleanup complete |
 
 ## Implementation-agent kickoff prompt
+
+Historical: this is the prompt the cleanup was handed off with, kept so the
+phase records above stay readable. The work it describes is finished.
 
 ```text
 Implement the focused brokerage sync architecture cleanup described in

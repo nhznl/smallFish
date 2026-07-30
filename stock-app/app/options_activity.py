@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from services import options_market
-from services import options_market
+from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
 from services.tastytrade import io as tastytrade_io
 
 from . import config
@@ -118,17 +118,6 @@ def _option_terms(symbol: str) -> tuple[str, str, str]:
     expiry = datetime.strptime(match.group("expiry"), "%y%m%d").date().isoformat()
     strike = Decimal(match.group("strike")) / Decimal("1000")
     return ("CALL" if match.group("side") == "C" else "PUT", expiry, str(strike))
-
-
-def _streamer_symbol(symbol: str) -> str:
-    """Convert an OCC option symbol to the dxFeed subscription symbol."""
-    match = _OPTION_RE.match(symbol.upper())
-    if not match:
-        return ""
-    strike = Decimal(match.group("strike")) / Decimal("1000")
-    strike_text = format(strike.normalize(), "f")
-    return (f".{match.group('root')}{match.group('expiry')}"
-            f"{match.group('side')}{strike_text}")
 
 
 def _epoch_ms_iso(value: Any) -> str:
@@ -641,8 +630,11 @@ def sync(start_date: date | None = None,
             if row["underlying_symbol"].upper() in option_underlyings
         ]
         marks.sort(key=lambda row: (row["underlying_symbol"], row["contract_key"]))
+        # Raw DXLink events from an injected provider identify a contract only by
+        # its streamer symbol, so keep a reverse map. The conversion itself is
+        # defined once, in the market-data provider adapter.
         contracts = {
-            _streamer_symbol(row["contract_symbol"]): row["contract_symbol"]
+            occ_to_dxfeed_symbol(row["contract_symbol"]): row["contract_symbol"]
             for row in marks if _option_terms(row["contract_symbol"])[0]
         }
         normalized_greeks = [

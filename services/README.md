@@ -22,7 +22,17 @@ provider ids fail with a safe configuration error.
 OCC-to-dxFeed conversion lives only in the Tastytrade adapter under
 `services.options_market.providers`. Application and utilities consumers must
 not call `services.tastytrade` quote, Greek, or market-metric transport
-directly.
+directly. A consumer that has to record the streamer identity a provider used —
+the Yahoo chain job's diagnostic column, and the reverse map that lets
+`options_activity` accept raw DXLink events from an injected provider — imports
+`occ_to_dxfeed_symbol` from that adapter instead of re-deriving it, so a
+provider swap edits one function.
+
+`stock-app/tests/test_brokerage_architecture_enforcement.py` asserts these
+boundaries structurally: SDK confinement and lazy SDK import, market-data
+transport only through the neutral API, adapters free of `services/`, importers
+free of market-data transport and provider symbol syntax, and a single
+OCC-to-dxFeed definition.
 
 Importing `services.options_market` does not import a provider SDK, read a
 credential, authenticate, or contact a provider. Both Python runtimes run its

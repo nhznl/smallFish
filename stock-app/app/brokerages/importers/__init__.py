@@ -15,7 +15,12 @@ Modules:
 * ``held_option_market_data`` — beta and Greeks for currently held option legs,
   read through the provider-neutral ``services.options_market`` API.
 
-Importers may call ``services/`` for transport, but never a provider-specific
-transport package: provider selection and provider symbol syntax stay behind the
-neutral service API.
+An importer may call ``services/`` for the account transport of its own provider
+family — ``snaptrade`` reads Fidelity through ``services.snaptrade``, exactly as
+``options_activity`` reads Tastytrade accounts through ``services.tastytrade``.
+What no importer may hold is *market-data* transport or provider symbol syntax:
+provider selection, quotes, Greeks/IV, beta, and OCC-to-dxFeed conversion stay
+behind ``services.options_market``.
+
+``tests/test_brokerage_architecture_enforcement.py`` enforces both halves.
 """
