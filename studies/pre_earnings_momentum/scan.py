@@ -25,22 +25,6 @@ from utilities.price_reader import read_prices, read_prices_validated
 from studies.pre_earnings_momentum.event_forecast import (
     consistent_tickers,
 )
-from studies.pre_earnings_momentum.scoring import (
-    score_event,
-    passes_liquidity,
-    score_persistence,
-    score_trend,
-    score_momentum,
-    score_extension,
-    score_tradability,
-    score_quality_technical,
-    score_shift,
-    apply_shift_context,
-    shift_label,
-    assign_bands_by_percentile,
-    band_from_score,
-    PERSISTENCE_MIN_TECH,
-)
 
 BENCHMARK = "SPY"
 RS_WINDOW = 63  # trading days (~3 months) for relative-strength comparison
@@ -135,51 +119,6 @@ def _market_regime(cache_root: Path, years: list, as_of_ts: pd.Timestamp, strate
     if last_close > last_sma:
         return "Neutral", float(mr.get("neutral_factor", 0.85))
     return "Risk-Off", float(mr.get("risk_off_factor", 0.6))
-
-
-def _has_higher_low(lows: np.ndarray, lookback: int) -> bool:
-    """B3: True if the recent trough is higher than the prior trough over the
-    lookback window -- a constructive base rather than a falling-knife structure."""
-    if len(lows) < lookback:
-        return False
-    window = lows[-lookback:]
-    half = lookback // 2
-    recent_low = np.nanmin(window[half:])
-    prior_low = np.nanmin(window[:half])
-    return bool(recent_low > prior_low)
-
-
-def _days_since_macd_cross(hist) -> "int | None":
-    """Trading days since the MACD histogram last crossed from <=0 to >0.
-    None if the histogram is not currently positive (no active upward shift)."""
-    n = len(hist)
-    if n == 0 or not (hist[-1] > 0):
-        return None
-    i = n - 1
-    # walk back over the current positive run
-    while i - 1 >= 0 and hist[i - 1] > 0:
-        i -= 1
-    return (n - 1) - i
-
-
-def _days_in_band(df_ticker, window: int, price_min: float, price_max: float,
-                  min_vol: int, min_dollar_vol: int) -> int:
-    """Counts how many of the symbol's last `window` trading days were a
-    technically-stable setup: inside the price range, passing the liquidity
-    gate, and clearing the technical-score floor. Indicators on each row are
-    already computed on full history, so older rows are valid too. (Persistence
-    is now informational only -- not part of score_total.)"""
-    recent = df_ticker.tail(window)
-    count = 0
-    for _, row in recent.iterrows():
-        close = row.get("close")
-        if pd.isna(close) or close < price_min or close > price_max:
-            continue
-        if not passes_liquidity(row, min_vol, min_dollar_vol):
-            continue
-        if score_quality_technical(row, min_dollar_vol) >= PERSISTENCE_MIN_TECH:
-            count += 1
-    return count
 
 
 def _apply_date_consistency(events: pd.DataFrame, strategy: dict,

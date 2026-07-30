@@ -30,14 +30,12 @@ from __future__ import annotations
 import argparse
 import csv
 import os
-import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 

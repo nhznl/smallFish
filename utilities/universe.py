@@ -71,7 +71,7 @@ import csv
 import io
 import os
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -91,10 +91,8 @@ from models.universe import (
     TYPE_ETF,
     TYPE_MF,
     TYPE_STOCK,
-    UNIVERSE_COLUMNS,
     UniverseEntry,
     normalize_symbol,
-    parse_bool,
     parse_registry,
     render_registry,
 )

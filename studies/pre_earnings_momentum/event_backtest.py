@@ -50,7 +50,6 @@ from studies.pre_earnings_momentum.scoring import (
     score_shift,
 )
 from studies.pre_earnings_momentum.scan import (
-    _days_since_macd_cross,
     _load_sector_map,
 )
 

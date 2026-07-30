@@ -21,7 +21,7 @@ from utilities.indicators.ta import (
     compute_macd,
     compute_bollinger,
 )
-from studies.pre_earnings_momentum.scan import _days_since_macd_cross
+from studies.pre_earnings_momentum.candidate_engine import _days_since_macd_cross
 
 
 def _close(values):

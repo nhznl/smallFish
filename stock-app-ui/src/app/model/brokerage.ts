@@ -24,25 +24,6 @@ export interface BrokerageDescriptor {
   portfolio_role: string;
 }
 
-export interface BrokerageCapabilities {
-  holdings: boolean;
-  options: boolean;
-  option_adjusted_basis: boolean;
-  activity: boolean;
-  sync: boolean;
-}
-
-export interface BrokerageCatalogEntry extends BrokerageDescriptor {
-  capabilities: BrokerageCapabilities;
-  availability: { status: AvailabilityStatus; reasons: string[] };
-}
-
-export interface BrokerageCatalog {
-  schema_name: string;
-  schema_version: number;
-  brokerages: BrokerageCatalogEntry[];
-}
-
 export interface BrokerageCoverage {
   status: PnlCompleteness;
   history_start: string | null;

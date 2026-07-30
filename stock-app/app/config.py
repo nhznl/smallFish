@@ -272,10 +272,6 @@ def events_csv() -> Path:
     return _under("SFP_EVENTS_CSV", data_dir(), "events.csv")
 
 
-def strategy_config_yaml() -> Path:
-    return _resolve("SFP_STRATEGY_CONFIG", "config/options_risk.yaml")
-
-
 def repo_root() -> Path:
     """Repository root containing ``commands.sh``; defaults to ``..``."""
     return _resolve("SFP_REPO_ROOT", "..")

@@ -5,7 +5,6 @@ import { Observable } from 'rxjs';
 import {
   AdjustedBasisResponse,
   ArchiveCreatedResponse,
-  BrokerageCatalog,
   BrokerageId,
   BrokerageSyncResponse,
   GainLossSnapshotResponse,
@@ -33,10 +32,6 @@ export class BrokerageService {
 
   private base(brokerageId: BrokerageId): string {
     return `${this.apiBaseUrl}/api/brokerages/${encodeURIComponent(brokerageId)}`;
-  }
-
-  getCatalog(): Observable<BrokerageCatalog> {
-    return this.http.get<BrokerageCatalog>(`${this.apiBaseUrl}/api/brokerages`);
   }
 
   getHoldings(brokerageId: BrokerageId, accountId?: string): Observable<HoldingsResponse> {

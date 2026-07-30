@@ -15,7 +15,6 @@ from .trend_engine import (
     Daily,
     AdvancedTrendWithVolume,
     f32,
-    round_half_up,
     round_float32_half_up,
 )
 

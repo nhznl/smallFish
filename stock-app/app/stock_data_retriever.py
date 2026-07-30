@@ -118,40 +118,6 @@ def format_news_items(items):
     return news
 
 
-def fetch_period_history(ticker_symbol: str, period: str):
-    ticker = yf.Ticker(ticker_symbol)
-    # auto_adjust pinned explicitly: the cache stores split/dividend-adjusted
-    # OHLC, and every downstream consumer (trend math, strategy scans,
-    # the wheel scan) assumes it. Do not rely on the yfinance default.
-    data = ticker.history(period=period, auto_adjust=True)
-    if data.empty:
-        raise ValueError("No data found!")
-
-    data = data.reset_index()
-    data["Date"] = data["Date"].dt.strftime("%Y-%m-%d")
-    return {
-        "ticker": ticker_symbol,
-        "period": period,
-        "data": data.to_dict("records"),
-    }
-
-
-def fetch_range_history(ticker_symbol: str, start_date: str, end_date: str):
-    ticker = yf.Ticker(ticker_symbol)
-    # auto_adjust pinned explicitly -- see fetch_period_history.
-    data = ticker.history(start=start_date, end=end_date, auto_adjust=True)
-    if data.empty:
-        raise ValueError("No data found for the specified date range!")
-
-    data = data.reset_index()
-    data["Date"] = data["Date"].dt.strftime("%Y-%m-%d")
-    return {
-        "ticker": ticker_symbol,
-        "period": f"daterange ({start_date} to {end_date})",
-        "data": data.to_dict("records"),
-    }
-
-
 def fetch_stock_information(ticker_symbol: str):
     ticker = yf.Ticker(ticker_symbol)
     info = getattr(ticker, "info", {}) or {}

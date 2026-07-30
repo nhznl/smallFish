@@ -118,7 +118,7 @@ hand-drawn SVG rather than a third-party charting library.
 ```
 src/app/
 ├── api/                 # FastAPI HTTP client
-├── model/               # Stock, options, retirement, time-series, and API types
+├── model/               # Stock, brokerage, portfolio, and API types
 ├── services/            # Shared symbol-filter state
 ├── shared/ui/           # Reusable drawer, modal, and capability-state components
 ├── momentum-scanner/    # Merged setup-ranked stock scanner

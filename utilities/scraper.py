@@ -74,7 +74,6 @@ from utilities.audit_price_cache import (
     DEFAULT_TOLERANCE,
     OUTCOME_EMPTY_FETCH,
     OUTCOME_FETCH_FAILED,
-    OUTCOME_REWRITTEN,
     audit_symbol,
     format_daily_line,
     load_universe_file,

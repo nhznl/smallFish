@@ -30,17 +30,6 @@ def brokerage_block(snapshot: BrokerageSnapshot) -> dict[str, Any]:
     }
 
 
-def capabilities_block(snapshot: BrokerageSnapshot) -> dict[str, bool]:
-    capabilities = snapshot.capabilities
-    return {
-        "holdings": capabilities.holdings,
-        "options": capabilities.options,
-        "option_adjusted_basis": capabilities.option_adjusted_basis,
-        "activity": capabilities.activity,
-        "sync": capabilities.sync,
-    }
-
-
 def as_of_block(snapshot: BrokerageSnapshot) -> dict[str, str | None]:
     positions = max(
         (fact.provenance.retrieved_at or "" for fact in snapshot.positions),

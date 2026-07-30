@@ -22,7 +22,6 @@ from __future__ import annotations
 import os
 from dataclasses import asdict, dataclass, field
 from datetime import date
-from pathlib import Path
 
 from . import config
 

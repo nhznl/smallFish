@@ -14,7 +14,6 @@ import re
 import tempfile
 import threading
 import uuid
-from collections import defaultdict
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -25,7 +24,6 @@ from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
 from services.tastytrade import io as tastytrade_io
 
 from . import config
-from .options_risk import apply_call_coverage
 
 SCHEMA_NAME = "smallfish.options-activity"
 SCHEMA_VERSION = 1

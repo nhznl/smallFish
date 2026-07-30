@@ -83,10 +83,6 @@ def read_metadata() -> dict[tuple[str, str], dict[str, str]]:
     }
 
 
-def notes_for(brokerage_id: str, symbol: str) -> str:
-    return read_metadata().get((brokerage_id, symbol), {}).get("notes", "")
-
-
 def set_notes(brokerage_id: str, symbol: str, notes: str) -> dict[str, str]:
     """Create or update the note on one symbol. Nothing else is patchable."""
     with _lock:

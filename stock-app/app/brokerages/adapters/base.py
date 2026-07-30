@@ -70,11 +70,6 @@ def optional_decimal(value: Any) -> Decimal | None:
     return result if result.is_finite() else None
 
 
-def decimal_or_zero(value: Any) -> Decimal:
-    result = optional_decimal(value)
-    return Decimal("0") if result is None else result
-
-
 def normalized_action(value: Any) -> str:
     """Canonical lifecycle action, or ``UNKNOWN`` when the spelling is unmapped."""
     key = "_".join(text(value).strip().upper().split()).replace("-", "_")

@@ -11,7 +11,6 @@ sorts its response, so output order is deterministic across restarts.
 
 from __future__ import annotations
 
-import csv
 import math
 import threading
 from collections import Counter
