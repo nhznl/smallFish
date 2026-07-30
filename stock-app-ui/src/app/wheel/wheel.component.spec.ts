@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import { StockService } from '../api/stock.service';
 import { SymbolFilterService } from '../services/symbol-filter.service';
@@ -79,12 +79,20 @@ describe('WheelComponent', () => {
   });
 
   it('renders an empty-state when the service returns no candidates', () => {
-    // StockService currently maps transport failures to [], so empty and failed
-    // loads share this empty-state contract until an explicit error channel exists.
     stockService.getWheelCandidates.and.returnValue(of([]));
     mount();
     expect(text()).toContain('No wheel candidates');
     expect(text()).not.toContain('Could not load wheel candidates');
+  });
+
+  it('shows a transport error instead of the empty-state when the load fails', () => {
+    stockService.getWheelCandidates.and.returnValue(
+      throwError(() => new Error('Network down'))
+    );
+    mount();
+    expect(text()).toContain('Could not load wheel candidates');
+    expect(text()).not.toContain('No wheel candidates');
+    expect(fixture.componentInstance.loadError).toBeTrue();
   });
 
   it('shows job-error messaging when runWheel fails without clearing the table', () => {

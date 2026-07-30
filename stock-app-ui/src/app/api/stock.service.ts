@@ -96,28 +96,26 @@ export class StockService {
     const url = horizon != null
       ? `${this.apiBaseUrl}/wheelCandidates?horizon=${horizon}`
       : `${this.apiBaseUrl}/wheelCandidates`;
-    return this.http.get<WheelCandidate[]>(url)
-      .pipe(
-        catchError(this.handleError<WheelCandidate[]>('getWheelCandidates', []))
-      );
+    // Propagate transport errors so the Wheel view can distinguish failed from empty.
+    return this.http.get<WheelCandidate[]>(url);
   }
 
   /**
    * Refresh the shared upcoming-earnings calendar (Finnhub, via `ensure-events`)
    * and report how many scanner symbols have a known upcoming report.
    */
-  runEarningsScan(): Observable<any> {
-    return this.http.post<any>(`${this.apiBaseUrl}/runEarningsScan`, null)
+  runEarningsScan(): Observable<EarningsScanResult> {
+    return this.http.post<EarningsScanResult>(`${this.apiBaseUrl}/runEarningsScan`, null)
       .pipe(
-        catchError(this.handleError<any>('runEarningsScan', { status: 'error' }))
+        catchError(this.handleError<EarningsScanResult>('runEarningsScan', { status: 'error' as const }))
       );
   }
 
   /** Trigger the Python wheel scan on the server and reload its cache. */
-  runWheel(): Observable<any> {
-    return this.http.post<any>(`${this.apiBaseUrl}/runWheel`, null)
+  runWheel(): Observable<WheelJobResult> {
+    return this.http.post<WheelJobResult>(`${this.apiBaseUrl}/runWheel`, null)
       .pipe(
-        catchError(this.handleError<any>('runWheel', { status: 'error' }))
+        catchError(this.handleError<WheelJobResult>('runWheel', { status: 'error' as const }))
       );
   }
 
