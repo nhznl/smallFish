@@ -27,6 +27,7 @@ from .. import trend as trend_state
 from ..contracts import BrokerageSnapshot
 from . import components as component_projection
 from . import envelope
+from .numbers import number as _number
 
 SCHEMA_NAME = "smallfish.brokerage-holdings"
 METADATA_HEADERS = ("symbol", "category", "industry", "note", "updated_at")
@@ -47,10 +48,6 @@ def read_metadata(path: Path) -> dict[str, dict[str, str]]:
             for row in csv.DictReader(handle)
             if str(row.get("symbol", "")).strip()
         }
-
-
-def _number(value: Decimal | None) -> float | None:
-    return None if value is None else float(value)
 
 
 def account_value(snapshot: BrokerageSnapshot, *,

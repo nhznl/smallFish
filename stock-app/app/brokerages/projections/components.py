@@ -21,6 +21,7 @@ from typing import Any, Iterable
 
 from ..contracts import (UNCONFIRMED_PROVIDER_LIFECYCLE, ActivityFact,
                          BrokerageSnapshot, PositionFact)
+from .numbers import number as _number
 
 # Reason codes. The shared ones keep their established spelling; the provider
 # one is brokerage-neutral by design — a warning must never name an institution.
@@ -35,10 +36,6 @@ POSITION_ACTIVITY_MISMATCH = "POSITION_ACTIVITY_MISMATCH"
 _CLOSING_LIFECYCLE = frozenset({"EXPIRATION", "ASSIGNMENT", "EXERCISE"})
 
 ZERO = Decimal("0")
-
-
-def _number(value: Decimal | None) -> float | None:
-    return None if value is None else float(value)
 
 
 @dataclass(frozen=True, slots=True)

@@ -18,6 +18,7 @@ from decimal import Decimal
 from typing import Any
 
 from ..contracts import ActivityFact
+from .numbers import number as _number
 
 SCHEMA_NAME = "smallfish.symbol-ledger-events"
 DEFAULT_LIMIT = 100
@@ -26,10 +27,6 @@ MAX_LIMIT = 500
 
 class CursorError(ValueError):
     code = "INVALID_CURSOR"
-
-
-def _number(value: Decimal | None) -> float | None:
-    return None if value is None else float(value)
 
 
 def encode_cursor(event: ActivityFact) -> str:

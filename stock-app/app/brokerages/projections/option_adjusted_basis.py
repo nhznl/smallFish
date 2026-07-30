@@ -17,6 +17,7 @@ from typing import Any
 from ..contracts import UNCONFIRMED_PROVIDER_LIFECYCLE, BrokerageSnapshot
 from . import components as component_projection
 from . import envelope
+from .numbers import number as _number
 
 SCHEMA_NAME = "smallfish.brokerage-option-adjusted-basis"
 
@@ -27,10 +28,6 @@ OPTION_HISTORY_REASON = "Option history, marks, or reconciliation is incomplete.
 UNCONFIRMED_REASON = (
     "This brokerage's assignment and expiration lifecycle shapes are unconfirmed."
 )
-
-
-def _number(value: Decimal | None) -> float | None:
-    return None if value is None else float(value)
 
 
 def _total(values: list[Decimal | None]) -> Decimal | None:

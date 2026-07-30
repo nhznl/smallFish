@@ -13,14 +13,11 @@ from typing import Any
 from ..contracts import BrokerageSnapshot, MarketObservation
 from . import components as component_projection
 from . import envelope
+from .numbers import number as _number
 
 SCHEMA_NAME = "smallfish.brokerage-options"
 
 ZERO = Decimal("0")
-
-
-def _number(value: Decimal | None) -> float | None:
-    return None if value is None else float(value)
 
 
 def _implied_volatility(observations: tuple[MarketObservation, ...]

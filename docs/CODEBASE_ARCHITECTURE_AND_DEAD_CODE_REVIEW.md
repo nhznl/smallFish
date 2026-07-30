@@ -172,7 +172,7 @@ residual imports only when the resulting diff cannot alter a frozen outcome.
 
 | Priority | Duplicate | Recommendation |
 |---|---|---|
-| Medium | Identical `_number(Decimal \| None)` conversion in six brokerage projection modules | Put the exact null/float conversion in a narrow projection utility and preserve response values byte-for-byte. |
+| Medium | Identical `_number(Decimal \| None)` conversion in six brokerage projection modules | ~~Put the exact null/float conversion in a narrow projection utility~~ **Phase 19 done.** Shared `numbers.number()`; byte-identical `float(Decimal)`. See [`PROJECTION_NUMBER_UTIL_PHASE19_DESIGN.md`](PROJECTION_NUMBER_UTIL_PHASE19_DESIGN.md). |
 | Medium | Candidate/scan helpers such as higher-low, days-since-cross, days-in-band, and trailing-return remain in both candidate and scan code | The scan now delegates candidate construction. Remove only copies proven unreachable and preserve frozen study outputs with artifact-level regression checks. |
 | Medium | Atomic file-write patterns recur across backend persistence modules | Consider one backend-only helper for same-directory temp files, flush/fsync, mode preservation, and atomic replace. Do not combine writers with different locks, schemas, or recovery semantics. |
 | Low | `_strategy_data_root` is duplicated in chains and wheel | Move to their shared options/config layer if both call sites retain identical precedence and error behavior. |
@@ -323,6 +323,10 @@ methodology changes, compatibility removals, and mechanical cleanup.
 18. **~~Job and study response interfaces.~~ Done (18a).** See
     [`job-results.ts`](../stock-app-ui/src/app/model/job-results.ts): typed
     stock-service job methods and study scan snapshot; wire shapes unchanged.
+19. **~~Shared projection `_number` util.~~ Done (19a).** See
+    [`PROJECTION_NUMBER_UTIL_PHASE19_DESIGN.md`](PROJECTION_NUMBER_UTIL_PHASE19_DESIGN.md):
+    `brokerages/projections/numbers.py`; six call sites migrated; conversion
+    byte-identical.
 
 ### Explicit stop conditions
 

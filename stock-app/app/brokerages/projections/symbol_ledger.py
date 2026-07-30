@@ -29,6 +29,7 @@ from ..store import ArchiveBoundary, event_set_hash, period_version
 from . import components as component_projection
 from . import envelope
 from .components import Component, resolve_position_deltas
+from .numbers import number as _number
 
 LIST_SCHEMA_NAME = "smallfish.symbol-ledger-list"
 DETAIL_SCHEMA_NAME = "smallfish.symbol-ledger"
@@ -41,10 +42,6 @@ INCOMPLETE_HISTORY = "Some cash flows, marks, or history are unavailable."
 UNCONFIRMED_LIFECYCLE = (
     "This brokerage's assignment and expiration lifecycle shapes are unconfirmed."
 )
-
-
-def _number(value: Decimal | None) -> float | None:
-    return None if value is None else float(value)
 
 
 def _sum(values: list[Decimal | None]) -> Decimal | None:
