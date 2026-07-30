@@ -102,7 +102,7 @@ work. The plan should remain closed.
 | Medium | API-origin selection is duplicated in five services | ~~Five independent port-4200 ternaries~~ **Phase 10 done.** Shared `API_BASE_URL` token + `resolveApiBaseUrl`. See [`ANGULAR_API_BASE_PHASE10_DESIGN.md`](ANGULAR_API_BASE_PHASE10_DESIGN.md). |
 | Medium | Money, percentage, sign, date, and range formatting is repeated with inconsistent behavior | ~~Holdings + Combined Ledger identical helpers~~ **Phase 11 done** (`format-display.ts`). Symbol Ledger, portfolios, sector rotation, scanner, stock detail, and strategy still differ (locale, `$` prefix, sign rules). | Migrate only after measuring each surface; do not force Symbol Ledger onto `en-US` currency helpers. See [`ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md`](ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md). |
 | High | Date and nullable API contracts do not match JSON | ~~Several interfaces typed ISO dates as `Date`~~ **4a done.** Stock/gain-loss transport uses ISO `string` + correct `| null` on trade stats and gain/loss blocks; scanner/stock-detail casts removed. See [`CONTRACT_TIGHTENING_PHASE4_DESIGN.md`](CONTRACT_TIGHTENING_PHASE4_DESIGN.md). |
-| Medium | Job and study results use `any` | Stock-service job methods, study candidates, and stock-detail weekly fields lose compile-time coverage of backend changes. | Add response interfaces derived from current payloads; do not change wire shapes. |
+| Medium | Job and study results use `any` | ~~Stock-service job methods and study scan candidates~~ **Phase 18 done** — typed from current wire shapes. Stock-detail weekly fields already typed on `StockAnalysis`. | Add further interfaces only when new payloads appear; do not change wire shapes. |
 
 The tiny `OptionsComponent` and `RetirementPortfolioComponent` classes are not
 accidental duplication. They are provider-specific route shells over the same
@@ -114,7 +114,7 @@ shared brokerage page and should remain simple.
 |---|---|---|---|
 | High | Largest screens have no direct component tests | ~~Only 6 of 19 components had specs~~ **5a–5c done.** Behavior specs added for Stock Detail, Momentum Scanner, Wheel, Portfolios, and Sector Rotation. See [`ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md`](ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md). |
 | Medium | Nested or independent route-driven subscriptions can race | ~~Stock Detail race~~ **Stock Detail fixed** with `switchMap` cancel. ~~Studies nested `paramMap` race~~ **Phase 9 done.** See [`STUDIES_ROUTE_RACE_PHASE9_DESIGN.md`](STUDIES_ROUTE_RACE_PHASE9_DESIGN.md). |
-| Medium | Empty data and failed requests are sometimes conflated | Some stock-service methods catch errors and return an empty array or an error-shaped success value, while other methods propagate errors. | Let view models distinguish `loading`, `empty`, `unavailable`, and `failed`. Centralize transport error translation without hiding failures. |
+| Medium | Empty data and failed requests are sometimes conflated | ~~`getWheelCandidates` caught errors into `[]`~~ **Phase 15 done** for Wheel; job methods still return `{ status: 'error' }` by design. Momentum Scanner and Sector Rotation already propagate list errors. | Phase 14 vocabulary + Wheel facade: see [`EMPTY_VS_FAILED_VIEW_MODEL_PHASE14_DESIGN.md`](EMPTY_VS_FAILED_VIEW_MODEL_PHASE14_DESIGN.md). Further screen extractions remain open. |
 | Medium | Most major routes are eager-loaded | ~~Only three lazy chunks~~ **Phase 8 done.** Remaining feature routes use `loadComponent`; 404 stays eager. See [`ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md`](ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md). |
 | Low | Three passing service specs trigger “no expectations” warnings | ~~HTTP controller alone~~ **Phase 12 done.** Explicit `GET` method expectations on path-building and query-param cases. See [`ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md`](ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md). |
 
@@ -303,7 +303,19 @@ methodology changes, compatibility removals, and mechanical cleanup.
     [`COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md):
     README/ARCHITECTURE document the Yahoo on-demand path; injectable
     `ticker_factory`; offline retriever tests. Broader formatting and
-    view-model / empty-vs-failed decomposition remain open.
+    view-model / empty-vs-failed decomposition remained open after 13a.
+14. **~~Empty-vs-failed vocabulary and first facade.~~ Done (14a–16a).** See
+    [`EMPTY_VS_FAILED_VIEW_MODEL_PHASE14_DESIGN.md`](EMPTY_VS_FAILED_VIEW_MODEL_PHASE14_DESIGN.md):
+    `DataViewState` types; `getWheelCandidates` propagates errors; Wheel
+    empty vs failed specs; `WheelCandidatesViewModel` extract. Further screen
+    facades and format-display migration remain open.
+15. **~~Byte-identical format-display migration (next pair).~~ Done (17a).** See
+    [`ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md`](ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md):
+    Symbol Ledger `pnlClass` delegates to shared `pnlToneClass`. `money()` /
+    `timestamp()` remain local (locale and empty-string rules differ).
+16. **~~Job and study response interfaces.~~ Done (18a).** See
+    [`job-results.ts`](../stock-app-ui/src/app/model/job-results.ts): typed
+    stock-service job methods and study scan snapshot; wire shapes unchanged.
 
 ### Explicit stop conditions
 

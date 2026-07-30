@@ -7,6 +7,12 @@ import { WheelCandidate } from '../model/wheel-candidate';
 import { CollectionScopeRequest, OptionQuoteSnapshot } from '../model/option-quotes';
 import { SectorRotationSnapshot } from '../model/sector-rotation';
 import { MomentumStock, StockAnalysis } from '../model/stock';
+import {
+  ChainsJobResult,
+  EarningsScanResult,
+  SectorRotationJobResult,
+  WheelJobResult,
+} from '../model/job-results';
 import { API_BASE_URL } from './api-base';
 
 @Injectable({ providedIn: 'root' })
@@ -123,7 +129,7 @@ export class StockService {
    * Collect option quotes, optionally scoped to the Wheel view's horizon,
    * cushion, and filtered symbols. Scope only ever narrows the collection.
    */
-  runChains(scope?: CollectionScopeRequest): Observable<any> {
+  runChains(scope?: CollectionScopeRequest): Observable<ChainsJobResult> {
     let params = new HttpParams();
     if (scope?.horizonDte != null) {
       params = params.set('horizonDte', String(scope.horizonDte));
@@ -134,12 +140,15 @@ export class StockService {
     if (scope?.minOtmPct != null) {
       params = params.set('minOtmPct', String(scope.minOtmPct));
     }
-    return this.http.post<any>(`${this.apiBaseUrl}/runChains`, null, { params })
+    return this.http.post<ChainsJobResult>(`${this.apiBaseUrl}/runChains`, null, { params })
       .pipe(
         catchError((err) => {
           console.error('runChains failed:', err);
           // A 400 carries an actionable scope message; surface it, not a generic failure.
-          return of({ status: 'error', message: err?.error?.detail ?? undefined });
+          return of({
+            status: 'error' as const,
+            message: err?.error?.detail ?? undefined,
+          } satisfies ChainsJobResult);
         })
       );
   }
@@ -155,10 +164,10 @@ export class StockService {
   }
 
   /** Recompute the sector-leadership snapshot from the local price cache. */
-  runSectorRotation(): Observable<any> {
-    return this.http.post<any>(`${this.apiBaseUrl}/runSectorRotation`, null)
+  runSectorRotation(): Observable<SectorRotationJobResult> {
+    return this.http.post<SectorRotationJobResult>(`${this.apiBaseUrl}/runSectorRotation`, null)
       .pipe(
-        catchError(this.handleError<any>('runSectorRotation', { status: 'error' }))
+        catchError(this.handleError<SectorRotationJobResult>('runSectorRotation', { status: 'error' as const }))
       );
   }
 

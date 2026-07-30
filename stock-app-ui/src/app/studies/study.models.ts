@@ -1,5 +1,7 @@
 /** Mirrors the versioned materialized JSON contract in models/study.py. */
 
+import { StrategyStock } from '../model/stock';
+
 export type StudyVerdict = 'PASSED' | 'FAILED' | 'INCONCLUSIVE' | 'NO_VERDICT' | 'NOT_RUN';
 export type StudyEvidenceLevel = 'CONFIRMATORY' | 'EXPLORATORY' | 'DESCRIPTIVE' | 'PLANNED';
 export type StudyStatisticFormat = 'NUMBER' | 'INTEGER' | 'PERCENT' | 'CURRENCY' | 'RATIO' | 'TEXT';
@@ -98,4 +100,11 @@ export interface StudyProvenance {
   generatedAt: string;
   dataCutoff: string | null;
   verificationState: string;
+}
+
+/** Latest materialized candidate snapshot for scan-capable studies. */
+export interface StudyScanSnapshot {
+  schemaName: 'pre-earnings-candidates-v1';
+  generatedAt: string;
+  candidates: StrategyStock[];
 }

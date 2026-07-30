@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { StudyCatalog, StudyDetail } from '../studies/study.models';
+import { JobCommandResult } from '../model/job-results';
+import { StudyCatalog, StudyDetail, StudyScanSnapshot } from '../studies/study.models';
 import { API_BASE_URL } from './api-base';
 
 @Injectable({ providedIn: 'root' })
@@ -17,13 +18,13 @@ export class StudiesService {
     return this.http.get<StudyDetail>(`${this.studiesUrl}/${encodeURIComponent(studyId)}`);
   }
 
-  runScan(studyId: string): Observable<{ status: string; message?: string; output?: string; durationMs?: number }> {
-    return this.http.post<{ status: string; message?: string; output?: string; durationMs?: number }>(
+  runScan(studyId: string): Observable<JobCommandResult> {
+    return this.http.post<JobCommandResult>(
       `${this.studiesUrl}/${encodeURIComponent(studyId)}/scan`, {});
   }
 
-  getScan(studyId: string): Observable<{ generatedAt: string; candidates: any[] }> {
-    return this.http.get<{ generatedAt: string; candidates: any[] }>(
+  getScan(studyId: string): Observable<StudyScanSnapshot> {
+    return this.http.get<StudyScanSnapshot>(
       `${this.studiesUrl}/${encodeURIComponent(studyId)}/scan`);
   }
 }

@@ -10,6 +10,7 @@ import {
   StudyCatalogItem, StudyDetail, StudyEvidenceLevel, StudyStatistic,
   StudyVariation, StudyVerdict
 } from './study.models';
+import { StrategyStock } from '../model/stock';
 
 @Component({
   selector: 'app-studies',
@@ -33,7 +34,7 @@ export class StudiesComponent implements OnInit {
   scanRunning = false;
   scanStatus: 'idle' | 'ok' | 'error' = 'idle';
   scanMessage = '';
-  scanCandidates: any[] = [];
+  scanCandidates: StrategyStock[] = [];
   scanGeneratedAt = '';
 
   ngOnInit(): void {

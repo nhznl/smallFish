@@ -124,7 +124,11 @@ describe('StudiesComponent', () => {
     ]);
     studiesService.getCatalog.and.returnValue(of(catalog('demo-study', 'other-study')));
     studiesService.getStudy.and.callFake((id: string) => of(study(id)));
-    studiesService.getScan.and.returnValue(of({ generatedAt: '', candidates: [] }));
+    studiesService.getScan.and.returnValue(of({
+      schemaName: 'pre-earnings-candidates-v1',
+      generatedAt: '',
+      candidates: [],
+    }));
     studiesService.runScan.and.returnValue(of({ status: 'ok' }));
 
     await TestBed.configureTestingModule({
