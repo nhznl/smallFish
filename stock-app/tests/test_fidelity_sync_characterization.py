@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, snaptrade_service
+from app import config, snaptrade_service, snaptrade_setup
 from app.brokerages import registry
 from app.brokerages.importers import held_option_market_data as market_data
 from app.brokerages.importers import snaptrade as importer
@@ -430,17 +430,17 @@ def test_cli_subcommand_surface_and_secret_redaction(
         "SNAPTRADE_USER_SECRET=\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(snaptrade_service.config, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(snaptrade_setup.config, "repo_root", lambda: tmp_path)
     monkeypatch.setattr(
-        snaptrade_service, "register_user",
+        snaptrade_setup, "register_user",
         lambda: {"userId": "uid-secret", "userSecret": "sekrit-value"},
     )
     monkeypatch.setattr(
-        snaptrade_service, "connection_portal_url",
+        snaptrade_setup, "connection_portal_url",
         lambda broker=None, custom_redirect=None: "https://example.test/portal",
     )
     monkeypatch.setattr(
-        snaptrade_service, "list_accounts",
+        snaptrade_setup, "list_accounts",
         lambda: [{"id": "acct-1", "name": "BrokerageLink", "number": "652",
                   "institution": "Fidelity", "totalValue": 1.0}],
     )
@@ -469,7 +469,7 @@ def test_cli_subcommand_surface_and_secret_redaction(
 def test_cli_validation_errors_exit_two_without_leaking_detail(
         fidelity_sync_env, monkeypatch, capsys):
     monkeypatch.setattr(
-        snaptrade_service, "register_user",
+        snaptrade_setup, "register_user",
         lambda: (_ for _ in ()).throw(
             snaptrade_service.SnapTradeValidationError("missing credentials", 503)
         ),

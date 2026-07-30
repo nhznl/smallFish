@@ -34,7 +34,8 @@ stock-app/
 │   ├── options_market.py   # market inputs for options positions
 │   ├── options_risk.py     # options-risk calculations
 │   ├── portfolios.py       # named symbol lists, returns, sector exposure
-│   ├── snaptrade_service.py  # SnapTrade setup, credential persistence, and CLI
+│   ├── snaptrade_setup.py  # SnapTrade registration, credential persistence, CLI
+│   ├── snaptrade_service.py  # thin compatibility facade for the legacy CLI path
 │   ├── studies_read.py     # fail-closed Research Studies reader
 │   ├── capabilities.py     # optional-integration and core-data states
 │   ├── brokerages/         # registry, importers, provider adapters, canonical facts
@@ -166,8 +167,13 @@ normalized broker facts written to
 immutable holding (equity, option, or cash) with quantity, price, cost basis,
 market value, and open P/L; the summary groups value by account and asset class.
 `services.snaptrade` performs registration, portal, account, position, and
-activity I/O; this module persists credentials, normalizes rows, and writes the
-ledger.
+activity I/O. Above it, ownership is split: `app/snaptrade_setup.py` handles
+registration, credential persistence, and the command-line presentation, while
+`app/brokerages/importers/snaptrade.py` normalizes rows and writes the holdings
+and option-event ledgers. `app/snaptrade_service.py` is a thin compatibility
+facade — re-exports, the legacy all-resource `sync` orchestrator, and CLI
+delegation — so the documented `python -m app.snaptrade_service` commands below
+keep working.
 
 Setup is one-time and depends on which kind of SnapTrade API key you have —
 the client-id prefix tells you:

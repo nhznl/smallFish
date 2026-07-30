@@ -7,10 +7,10 @@ within the settled boundaries below and must pause at a listed stop condition.
 
 ## Resume here
 
-Begin with Phase 4. Work one phase and one focused commit at a time. Update the
+Begin with Phase 5. Work one phase and one focused commit at a time. Update the
 dashboard and progress log in the same commit as each completed phase. Do not
-restart the completed Symbol Ledger, common brokerage API, legacy-route
-retirement, provider-I/O extraction, options market-data, or importer-move
+restart completed Symbol Ledger, common brokerage API, legacy-route retirement,
+provider-I/O extraction, options market-data, importer-move, or setup-facade
 projects.
 
 ## Objective
@@ -753,8 +753,8 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 2 | Make resource commands single-purpose | COMPLETE | Registry: `sync_holdings` / `sync_activity` / `sync_held_option_market_data`; empty-body sync is 1/1/1/1; legacy `sync` orchestrates once each |
 | 2.5 | Provider-neutral quotes, Greeks/IV, and beta API/model | COMPLETE | `services/options_market/` + tastytrade adapter; consumers routed; `market_quotes` rename; both-runtime `test_options_market.py` |
 | 3 | Move materialization into explicit modules | COMPLETE | `brokerages.importers.snaptrade` + `held_option_market_data`; `retirement_options.py` deleted; registry/adapter retargeted; 461 stock-app tests |
-| 4 | Isolate setup/CLI and finish compatibility facade | NOT STARTED | Begin here |
-| 5 | Enforcement, docs, and full regression | NOT STARTED | Blocked on Phase 4 |
+| 4 | Isolate setup/CLI and finish compatibility facade | COMPLETE | `snaptrade_setup.py` owns setup/CLI; `snaptrade_service` is thin facade (116 lines) + structural tests; gate 124+38 |
+| 5 | Enforcement, docs, and full regression | NOT STARTED | Begin here |
 
 ## Progress log
 
@@ -767,6 +767,7 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 2026-07-29 | Boundary decision | COMPLETE | Tastytrade's brokerage-account role and options market-data-provider role are independent. Add one cross-runtime neutral API/model for quotes, Greeks/IV, and underlying beta; route both brokerage market-data paths and premium quote enrichment through it. Keep Yahoo chain discovery and a second provider out of scope. | Phase 2.5 — establish the neutral API before moving importers |
 | 2026-07-29 | 2.5 | COMPLETE | Added `services/options_market/` (stdlib contracts, explicit tastytrade routing, OCC→dxFeed in adapter). Routed `retirement_options`, `options_activity` market-data, and `utilities.options.market_quotes` through it. Renamed tastytrade_quotes→`market_quotes`. Gate: services 18+17 pass both runtimes; stock-app 45; utilities 61; docs/secrets/diff-check clean. No production module outside the adapter calls Tastytrade quote/Greek/metric transport. | Phase 3 — move materialization into explicit modules |
 | 2026-07-29 | 3 | COMPLETE | Created `brokerages.importers.snaptrade` (holdings+activity) and `held_option_market_data` (beta/Greeks via options_market). Deleted `retirement_options.py`; registry/adapter use public importer readers; `snaptrade_service` is setup/CLI + COMPAT re-exports/orchestrator. Gate: services 22; targeted 159; full stock-app 461; docs/secrets/diff-check clean. | Phase 4 — isolate setup/CLI facade |
+| 2026-07-29 | 4 | COMPLETE | Moved setup/credential persistence/CLI into `snaptrade_setup.py`; `snaptrade_service` is re-exports + `sync` orchestrator + `_main` delegation (116 lines) with AST thinness tests. `tools/brokerages.py` verify uses setup owner; module path `python -m app.snaptrade_service` preserved. Gate: 124 stock-app targeted + 38 brokerages + setup status masked. | Phase 5 — enforcement and full regression |
 
 ## Implementation-agent kickoff prompt
 

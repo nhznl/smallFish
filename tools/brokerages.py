@@ -405,7 +405,9 @@ def _verify_snaptrade(root: Path, settings: dict[str, str]) -> int:
     script = (
         "import json, sys\n"
         "sys.path.insert(0, 'stock-app')\n"
-        "from app import snaptrade_service as s\n"
+        # Account listing belongs to the setup owner; snaptrade_service only
+        # re-exports it for the documented legacy command path.
+        "from app import snaptrade_setup as s\n"
         "try:\n"
         "    accounts = s.list_accounts()\n"
         # Only aggregate shape is emitted: never an account number or name.

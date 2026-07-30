@@ -12,7 +12,7 @@ summary shape, and the two single-purpose resource commands:
 Normalized holdings are immutable broker facts. Editable classifications and the
 Symbol Ledger live outside this module under `/api/brokerages`.
 
-Credential persistence and the setup CLI stay in ``app.snaptrade_service``; this
+Credential persistence and the setup CLI belong to ``app.snaptrade_setup``; this
 module never touches them. Nothing here fetches market data — held-option beta
 and Greeks belong to ``held_option_market_data``.
 """
@@ -80,12 +80,12 @@ class RetirementOptionsError(ValueError):
 def _validation_error(message: str, status_code: int) -> Exception:
     """Build the setup-owned validation error without importing it eagerly.
 
-    ``snaptrade_service`` imports this module to expose its compatibility
-    surface, so the error type is reached lazily to keep that one-directional.
+    Only the error type is shared with setup. Reaching it at call time keeps
+    artifact materialization independent of the credential/CLI module.
     """
-    from ... import snaptrade_service
+    from ... import snaptrade_setup
 
-    return snaptrade_service.SnapTradeValidationError(message, status_code)
+    return snaptrade_setup.SnapTradeValidationError(message, status_code)
 
 
 # --------------------------------------------------------------------------- #
@@ -459,8 +459,8 @@ def sync_holdings(provider: HoldingsProvider | None = None) -> dict[str, Any]:
     """Pull holdings only: normalize, write the ledger, advance trend, summarize.
 
     Does not fetch activity or market data. The registry HOLDINGS resource and the
-    legacy ``snaptrade_service.sync`` orchestrator are the callers that decide
-    sibling resources.
+    legacy ``snaptrade_service.sync`` compatibility orchestrator are the callers
+    that decide sibling resources.
     """
     provider = provider or fetch_snaptrade
     previous_rows = read_holdings_ledger()

@@ -1,10 +1,23 @@
+"""The ``snaptrade_service`` compatibility facade.
+
+Three things are covered: the legacy all-resource ``sync`` orchestrator it owns,
+the documented ``python -m app.snaptrade_service`` CLI it delegates to
+``app.snaptrade_setup``, and a structural guard proving normalization, artifact
+schemas, provider transport, and financial policy have not returned to it.
+
+Setup behavior itself lives in ``test_snaptrade_setup.py``; the SnapTrade
+artifacts live in ``test_importer_snaptrade.py``.
+"""
+
 from __future__ import annotations
 
+import ast
 import csv
+from pathlib import Path
 
 import pytest
 
-from app import config, snaptrade_service
+from app import config, snaptrade_service, snaptrade_setup
 
 
 @pytest.fixture
@@ -107,63 +120,8 @@ def test_config_paths(tmp_path, monkeypatch):
     )
 
 
-def test_register_rejected_for_personal_key(holdings_env, monkeypatch):
-    monkeypatch.setenv("SNAPTRADE_CLIENT_ID", "PERS-ABC")
-    monkeypatch.setenv("SNAPTRADE_CONSUMER_KEY", "ckey")
-    with pytest.raises(
-        snaptrade_service.SnapTradeValidationError, match="personal API keys"
-    ) as rejected:
-        snaptrade_service.register_user()
-    assert rejected.value.status_code == 422
-
-
-def test_register_missing_app_credentials_is_unavailable(holdings_env):
-    with pytest.raises(snaptrade_service.SnapTradeValidationError) as missing:
-        snaptrade_service.register_user()
-    assert missing.value.status_code == 503
-
-
-def test_registration_credentials_are_saved_without_being_printed(
-        tmp_path, monkeypatch, capsys):
-    env_path = tmp_path / "app.env"
-    env_path.write_text(
-        "SNAPTRADE_CLIENT_ID=client\n"
-        "SNAPTRADE_USER_ID=\n"
-        "SNAPTRADE_USER_SECRET=\n",
-        encoding="utf-8",
-    )
-    env_path.chmod(0o644)
-    credentials = {"userId": "registered-user", "userSecret": "generated-secret"}
-    monkeypatch.setattr(snaptrade_service, "register_user", lambda: credentials)
-    monkeypatch.setattr(snaptrade_service.config, "repo_root", lambda: tmp_path)
-
-    assert snaptrade_service._main(["register"]) == 0
-
-    output = capsys.readouterr().out
-    assert "registered-user" not in output
-    assert "generated-secret" not in output
-    assert "saved securely" in output
-    body = env_path.read_text(encoding="utf-8")
-    assert "SNAPTRADE_USER_ID='registered-user'" in body
-    assert "SNAPTRADE_USER_SECRET='generated-secret'" in body
-    assert env_path.stat().st_mode & 0o777 == 0o600
-
-
-def test_registration_refuses_to_replace_existing_credentials(tmp_path):
-    env_path = tmp_path / "app.env"
-    env_path.write_text(
-        "SNAPTRADE_USER_ID=existing-user\nSNAPTRADE_USER_SECRET=existing-secret\n",
-        encoding="utf-8",
-    )
-
-    with pytest.raises(snaptrade_service.SnapTradeValidationError) as exc:
-        snaptrade_service._validate_registration_target(env_path)
-
-    assert exc.value.status_code == 409
-
-
 # --------------------------------------------------------------------------- #
-# sync / normalization / snapshot                                              #
+# legacy sync orchestrator / snapshot                                          #
 # --------------------------------------------------------------------------- #
 
 def test_sync_writes_ledger_and_summary(holdings_env):
@@ -266,26 +224,183 @@ def test_snapshot_empty_when_no_ledger(holdings_env):
     assert summary["totalValue"] == 0.0
 
 
+# --------------------------------------------------------------------------- #
+# CLI compatibility: the documented module path delegates to the setup owner    #
+# --------------------------------------------------------------------------- #
+
+def test_cli_delegates_to_the_setup_owner_with_the_legacy_commands(monkeypatch):
+    seen: dict[str, object] = {}
+
+    def fake_main(argv=None, *, sync, snapshot):
+        seen.update(argv=argv, sync=sync, snapshot=snapshot)
+        return 0
+
+    monkeypatch.setattr(snaptrade_setup, "main", fake_main)
+
+    assert snaptrade_service._main(["accounts"]) == 0
+    assert seen["argv"] == ["accounts"]
+    assert seen["sync"] is snaptrade_service.sync
+    assert seen["snapshot"] is snaptrade_service.snapshot
 
 
+def test_cli_sync_runs_the_facade_orchestrator(monkeypatch, capsys):
+    """The injected seam is the facade's own module attribute, so patches apply."""
+    monkeypatch.setattr(
+        snaptrade_service, "sync", lambda: {"source": "SNAPTRADE", "holdings": []}
+    )
+
+    assert snaptrade_service._main(["sync"]) == 0
+    assert "SNAPTRADE" in capsys.readouterr().out
 
 
+def test_cli_register_saves_credentials_without_printing_them(
+        tmp_path, monkeypatch, capsys):
+    env_path = tmp_path / "app.env"
+    env_path.write_text(
+        "SNAPTRADE_CLIENT_ID=client\n"
+        "SNAPTRADE_USER_ID=\n"
+        "SNAPTRADE_USER_SECRET=\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        snaptrade_setup, "register_user",
+        lambda: {"userId": "registered-user", "userSecret": "generated-secret"},
+    )
+    monkeypatch.setattr(snaptrade_setup.config, "repo_root", lambda: tmp_path)
+
+    assert snaptrade_service._main(["register"]) == 0
+
+    output = capsys.readouterr().out
+    assert "registered-user" not in output
+    assert "generated-secret" not in output
+    assert "saved securely" in output
 
 
+def test_cli_validation_error_exits_two_without_leaking_detail(monkeypatch, capsys):
+    monkeypatch.setattr(
+        snaptrade_setup, "list_accounts",
+        lambda: (_ for _ in ()).throw(
+            snaptrade_service.SnapTradeValidationError("missing credentials", 503)
+        ),
+    )
 
+    with pytest.raises(SystemExit) as exc:
+        snaptrade_service._main(["accounts"])
 
-
-
-
-
-
-
-
-
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert err.startswith("error: ")
+    assert "missing credentials" in err
 
 
 # --------------------------------------------------------------------------- #
-# gain/loss trend tracking                                                      #
+# structural guard: the facade must stay a facade                              #
+# --------------------------------------------------------------------------- #
+
+FACADE_SOURCE = Path(snaptrade_service.__file__).read_text(encoding="utf-8")
+FACADE_TREE = ast.parse(FACADE_SOURCE)
+
+#: The only modules the facade may alias names from.
+RE_EXPORT_OWNERS = {"snaptrade_setup", "importer", "held_option_market_data"}
+
+#: Imports the facade needs to re-export and orchestrate, and nothing more. A
+#: provider SDK, artifact IO, arithmetic, argparse, or configuration import here
+#: means an implementation moved back into the facade.
+ALLOWED_IMPORTS = {"__future__", "typing", ".", ".brokerages.importers"}
+
+#: Vocabulary that only appears when normalization, an artifact schema, provider
+#: transport, or CLI presentation is implemented rather than delegated.
+FORBIDDEN_MARKERS = (
+    "csv", "DictReader", "DictWriter", "HEADERS = [",
+    "Decimal", "def _normalize", "atomic_write(",
+    "tempfile", "os.replace", "config.",
+    "snaptrade_io", "services.", "argparse",
+)
+
+
+def _facade_function(name: str) -> ast.FunctionDef:
+    for node in FACADE_TREE.body:
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return node
+    raise AssertionError(f"{name} is not defined in the facade")
+
+
+def _facade_code_without_prose() -> str:
+    """The facade's executable statements, with comments and docstrings dropped."""
+    body = [
+        node for node in FACADE_TREE.body
+        if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant))
+    ]
+    return ast.unparse(ast.Module(body=body, type_ignores=[]))
+
+
+def test_facade_defines_only_the_orchestrator_and_the_cli_delegate():
+    defined = {
+        node.name for node in FACADE_TREE.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert defined == {"sync", "_main"}
+    assert [node for node in FACADE_TREE.body if isinstance(node, ast.ClassDef)] == []
+
+
+def test_facade_imports_nothing_beyond_its_re_export_owners():
+    imported: set[str] = set()
+    for node in ast.walk(FACADE_TREE):
+        assert not isinstance(node, ast.Import), ast.unparse(node)
+        if isinstance(node, ast.ImportFrom):
+            imported.add("." * node.level + (node.module or ""))
+    assert imported <= ALLOWED_IMPORTS, imported - ALLOWED_IMPORTS
+
+
+def test_facade_module_level_names_are_plain_re_exports():
+    for node in FACADE_TREE.body:
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value = node.value
+        assert isinstance(value, ast.Attribute), ast.unparse(node)
+        assert isinstance(value.value, ast.Name), ast.unparse(node)
+        assert value.value.id in RE_EXPORT_OWNERS, ast.unparse(node)
+
+
+def test_facade_sync_only_orchestrates_the_resource_commands():
+    called = {
+        f"{node.func.value.id}.{node.func.attr}"
+        for node in ast.walk(_facade_function("sync"))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id in RE_EXPORT_OWNERS
+    }
+    assert called == {
+        "importer.sync_holdings",
+        "importer.read_holdings_ledger",
+        "importer.sync_activity",
+        "held_option_market_data.sync_held_option_market_data",
+    }
+
+
+def test_facade_main_only_delegates_to_the_setup_owner():
+    calls = [node for node in ast.walk(_facade_function("_main"))
+             if isinstance(node, ast.Call)]
+    assert len(calls) == 1
+    assert ast.unparse(calls[0].func) == "snaptrade_setup.main"
+    assert {keyword.arg for keyword in calls[0].keywords} == {"sync", "snapshot"}
+
+
+def test_facade_contains_no_normalization_schema_transport_or_cli_body():
+    code = _facade_code_without_prose()
+    present = [marker for marker in FORBIDDEN_MARKERS if marker in code]
+    assert present == []
+
+
+def test_facade_keeps_the_documented_module_entry_point():
+    assert any(
+        isinstance(node, ast.If) and ast.unparse(node.test) == "__name__ == '__main__'"
+        for node in FACADE_TREE.body
+    )
+
+
+# --------------------------------------------------------------------------- #
+# gain/loss trend tracking, reached through the facade's compatibility alias    #
 # --------------------------------------------------------------------------- #
 
 def _ledger_row(symbol, pct, account_id="acct-1", asset_class="STOCK"):

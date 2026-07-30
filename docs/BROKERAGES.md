@@ -161,6 +161,11 @@ The command saves the generated `userId` and `userSecret` directly to `app.env`
 using an atomic mode-0600 write; it never displays either value. Then rerun
 `setup snaptrade` and follow the connection-portal link.
 
+That command path is stable. Registration, credential persistence, and account
+listing are implemented in `stock-app/app/snaptrade_setup.py`;
+`stock-app/app/snaptrade_service.py` remains a thin compatibility facade so the
+documented command keeps working.
+
 ### Verify
 
 ```bash
