@@ -123,13 +123,6 @@ def trading_holdings_trend_csv() -> Path:
     )
 
 
-def trading_holdings_gain_loss_snapshots_csv() -> Path:
-    """User-captured Trading holding G/L percentages for the newest sync dates."""
-    return _under(
-        "SFP_TRADING_HOLDINGS_GL_SNAPSHOTS",
-        data_dir(),
-        "ledger_trading/holdings_gain_loss_snapshots.csv",
-    )
 
 
 def trading_holdings_enrichment_csv() -> Path:
@@ -168,14 +161,6 @@ def holdings_trend_csv() -> Path:
     )
 
 
-def holdings_gain_loss_snapshots_csv() -> Path:
-    """User-captured holding G/L percentages, retained for the three newest
-    Fidelity sync dates and kept separate from the broker holdings ledger."""
-    return _under(
-        "SFP_HOLDINGS_GL_SNAPSHOTS",
-        data_dir(),
-        "ledger_retirement/holdings_gain_loss_snapshots.csv",
-    )
 
 
 def holdings_enrichment_csv() -> Path:

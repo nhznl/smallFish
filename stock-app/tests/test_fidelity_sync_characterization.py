@@ -203,7 +203,6 @@ def _install_providers(monkeypatch, counter: _CallCounter, *,
             factory=entry.factory,
             holdings_metadata_path=entry.holdings_metadata_path,
             holdings_trend_path=entry.holdings_trend_path,
-            legacy_gain_loss_snapshots_path=entry.legacy_gain_loss_snapshots_path,
             sync_commands={
                 name: wrap(name, originals[name]) for name in originals
             },

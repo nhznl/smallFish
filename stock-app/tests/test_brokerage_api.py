@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import config, options_activity
-from app.brokerages import contracts, migration, registry, trend
+from app.brokerages import contracts, registry, trend
 from app.brokerages.projections import components as component_projection
 from app.brokerages.projections import holdings as holdings_projection
 from app.main import app
@@ -463,33 +463,6 @@ def test_a_holding_with_no_recorded_trend_does_not_alert(adapter_env, brokerage_
     assert recorded["alert_at"] is None
 
 
-@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
-def test_captured_percentages_survive_the_cutover(adapter_env, brokerage_id):
-    """A captured percentage cannot be recomputed — the mark it was taken
-    against is gone — so the pre-cutover files are carried across on sync."""
-    _write_sold_out_lot(brokerage_id)
-    entry = registry.REGISTRY[brokerage_id]
-    path = entry.legacy_gain_loss_snapshots_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    account = _get(brokerage_id, "holdings")["items"][0]["account_id"]
-    path.write_text(
-        "sync_date,retrieved_at,captured_at,account_id,account_name,symbol,gain_loss_pct\n"
-        f"2026-07-01,2026-07-01T20:00:00Z,2026-07-01T20:05:00Z,{account},Legacy,XYZ,7.5\n",
-        encoding="utf-8",
-    )
-
-    moved = migration.migrate_gain_loss_snapshots()
-    assert moved["summary"]["migrated_count"] == 1
-    # Running it again must not duplicate a measurement.
-    assert migration.migrate_gain_loss_snapshots()["summary"]["migrated_count"] == 0
-
-    body = _get(brokerage_id, "holdings")
-    assert body["items"][0]["gain_loss_snapshots"] == {"2026-07-01": pytest.approx(7.5)}
-    assert [entry["sync_date"] for entry in body["summary"]["gain_loss_snapshots"]] == [
-        "2026-07-01"
-    ]
-    # The legacy file is a rollback artifact and is never rewritten.
-    assert "2026-07-01" in path.read_text(encoding="utf-8")
 
 
 # ----------------------------------------------------------------- options ---

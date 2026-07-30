@@ -92,12 +92,10 @@ specific artifact.
 | `SFP_TASTYTRADE_POSITIONS` | `$SFP_DATA_DIR/ledger_trading/positions.csv` |
 | `SFP_TRADING_HOLDINGS_ENRICHMENT` | `$SFP_DATA_DIR/ledger_trading/holdings_enrichment.csv` |
 | `SFP_TRADING_HOLDINGS_TREND` | `$SFP_DATA_DIR/ledger_trading/holdings_trend.csv` |
-| `SFP_TRADING_HOLDINGS_GL_SNAPSHOTS` | `$SFP_DATA_DIR/ledger_trading/holdings_gain_loss_snapshots.csv` |
 | `SFP_OPTIONS_GREEKS` | `$SFP_DATA_DIR/ledger_trading/options_greeks.csv` |
 | `SFP_OPTIONS_BETAS` | `$SFP_DATA_DIR/ledger_trading/options_betas.csv` |
 | `SFP_SNAPTRADE_HOLDINGS` | `$SFP_DATA_DIR/ledger_retirement/positions.csv` |
 | `SFP_RETIREMENT_OPTION_EVENTS` | `$SFP_DATA_DIR/ledger_retirement/options_activity.csv` |
-| `SFP_HOLDINGS_GL_SNAPSHOTS` | `$SFP_DATA_DIR/ledger_retirement/holdings_gain_loss_snapshots.csv` |
 | `SFP_SYMBOL_LEDGER_METADATA` | `$SFP_DATA_DIR/ledger_symbols/symbol_ledger_metadata.csv` |
 | `SFP_SYMBOL_LEDGER_ARCHIVES` | `$SFP_DATA_DIR/ledger_symbols/symbol_ledger_archives.csv` |
 | `SFP_SYMBOL_LEDGER_GL_SNAPSHOTS` | `$SFP_DATA_DIR/ledger_symbols/holdings_gain_loss_snapshots.csv` |
@@ -106,8 +104,13 @@ specific artifact.
 The three `SFP_SYMBOL_LEDGER_*` artifacts belong to the brokerage-agnostic
 `/api/brokerages` surface and are keyed by `(brokerage_id, symbol)`, so one file
 serves every configured brokerage. They hold app-owned data only — your notes,
-your classifications, and the reset boundaries that seal a completed period.
+your classifications, the reset boundaries that seal a completed period, and
+user-captured gain/loss snapshot percentages (`SFP_SYMBOL_LEDGER_GL_SNAPSHOTS`).
 Broker events live in the provider artifacts above and are never written here.
+
+Per-brokerage gain/loss snapshot files (`SFP_HOLDINGS_GL_SNAPSHOTS`,
+`SFP_TRADING_HOLDINGS_GL_SNAPSHOTS`) were retired in Phase 21b; captured
+percentages now live only in the common store.
 
 Research Studies are a special case. `SFP_STUDIES_DIR` is the *mutable* root —
 local rebuilds and scan snapshots are written there — but the bundled study

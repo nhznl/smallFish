@@ -218,13 +218,13 @@ account types (ROTH IRA / PRE TAX / BROKERAGE). Option legs are excluded from
 this holdings view — they have their own tables (below).
 
 The holdings header's **Snapshot G/L %** action calls
-`POST /retirement/holdings/gain-loss-snapshots`. It saves every visible
-holding's current G/L percentage under the date of the ledger's last Fidelity
-sync and displays that date as a comparison column. A second capture for the
-same sync date replaces that date's complete snapshot. The separate
-`data/ledger_retirement/holdings_gain_loss_snapshots.csv` artifact retains only
-the three newest distinct sync dates, so a fourth date removes the oldest one;
-holdings absent on an older date display `—` rather than zero.
+`POST /api/brokerages/{brokerage_id}/holdings/gain-loss-snapshots`. It saves
+every visible holding's current G/L percentage under the date of the ledger's
+last sync and displays that date as a comparison column. A second capture for the
+same sync date replaces that date's complete snapshot. Snapshots are stored in
+the common `ledger_symbols/holdings_gain_loss_snapshots.csv` artifact, retained
+for the three newest distinct sync dates per brokerage; a fourth date removes the
+oldest one. Holdings absent on an older date display `—` rather than zero.
 
 ### Symbol Ledger
 

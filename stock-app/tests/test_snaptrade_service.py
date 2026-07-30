@@ -24,9 +24,6 @@ from app import config, snaptrade_service, snaptrade_setup
 def holdings_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SFP_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("SFP_SNAPTRADE_HOLDINGS", str(tmp_path / "holdings.csv"))
-    monkeypatch.setenv(
-        "SFP_HOLDINGS_GL_SNAPSHOTS", str(tmp_path / "gain_loss_snapshots.csv")
-    )
     for key in (
         "SNAPTRADE_CLIENT_ID", "SNAPTRADE_CONSUMER_KEY",
         "SNAPTRADE_USER_ID", "SNAPTRADE_USER_SECRET",
@@ -114,10 +111,6 @@ def test_config_paths(tmp_path, monkeypatch):
     override = tmp_path / "custom_holdings.csv"
     monkeypatch.setenv("SFP_SNAPTRADE_HOLDINGS", str(override))
     assert config.snaptrade_holdings_csv() == override
-    monkeypatch.delenv("SFP_HOLDINGS_GL_SNAPSHOTS", raising=False)
-    assert config.holdings_gain_loss_snapshots_csv() == (
-        tmp_path / "ledger_retirement" / "holdings_gain_loss_snapshots.csv"
-    )
 
 
 # --------------------------------------------------------------------------- #
