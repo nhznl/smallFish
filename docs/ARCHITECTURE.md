@@ -137,13 +137,17 @@ contains no secret and no account identifier.
 
 ## Immutable facts vs editable metadata
 
-A deliberate split in the ledgers:
+Each brokerage has its own artifact namespace; there is no global
+`positions.csv`. The common projections load one brokerage snapshot at a time.
+In particular, **Option-Adjusted Basis** combines the current equity and option
+facts for the same symbol within the requested Trading or Retirement ledger. It
+never mixes positions across the two brokerages.
 
-| Immutable | Editable |
+| Immutable provider facts | Editable app-owned metadata |
 |---|---|
-| `options_activity.csv` — broker transactions; `positions.csv` — all current positions for the combined ledger | symbol-ledger notes and archive boundaries |
-| `options_greeks.csv`, `options_betas.csv` — timestamped observations | symbol-ledger notes and archive boundaries |
-| `positions.csv` (retirement) — normalized holdings | holding enrichment metadata and user-captured G/L snapshots |
+| Trading: `ledger_trading/options_activity.csv` contains broker transactions; `ledger_trading/positions.csv` contains current Trading equity and option positions used by its Holdings, Symbol Ledger reconciliation, and Option-Adjusted Basis projections | Trading holding enrichment and user-captured G/L snapshots; brokerage-scoped Symbol Ledger notes and archive boundaries |
+| Retirement: `ledger_retirement/options_activity.csv` contains option transaction events; `ledger_retirement/positions.csv` contains current Fidelity equity, option, and cash positions used by its Holdings, Symbol Ledger reconciliation, and Option-Adjusted Basis projections | Retirement holding enrichment and user-captured G/L snapshots; brokerage-scoped Symbol Ledger notes and archive boundaries |
+| Per-ledger Greek, IV, beta, and mark artifacts contain timestamped market observations | Not directly editable; sync refreshes provider observations while retaining the applicable prior-on-miss evidence |
 
 Broker facts are never edited in place; syncs upsert by provider id. Symbol
 Ledger archives and notes live in separate app-owned files, so a resync never
@@ -213,7 +217,10 @@ No suite contacts a provider. Fetchers are injected, fixtures are committed, and
 several tests assert that no socket is opened. The suites pass offline, which is
 also what makes CI possible without secrets.
 
-## Extending
+## Extension boundaries
+
+This section provides guidance on design boundaries if one wants to extend the
+app.
 
 | To add | Do |
 |---|---|
