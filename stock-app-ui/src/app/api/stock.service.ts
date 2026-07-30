@@ -110,7 +110,7 @@ export class StockService {
    * and report how many scanner symbols have a known upcoming report.
    */
   runEarningsScan(): Observable<any> {
-    return this.http.get<any>(`${this.apiBaseUrl}/runEarningsScan`)
+    return this.http.post<any>(`${this.apiBaseUrl}/runEarningsScan`, null)
       .pipe(
         catchError(this.handleError<any>('runEarningsScan', { status: 'error' }))
       );
@@ -118,7 +118,7 @@ export class StockService {
 
   /** Trigger the Python wheel scan on the server and reload its cache. */
   runWheel(): Observable<any> {
-    return this.http.get<any>(`${this.apiBaseUrl}/runWheel`)
+    return this.http.post<any>(`${this.apiBaseUrl}/runWheel`, null)
       .pipe(
         catchError(this.handleError<any>('runWheel', { status: 'error' }))
       );
@@ -139,7 +139,7 @@ export class StockService {
     if (scope?.minOtmPct != null) {
       params = params.set('minOtmPct', String(scope.minOtmPct));
     }
-    return this.http.get<any>(`${this.apiBaseUrl}/runChains`, { params })
+    return this.http.post<any>(`${this.apiBaseUrl}/runChains`, null, { params })
       .pipe(
         catchError((err) => {
           console.error('runChains failed:', err);
@@ -161,7 +161,7 @@ export class StockService {
 
   /** Recompute the sector-leadership snapshot from the local price cache. */
   runSectorRotation(): Observable<any> {
-    return this.http.get<any>(`${this.apiBaseUrl}/runSectorRotation`)
+    return this.http.post<any>(`${this.apiBaseUrl}/runSectorRotation`, null)
       .pipe(
         catchError(this.handleError<any>('runSectorRotation', { status: 'error' }))
       );

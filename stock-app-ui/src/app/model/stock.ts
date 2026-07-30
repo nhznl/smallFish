@@ -68,14 +68,14 @@ export interface StrategyReport {
 export interface MomentumStock {
   code: string;
   type: StockType;
-  lastTradeStats: { tradeDate: Date; close: number };
+  lastTradeStats: { tradeDate: string; close: number } | null;
   /** Rolling 252-session high/low from the same cached bars as lastTradeStats. */
   fiftyTwoWeekLow?: number | null;
   fiftyTwoWeekHigh?: number | null;
   /** Latest cached close as a 0–100 position between the cached 52-week low/high. */
   fiftyTwoWeekPosition?: number | null;
   recentWeeks: Array<{
-    endDate: Date | null;
+    endDate: string | null;
     avgClose: number;
     avgChange: number;
     avgVolume: number;
@@ -84,10 +84,10 @@ export interface MomentumStock {
     relativeMomentum: number;
     relativeMomentumStd: number;
   }>;
-  yearToDate: GainLossFromDate;
-  midPointToDate: GainLossFromDate;
-  fiveWeeksToDate: GainLossFromDate;
-  fiveDaysToDate: GainLossFromDate;
+  yearToDate: GainLossFromDate | null;
+  midPointToDate: GainLossFromDate | null;
+  fiveWeeksToDate: GainLossFromDate | null;
+  fiveDaysToDate: GainLossFromDate | null;
   atrPct?: number | null;
   realizedVolatilityExpansion?: number | null;
   volumeRatio?: number | null;
@@ -115,8 +115,8 @@ export interface MomentumStock {
 }
 
 export interface StockAnalysisWeek {
-  startDate: Date | null;
-  endDate: Date | null;
+  startDate: string | null;
+  endDate: string | null;
   avgClose: number;
 }
 
@@ -130,13 +130,13 @@ export interface StockDailyBar {
 export interface StockAnalysis {
   code: string;
   type: StockType;
-  lastTradeStats: Daily;
+  lastTradeStats: Daily | null;
   recentWeeks: StockAnalysisWeek[];
   dailyBars?: StockDailyBar[];
-  yearToDate: GainLossFromDate;
-  midPointToDate: GainLossFromDate;
-  fiveWeeksToDate: GainLossFromDate;
-  fiveDaysToDate: GainLossFromDate;
+  yearToDate: GainLossFromDate | null;
+  midPointToDate: GainLossFromDate | null;
+  fiveWeeksToDate: GainLossFromDate | null;
+  fiveDaysToDate: GainLossFromDate | null;
   yearlySlopes: Record<string, YearlySlope>;
   atrPct?: number | null;
   volumeRatio?: number | null;
@@ -149,7 +149,7 @@ export interface StockAnalysis {
 export interface StrategyStock {
   code: string;
   type: StockType;
-  lastTradeStats: { close: number };
+  lastTradeStats: { close: number } | null;
   fiftyTwoWeekLow?: number | null;
   fiftyTwoWeekHigh?: number | null;
   fiftyTwoWeekPosition?: number | null;

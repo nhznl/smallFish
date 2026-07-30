@@ -74,9 +74,9 @@
           <span class="momentum-score">{{ formatNumber(stock()!.setupScore) }}<small>/100 setup score</small></span>
         </div>
         <div class="momentum-metrics">
-          <div><span>5D</span><strong [class]="signClass(stock()!.fiveDaysToDate.gainLoss)">{{ formatSigned(stock()!.fiveDaysToDate.gainLoss, 0) }}</strong></div>
-          <div><span>5W</span><strong [class]="signClass(stock()!.fiveWeeksToDate.gainLoss)">{{ formatSigned(stock()!.fiveWeeksToDate.gainLoss, 0) }}</strong></div>
-          <div><span>YTD</span><strong [class]="signClass(stock()!.yearToDate.gainLoss)">{{ formatSigned(stock()!.yearToDate.gainLoss, 0) }}</strong></div>
+          <div><span>5D</span><strong [class]="signClass(stock()!.fiveDaysToDate?.gainLoss)">{{ formatSigned(stock()!.fiveDaysToDate?.gainLoss, 0) }}</strong></div>
+          <div><span>5W</span><strong [class]="signClass(stock()!.fiveWeeksToDate?.gainLoss)">{{ formatSigned(stock()!.fiveWeeksToDate?.gainLoss, 0) }}</strong></div>
+          <div><span>YTD</span><strong [class]="signClass(stock()!.yearToDate?.gainLoss)">{{ formatSigned(stock()!.yearToDate?.gainLoss, 0) }}</strong></div>
           <div><span>vs SPY 1M</span><strong [class]="signClass(stock()!.relativeStrengthSpyOneMonth)">{{ formatSigned(stock()!.relativeStrengthSpyOneMonth) }}</strong></div>
           <div><span>RSI 14</span><strong>{{ formatNumber(stock()!.trendRsi) }}</strong></div>
           <div><span>ATR %</span><strong>{{ formatPercentValue(stock()!.atrPct) }}</strong></div>
@@ -272,33 +272,35 @@
               </div>
             </div>
             <h3>Last cached session (OHLCV)</h3>
-            @if (stock()) {
+            @if (stock()?.lastTradeStats; as lastTrade) {
               <div class="info-grid two-column">
                 <div class="info-row">
                   <span class="info-label">Open</span>
-                  <div class="info-value">{{ formatPrice(stock()!.lastTradeStats.open) }}</div>
+                  <div class="info-value">{{ formatPrice(lastTrade.open) }}</div>
                 </div>
                 <div class="info-row">
                   <span class="info-label">Close</span>
-                  <div class="info-value">{{ formatPrice(stock()!.lastTradeStats.close) }}</div>
+                  <div class="info-value">{{ formatPrice(lastTrade.close) }}</div>
                 </div>
                 <div class="info-row">
                   <span class="info-label">High</span>
-                  <div class="info-value">{{ formatPrice(stock()!.lastTradeStats.high) }}</div>
+                  <div class="info-value">{{ formatPrice(lastTrade.high) }}</div>
                 </div>
                 <div class="info-row">
                   <span class="info-label">Low</span>
-                  <div class="info-value">{{ formatPrice(stock()!.lastTradeStats.low) }}</div>
+                  <div class="info-value">{{ formatPrice(lastTrade.low) }}</div>
                 </div>
                 <div class="info-row">
                   <span class="info-label">Volume</span>
-                  <div class="info-value">{{ formatCompactNumber(stock()!.lastTradeStats.volume) }}</div>
+                  <div class="info-value">{{ formatCompactNumber(lastTrade.volume) }}</div>
                 </div>
                 <div class="info-row">
                   <span class="info-label">Last Trade Date</span>
-                  <div class="info-value">{{ formatDate(stock()!.lastTradeStats.tradeDate) }}</div>
+                  <div class="info-value">{{ formatDate(lastTrade.tradeDate) }}</div>
                 </div>
               </div>
+            } @else if (stock()) {
+              <p class="no-data">No last-session OHLCV in the analysis payload.</p>
             } @else {
               <p class="no-data">{{ stockError() }}</p>
             }

@@ -226,12 +226,12 @@ export class StockDetailComponent implements OnInit {
 
     const weeks = current.recentWeeks
       .map(week => {
-        const close = Number((week as any).avgClose ?? week.avgClose);
+        const close = Number(week.avgClose);
         if (!Number.isFinite(close)) {
           return null;
         }
-        const start = this.parseDate((week as any).startDate ?? week.startDate);
-        const end = this.parseDate((week as any).endDate ?? week.endDate);
+        const start = this.parseDate(week.startDate);
+        const end = this.parseDate(week.endDate);
         const year = end?.getFullYear() ?? start?.getFullYear();
         return {
           start,
@@ -625,18 +625,11 @@ export class StockDetailComponent implements OnInit {
     return this.shortDateFormatter.format(parsed);
   }
 
-  formatDate(value: Date | string | undefined | null): string {
+  formatDate(value: string | undefined | null): string {
     if (!value) {
       return '';
     }
-    
-    let dateObj: Date;
-    if (value instanceof Date) {
-      dateObj = value;
-    } else {
-      dateObj = new Date(value);
-    }
-    
+    const dateObj = new Date(value);
     if (Number.isNaN(dateObj.getTime())) {
       return '';
     }
@@ -829,12 +822,9 @@ export class StockDetailComponent implements OnInit {
     return 'Failed to load stock information.';
   }
 
-  private parseDate(value: Date | string | null | undefined): Date | null {
+  private parseDate(value: string | null | undefined): Date | null {
     if (!value) {
       return null;
-    }
-    if (value instanceof Date) {
-      return Number.isNaN(value.getTime()) ? null : value;
     }
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? null : parsed;

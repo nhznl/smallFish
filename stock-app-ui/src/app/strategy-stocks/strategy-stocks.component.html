@@ -254,7 +254,7 @@
         }
         <h2 class="drawer-symbol">
           {{ stock.code }}
-          <small>{{ stock.lastTradeStats.close ? ('$' + (stock.lastTradeStats.close | number:'1.2-2')) : 'N/A' }}</small>
+          <small>{{ stock.lastTradeStats?.close ? ('$' + (stock.lastTradeStats.close | number:'1.2-2')) : 'N/A' }}</small>
         </h2>
         <p class="drawer-sector">
           {{ stock.strategyReport?.sector }} · {{ stock.signal || 'N/A' }}

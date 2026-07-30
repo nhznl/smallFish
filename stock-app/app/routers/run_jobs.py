@@ -1,4 +1,8 @@
-"""GET command endpoints for scans and prospective quote collection.
+"""Command endpoints for scans and prospective quote collection.
+
+Mutating jobs accept POST (preferred). Matching GET routes remain for
+compatibility during the Phase 4b window; both verbs share the same handlers
+and per-job single-flight locks (busy → 409).
 
 Commands run from the repository root with a five-minute timeout. Successful
 runs reload the in-memory cache so the generated report is immediately served.
@@ -8,7 +12,10 @@ from __future__ import annotations
 
 import re
 import subprocess
+import threading
 import time
+from collections.abc import Callable
+from contextlib import contextmanager
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -22,6 +29,37 @@ router = APIRouter()
 _TIMEOUT_SECONDS = 300
 _TAIL_LINES = 12
 _SYMBOL_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,9}$")
+
+_JOB_LOCKS = {
+    "earnings_scan": threading.Lock(),
+    "wheel": threading.Lock(),
+    "sector_rotation": threading.Lock(),
+    "chains": threading.Lock(),
+}
+
+_JOB_BUSY = {
+    "earnings_scan": "An earnings calendar refresh is already running.",
+    "wheel": "A wheel scan is already running.",
+    "sector_rotation": "A sector-rotation job is already running.",
+    "chains": "An option-quote collection is already running.",
+}
+
+
+@contextmanager
+def _job_lock(job_key: str):
+    """Acquire a non-blocking per-job lock or raise 409."""
+    lock = _JOB_LOCKS[job_key]
+    if not lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail=_JOB_BUSY[job_key])
+    try:
+        yield
+    finally:
+        lock.release()
+
+
+def _run_locked(job_key: str, runner: Callable[[], dict]) -> JSONResponse:
+    with _job_lock(job_key):
+        return JSONResponse(content=runner())
 
 
 def _run_command(job: str, args: list[str] | None = None, *,
@@ -139,8 +177,7 @@ def _earnings_coverage() -> dict:
     }
 
 
-@router.get("/runEarningsScan")
-def run_earnings_scan() -> JSONResponse:
+def _earnings_scan_payload() -> dict:
     """Refresh the shared upcoming-earnings calendar, then report its coverage.
 
     This is the same `ensure-events` prerequisite the live scans run: a calendar
@@ -154,37 +191,28 @@ def run_earnings_scan() -> JSONResponse:
     """
     result = _run_command("ensure-events", reload_cache=False)
     result.update(_earnings_coverage())
-    return JSONResponse(content=result)
+    return result
 
 
-@router.get("/runWheel")
-def run_wheel() -> JSONResponse:
-    return JSONResponse(content=_run_earnings_dependent_command(
-        "wheel", require_fresh=False))
+def _wheel_payload() -> dict:
+    return _run_earnings_dependent_command("wheel", require_fresh=False)
 
 
-@router.get("/runSectorRotation")
-def run_sector_rotation() -> JSONResponse:
+def _sector_rotation_payload() -> dict:
     """Recompute the sector-leadership snapshot from the local price cache.
 
     Reads cached bars only -- no market-data provider is contacted. The stock
     cache does not serve this artifact, so it is not reloaded.
     """
-    return JSONResponse(content=_run_command("sector-rotation", reload_cache=False))
+    return _run_command("sector-rotation", reload_cache=False)
 
 
-@router.get("/runChains")
-def run_chains(
-    horizonDte: int | None = Query(default=None),
-    symbols: str | None = Query(default=None),
-    minOtmPct: float | None = Query(default=None),
-) -> JSONResponse:
-    """Collect option quotes, optionally scoped to what the Wheel view shows.
-
-    Scope is subtractive only. `chains` itself rejects a horizon outside the
-    configured `chain_dtes` and records the accepted scope in the run manifest,
-    so a narrowed archive stays self-describing.
-    """
+def _chains_args(
+    horizonDte: int | None,
+    symbols: str | None,
+    minOtmPct: float | None,
+) -> list[str]:
+    """Validate optional collection scope and return argv fragments."""
     args: list[str] = []
     if horizonDte is not None:
         if horizonDte <= 0:
@@ -205,4 +233,38 @@ def run_chains(
             raise HTTPException(
                 status_code=400, detail="minOtmPct must be a percentage in [0, 100).")
         args += ["--min-otm-pct", f"{minOtmPct:g}"]
-    return JSONResponse(content=_run_command("chains", args))
+    return args
+
+
+@router.get("/runEarningsScan", deprecated=True)
+@router.post("/runEarningsScan")
+def run_earnings_scan() -> JSONResponse:
+    """Refresh upcoming earnings. Prefer POST; GET kept for compatibility."""
+    return _run_locked("earnings_scan", _earnings_scan_payload)
+
+
+@router.get("/runWheel", deprecated=True)
+@router.post("/runWheel")
+def run_wheel() -> JSONResponse:
+    """Run the wheel scan. Prefer POST; GET kept for compatibility."""
+    return _run_locked("wheel", _wheel_payload)
+
+
+@router.get("/runSectorRotation", deprecated=True)
+@router.post("/runSectorRotation")
+def run_sector_rotation() -> JSONResponse:
+    """Recompute sector leadership. Prefer POST; GET kept for compatibility."""
+    return _run_locked("sector_rotation", _sector_rotation_payload)
+
+
+@router.get("/runChains", deprecated=True)
+@router.post("/runChains")
+def run_chains(
+    horizonDte: int | None = Query(default=None),
+    symbols: str | None = Query(default=None),
+    minOtmPct: float | None = Query(default=None),
+) -> JSONResponse:
+    """Collect option quotes. Prefer POST; GET kept for compatibility."""
+    # Validate scope before taking the lock so bad requests do not block a run.
+    args = _chains_args(horizonDte, symbols, minOtmPct)
+    return _run_locked("chains", lambda: _run_command("chains", args))

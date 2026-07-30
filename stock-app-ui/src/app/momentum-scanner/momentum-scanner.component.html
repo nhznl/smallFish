@@ -280,7 +280,7 @@
             ⚠ {{ stock.preliminaryReversalLabel }}
           </span>
         }
-        <h2 class="drawer-symbol">{{ stock.code }} <small>{{ stock.lastTradeStats.close | currency:'USD':'symbol':'1.2-2' }}</small></h2>
+        <h2 class="drawer-symbol">{{ stock.code }} <small>{{ stock.lastTradeStats?.close != null ? (stock.lastTradeStats.close | currency:'USD':'symbol':'1.2-2') : '—' }}</small></h2>
         <p class="drawer-reason">{{ stock.setupReason }}</p>
       </div>
       <section class="drawer-section score-summary">
@@ -300,10 +300,10 @@
       <section class="drawer-section">
         <h3 class="drawer-section-title">Decision evidence</h3>
         <dl class="metric-grid">
-          <div><dt>5D return</dt><dd [class]="metricClass(stock.fiveDaysToDate.gainLoss)">{{ stock.fiveDaysToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.fiveDaysToDate.startDate) }} at {{ stock.fiveDaysToDate.startPrice | currency }}</small></div>
-          <div><dt>5W return</dt><dd [class]="metricClass(stock.fiveWeeksToDate.gainLoss)">{{ stock.fiveWeeksToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.fiveWeeksToDate.startDate) }} at {{ stock.fiveWeeksToDate.startPrice | currency }}</small></div>
-          <div><dt>YTD</dt><dd [class]="metricClass(stock.yearToDate.gainLoss)">{{ stock.yearToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.yearToDate.startDate) }}</small></div>
-          <div><dt>Midpoint</dt><dd [class]="metricClass(stock.midPointToDate.gainLoss)">{{ stock.midPointToDate.gainLoss | number:'1.0-1' }}%</dd><small>from {{ formatDate(stock.midPointToDate.startDate) }}</small></div>
+          <div><dt>5D return</dt><dd [class]="metricClass(stock.fiveDaysToDate?.gainLoss)">{{ stock.fiveDaysToDate?.gainLoss != null ? (stock.fiveDaysToDate.gainLoss | number:'1.0-1') + '%' : '—' }}</dd><small>from {{ formatDate(stock.fiveDaysToDate?.startDate) }} at {{ stock.fiveDaysToDate?.startPrice != null ? (stock.fiveDaysToDate.startPrice | currency) : '—' }}</small></div>
+          <div><dt>5W return</dt><dd [class]="metricClass(stock.fiveWeeksToDate?.gainLoss)">{{ stock.fiveWeeksToDate?.gainLoss != null ? (stock.fiveWeeksToDate.gainLoss | number:'1.0-1') + '%' : '—' }}</dd><small>from {{ formatDate(stock.fiveWeeksToDate?.startDate) }} at {{ stock.fiveWeeksToDate?.startPrice != null ? (stock.fiveWeeksToDate.startPrice | currency) : '—' }}</small></div>
+          <div><dt>YTD</dt><dd [class]="metricClass(stock.yearToDate?.gainLoss)">{{ stock.yearToDate?.gainLoss != null ? (stock.yearToDate.gainLoss | number:'1.0-1') + '%' : '—' }}</dd><small>from {{ formatDate(stock.yearToDate?.startDate) }}</small></div>
+          <div><dt>Midpoint</dt><dd [class]="metricClass(stock.midPointToDate?.gainLoss)">{{ stock.midPointToDate?.gainLoss != null ? (stock.midPointToDate.gainLoss | number:'1.0-1') + '%' : '—' }}</dd><small>from {{ formatDate(stock.midPointToDate?.startDate) }}</small></div>
           <div><dt>vs SPY (1M)</dt><dd [class]="metricClass(stock.relativeStrengthSpyOneMonth)">{{ stock.relativeStrengthSpyOneMonth != null ? (stock.relativeStrengthSpyOneMonth | number:'1.1-1') + '%' : '—' }}</dd></div>
           <div><dt>Volume (3/20D)</dt><dd>{{ stock.volumeRatio != null ? (stock.volumeRatio | number:'1.2-2') + '×' : '—' }}</dd><small>Non-overlapping windows</small></div>
           <div><dt>Avg $ volume 20D</dt><dd>{{ formatCompact(stock.averageDollarVolume20) }}</dd></div>
@@ -316,7 +316,7 @@
             <div class="warning-metric"><dt>Reversal warning</dt><dd>{{ stock.preliminaryReversalLabel }}</dd><small>Preliminary evidence only; score penalized and excluded from Actionable</small></div>
           }
           <div><dt>Distance from SMA20</dt><dd [class]="metricClass(stock.distanceSma20Pct)">{{ stock.distanceSma20Pct != null ? (stock.distanceSma20Pct | number:'1.1-1') + '%' : '—' }}</dd><small>Used for entry-room scoring</small></div>
-          <div><dt>Freshness</dt><dd>{{ stock.freshnessStatus }}</dd><small>{{ formatDate(stock.lastTradeStats.tradeDate) }}</small></div>
+          <div><dt>Freshness</dt><dd>{{ stock.freshnessStatus }}</dd><small>{{ formatDate(stock.lastTradeStats?.tradeDate) }}</small></div>
         </dl>
       </section>
       <section class="drawer-section">

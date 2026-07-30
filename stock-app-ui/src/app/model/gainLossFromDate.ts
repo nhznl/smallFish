@@ -1,5 +1,6 @@
 export interface GainLossFromDate {
   gainLoss: number;
-  startDate: Date;
+  /** ISO calendar date from the API (`YYYY-MM-DD`). */
+  startDate: string;
   startPrice: number;
-} 
+}

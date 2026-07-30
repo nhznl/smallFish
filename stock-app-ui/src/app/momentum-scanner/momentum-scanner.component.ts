@@ -106,10 +106,10 @@ export class MomentumScannerComponent {
   selectedStock: MomentumStock | null = null;
   loading = true;
   error: string | null = null;
-  dataAsOf: Date | null = null;
+  dataAsOf: string | null = null;
   staleCount = 0;
-  fiveDayAnchor: Date | null = null;
-  fiveWeekAnchor: Date | null = null;
+  fiveDayAnchor: string | null = null;
+  fiveWeekAnchor: string | null = null;
   pageIndex = 0;
   pageSize = 50;
   earningsRunning = false;
@@ -369,7 +369,7 @@ export class MomentumScannerComponent {
     return change > 0 ? '↑' : '↓';
   }
 
-  formatDate(value: Date | string | null | undefined): string {
+  formatDate(value: string | null | undefined): string {
     if (!value) return '—';
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? '—' : new Intl.DateTimeFormat('en-US', {
@@ -377,11 +377,13 @@ export class MomentumScannerComponent {
     }).format(parsed);
   }
 
-  formatHeaderDate(value: Date | null): string {
+  formatHeaderDate(value: string | null): string {
     if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
     return new Intl.DateTimeFormat('en-US', {
       month: '2-digit', day: '2-digit', timeZone: 'UTC'
-    }).format(value);
+    }).format(parsed);
   }
 
   formatCompact(value: number | null | undefined): string {
@@ -473,7 +475,7 @@ export class MomentumScannerComponent {
     this.staleCount = this.allStocks.filter(stock => stock.freshnessStatus !== 'FRESH').length;
   }
 
-  private modeDate(values: Array<Date | string | undefined>): Date | null {
+  private modeDate(values: Array<string | null | undefined>): string | null {
     const counts = new Map<string, number>();
     for (const value of values) {
       if (!value) continue;
@@ -486,7 +488,7 @@ export class MomentumScannerComponent {
     for (const entry of counts.entries()) {
       if (!best || entry[1] > best[1] || (entry[1] === best[1] && entry[0] > best[0])) best = entry;
     }
-    return best ? new Date(`${best[0]}T00:00:00Z`) : null;
+    return best ? best[0] : null;
   }
 
   private sortRows(rows: MomentumStock[], sort: Sort): MomentumStock[] {

@@ -282,3 +282,61 @@ def test_scan_job_launch_failure(monkeypatch):
     assert body["message"] == "The job could not be started."
     assert "bash not found" not in body["message"]
     assert set(body) == {"status", "message"}
+
+
+def test_run_wheel_post_matches_get_shape(monkeypatch):
+    calls = []
+
+    def _run(args, **kwargs):
+        calls.append(args[4])
+        return _FakeProc(0, "Wheel complete")
+
+    monkeypatch.setattr(run_jobs.subprocess, "run", _run)
+    monkeypatch.setattr(run_jobs.cache, "reload", lambda: None)
+
+    body = client.post("/runWheel").json()
+
+    assert calls == ["ensure-events", "wheel"]
+    assert body["status"] == "ok"
+    assert body["earningsRefresh"]["status"] == "ok"
+
+
+def test_run_job_post_returns_409_when_busy(monkeypatch):
+    monkeypatch.setattr(run_jobs.subprocess, "run",
+                        lambda *a, **k: _FakeProc(0, "ok"))
+    monkeypatch.setattr(run_jobs.cache, "reload", lambda: None)
+
+    assert run_jobs._JOB_LOCKS["wheel"].acquire(blocking=False)
+    try:
+        response = client.post("/runWheel")
+    finally:
+        run_jobs._JOB_LOCKS["wheel"].release()
+
+    assert response.status_code == 409
+    assert "already running" in response.json()["detail"]
+
+
+def test_run_chains_post_forwards_scope(monkeypatch):
+    called = _capture_chains(monkeypatch)
+
+    body = client.post(
+        "/runChains", params={"horizonDte": 37, "symbols": "aapl,msft", "minOtmPct": 5}
+    ).json()
+
+    assert body["status"] == "ok"
+    assert called["args"][4:] == [
+        "chains", "--horizon-dte", "37", "--symbols", "AAPL,MSFT",
+        "--min-otm-pct", "5",
+    ]
+
+
+def test_run_chains_rejects_bad_scope_without_holding_the_lock(monkeypatch):
+    called = _capture_chains(monkeypatch)
+    assert run_jobs._JOB_LOCKS["chains"].acquire(blocking=False)
+    try:
+        response = client.post("/runChains", params={"horizonDte": 0})
+    finally:
+        run_jobs._JOB_LOCKS["chains"].release()
+
+    assert response.status_code == 400
+    assert "args" not in called

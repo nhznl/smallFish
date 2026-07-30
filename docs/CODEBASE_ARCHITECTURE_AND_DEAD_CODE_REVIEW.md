@@ -96,7 +96,7 @@ work. The plan should remain closed.
 |---|---|---|---|
 | Medium | API-origin selection is duplicated in five services | Brokerage, portfolio, studies, capability, and stock services independently test for port `4200` and select localhost versus `window.location.origin`. | Provide one injected API-base token or environment helper. Test development and production origins once. |
 | Medium | Money, percentage, sign, date, and range formatting is repeated with inconsistent behavior | Brokerage Holdings, Combined Ledger, Symbol Ledger, portfolios, sector rotation, scanner, stock detail, and strategy views. Some use a fixed locale and some the browser locale; sign/minus conventions differ. | Introduce a small set of pure pipes or narrow formatting helpers. Preserve each display contract deliberately instead of replacing everything with one broad formatter. |
-| High | Date and nullable API contracts do not match JSON | Several interfaces type serialized ISO dates as `Date`, while components already accept `Date \| string` or cast through `any`. Some gain/loss and trade-stat fields are typed as always present although backend projections can omit them. | Define transport interfaces with ISO `string` and correct nullability. Convert to `Date` only at a view boundary when needed. Remove the compensating `any` casts. |
+| High | Date and nullable API contracts do not match JSON | ~~Several interfaces typed ISO dates as `Date`~~ **4a done.** Stock/gain-loss transport uses ISO `string` + correct `| null` on trade stats and gain/loss blocks; scanner/stock-detail casts removed. See [`CONTRACT_TIGHTENING_PHASE4_DESIGN.md`](CONTRACT_TIGHTENING_PHASE4_DESIGN.md). |
 | Medium | Job and study results use `any` | Stock-service job methods, study candidates, and stock-detail weekly fields lose compile-time coverage of backend changes. | Add response interfaces derived from current payloads; do not change wire shapes. |
 
 The tiny `OptionsComponent` and `RetirementPortfolioComponent` classes are not
@@ -183,7 +183,7 @@ decimal semantics are demonstrably identical.
 | Finding | Why it matters | Design direction |
 |---|---|---|
 | Documentation describes removed product behavior | A new user is told to expect Trade Groups and risk dashboards that no longer exist. This damages trust even though the software works. | Correct text and recapture screenshots from representative fake data before other refactors. |
-| Artifact-mutating jobs use `GET` | `/runWheel`, `/runChains`, `/runSectorRotation`, and `/runEarningsScan` perform long-running writes through a safe/idempotent HTTP verb. Browsers, caches, link tools, and retries can trigger them unexpectedly. | Add `POST` equivalents and migrate the Angular client. Preserve deprecated `GET` routes during an explicit compatibility window. |
+| Artifact-mutating jobs use `GET` | ~~Long-running writes via GET~~ **4b done.** POST preferred for `/runWheel`, `/runChains`, `/runSectorRotation`, `/runEarningsScan`; deprecated GET retained; per-job 409 locks. See [`CONTRACT_TIGHTENING_PHASE4_DESIGN.md`](CONTRACT_TIGHTENING_PHASE4_DESIGN.md). |
 | Long-running jobs execute synchronously without admission control | Commands may run for up to five minutes. Concurrent tabs can start overlapping artifact writers, and the response has no durable job identity. | Add single-flight locking or a small job registry with status/idempotency. A full distributed queue is unnecessary unless deployment requirements demand it. |
 | Retired risk subsystem obscures ownership | A dead API-era module keeps risk configuration, formulas, dependencies, and tests looking active, while one coverage helper prevents removal. | Complete the consumer-first extraction described in the backend section. |
 
@@ -193,7 +193,7 @@ decimal semantics are demonstrably identical.
 |---|---|---|
 | `options_activity.py` is an 863-line responsibility cluster | It combines provider sync, event normalization, several CSV stores, market enrichment, trend advancement, CRUD, and repair helpers. Changes can cross persistence and provider boundaries accidentally. | First write a dedicated design note. Separate provider ingestion, canonical activity normalization, activity store, derived trend state, and administrative repair while preserving all CSV/API contracts. |
 | `utilities/options/chains.py` is a 2,134-line pipeline module | Discovery, eligibility, provider enrichment, archive handling, and metadata publication are difficult to test and reason about independently. | Extract pipeline stages behind existing artifact contracts. Preserve validation and atomic publication; do not change selection methodology during structural work. |
-| Brokerage API routes accept and return raw dictionaries | Manual validation weakens OpenAPI, nullability, and refactoring safety. | Add Pydantic request/response models additively with aliases matching the existing wire format. Characterize current error codes and optional fields first. |
+| Brokerage API routes accept and return raw dictionaries | ~~Untyped write bodies~~ **4c done for closed writes.** Request models in `brokerages/schemas.py` for notes / holdings metadata / archives / sync; deep GET envelopes still projection-owned. |
 | Gain/loss migration runs during every brokerage sync | A one-time compatibility action remains on the steady-state hot path. | Prove all supported files are migrated, document rollback/old-file behavior, then retire the runtime migration separately. |
 | Company-info fetching is a backend network exception | `stock_data_retriever.py` performs live Yahoo/yfinance retrieval in the read-oriented API runtime, unlike the artifact-first price path and injected service transports. | Either document this narrow exception and inject the fetcher for tests, or move raw transport into `services/`/a materialized artifact. Do not make the backend import `utilities/`. |
 | Frontend feature components hold transport, transformation, and presentation state | The largest views are hard to test and are vulnerable to route/loading races. | After behavior tests, extract feature facades/view models and focused presentational components. Avoid a global state framework unless shared-state requirements emerge. |
@@ -251,9 +251,10 @@ methodology changes, compatibility removals, and mechanical cleanup.
 3. **~~Write and approve a risk-subsystem retirement design.~~ Done.** See
    [`OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md`](OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md).
    Coverage moved; dead modules, config, and dashboard tests removed.
-4. **Tighten contracts without breaking compatibility.** Correct Angular
-   transport types and backend nullability, add Pydantic schemas with wire-name
-   aliases, and introduce `POST` job routes before deprecating `GET`.
+4. **~~Tighten contracts without breaking compatibility.~~ Done (4a–4c).** See
+   [`CONTRACT_TIGHTENING_PHASE4_DESIGN.md`](CONTRACT_TIGHTENING_PHASE4_DESIGN.md):
+   Angular transport types, POST job routes (GET kept), additive Pydantic
+   request bodies for closed brokerage writes.
 5. **Add lifecycle and feature tests.** Cover route changes, request races,
    error/empty distinctions, and high-value mutations in the largest Angular
    screens.
