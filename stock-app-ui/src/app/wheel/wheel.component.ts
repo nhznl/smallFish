@@ -15,6 +15,7 @@ import { SymbolFilterService } from '../services/symbol-filter.service';
 import { Subscription } from 'rxjs';
 import { WheelCandidate } from '../model/wheel-candidate';
 import { OptionQuotesTabComponent } from './option-quotes-tab.component';
+import { WheelCandidatesViewModel } from './wheel-candidates.view-model';
 
 @Component({
   selector: 'app-wheel',
@@ -57,13 +58,24 @@ export class WheelComponent implements OnInit, OnDestroy {
   private stockService = inject(StockService);
   private symbolFilterService = inject(SymbolFilterService);
   private filterSub?: Subscription;
+  private loadSub?: Subscription;
+
+  readonly candidatesVm = new WheelCandidatesViewModel();
 
   // Raw candidates for ALL horizons; the table shows one horizon at a time.
-  private allCandidates: WheelCandidate[] = [];
   dataSource = new MatTableDataSource<WheelCandidate>([]);
 
-  loadingData = true;
-  loadError = false;
+  get loadingData(): boolean {
+    return this.candidatesVm.loadingData();
+  }
+
+  get loadError(): boolean {
+    return this.candidatesVm.loadError();
+  }
+
+  get currentRunMode(): string {
+    return this.candidatesVm.runMode();
+  }
 
   // Filters / selectors
   readonly horizons: number[] = [7, 14, 30, 37, 45];
@@ -74,9 +86,8 @@ export class WheelComponent implements OnInit, OnDestroy {
   showUnavailable = false;            // default-OFF; live chain eligibility requires quality OK
   etfsOnly = false;
   symbolFilter = '';
-  currentRunMode = '';
 
-  // Curated, decision-relevant subset of the versioned wheel columns. The rest stay in
+  // Curated, decision-relevant subset of the versioned wheel columns.
   // the CSV report (and the Wheel Explainer) for auditing -- see the column-sync
   // rule (section 5). The put/call ITM + touch columns follow the cushion selector.
   displayedColumns: string[] = [
@@ -139,28 +150,12 @@ export class WheelComponent implements OnInit, OnDestroy {
   }
 
   load(): void {
-    this.loadingData = true;
-    this.loadError = false;
-    // Fetch ALL horizons once; the horizon selector filters client-side.
-    this.stockService.getWheelCandidates().subscribe({
-      next: (candidates) => {
-        this.allCandidates = candidates ?? [];
-        this.currentRunMode = this.allCandidates[0]?.wheel?.runMode ?? '';
-        this.loadingData = false;
-        this.loadError = false;
-        this.applyFilters();
-      },
-      error: () => {
-        this.allCandidates = [];
-        this.loadingData = false;
-        this.loadError = true;
-        this.applyFilters();
-      }
-    });
+    this.loadSub?.unsubscribe();
+    this.loadSub = this.candidatesVm.load(this.stockService, () => this.applyFilters());
   }
 
   applyFilters(): void {
-    const rows = this.allCandidates.filter(c => {
+    const rows = this.candidatesVm.candidates().filter(c => {
       if (c.wheel?.horizonDte !== this.horizon) {
         return false;
       }
@@ -477,5 +472,6 @@ export class WheelComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.filterSub?.unsubscribe();
+    this.loadSub?.unsubscribe();
   }
 }
