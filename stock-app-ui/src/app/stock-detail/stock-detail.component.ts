@@ -1,6 +1,9 @@
-import { Component, OnInit, inject, signal, computed, ChangeDetectionStrategy } from '@angular/core';
+import { Component, OnInit, inject, signal, computed, ChangeDetectionStrategy, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { EMPTY, merge } from 'rxjs';
+import { catchError, distinctUntilChanged, map, switchMap, tap } from 'rxjs/operators';
 
 import { StockService } from '../api/stock.service';
 import { StockAnalysis, YearlySlope } from '../model/stock';
@@ -130,6 +133,7 @@ type HeatmapData = {
 export class StockDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly stockService = inject(StockService);
+  private readonly destroyRef = inject(DestroyRef);
 
   // Signals for reactive state management
   private readonly _symbol = signal<string>('');
@@ -494,26 +498,38 @@ export class StockDetailComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.route.params.subscribe(params => {
-      const symbolParam = (params['symbol'] ?? '').toString().toUpperCase();
-      this._symbol.set(symbolParam);
-      this.loadStockAnalysis(symbolParam);
-      this.loadStockInfo(symbolParam);
-    });
+    // switchMap cancels in-flight analysis/info when the route symbol changes so
+    // a slower response for A cannot overwrite a newer load for B.
+    this.route.params.pipe(
+      map(params => (params['symbol'] ?? '').toString().toUpperCase()),
+      distinctUntilChanged(),
+      tap(symbol => this._symbol.set(symbol)),
+      switchMap(symbol => this.loadForSymbol(symbol)),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe();
   }
 
-  private loadStockAnalysis(symbol: string): void {
+  private loadForSymbol(symbol: string) {
     if (!symbol) {
       this._stock.set(null);
-      return;
+      this._stockError.set(null);
+      this._stockInfo.set(null);
+      this._stockInfoError.set(null);
+      this._stockInfoLoading.set(false);
+      return EMPTY;
     }
+
     this._stockError.set(null);
-    this.stockService.getStockAnalysis(symbol).subscribe({
-      next: stock => {
+    this._stockInfoError.set(null);
+    this._stockInfoLoading.set(true);
+    this._stockInfo.set(null);
+
+    const analysis$ = this.stockService.getStockAnalysis(symbol).pipe(
+      tap(stock => {
         this._stock.set(stock);
         this._stockError.set(null);
-      },
-      error: (error) => {
+      }),
+      catchError(error => {
         console.error('Error fetching stock details:', error);
         this._stock.set(null);
         // A 404 here is nearly always the scanner cache's sub-$6 exclusion
@@ -523,31 +539,24 @@ export class StockDetailComponent implements OnInit {
           ? `${symbol.toUpperCase()} is not in the scanner cache, which excludes symbols `
             + `trading under $6. Live company data above is unaffected.`
           : this.resolveErrorMessage(error));
-      }
-    });
-  }
+        return EMPTY;
+      }),
+    );
 
-  private loadStockInfo(symbol: string): void {
-    this._stockInfoError.set(null);
-    if (!symbol) {
-      this._stockInfo.set(null);
-      this._stockInfoLoading.set(false);
-      return;
-    }
-
-    this._stockInfoLoading.set(true);
-    this._stockInfo.set(null);
-    this.stockService.getStockInfo(symbol).subscribe({
-      next: (info) => {
+    const info$ = this.stockService.getStockInfo(symbol).pipe(
+      tap(info => {
         this._stockInfo.set(info);
         this._stockInfoLoading.set(false);
-      },
-      error: (error) => {
+      }),
+      catchError(error => {
         console.error('Error fetching stock information:', error);
         this._stockInfoError.set(this.resolveErrorMessage(error));
         this._stockInfoLoading.set(false);
-      }
-    });
+        return EMPTY;
+      }),
+    );
+
+    return merge(analysis$, info$);
   }
 
   getWeeklySlope(slope: YearlySlope, week: number): number | undefined {

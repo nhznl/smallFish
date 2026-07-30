@@ -107,8 +107,8 @@ shared brokerage page and should remain simple.
 
 | Priority | Finding | Risk | Recommendation |
 |---|---|---|---|
-| High | Largest screens have no direct component tests | Of 19 component files, only 6 have a direct spec. Notable untested files include Stock Detail (863 lines), Portfolios (726), Momentum Scanner (549), Wheel (481), Strategy Stocks (274), Sector Rotation (175), Studies (139), and Option Quotes Tab (103). | Add behavior-focused tests around loading/error states, route changes, filtering, and user mutations before decomposition. Do not chase line coverage. |
-| Medium | Nested or independent route-driven subscriptions can race | Studies nests `paramMap` beneath catalog loading. Stock Detail independently starts analysis and company-info requests for each route change. A fast route change can allow an older response to render after a newer one. | Use `switchMap` for route-derived requests and `takeUntilDestroyed` for persistent streams. Combine results only where their loading/error semantics match. |
+| High | Largest screens have no direct component tests | ~~Only 6 of 19 components had specs~~ **5a–5c done.** Behavior specs added for Stock Detail, Momentum Scanner, Wheel, Portfolios, and Sector Rotation. See [`ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md`](ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md). |
+| Medium | Nested or independent route-driven subscriptions can race | ~~Stock Detail race~~ **Stock Detail fixed** with `switchMap` cancel. Studies nested `paramMap` race remains deferred. |
 | Medium | Empty data and failed requests are sometimes conflated | Some stock-service methods catch errors and return an empty array or an error-shaped success value, while other methods propagate errors. | Let view models distinguish `loading`, `empty`, `unavailable`, and `failed`. Centralize transport error translation without hiding failures. |
 | Medium | Most major routes are eager-loaded | The successful build reports a 1.12 MB raw initial bundle; only portfolios, wheel explainer, and sector rotation are lazy chunks. | Lazy-load the remaining heavy feature routes after route-state tests exist. The build is within budget, so this is a measured performance improvement rather than an emergency. |
 | Low | Three passing service specs trigger “no expectations” warnings | The HTTP controller assertions throw on failure, but Karma does not count them as Jasmine expectations. | Add explicit response or request assertions so the suite remains warning-free and intent is obvious. |
@@ -255,9 +255,10 @@ methodology changes, compatibility removals, and mechanical cleanup.
    [`CONTRACT_TIGHTENING_PHASE4_DESIGN.md`](CONTRACT_TIGHTENING_PHASE4_DESIGN.md):
    Angular transport types, POST job routes (GET kept), additive Pydantic
    request bodies for closed brokerage writes.
-5. **Add lifecycle and feature tests.** Cover route changes, request races,
-   error/empty distinctions, and high-value mutations in the largest Angular
-   screens.
+5. **~~Add lifecycle and feature tests.~~ Done (5a–5c).** See
+   [`ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md`](ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md):
+   Stock Detail race/cancel, scanner/wheel empty-vs-error, portfolios mutations
+   and sector-rotation job reload.
 6. **Decompose large orchestrators.** Start with design documents for options
    activity and chains. Preserve artifacts, provider boundaries, frozen study
    results, and atomic-write behavior.
@@ -292,7 +293,7 @@ The following checks were run against the stated baseline:
 | Backend `pip check` | No broken requirements |
 | Utilities `pip check` | No broken requirements |
 | Angular production build (Node 24) | Passed; 1.12 MB raw initial bundle, within budget |
-| Angular CI tests | 69 passed; 3 no-expectation warnings noted above |
+| Angular CI tests | 91 passed; 3 no-expectation warnings noted above |
 | Angular strict unused-symbol compilation | Passed |
 
 Static unused-code analysis combined TypeScript compiler checks, import and
