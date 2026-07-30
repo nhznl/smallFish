@@ -56,11 +56,10 @@ run its fake-SDK tests.
 
 ## SnapTrade
 
-`services.snaptrade` supplies lazy, read-only setup and transport calls for
-registration, connection portal creation, linked accounts, positions, and
-defensively offset/limit-paginated activities. It is installed only in the
-backend environment; the backend retains credential persistence, CLI output,
-normalization, and artifact writes, split between `snaptrade_setup.py` and the
+`services.snaptrade` supplies lazy, read-only transport calls for linked
+accounts, positions, and defensively offset/limit-paginated activities. It is
+installed only in the backend environment. Credential entry and verification
+belong to `tools/brokerages.py`; normalization and artifact writes belong to the
 brokerage importers.
 
 ## Consumers
@@ -70,8 +69,6 @@ brokerage importers.
 | `stock-app/app/options_activity.py` | Account selection, option-event normalization, API sync policy, ledger writes; market-data portion uses `services.options_market` |
 | `stock-app/app/brokerages/importers/held_option_market_data.py` | Held-option beta/Greek materialization via `services.options_market` |
 | `stock-app/app/brokerages/importers/snaptrade.py` | SnapTrade holdings/activity normalization and ledger writes |
-| `stock-app/app/snaptrade_setup.py` | SnapTrade registration, credential persistence, account listing, setup CLI output |
-| `stock-app/app/snaptrade_service.py` | Compatibility facade only: re-exports, the legacy all-resource sync orchestrator, and CLI delegation |
 | `utilities/options/market_quotes.py` | Quote coverage metadata, freshness, and premium-archive enrichment from neutral observations |
 | `tools/brokerages.py` | Standard-library verification orchestration and safe human-facing status |
 

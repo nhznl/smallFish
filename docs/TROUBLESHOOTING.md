@@ -210,7 +210,8 @@ server logs.
 ### SnapTrade verifies but shows no holdings
 
 The credentials work; no brokerage is linked. Personal (`PERS-`) keys link on
-the SnapTrade dashboard; commercial keys use the connection portal. See
+the SnapTrade dashboard; commercial users are created and linked outside
+smallFish. See
 [BROKERAGES.md](BROKERAGES.md).
 
 ### `retirement-risk` capability is incomplete with only SnapTrade

@@ -362,16 +362,13 @@ def test_occ_to_dxfeed_conversion_is_defined_only_in_the_provider_adapter():
 # --------------------------------------------------------------------------- #
 
 def test_fidelity_resource_commands_are_the_owning_modules_themselves():
-    """Registry fidelity: HOLDINGS is the holdings importer, not the legacy
-    all-resource orchestrator that also fetches activity and market data."""
-    from app import snaptrade_service
+    """Registry Fidelity resources point directly at their owning modules."""
     from app.brokerages import registry
     from app.brokerages.importers import held_option_market_data
     from app.brokerages.importers import snaptrade as snaptrade_importer
 
     commands = registry.REGISTRY["fidelity"].sync_commands
     assert commands["HOLDINGS"] is snaptrade_importer.sync_holdings
-    assert commands["HOLDINGS"] is not snaptrade_service.sync
     assert commands["MARKET_DATA"] is (
         held_option_market_data.sync_held_option_market_data)
     assert len({id(command) for command in commands.values()}) == 3

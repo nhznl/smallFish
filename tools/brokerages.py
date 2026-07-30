@@ -204,15 +204,15 @@ def snaptrade_status(settings: dict[str, str]) -> ProviderStatus:
     if not user_id or not user_secret:
         return ProviderStatus(
             "snaptrade", NEEDS_REGISTRATION,
-            "Commercial API keys require a registered SnapTrade user before any "
-            "brokerage can be linked.",
-            "./setup-brokerages.sh setup snaptrade  (registers a user and prints "
-            "the connection portal link)", masked)
+            "Commercial API keys require an externally created SnapTrade user "
+            "and linked brokerage.",
+            "create and link the user outside smallFish, then run "
+            "./setup-brokerages.sh setup snaptrade to save its credentials", masked)
 
     return ProviderStatus(
         "snaptrade", NEEDS_CONNECTION,
         "Commercial keys with a registered user. A brokerage must be linked "
-        "through the SnapTrade connection portal before holdings appear.",
+        "outside smallFish before holdings appear.",
         "./setup-brokerages.sh verify", masked)
 
 
@@ -336,8 +336,8 @@ Get your keys from https://dashboard.snaptrade.com.
   Personal keys   client ID starts with PERS-. Single-user. You link your
                   brokerage on the SnapTrade dashboard itself, and leave
                   SNAPTRADE_USER_ID / SNAPTRADE_USER_SECRET empty.
-  Commercial keys a SnapTrade user must be registered first, then a brokerage
-                  is linked through the connection portal.
+  Commercial keys create and link the SnapTrade user outside smallFish, then
+                  enter the existing user ID and user secret here.
 """)
     updates = collect(env_path, [
         ("SNAPTRADE_CLIENT_ID", "SnapTrade client ID", False),
@@ -347,17 +347,25 @@ Get your keys from https://dashboard.snaptrade.com.
     changed = update_env_file(env_path, updates)
     print(f"\n  Updated {env_path} ({', '.join(changed) or 'no changes'})")
 
+    settings = read_settings(env_path)
+    client_id = settings.get("SNAPTRADE_CLIENT_ID", "").strip()
+    if client_id and not client_id.upper().startswith("PERS-"):
+        user_updates = collect(env_path, [
+            ("SNAPTRADE_USER_ID", "Existing SnapTrade user ID", False),
+            ("SNAPTRADE_USER_SECRET", "Existing SnapTrade user secret (input hidden)", True),
+        ], assume_yes=assume_yes)
+        user_changed = update_env_file(env_path, user_updates)
+        if user_changed:
+            print(f"  Updated {env_path} ({', '.join(user_changed)})")
+
     status = snaptrade_status(read_settings(env_path))
     print(f"\n  State: {status.state}")
     print(f"  {status.summary}")
     if status.state == NEEDS_REGISTRATION:
         print("""
-  Commercial keys need a registered user. With the API environment installed:
-
-      stock-app/.venv/bin/python -m app.snaptrade_service register
-
-  The command saves the generated user credentials directly to app.env using an
-  atomic mode-0600 write and never displays them. Then rerun this command.""")
+  Commercial keys need an existing SnapTrade user and linked brokerage.
+  Complete those steps outside smallFish, then rerun this command to save the
+  user ID and user secret.""")
     elif status.next_step:
         print(f"\n  Next: {status.next_step}")
     return 0
@@ -403,13 +411,10 @@ def _verify_snaptrade(root: Path, settings: dict[str, str]) -> int:
     import subprocess
 
     script = (
-        "import json, sys\n"
-        "sys.path.insert(0, 'stock-app')\n"
-        # Account listing belongs to the setup owner; snaptrade_service only
-        # re-exports it for the documented legacy command path.
-        "from app import snaptrade_setup as s\n"
+        "import json\n"
+        "from services.snaptrade import io\n"
         "try:\n"
-        "    accounts = s.list_accounts()\n"
+        "    accounts = io.list_accounts()\n"
         # Only aggregate shape is emitted: never an account number or name.
         "    print(json.dumps({'ok': True, 'accounts': len(accounts)}))\n"
         "except Exception as exc:\n"
@@ -467,7 +472,7 @@ def _report_verification(label: str, result) -> int:
             print(f"  {payload['accounts']} linked account(s) visible.")
             if payload["accounts"] == 0:
                 print("  No brokerage linked yet — link one on the SnapTrade "
-                      "dashboard or through the connection portal.")
+                      "dashboard or your external SnapTrade integration.")
         return 0
 
     print(f"  ERROR: {label} rejected the read-only call "

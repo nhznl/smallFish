@@ -194,8 +194,8 @@ def snaptrade_capability() -> Capability:
         return Capability(
             id="snaptrade", label="Retirement brokerage", provides=provides,
             state=NEEDS_REGISTRATION, available=False,
-            reason="Commercial SnapTrade keys need a registered user before a "
-                   "brokerage can be linked.",
+            reason="Commercial SnapTrade keys need an externally created user "
+                   "and linked brokerage before they can be used.",
             action="./setup-brokerages.sh setup snaptrade",
             provider="SnapTrade", requires=requires)
 

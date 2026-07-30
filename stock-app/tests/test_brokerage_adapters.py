@@ -18,7 +18,7 @@ from decimal import Decimal
 
 import pytest
 
-from app import brokerages, config, options_activity, snaptrade_service
+from app import brokerages, config, options_activity
 from app.brokerages import contracts, registry
 from app.brokerages.importers import held_option_market_data
 from app.brokerages.importers import snaptrade as snaptrade_importer
@@ -87,7 +87,7 @@ def _write_tastytrade(*, positions=(), activity=(), greeks=(), betas=()) -> None
 
 def _write_snaptrade(*, holdings=(), events=(), greeks=(), betas=()) -> None:
     def holding(**kw):
-        row = {header: "" for header in snaptrade_service.HOLDINGS_HEADERS}
+        row = {header: "" for header in snaptrade_importer.HOLDINGS_HEADERS}
         row.update({"schema_version": "1", "source": "SNAPTRADE",
                     "account_id": "acct-1", "account_name": "BrokerageLink",
                     "institution": "Fidelity", "currency": "USD",
@@ -109,7 +109,7 @@ def _write_snaptrade(*, holdings=(), events=(), greeks=(), betas=()) -> None:
     path = config.snaptrade_holdings_csv()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=snaptrade_service.HOLDINGS_HEADERS)
+        writer = csv.DictWriter(handle, fieldnames=snaptrade_importer.HOLDINGS_HEADERS)
         writer.writeheader()
         writer.writerows(holding(**row) for row in holdings)
     snaptrade_importer.atomic_write(
@@ -488,7 +488,6 @@ def test_read_adapters_never_call_a_provider(adapter_env, brokerage_id, monkeypa
     monkeypatch.setattr(options_activity, "fetch_tastytrade", forbidden)
     monkeypatch.setattr(snaptrade_importer, "fetch_snaptrade", forbidden)
     monkeypatch.setattr(snaptrade_importer, "fetch_activities", forbidden)
-    monkeypatch.setattr(snaptrade_service, "sync", forbidden)
     write_covered_put(brokerage_id)
     registry.resolve(brokerage_id).snapshot()
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
@@ -79,9 +78,9 @@ def user_kwargs(credentials: SnapTradeCredentials) -> dict[str, str]:
         return {}
     if not credentials.user_id or not credentials.user_secret:
         raise SnapTradeConfigurationError(
-            "SnapTrade user is not registered; run "
-            "'python -m app.snaptrade_service register' and save "
-            "SNAPTRADE_USER_ID/SNAPTRADE_USER_SECRET to app.env",
+            "SnapTrade commercial user credentials are not configured; create "
+            "and link the user outside smallFish, then save "
+            "SNAPTRADE_USER_ID and SNAPTRADE_USER_SECRET in app.env",
             unavailable=True,
         )
     return {"user_id": credentials.user_id, "user_secret": credentials.user_secret}
@@ -117,31 +116,6 @@ def _call(operation: str, callback: Callable[[], Any]) -> Any:
         raise
     except Exception as exc:
         raise SnapTradeServiceError(operation, exc) from exc
-
-
-def register_user(user_id: str | None = None, *, credentials: SnapTradeCredentials | None = None,
-                  client_factory: ClientFactory | None = None) -> Any:
-    creds = credentials or load_credentials()
-    if is_personal_key(creds):
-        raise SnapTradeConfigurationError(
-            "registration does not apply to personal API keys (PERS- prefix); "
-            "link brokerages on the SnapTrade dashboard, then run 'sync'"
-        )
-    resolved_id = user_id or creds.user_id or f"smallfish-{uuid.uuid4()}"
-    client = _client(creds, client_factory)
-    return _call("user registration", lambda: client.authentication.register_snap_trade_user(
-        user_id=resolved_id
-    ).body)
-
-
-def connection_portal(broker: str | None = None, custom_redirect: str | None = None, *,
-                      credentials: SnapTradeCredentials | None = None,
-                      client_factory: ClientFactory | None = None) -> Any:
-    creds = credentials or load_credentials()
-    client = _client(creds, client_factory)
-    return _call("connection portal", lambda: client.authentication.login_snap_trade_user(
-        **user_kwargs(creds), broker=broker or None, custom_redirect=custom_redirect or None,
-    ).body)
 
 
 def list_accounts(*, credentials: SnapTradeCredentials | None = None,

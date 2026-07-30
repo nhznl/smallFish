@@ -71,8 +71,8 @@ smallFish never receives your brokerage password. Guided setup:
 |---|---|---|---|
 | `SNAPTRADE_CLIENT_ID` | Optional, secret | empty | From the SnapTrade dashboard. A `PERS-` prefix means a personal key. |
 | `SNAPTRADE_CONSUMER_KEY` | Optional, secret | empty | From the SnapTrade dashboard. |
-| `SNAPTRADE_USER_ID` | Optional, secret | empty | **Commercial keys only.** Leave empty for `PERS-` keys. |
-| `SNAPTRADE_USER_SECRET` | Optional, secret | empty | **Commercial keys only.** |
+| `SNAPTRADE_USER_ID` | Optional, secret | empty | **Commercial keys only.** Existing user created and linked outside smallFish; leave empty for `PERS-` keys. |
+| `SNAPTRADE_USER_SECRET` | Optional, secret | empty | **Commercial keys only.** Existing user secret, entered without echo by guided setup. |
 
 ## Advanced: path overrides
 

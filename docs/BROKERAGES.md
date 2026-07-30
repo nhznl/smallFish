@@ -26,7 +26,7 @@ One entry point for everything below:
 | `NOT_CONFIGURED` | No credentials. The feature is off. | `setup` |
 | `INCOMPLETE` | Some but not all required settings. | `setup` |
 | `CREDENTIALS_PRESENT` | Complete, not yet checked against the provider. | `verify` |
-| `NEEDS_REGISTRATION` | Commercial SnapTrade keys without a registered user. | `setup snaptrade` |
+| `NEEDS_REGISTRATION` | Commercial SnapTrade keys without externally created user credentials. | Create/link the user outside smallFish, then `setup snaptrade` |
 | `NEEDS_CONNECTION` | Configured, but no brokerage linked yet. | Link at the provider, then `verify` |
 | `READY` | Verified against the provider. | Sync in the UI |
 | `ERROR` | Misconfigured or rejected. | See the printed remediation |
@@ -41,8 +41,8 @@ owns Tastytrade session construction, account/history/position reads, DXLink
 streaming, and raw payloads. `services.options_market` is the provider-neutral
 read API for exact-contract quotes, Greeks/IV, and underlying beta; it routes
 to Tastytrade today and owns OCC-to-dxFeed conversion in its adapter.
-`services.snaptrade` owns SnapTrade client construction, registration,
-connection-portal, account, position, and paginated-activity calls.
+`services.snaptrade` owns SnapTrade client construction and read-only account,
+position, and paginated-activity calls.
 
 Tastytrade therefore has two independent roles: brokerage-account source for
 the options ledger, and the current options market-data provider behind
@@ -135,8 +135,8 @@ detects which you have from the client-ID prefix.
 | | Personal (`PERS-` prefix) | Commercial |
 |---|---|---|
 | Users | Single-user: you | Many |
-| Registration | None | A SnapTrade user must be registered first |
-| Linking a brokerage | On the SnapTrade dashboard | Through the connection portal |
+| Registration | None | Create the SnapTrade user outside smallFish |
+| Linking a brokerage | On the SnapTrade dashboard | Complete outside smallFish |
 | `SNAPTRADE_USER_ID` / `_USER_SECRET` | Leave **empty** | Required |
 
 ### Setup
@@ -151,20 +151,16 @@ Then:
 **Personal keys** — link your brokerage on the SnapTrade dashboard. Nothing
 further goes in `app.env`.
 
-**Commercial keys** — register a user:
+**Commercial keys** — create the user and link its brokerage outside smallFish.
+Then rerun guided setup and enter the existing user credentials:
 
 ```bash
-stock-app/.venv/bin/python -m app.snaptrade_service register
+./setup-brokerages.sh setup snaptrade
 ```
 
-The command saves the generated `userId` and `userSecret` directly to `app.env`
-using an atomic mode-0600 write; it never displays either value. Then rerun
-`setup snaptrade` and follow the connection-portal link.
-
-That command path is stable. Registration, credential persistence, and account
-listing are implemented in `stock-app/app/snaptrade_setup.py`;
-`stock-app/app/snaptrade_service.py` remains a thin compatibility facade so the
-documented command keeps working.
+The setup command saves the supplied user ID and secret to `app.env` using an
+atomic mode-0600 write and never echoes the secret. smallFish does not register
+SnapTrade users or create connection-portal URLs.
 
 ### Verify
 

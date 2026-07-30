@@ -23,10 +23,6 @@ class Client:
         self.pages = list(pages)
         self.position_calls = []
         self.activity_calls = []
-        self.authentication = SimpleNamespace(
-            register_snap_trade_user=lambda **kwargs: SimpleNamespace(body={"userId": kwargs["user_id"], "userSecret": "secret"}),
-            login_snap_trade_user=lambda **kwargs: SimpleNamespace(body={"redirectURI": "https://portal"}),
-        )
         self.account_information = self
 
     def list_user_accounts(self, **kwargs):
@@ -58,17 +54,6 @@ def test_credentials_redaction_and_auth_modes():
     with pytest.raises(io.SnapTradeConfigurationError) as missing:
         io.load_credentials({})
     assert missing.value.unavailable is True
-
-
-def test_registration_and_portal_return_raw_bodies():
-    client = Client([])
-    factory = lambda _credentials: client
-    registered = io.register_user("known-user", credentials=_credentials(), client_factory=factory)
-    portal = io.connection_portal("FIDELITY", credentials=_credentials(), client_factory=factory)
-    assert registered == {"userId": "known-user", "userSecret": "secret"}
-    assert portal == {"redirectURI": "https://portal"}
-    with pytest.raises(io.SnapTradeConfigurationError):
-        io.register_user(credentials=_credentials(personal=True), client_factory=factory)
 
 
 def test_positions_filters_accounts_and_activities_page_until_short_page():

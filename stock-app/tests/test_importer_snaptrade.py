@@ -1,8 +1,8 @@
 """SnapTrade importer: option-activity materialization and its artifact seams.
 
-Holdings normalization, the summary shape, and trend advancement are exercised
-through the compatibility facade in ``test_snaptrade_service.py``; this suite
-covers the immutable option-event ledger the ACTIVITY resource owns.
+Holdings normalization and the summary shape are exercised in
+``test_importer_snaptrade_holdings.py``; this suite covers the immutable
+option-event ledger the ACTIVITY resource owns.
 """
 
 from __future__ import annotations

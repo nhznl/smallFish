@@ -97,6 +97,7 @@ def test_snaptrade_commercial_keys_without_a_user_need_registration():
     status = B.snaptrade_status(
         {"SNAPTRADE_CLIENT_ID": "COMM-abc", "SNAPTRADE_CONSUMER_KEY": "key"})
     assert status.state == B.NEEDS_REGISTRATION
+    assert "outside smallFish" in status.next_step
 
 
 def test_snaptrade_commercial_keys_with_a_user_need_a_brokerage_link():
@@ -251,6 +252,29 @@ def test_an_empty_entry_leaves_the_setting_unchanged(tmp_path, monkeypatch):
     assert B.collect(env_path, [("TT_CLIENT_SECRET", "secret", True)]) == {}
 
 
+def test_snaptrade_guided_setup_accepts_existing_commercial_user_credentials(
+        tmp_path, monkeypatch, capsys):
+    env_path = tmp_path / "app.env"
+    env_path.write_text("", encoding="utf-8")
+    entered = iter(["COMM-client", "existing-user"])
+    secrets = iter(["consumer-secret", "existing-user-secret"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(entered))
+    monkeypatch.setattr(B, "prompt_secret", lambda _label: next(secrets))
+
+    assert B.setup_snaptrade(env_path) == 0
+
+    settings = B.read_settings(env_path)
+    assert settings == {
+        "SNAPTRADE_CLIENT_ID": "COMM-client",
+        "SNAPTRADE_CONSUMER_KEY": "consumer-secret",
+        "SNAPTRADE_USER_ID": "existing-user",
+        "SNAPTRADE_USER_SECRET": "existing-user-secret",
+    }
+    output = capsys.readouterr().out
+    assert "consumer-secret" not in output
+    assert "existing-user-secret" not in output
+
+
 def test_confirm_declines_without_a_terminal(monkeypatch, capsys):
     """Non-interactive callers must never silently overwrite a credential."""
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
@@ -391,6 +415,14 @@ def test_the_tastytrade_probe_calls_functions_that_exist():
                  and isinstance(n.value, ast.Name) and n.value.id == "io"}:
         assert hasattr(module, name), \
             f"the verify probe calls services.tastytrade.io.{name}(), which does not exist"
+
+
+def test_the_snaptrade_probe_calls_transport_directly():
+    source = (REPO_ROOT / "tools/brokerages.py").read_text(encoding="utf-8")
+    assert "from services.snaptrade import io" in source
+    assert "accounts = io.list_accounts()" in source
+    assert "snaptrade_setup" not in source
+    assert "snaptrade_service" not in source
 
 
 def test_verification_failure_uses_stable_remediation_not_provider_message():

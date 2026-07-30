@@ -12,9 +12,9 @@ summary shape, and the two single-purpose resource commands:
 Normalized holdings are immutable broker facts. Editable classifications and the
 Symbol Ledger live outside this module under `/api/brokerages`.
 
-Credential persistence and the setup CLI belong to ``app.snaptrade_setup``; this
-module never touches them. Nothing here fetches market data — held-option beta
-and Greeks belong to ``held_option_market_data``.
+Credential entry and verification belong to ``tools/brokerages.py``; this module
+never touches them. Nothing here fetches market data — held-option beta and
+Greeks belong to ``held_option_market_data``.
 """
 
 from __future__ import annotations
@@ -32,14 +32,10 @@ from services.snaptrade import io as snaptrade_io
 
 from ... import config, options_activity
 
-try:  # models/ is standard-library-only and importable in both environments.
-    from models.snaptrade_holdings import (
-        SNAPTRADE_HOLDINGS_SCHEMA_VERSION,
-        SUPPORTED_SNAPTRADE_HOLDINGS_SCHEMA_VERSIONS,
-    )
-except ImportError:  # pragma: no cover - fallback when models/ is not on the path.
-    SNAPTRADE_HOLDINGS_SCHEMA_VERSION = 1
-    SUPPORTED_SNAPTRADE_HOLDINGS_SCHEMA_VERSIONS = frozenset({1})
+SNAPTRADE_HOLDINGS_SCHEMA_VERSION = 1
+SUPPORTED_SNAPTRADE_HOLDINGS_SCHEMA_VERSIONS = frozenset(
+    {SNAPTRADE_HOLDINGS_SCHEMA_VERSION}
+)
 
 SOURCE = "SNAPTRADE"
 
@@ -77,15 +73,16 @@ class RetirementOptionsError(ValueError):
         self.status_code = status_code
 
 
-def _validation_error(message: str, status_code: int) -> Exception:
-    """Build the setup-owned validation error without importing it eagerly.
+class SnapTradeImportError(ValueError):
+    """Safe application error for SnapTrade import and artifact failures."""
 
-    Only the error type is shared with setup. Reaching it at call time keeps
-    artifact materialization independent of the credential/CLI module.
-    """
-    from ... import snaptrade_setup
+    def __init__(self, message: str, status_code: int = 422):
+        super().__init__(message)
+        self.status_code = status_code
 
-    return snaptrade_setup.SnapTradeValidationError(message, status_code)
+
+def _validation_error(message: str, status_code: int) -> SnapTradeImportError:
+    return SnapTradeImportError(message, status_code)
 
 
 # --------------------------------------------------------------------------- #
@@ -458,9 +455,8 @@ def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[
 def sync_holdings(provider: HoldingsProvider | None = None) -> dict[str, Any]:
     """Pull holdings only: normalize, write the ledger, advance trend, summarize.
 
-    Does not fetch activity or market data. The registry HOLDINGS resource and the
-    legacy ``snaptrade_service.sync`` compatibility orchestrator are the callers
-    that decide sibling resources.
+    Does not fetch activity or market data. The registry decides which sibling
+    resources a request includes.
     """
     provider = provider or fetch_snaptrade
     previous_rows = read_holdings_ledger()

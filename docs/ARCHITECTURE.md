@@ -229,7 +229,7 @@ app.
 | A shared type | `models/`, standard library only, with tests. |
 | Brokerage/provider I/O | `services/<provider>/` for raw transport; `services.options_market` for neutral quotes/Greeks/beta. Keep artifact writes in the consumer runtime. |
 | A brokerage sync resource | A single-purpose command under `stock-app/app/brokerages/importers/`, wired to the registry. Holdings must not fetch activity or market data. |
-| A brokerage setup/CLI step | The provider's setup module, such as `stock-app/app/snaptrade_setup.py`. A documented legacy module path stays a thin facade over it, never a second implementation. |
+| A brokerage setup/CLI step | `tools/brokerages.py`, kept standard-library-only so setup works before either application runtime is available. Provider calls used for verification execute through the appropriate runtime's `services/` transport. |
 | A UI view | Read `stock-app-ui/AGENTS.md` and `stock-app-ui/docs/UX_GUIDANCE.md` first; reuse the shared primitives. |
 | An optional integration | A capability in `stock-app/app/capabilities.py` and a provider adapter in `tools/brokerages.py`, so it degrades gracefully. |
 | A study | A new pre-registered definition. Never edit a published one. |

@@ -30,8 +30,6 @@ stock-app/
 │   ├── stock_model.py      # stock, weekly, and gain/loss models
 │   ├── options_activity.py # Tastytrade sync policy, normalization, marks, reconciliation
 │   ├── portfolios.py       # named symbol lists, returns, sector exposure
-│   ├── snaptrade_setup.py  # SnapTrade registration, credential persistence, CLI
-│   ├── snaptrade_service.py  # thin compatibility facade for the legacy CLI path
 │   ├── studies_read.py     # fail-closed Research Studies reader
 │   ├── capabilities.py     # optional-integration and core-data states
 │   ├── brokerages/         # registry, importers, adapters, call coverage, canonical facts
@@ -157,14 +155,11 @@ normalized broker facts written to
 `data/ledger_retirement/positions.csv` by the last sync. Each row is an
 immutable holding (equity, option, or cash) with quantity, price, cost basis,
 market value, and open P/L; the summary groups value by account and asset class.
-`services.snaptrade` performs registration, portal, account, position, and
-activity I/O. Above it, ownership is split: `app/snaptrade_setup.py` handles
-registration, credential persistence, and the command-line presentation, while
+`services.snaptrade` performs read-only account, position, and activity I/O.
 `app/brokerages/importers/snaptrade.py` normalizes rows and writes the holdings
-and option-event ledgers. `app/snaptrade_service.py` is a thin compatibility
-facade — re-exports, the legacy all-resource `sync` orchestrator, and CLI
-delegation — so the documented `python -m app.snaptrade_service` commands below
-keep working.
+and option-event ledgers. Credential entry and provider verification belong to
+`tools/brokerages.py`; smallFish does not register SnapTrade users or create
+connection portals.
 
 Setup is one-time and depends on which kind of SnapTrade API key you have —
 the client-id prefix tells you:
@@ -172,33 +167,24 @@ the client-id prefix tells you:
 **Personal key (`PERS-` prefix)** — single-user. Link your brokerage on the
 SnapTrade dashboard itself, set `SNAPTRADE_CLIENT_ID` and
 `SNAPTRADE_CONSUMER_KEY` in `app.env`, and you are done: leave
-`SNAPTRADE_USER_ID`/`SNAPTRADE_USER_SECRET` empty and never run `register`
-(the API rejects it for personal keys).
+`SNAPTRADE_USER_ID`/`SNAPTRADE_USER_SECRET` empty.
 
-**Commercial key** — multi-user. Register a user once, save its credentials,
-then link the brokerage through the connection portal:
-
-```bash
-# Run from stock-app/ with the repo root on PYTHONPATH so `models` resolves:
-PYTHONPATH=.. .venv/bin/python -m app.snaptrade_service register            # create a user
-#   -> credentials are saved directly to app.env and are never displayed
-PYTHONPATH=.. .venv/bin/python -m app.snaptrade_service connect --broker FIDELITY
-#   -> open the printed URL in a browser and log in to Fidelity to link it
-```
-
-Either way, verify and pull:
+**Commercial key** — multi-user. Create the user and link its brokerage outside
+smallFish, then use guided setup to save the existing credentials:
 
 ```bash
-PYTHONPATH=.. .venv/bin/python -m app.snaptrade_service accounts            # verify the link
-PYTHONPATH=.. .venv/bin/python -m app.snaptrade_service sync                # pull holdings -> ledger
+./setup-brokerages.sh setup snaptrade
+# prompts for the existing commercial user ID and secret without echoing secrets
 ```
 
-If a step is missing, the CLI and the API return a 503 whose message names the
-exact setting or command needed next — the errors are the setup guide.
+Either way, verify the link, then sync through the common API or dashboard:
 
-`sync` is read-only at the broker (it never places trades) and rewrites the
-ledger from the current SnapTrade snapshot. `POST /api/brokerages/fidelity/sync`
-performs the same pull over HTTP; the legacy `/retirement/holdings/*` and
+```bash
+./setup-brokerages.sh verify
+```
+
+`POST /api/brokerages/fidelity/sync` is read-only at the broker and rewrites the
+ledger from the current SnapTrade snapshot. The legacy `/retirement/holdings/*` and
 `/retirement/enrichment/{symbol}` routes are retired in favour of the common
 brokerage surface. Note: some employer-plan funds (e.g. 401(k)
 units) come back without a broker cost basis, so their open P/L equals market

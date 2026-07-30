@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, snaptrade_service, snaptrade_setup
+from app import config
 from app.brokerages import registry
 from app.brokerages.importers import held_option_market_data as market_data
 from app.brokerages.importers import snaptrade as importer
@@ -370,131 +370,6 @@ def test_holdings_without_option_legs_skips_market_data(
     }
 
 
-def test_legacy_sync_orchestrates_each_resource_at_most_once(
-        fidelity_sync_env, monkeypatch):
-    counter = _CallCounter()
-    _install_providers(monkeypatch, counter)
-
-    summary = snaptrade_service.sync(provider=importer.fetch_snaptrade)
-
-    assert summary["sync"]["positions_synced"] == 2
-    assert counter.as_dict() == {
-        "positions": 1,
-        "activities": 1,
-        "betas": 1,
-        "greeks": 1,
-        "resource_commands": [],
-    }
-
-
-# ----------------------------------------- legacy sync seam / CLI / errors ---
-
-def test_legacy_sync_provider_injection_return_shape(fidelity_sync_env, monkeypatch):
-    monkeypatch.setattr(
-        importer, "sync_events",
-        lambda: {"groups_reactivated": 0, "events_received": 0},
-    )
-    monkeypatch.setattr(market_data, "sync_market_data", lambda: {})
-
-    summary = snaptrade_service.sync(
-        provider=lambda: [(_account(), _positions_with_option())]
-    )
-
-    assert set(summary) >= {
-        "holdings", "totalValue", "totalCostBasis", "totalOpenPnl",
-        "totalOpenPnlPct", "byAccount", "byAssetClass", "retrievedAt",
-        "source", "sync",
-    }
-    assert summary["source"] == "SNAPTRADE"
-    assert summary["retrievedAt"] == FROZEN_NOW
-    assert summary["sync"] == {
-        "accounts_synced": 1,
-        "positions_synced": 2,
-        "added": 2,
-        "changed": 0,
-        "unchanged": 0,
-        "removed": 0,
-        "groups_reactivated": 0,
-    }
-    assert {h["symbol"] for h in summary["holdings"]} == {"JOBY", CONTRACT}
-
-
-def test_cli_subcommand_surface_and_secret_redaction(
-        fidelity_sync_env, monkeypatch, capsys, tmp_path):
-    """Documented `python -m app.snaptrade_service` commands stay available."""
-    env_path = tmp_path / "app.env"
-    env_path.write_text(
-        "SNAPTRADE_CLIENT_ID=client\n"
-        "SNAPTRADE_USER_ID=\n"
-        "SNAPTRADE_USER_SECRET=\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(snaptrade_setup.config, "repo_root", lambda: tmp_path)
-    monkeypatch.setattr(
-        snaptrade_setup, "register_user",
-        lambda: {"userId": "uid-secret", "userSecret": "sekrit-value"},
-    )
-    monkeypatch.setattr(
-        snaptrade_setup, "connection_portal_url",
-        lambda broker=None, custom_redirect=None: "https://example.test/portal",
-    )
-    monkeypatch.setattr(
-        snaptrade_setup, "list_accounts",
-        lambda: [{"id": "acct-1", "name": "BrokerageLink", "number": "652",
-                  "institution": "Fidelity", "totalValue": 1.0}],
-    )
-    monkeypatch.setattr(
-        snaptrade_service, "sync",
-        lambda: {"source": "SNAPTRADE", "holdings": [], "sync": {"added": 0}},
-    )
-    monkeypatch.setattr(
-        snaptrade_service, "snapshot",
-        lambda: {"source": "SNAPTRADE", "holdings": [], "totalValue": 0.0},
-    )
-
-    assert snaptrade_service._main(["register"]) == 0
-    assert snaptrade_service._main(["connect", "--broker", "FIDELITY"]) == 0
-    assert snaptrade_service._main(["accounts"]) == 0
-    assert snaptrade_service._main(["sync"]) == 0
-    assert snaptrade_service._main(["snapshot"]) == 0
-
-    output = capsys.readouterr().out
-    assert "sekrit-value" not in output
-    assert "uid-secret" not in output
-    assert "https://example.test/portal" in output
-    assert "saved securely" in output
-
-
-def test_cli_validation_errors_exit_two_without_leaking_detail(
-        fidelity_sync_env, monkeypatch, capsys):
-    monkeypatch.setattr(
-        snaptrade_setup, "register_user",
-        lambda: (_ for _ in ()).throw(
-            snaptrade_service.SnapTradeValidationError("missing credentials", 503)
-        ),
-    )
-    with pytest.raises(SystemExit) as exc:
-        snaptrade_service._main(["register"])
-    assert exc.value.code == 2
-    err = capsys.readouterr().err
-    assert "missing credentials" in err
-    assert err.startswith("error: ")
-
-
-def test_public_status_codes_on_setup_errors(fidelity_sync_env, monkeypatch):
-    monkeypatch.setenv("SNAPTRADE_CLIENT_ID", "PERS-ABC")
-    monkeypatch.setenv("SNAPTRADE_CONSUMER_KEY", "ckey")
-    with pytest.raises(snaptrade_service.SnapTradeValidationError) as personal:
-        snaptrade_service.register_user()
-    assert personal.value.status_code == 422
-
-    monkeypatch.delenv("SNAPTRADE_CLIENT_ID", raising=False)
-    monkeypatch.delenv("SNAPTRADE_CONSUMER_KEY", raising=False)
-    with pytest.raises(snaptrade_service.SnapTradeValidationError) as missing:
-        snaptrade_service.register_user()
-    assert missing.value.status_code == 503
-
-
 # ------------------------------------------- artifact equivalence fixtures ---
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -514,7 +389,7 @@ def test_holdings_and_activity_artifacts_match_golden_fixtures(
         ],
     )
 
-    snaptrade_service.sync(
+    importer.sync_holdings(
         provider=lambda: [(_account(), _positions_with_option())]
     )
     importer.sync_events(
@@ -533,12 +408,8 @@ def test_holdings_and_activity_artifacts_match_golden_fixtures(
 
 def test_beta_and_greeks_artifacts_match_golden_fixtures(
         fidelity_sync_env, monkeypatch):
-    # Write holdings without invoking the live market-data side effect.
-    monkeypatch.setattr(importer, "sync_events", lambda: {
-        "groups_reactivated": 0,
-    })
-    monkeypatch.setattr(market_data, "sync_market_data", lambda: {})
-    snaptrade_service.sync(
+    # Write holdings without invoking activity or market-data siblings.
+    importer.sync_holdings(
         provider=lambda: [(_account(), _positions_with_option())]
     )
 
