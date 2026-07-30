@@ -50,7 +50,7 @@ settings are `SFP_DATA_DIR` and `SFP_LOG_DIR`; `APP_HOST`, `APP_PORT`, and
 `CORS_ORIGINS` configure the service.
 
 `SFP_DATA_DIR` contains the price cache, universe registry, namespaced study
-reports, wheel output, events, premiums, backtests, the `ledger_options/`
+reports, wheel output, events, premiums, backtests, the `ledger_trading/`
 folder, and retirement ledger data. Every artifact location can be overridden
 individually; the full table is in
 [`../docs/CONFIGURATION.md`](../docs/CONFIGURATION.md).
@@ -133,7 +133,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 versioned vocabulary for Holdings, Options, Option-Adjusted Basis, and Symbol
 Ledger. Missing marks, activity, or reconciliation remain unavailable rather
 than becoming zero. Tastytrade sync materializes all current positions in
-`data/ledger_options/tastytrade_positions.csv`.
+`data/ledger_trading/tastytrade_positions.csv`.
 
 The legacy `/brokerage-ledgers/{portfolio}/holdings` read and its enrichment and
 gain/loss-snapshot write paths are retired: the common Holdings resource now

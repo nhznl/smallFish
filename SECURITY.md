@@ -29,7 +29,7 @@ You will be credited when a report leads to a fix, unless you prefer otherwise.
 
 - A real credential, API key, or refresh token. Describe it; do not paste it.
 - A real account number, position, cost basis, or transaction.
-- An unredacted `app.env`, or any file from `data/ledger_options/` or
+- An unredacted `app.env`, or any file from `data/ledger_trading/` or
   `data/ledger_retirement/`.
 
 `./commands.sh doctor` output is safe to attach: it masks secrets and reports

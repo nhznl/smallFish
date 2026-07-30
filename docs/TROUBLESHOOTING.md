@@ -239,7 +239,7 @@ stale server or leftover `data/` state is involved.
 Include your OS, Python and Node versions, the exact command, and the full
 `./commands.sh doctor` output. Redact anything else.
 
-Never attach `app.env`, anything from `data/ledger_options/` or
+Never attach `app.env`, anything from `data/ledger_trading/` or
 `data/ledger_retirement/`, or a screenshot showing real positions. For a
 security issue, do not open a public issue at all — see
 [../SECURITY.md](../SECURITY.md).

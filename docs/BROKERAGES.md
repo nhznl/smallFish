@@ -70,7 +70,7 @@ beta.
 - Live IV and Greeks for your exact open contracts.
 - Market-metric beta, the governed beta input for beta-delta risk.
 
-It writes those into git-ignored CSVs under `$SFP_DATA_DIR/ledger_options/`.
+It writes those into git-ignored CSVs under `$SFP_DATA_DIR/ledger_trading/`.
 
 ### Setup
 
@@ -207,10 +207,10 @@ Partial risk inputs are never presented as complete totals.
 
 | Path | Contents |
 |---|---|
-| `$SFP_DATA_DIR/ledger_options/options_activity.csv` | Immutable broker transactions |
-| `$SFP_DATA_DIR/ledger_options/options_position_marks.csv` | Current marks |
-| `$SFP_DATA_DIR/ledger_options/options_greeks.csv` | Timestamped IV and Greeks |
-| `$SFP_DATA_DIR/ledger_options/options_betas.csv` | Timestamped market-metric beta |
+| `$SFP_DATA_DIR/ledger_trading/options_activity.csv` | Immutable broker transactions |
+| `$SFP_DATA_DIR/ledger_trading/options_position_marks.csv` | Current marks |
+| `$SFP_DATA_DIR/ledger_trading/options_greeks.csv` | Timestamped IV and Greeks |
+| `$SFP_DATA_DIR/ledger_trading/options_betas.csv` | Timestamped market-metric beta |
 | `$SFP_DATA_DIR/ledger_retirement/snaptrade_holdings.csv` | Normalized holdings |
 
 All git-ignored. All contain real position data — never attach them to an issue.

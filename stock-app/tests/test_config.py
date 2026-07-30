@@ -13,7 +13,7 @@ def test_runtime_roots_derive_artifact_paths(tmp_path: Path, monkeypatch):
     assert config.logs_dir() == logs
     assert config.universe_csv() == data / "universe.csv"
     assert config.retired_symbols_csv() == data / "retired_symbols.csv"
-    options_dir = data / "ledger_options"
+    options_dir = data / "ledger_trading"
     assert config.options_activity_csv() == options_dir / "options_activity.csv"
     assert config.options_position_marks_csv() == options_dir / "options_position_marks.csv"
     assert config.options_greeks_csv() == options_dir / "options_greeks.csv"

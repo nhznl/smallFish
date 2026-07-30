@@ -112,7 +112,7 @@ never touches another symbol's cache.
 | `data/events.csv`, `data/events_meta.json`, `data/events_history/` | Upcoming earnings calendar, freshness/coverage, and dated snapshots | `fetch` or the conditional scan prerequisite (Finnhub) |
 | `data/earnings_history.csv` | Multi-year realized earnings dates; not refreshed in the live scan path | `earnings-history` (Yahoo/yfinance) |
 | `data/backtest/`, `data/sector_rotation_study/` | Study runs and pinned evidence | study commands |
-| `data/ledger_options/`, `data/ledger_retirement/` | Broker data. **Real positions.** | brokerage syncs |
+| `data/ledger_trading/`, `data/ledger_retirement/` | Broker data. **Real positions.** | brokerage syncs |
 | `data/studies/` | Materialized Research Studies JSON | `studies build` |
 | `logs/` | Scraper, audit, and server logs | various |
 
@@ -195,7 +195,7 @@ Broker ledgers can be re-synced from the providers.
 ## Privacy
 
 - Everything is local. smallFish has no telemetry and no service of its own.
-- `data/ledger_options/` and `data/ledger_retirement/` contain your real
+- `data/ledger_trading/` and `data/ledger_retirement/` contain your real
   positions, cost basis, and transaction history. Never attach them to an issue,
   a pull request, or a screenshot.
 - Redact before sharing diagnostics. `./commands.sh doctor` output is already

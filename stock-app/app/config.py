@@ -99,12 +99,12 @@ def retired_symbols_csv() -> Path:
 
 def options_activity_csv() -> Path:
     """Immutable normalized broker transactions used by the options activity UI."""
-    return _under("SFP_OPTIONS_ACTIVITY", data_dir(), "ledger_options/options_activity.csv")
+    return _under("SFP_OPTIONS_ACTIVITY", data_dir(), "ledger_trading/options_activity.csv")
 
 
 def options_position_marks_csv() -> Path:
     """Latest broker position marks used for open group P/L."""
-    return _under("SFP_OPTIONS_POSITION_MARKS", data_dir(), "ledger_options/options_position_marks.csv")
+    return _under("SFP_OPTIONS_POSITION_MARKS", data_dir(), "ledger_trading/options_position_marks.csv")
 
 
 def tastytrade_positions_csv() -> Path:
@@ -112,14 +112,14 @@ def tastytrade_positions_csv() -> Path:
     ledger. Unlike ``options_position_marks_csv``, this includes every current
     equity and option position and is not consumed by the legacy options API."""
     return _under(
-        "SFP_TASTYTRADE_POSITIONS", data_dir(), "ledger_options/tastytrade_positions.csv"
+        "SFP_TASTYTRADE_POSITIONS", data_dir(), "ledger_trading/tastytrade_positions.csv"
     )
 
 
 def trading_holdings_trend_csv() -> Path:
     """Per-holding adverse-move state for Tastytrade equity positions."""
     return _under(
-        "SFP_TRADING_HOLDINGS_TREND", data_dir(), "ledger_options/holdings_trend.csv"
+        "SFP_TRADING_HOLDINGS_TREND", data_dir(), "ledger_trading/holdings_trend.csv"
     )
 
 
@@ -128,7 +128,7 @@ def trading_holdings_gain_loss_snapshots_csv() -> Path:
     return _under(
         "SFP_TRADING_HOLDINGS_GL_SNAPSHOTS",
         data_dir(),
-        "ledger_options/holdings_gain_loss_snapshots.csv",
+        "ledger_trading/holdings_gain_loss_snapshots.csv",
     )
 
 
@@ -137,18 +137,18 @@ def trading_holdings_enrichment_csv() -> Path:
     return _under(
         "SFP_TRADING_HOLDINGS_ENRICHMENT",
         data_dir(),
-        "ledger_options/holdings_enrichment.csv",
+        "ledger_trading/holdings_enrichment.csv",
     )
 
 
 def options_greeks_csv() -> Path:
     """Latest timestamped Tastytrade Greeks for current option positions."""
-    return _under("SFP_OPTIONS_GREEKS", data_dir(), "ledger_options/options_greeks.csv")
+    return _under("SFP_OPTIONS_GREEKS", data_dir(), "ledger_trading/options_greeks.csv")
 
 
 def options_betas_csv() -> Path:
     """Latest timestamped Tastytrade beta for current option underlyings."""
-    return _under("SFP_OPTIONS_BETAS", data_dir(), "ledger_options/options_betas.csv")
+    return _under("SFP_OPTIONS_BETAS", data_dir(), "ledger_trading/options_betas.csv")
 
 
 def snaptrade_holdings_csv() -> Path:
