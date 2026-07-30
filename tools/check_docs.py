@@ -51,6 +51,7 @@ NARRATIVE_FILES: set[str] = {
     "docs/ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md",
     "docs/ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md",
     "docs/COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md",
+    "docs/EMPTY_VS_FAILED_VIEW_MODEL_PHASE14_DESIGN.md",
 }
 
 # Roots holding generated runtime artifacts. Documentation legitimately names
