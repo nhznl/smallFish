@@ -15,6 +15,7 @@ import {
   SymbolLedgerDetailResponse,
   SymbolLedgerListResponse,
 } from '../model/brokerage';
+import { API_BASE_URL } from './api-base';
 
 /**
  * The one client for every brokerage resource.
@@ -26,9 +27,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class BrokerageService {
   private readonly http = inject(HttpClient);
-  private readonly apiBaseUrl = window.location.port === '4200'
-    ? 'http://localhost:8000'
-    : window.location.origin;
+  private readonly apiBaseUrl = inject(API_BASE_URL);
 
   private base(brokerageId: BrokerageId): string {
     return `${this.apiBaseUrl}/api/brokerages/${encodeURIComponent(brokerageId)}`;

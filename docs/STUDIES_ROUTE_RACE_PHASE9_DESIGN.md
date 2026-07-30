@@ -47,8 +47,9 @@ and can race.
 ## Out of scope
 
 - View-model / presentational decomposition (separate large phase)
-- Shared API-base token or formatting pipes
-- Mechanical dead-code deletion (`models/price.py`, orphan Angular models,
-  unused retrieval helpers)
+- ~~Shared API-base token~~ **Done in Phase 10** — see
+  [`ANGULAR_API_BASE_PHASE10_DESIGN.md`](ANGULAR_API_BASE_PHASE10_DESIGN.md)
+- Formatting pipes
+- Mechanical dead-code deletion (`models/price.py` still deferred)
 - Changing study API paths, JSON contracts, or materialized evidence
 - Strategy-stocks component tests (still deferred from Phase 5)

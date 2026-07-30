@@ -2,14 +2,12 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { StudyCatalog, StudyDetail } from '../studies/study.models';
+import { API_BASE_URL } from './api-base';
 
 @Injectable({ providedIn: 'root' })
 export class StudiesService {
   private readonly http = inject(HttpClient);
-  private readonly apiBaseUrl = window.location.port === '4200'
-    ? 'http://localhost:8000'
-    : window.location.origin;
-  private readonly studiesUrl = `${this.apiBaseUrl}/api/studies`;
+  private readonly studiesUrl = `${inject(API_BASE_URL)}/api/studies`;
 
   getCatalog(): Observable<StudyCatalog> {
     return this.http.get<StudyCatalog>(this.studiesUrl);

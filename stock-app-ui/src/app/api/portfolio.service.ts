@@ -6,6 +6,7 @@ import {
   PortfolioListResponse,
   SymbolLookupResponse
 } from '../model/portfolio';
+import { API_BASE_URL } from './api-base';
 
 /**
  * Portfolio tracking API.
@@ -17,9 +18,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class PortfolioService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = (window.location.port === '4200'
-    ? 'http://localhost:8000'
-    : window.location.origin) + '/portfolios';
+  private readonly baseUrl = `${inject(API_BASE_URL)}/portfolios`;
 
   /** All portfolios with the list-table columns, SPY context, and cache date. */
   list(): Observable<PortfolioListResponse> {

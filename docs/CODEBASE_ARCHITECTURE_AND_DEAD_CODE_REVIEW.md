@@ -35,9 +35,11 @@ The audit nevertheless found substantial follow-up work:
    [`OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md`](OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md).
    Coverage lives in `brokerages/call_coverage.py`; the dashboard modules and
    `options_risk.yaml` are deleted.
-3. The Angular application has three orphan model files, one unused service
+3. ~~The Angular application has three orphan model files, one unused service
    method, repeated infrastructure/formatting code, and weak coverage for its
-   largest screens.
+   largest screens.~~ Orphan models / unused catalog client removed; Phase 5
+   coverage and Phase 10 API-base token landed. Formatting drift and view-model
+   decomposition remain open.
 4. Several backend endpoints and helpers have no repository consumer, but are
    compatibility surfaces rather than proven dead code. They must not be
    removed solely because the Angular client does not call them.
@@ -85,8 +87,8 @@ work. The plan should remain closed.
 
 | Priority | Finding | Evidence and disposition |
 |---|---|---|
-| Medium | Three orphan model files | `src/app/model/retirement.ts`, `startEndDate.ts`, and `weekly.ts` have no TypeScript importer. Confirm route/template references once more, then delete them in a focused cleanup. |
-| Medium | Unused catalog request | `BrokerageService.getCatalog()` has no production caller. The catalog-only interfaces appear to exist solely for this method. Treat `/api/brokerages` as an external compatibility endpoint; the frontend method can be removed independently. |
+| Medium | Three orphan model files | ~~`retirement.ts`, `startEndDate.ts`, `weekly.ts`~~ **Removed** in an earlier chore; no longer present under `src/app/model/`. |
+| Medium | Unused catalog request | ~~`BrokerageService.getCatalog()`~~ **Removed** in an earlier chore. Backend `GET /api/brokerages` retained as a compatibility endpoint. |
 | Low | No unused local CSS selectors detected | A static component stylesheet/template comparison found no unreferenced class selector. Dynamic class names remain a limit of this check. |
 | Low | No compiler-visible unused locals or parameters | Angular's TypeScript project passes `--noUnusedLocals --noUnusedParameters`. Public template members and runtime references still require the semantic checks in this report. |
 
@@ -94,7 +96,7 @@ work. The plan should remain closed.
 
 | Priority | Finding | Affected areas | Recommendation |
 |---|---|---|---|
-| Medium | API-origin selection is duplicated in five services | Brokerage, portfolio, studies, capability, and stock services independently test for port `4200` and select localhost versus `window.location.origin`. | Provide one injected API-base token or environment helper. Test development and production origins once. |
+| Medium | API-origin selection is duplicated in five services | ~~Five independent port-4200 ternaries~~ **Phase 10 done.** Shared `API_BASE_URL` token + `resolveApiBaseUrl`. See [`ANGULAR_API_BASE_PHASE10_DESIGN.md`](ANGULAR_API_BASE_PHASE10_DESIGN.md). |
 | Medium | Money, percentage, sign, date, and range formatting is repeated with inconsistent behavior | Brokerage Holdings, Combined Ledger, Symbol Ledger, portfolios, sector rotation, scanner, stock detail, and strategy views. Some use a fixed locale and some the browser locale; sign/minus conventions differ. | Introduce a small set of pure pipes or narrow formatting helpers. Preserve each display contract deliberately instead of replacing everything with one broad formatter. |
 | High | Date and nullable API contracts do not match JSON | ~~Several interfaces typed ISO dates as `Date`~~ **4a done.** Stock/gain-loss transport uses ISO `string` + correct `| null` on trade stats and gain/loss blocks; scanner/stock-detail casts removed. See [`CONTRACT_TIGHTENING_PHASE4_DESIGN.md`](CONTRACT_TIGHTENING_PHASE4_DESIGN.md). |
 | Medium | Job and study results use `any` | Stock-service job methods, study candidates, and stock-detail weekly fields lose compile-time coverage of backend changes. | Add response interfaces derived from current payloads; do not change wire shapes. |
@@ -121,9 +123,9 @@ shared brokerage page and should remain simple.
 |---|---|---|
 | ~~High~~ Done | Retired options-risk subsystem | **Implemented 2026-07-29.** Call coverage moved to `brokerages/call_coverage.py`; legacy risk-dashboard modules (`app.options_market`, `app.options_risk`), `config/options_risk.yaml`, and dashboard-only tests deleted. Capability `retirement-risk` reworded to market-data enrichment. Design: [`OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md`](OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md). |
 | Medium | Tests-only activity maintenance helpers | ~~Decide expose vs remove~~ **Phase 6 decision:** keep as tests-backed recovery APIs; do **not** add a public router/CLI in this phase. See [`OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md`](OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md). |
-| Medium | Unused retrieval helpers | `stock_data_retriever.fetch_period_history` and `fetch_range_history` have no caller; the file's company-info function is live. Remove the unused functions after checking any external imports. |
-| Medium | Unused shared price contract | `models/price.py` defines `DailyPriceBar`, but neither runtime nor tests consume it. Delete it, or deliberately adopt it for standard-library row validation; do not force pandas into `models/`. |
-| Low | Zero-reference helpers | `brokerages.store.notes_for`, `brokerages.projections.envelope.capabilities_block`, `brokerages.adapters.base.decimal_or_zero`, and `config.strategy_config_yaml` have no repository reference. Remove after confirming they are not supported import surfaces. |
+| Medium | Unused retrieval helpers | ~~`fetch_period_history` / `fetch_range_history`~~ **Removed** earlier; `fetch_stock_information` remains live. |
+| Medium | Unused shared price contract | `models/price.py` defines `DailyPriceBar`, but neither runtime nor tests consume it. **Deferred (stop condition):** public `models/` surface — delete only after an adopt-or-delete owner decision; do not force pandas into `models/`. |
+| Low | Zero-reference helpers | ~~`notes_for`, `capabilities_block`, `decimal_or_zero`, `strategy_config_yaml`~~ **Removed** in earlier cleanup (strategy_config with Phase 2 / risk retirement). |
 | Low | Tests-only helpers | `universe_read.is_member` and `cache.read_companies` have no production caller. They may be retained as small tested library conveniences, but should not be counted as production behavior. |
 
 The following are **not proven dead** and must remain pending a consumer audit:
@@ -279,6 +281,11 @@ methodology changes, compatibility removals, and mechanical cleanup.
    [`STUDIES_ROUTE_RACE_PHASE9_DESIGN.md`](STUDIES_ROUTE_RACE_PHASE9_DESIGN.md):
    catalog → `paramMap` → `switchMap` study/scan load; stale `runScan` guard;
    lifecycle specs. Deferred from Phase 5.
+10. **~~Shared Angular API-base token.~~ Done (10a).** See
+    [`ANGULAR_API_BASE_PHASE10_DESIGN.md`](ANGULAR_API_BASE_PHASE10_DESIGN.md):
+    one `API_BASE_URL` injection token replaces five duplicated origin
+    ternaries. Remaining mechanical cleanup (`models/price.py`) deferred —
+    public `models/` surface needs an adopt-or-delete owner decision.
 
 ### Explicit stop conditions
 

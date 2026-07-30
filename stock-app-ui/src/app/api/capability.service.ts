@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { catchError, map, shareReplay } from 'rxjs/operators';
+import { API_BASE_URL } from './api-base';
 
 /** One optional feature's availability. Mirrors stock-app/app/capabilities.py. */
 export interface Capability {
@@ -38,9 +39,7 @@ export interface CapabilitySnapshot {
 @Injectable({ providedIn: 'root' })
 export class CapabilityService {
   private readonly http = inject(HttpClient);
-  private readonly apiBaseUrl = window.location.port === '4200'
-    ? 'http://localhost:8000'
-    : window.location.origin;
+  private readonly apiBaseUrl = inject(API_BASE_URL);
 
   private readonly snapshot$: Observable<CapabilitySnapshot> = this.http
     .get<CapabilitySnapshot>(`${this.apiBaseUrl}/capabilities`)

@@ -7,20 +7,17 @@ import { WheelCandidate } from '../model/wheel-candidate';
 import { CollectionScopeRequest, OptionQuoteSnapshot } from '../model/option-quotes';
 import { SectorRotationSnapshot } from '../model/sector-rotation';
 import { MomentumStock, StockAnalysis } from '../model/stock';
+import { API_BASE_URL } from './api-base';
 
 @Injectable({ providedIn: 'root' })
 export class StockService {
   private readonly http = inject(HttpClient);
-
-  private readonly apiBaseUrl = window.location.port === '4200'
-    ? 'http://localhost:8000'
-    : window.location.origin;
+  private readonly apiBaseUrl = inject(API_BASE_URL);
   private stockUrl = `${this.apiBaseUrl}/stocks`;
   private momentumStocksUrl = `${this.apiBaseUrl}/momentumStocks`;
   private readonly stockInfoCache = new Map<string, StockInfo>();
   private readonly stockInfoRequests = new Map<string, Observable<StockInfo>>();
 
-  constructor() {}
 
   /** Fetch the focused cached-analysis payload used by Stock Detail. */
   getStockAnalysis(symbol: string): Observable<StockAnalysis> {
