@@ -1,5 +1,5 @@
 """Deterministic fixture tests for the Phase 2 option-chain premium screen
-(chains.py, Requirements.md section 7).
+(`utilities/options/chains.py`).
 
 Runnable standalone (no pytest, no network -- the yfinance fetch is injected via
 fake ticker objects, exactly like test_audit_price_cache.py):
@@ -730,7 +730,7 @@ def _write_wheel_csv(root: Path, as_of: str, specs: list[dict]) -> None:
 
 def test_run_chains_isolates_one_bad_symbol():
     """A fetch failure for one symbol is recorded; the other still produces
-    rows and the run does not crash (per-symbol isolation, section 7)."""
+    rows and the run does not crash (per-symbol isolation)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         _write_wheel_csv(root, "2026-07-16", [

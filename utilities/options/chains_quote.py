@@ -360,7 +360,7 @@ def compute_mid(bid, ask) -> float | None:
     """(bid + ask) / 2, or None for any degenerate quote: missing, zero, or
     crossed (ask < bid). Yahoo bid/ask are stale outside RTH and far-OTM
     contracts routinely quote 0 bid -- all of those become a null, flagged
-    mid rather than a fabricated price (section 7)."""
+    mid rather than a fabricated price."""
     b = _num(bid)
     a = _num(ask)
     if b is None or a is None or b <= 0 or a <= 0 or a < b:
@@ -397,7 +397,7 @@ def cc_period_yield(premium: float | None, spot: float | None) -> float | None:
 
 def simple_apr(period_yield: float | None, dte: int | float | None) -> float | None:
     """simple_APR = period_yield * 365 / calendar_DTE. LABELLED simple on
-    purpose: no compounding is implied (section 7)."""
+    purpose: no compounding is implied."""
     if period_yield is None or dte in (None, 0):
         return None
     return period_yield * 365.0 / dte
@@ -405,7 +405,7 @@ def simple_apr(period_yield: float | None, dte: int | float | None) -> float | N
 
 def annualized_rv(rv_used_daily: float | None) -> float | None:
     """Annualize a DAILY realized-vol sigma: rv_used_daily * sqrt(252)
-    (section 4.3 units convention -- the wheel stores daily sigma)."""
+    (wheel stores daily sigma)."""
     rv = _num(rv_used_daily)
     if rv is None:
         return None
@@ -416,7 +416,7 @@ def iv_vs_rv(iv: float | None, ann_rv: float | None) -> tuple[float | None, floa
     """(ratio, difference) of chain IV vs the annualized realized vol. IV is
     juiciness; RV is the realized baseline -- a ratio > 1 means options are
     pricing in more than the stock has recently realized. Yahoo IV is
-    unreliable, so this is context, never a gate (section 7)."""
+    unreliable, so this is context, never a gate."""
     iv = _num(iv)
     if iv is None or ann_rv in (None, 0):
         return None, None
@@ -425,7 +425,7 @@ def iv_vs_rv(iv: float | None, ann_rv: float | None) -> tuple[float | None, floa
 
 def liquidity_gate(mid: float | None, open_interest, spread_pct: float | None,
                    oi_min: float, max_spread_pct: float) -> tuple[bool, list[str]]:
-    """Hard liquidity gate (section 7). Fails on: no two-sided quote,
+    """Hard liquidity gate. Fails on: no two-sided quote,
     open interest below `oi_min`, or a bid-ask spread wider than
     `max_spread_pct` of mid. Returns (ok, reasons); reasons is empty iff ok.
     The record of *what* was gated is preserved on every row (gate_reason)."""

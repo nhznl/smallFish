@@ -1,4 +1,4 @@
-"""One-time price-cache audit/backfill (Requirements.md section 4.2).
+"""One-time price-cache audit/backfill (`utilities/README.md` — price cache format).
 
 The shared repository cache is appended incrementally with yfinance auto-adjusted
 closes, so rows written *before* a later split/dividend keep their old
@@ -302,7 +302,7 @@ def audit_symbol(cache_root: Path, symbol: str, fetch_fn,
 
 def load_universe_file(path: Path) -> list[str]:
     """Reads one symbol per line; '#'-prefixed comment lines and blanks are
-    skipped (the section 4.1 index-file convention)."""
+    skipped (the `#`-comment universe-file convention)."""
     symbols = []
     for line in path.read_text().splitlines():
         line = line.strip()
@@ -362,7 +362,7 @@ def make_yfinance_fetcher(pause_seconds: float):
     def fetch(symbol: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         ticker = yf.Ticker(symbol)
         # auto_adjust pinned explicitly -- the whole point of this audit is
-        # a single consistent adjustment vintage (section 4.2).
+        # a single consistent adjustment vintage (see module docstring).
         df = ticker.history(start=start.strftime("%Y-%m-%d"),
                             end=(end + timedelta(days=1)).strftime("%Y-%m-%d"),
                             auto_adjust=True)

@@ -101,7 +101,3 @@ Small, unblocked, no decision needed.
 - **`npm audit` reports advisories in the Karma test toolchain.** Dev-only, none
   reachable from the application bundle. Do not `npm audit fix` reflexively — it
   would move Angular tooling off the committed lockfile.
-- **Seven source files cite `Requirements.md` section numbers** that no longer
-  exist (`section 4.2`, `sections 4.1-4.5`, `section 6.4`, `section 7`). They
-  predate an earlier restructure. Repoint them at the owning config or module,
-  which is more useful than a document reference anyway.

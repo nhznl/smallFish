@@ -56,6 +56,7 @@ NARRATIVE_FILES: set[str] = {
     "docs/CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md",
     "docs/GAIN_LOSS_MIGRATION_RETIRE_PHASE21_DESIGN.md",
     "docs/PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md",
+    "docs/DOC_HYGIENE_PHASE23_DESIGN.md",
 }
 
 # Roots holding generated runtime artifacts. Documentation legitimately names

@@ -1,4 +1,4 @@
-"""Phase 1 wheel scan (Requirements.md sections 2, 3, 4.1-4.5).
+"""Phase 1 wheel scan (`models/wheel.py` columns; `utilities/options/config/wheel.yaml`).
 
 Computes, per symbol x horizon (7/14/30/37/45 DTE), the OHLCV-only analytics
 needed to judge a name for cash-secured puts / covered calls: price ranges,
@@ -19,17 +19,17 @@ Reads ONLY local files (no network calls anywhere in the scan path):
 Output (written by ``python -m utilities.options.wheel``):
   - data/wheel/{as_of}.csv            one row per symbol x horizon, WHEEL_COLUMNS
   - data/wheel_exclusions/{as_of}.csv symbols failing the data-hygiene guard
-    (never in the main report with null metrics; section 4.2)
+    (never in the main report with null metrics)
   - data/wheel/runs/{run_id}/          creation-only report, exclusions, and
     reproducibility manifest with source digests
 
 Conventions:
-  - N sessions per horizon = round(DTE * 252/365) (section 2).
+  - N sessions per horizon = round(DTE * 252/365).
   - RV fields are DAILY sigma; all *_pct / *_freq columns are FRACTIONS
     (0.05 = 5%), matching ta.py's atr_pct convention. The cushions in
     config are percent numbers (2.5 means 2.5%).
   - All path metrics use the future-only interval [i+1, i+N]; day i's
-    high/low happened before entry and never counts (section 4.3).
+    high/low happened before entry and never counts.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ CONFIG_PATH = Path(__file__).resolve().parent / "config" / "wheel.yaml"
 # ---------------------------------------------------------------------------
 
 DEFAULT_HORIZONS_DTE = [7, 14, 30, 37, 45]
-# RV-window -> horizon mapping (section 4.3): 7 DTE -> RV7, 14/30/37 -> RV21,
+# RV-window -> horizon mapping: 7 DTE -> RV7, 14/30/37 -> RV21,
 # 45 -> RV37. Keyed by DTE; values are the RV window in sessions.
 DEFAULT_RV_WINDOW_BY_DTE = {7: 7, 14: 21, 30: 21, 37: 21, 45: 37}
 RV_WINDOWS = [7, 21, 37]
@@ -109,7 +109,7 @@ RUN_MODE_CURRENT_CONTEXT_ONLY = wheel_schema.RUN_MODE_CURRENT_CONTEXT_ONLY
 # ---------------------------------------------------------------------------
 
 def sessions_for_dte(dte: int) -> int:
-    """Calendar DTE -> exchange sessions: N = round(DTE * 252/365) (section 2)."""
+    """Calendar DTE -> exchange sessions: N = round(DTE * 252/365)."""
     return int(round(dte * 252.0 / 365.0))
 
 
@@ -202,7 +202,7 @@ def band_metrics(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
 
 def hygiene_check(closes: np.ndarray, threshold: float = 0.30,
                   min_sessions: int = 300) -> tuple[int, str | None]:
-    """Per-scan data-hygiene guard (section 4.2). Flags any single-day
+    """Per-scan data-hygiene guard. Flags any single-day
     |log close return| > `threshold` as a residual adjustment discontinuity.
 
     Returns (clean_start_idx, excluded_reason):
@@ -232,7 +232,7 @@ def horizon_window_metrics(closes: np.ndarray, highs: np.ndarray, lows: np.ndarr
 
     For every entry index i with a full future window, the hypothetical strike
     is set from that window's own entry close C[i]; ALL path metrics use ONLY
-    the future interval [i+1, i+N] (entry-day fix, section 4.3):
+    the future interval [i+1, i+N] (entry-day fix):
       - put expiry-ITM:  C[i+N] <= C[i] * (1 - c)
       - call expiry-ITM: C[i+N] >= C[i] * (1 + c)
       - put touch:  min(low[i+1..i+N])  <= put strike
@@ -325,7 +325,7 @@ def min_cushion_label(put_itm_by_cushion: dict[float, float], target: float) -> 
 def event_window_state(price_as_of: pd.Timestamp, horizon_calendar_days: int,
                        event_dates: list[pd.Timestamp],
                        events_coverage_end: pd.Timestamp | None) -> str:
-    """Freshness tri-state (section 4.4). KNOWN_EVENT when an event falls in
+    """Freshness tri-state. KNOWN_EVENT when an event falls in
     (price_as_of, price_as_of + horizon]; else NO_EVENT_IN_FETCHED_RANGE only
     when the fetched coverage actually extends to the window end
     (events_coverage_end >= price_as_of + horizon); else UNKNOWN_STALE.
@@ -515,7 +515,7 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
     warnings: list[str] = []
     price_input_digest = hashlib.sha256()
 
-    # -- Universe (section 4.1): the universe.py registry (S&P Composite 1500 +
+    # -- Universe: the universe.py registry (S&P Composite 1500 +
     # curated ETF seed + manual pins) + the latest
     # strategy report, deduped. Liveness is always registry minus the retirement
     # journal; a stale report must not reintroduce a newly retired symbol.
@@ -544,7 +544,7 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
             warnings.append("no strategy report found on or before as_of -- "
                             "skipping that universe source")
 
-    # -- Events + freshness sidecar (section 4.4) --
+    # -- Events + freshness sidecar --
     events_path = output_root / "events.csv"
     events_by_symbol: dict[str, list[pd.Timestamp]] = {}
     if events_path.exists():

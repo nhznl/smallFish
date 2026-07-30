@@ -232,8 +232,8 @@ decimal semantics are demonstrably identical.
 | ~~Medium~~ Done | `docs/BROKERAGES.md` | ~~“Combined risk inputs” / retired risk UI~~ Ledger views table; materialized Greeks/beta vs user-visible features (`29ec548`). |
 | ~~Medium~~ Done | `docs/TROUBLESHOOTING.md` | ~~Both `/options` and `/portfolios` collide~~ Only `/portfolios` in `SPA_ROUTE_COLLISIONS`; `/options` JSON collection retired (`29ec548`). |
 | ~~Medium~~ Done | `utilities/README.md` | ~~Quote/Greek/beta transport in utilities~~ `services.options_market` ownership documented (`29ec548`). |
-| Low | `stock-app/requirements.txt` comments | Header comments refer to an old `strategy/` duplication problem and no longer explain the current runtime boundary. |
-| Low | `Requirements.md` | Seven source-file references include stale section-number annotations. Paths remain useful, but anchors should use durable headings rather than line/section numbers. |
+| ~~Low~~ Done | `stock-app/requirements.txt` comments | ~~Old `strategy/` duplication wording~~ Updated: FastAPI vs utilities/studies split and `services/` boundary (23a). |
+| ~~Low~~ Done | `Requirements.md` / source comments | ~~Stale section-number anchors~~ Repointed to owning modules and config; housekeeping bullet removed (23a). |
 
 The setup sequence, support matrix, optional-integration behavior, data-root
 configuration, and core brokerage ownership documentation otherwise agree with
@@ -342,6 +342,11 @@ methodology changes, compatibility removals, and mechanical cleanup.
     [`PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md`](PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md):
     Holdings / Symbol Ledger / Option-Adjusted Basis in README and screenshots;
     Trade Groups and risk-dashboard imagery retired; synthetic data only.
+23. **~~Doc hygiene (requirements header, section anchors, OAB screenshot).~~ Done (23a).** See
+    [`DOC_HYGIENE_PHASE23_DESIGN.md`](DOC_HYGIENE_PHASE23_DESIGN.md):
+    `stock-app/requirements.txt` runtime-boundary comments; durable module/config
+    references replace stale `Requirements.md` section numbers; Option-Adjusted
+    Basis marketing screenshot added to `docs/screenshots/`.
 
 ### Explicit stop conditions
 

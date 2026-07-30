@@ -1,12 +1,12 @@
 import { StockType } from './stock';
 
 // Wheel candidate types for the Phase 1 options-wheel scan
-// (Requirements.md sections 4-5).
+// (`models/wheel.py` — `WHEEL_COLUMNS` / `report_columns()`).
 //
 // SOURCE OF TRUTH for column names/order: the Python `WHEEL_COLUMNS` constant in
 // `models/wheel.py` (`report_columns()`) and FastAPI's wheel reader/router.
 // These interfaces MUST stay in sync with the report CSV, backend JSON, table,
-// and explainer (the section 5 column-sync rule).
+// and explainer.
 //
 // Units (per wheel.py): RV fields are DAILY sigma; every
 // `*Pct` / `*ExpiryItm*` / `*Touch*` frequency column is a fraction (0.05 = 5%),

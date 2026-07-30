@@ -1,5 +1,5 @@
-"""Phase 2 option-chain fetch + premium-yield screen (Requirements.md
-section 7 -- the "juiciness" screen).
+"""Phase 2 option-chain fetch + premium-yield screen
+(`utilities/options/README.md` — chains pipeline).
 
 Phase 1 (wheel.py) supplies *likelihood* (rv_percentile_252) and *risk*
 (expiry-ITM frequency) but never an actual bid. This module reads the LATEST
@@ -14,7 +14,7 @@ tests run with no network. `chain_obj` exposes the yfinance Ticker surface:
   - `.option_chain(expiry)`    -> object with `.puts` and `.calls` DataFrames
 Per-symbol isolation: one bad symbol/expiry never sinks the whole run.
 
-Data-source caveats baked in (section 7): Yahoo remains the contract-discovery,
+Data-source caveats (`chains_config.py` defaults): Yahoo remains the contract-discovery,
 OI/volume, last-trade, and diagnostic-IV source. Its bid/ask lacks an observation
 timestamp and cannot authorize entry economics. Exact standard contracts are
 then enriched from Tastytrade DXLink Quote events. Bid and ask provider times
@@ -245,7 +245,7 @@ PREMIUM_COLUMNS = [
     "quote_age_seconds",
     "quote_quality",        # OK | STALE | UNKNOWN | INVALID
     "quote_quality_reasons",
-    # strategy-specific juiciness (section 7)
+    # strategy-specific juiciness
     "seller_fill_method",   # BID (conservative executable baseline)
     "seller_fill",          # observed bid used by the execution scenario
     "intrinsic_value",      # per-share intrinsic value at snapshot spot
@@ -268,7 +268,7 @@ PREMIUM_COLUMNS = [
     "earnings_in_window",   # KNOWN_EVENT for this chain_dte's horizon
     "earnings_window_state",
     "pair_eligible",
-    # hard liquidity gate (section 7)
+    # hard liquidity gate
     "liquidity_ok",         # passes oi_min AND max_spread_pct AND has a quote
     "gate_reason",          # ';'-joined gate reasons (empty when liquidity_ok)
     "entry_eligible",       # false for ITM or failed-liquidity rows
@@ -282,7 +282,7 @@ PREMIUM_COLUMNS = [
 class _ThrottledTicker:
     """Wraps a yfinance Ticker so every network access (the expiry listing and
     each option_chain call) is throttled by a configurable sleep -- ~3 requests
-    per symbol, kept polite (section 7)."""
+    per symbol, kept polite."""
 
     def __init__(self, ticker, sleep_seconds: float):
         self._ticker = ticker

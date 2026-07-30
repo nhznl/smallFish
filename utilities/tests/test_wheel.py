@@ -4,7 +4,7 @@ Runnable standalone (no pytest needed):
 
     cd strategy && python3 tests/test_wheel.py
 
-Covers the Requirements.md section 4.5 test list: session counting,
+Covers the wheel scan contract (`utilities/options/wheel.py`): session counting,
 both RV estimators + the conservative max, the 1-sigma move, expiry-ITM /
 touch windowing (including the entry-day fix and low/high-not-close touches),
 min_cushion_20pct_itm (+ ">10%" overflow), the discontinuity guard, the
@@ -63,7 +63,7 @@ def _approx(a: float, b: float, tol: float = 1e-12) -> bool:
     return abs(a - b) < tol
 
 
-# -- Session conversion (section 2) -----------------------------------------
+# -- Session conversion ---------------------------------------------------------
 
 def test_sessions_for_dte():
     """N = round(DTE * 252/365) must reproduce the documented table."""
@@ -72,7 +72,7 @@ def test_sessions_for_dte():
         assert sessions_for_dte(dte) == n, f"{dte} DTE -> {sessions_for_dte(dte)}, want {n}"
 
 
-# -- Volatility estimators (section 4.3) ------------------------------------
+# -- Volatility estimators ----------------------------------------------------
 
 def test_sigma_cc_hand_computed():
     """Sample std (ddof=1) of log returns on a tiny series."""
@@ -103,7 +103,7 @@ def test_one_sigma_move():
     assert _approx(pct, 0.10)
 
 
-# -- Expiry-ITM / touch windowing (section 4.3, entry-day fix) ---------------
+# -- Expiry-ITM / touch windowing (entry-day fix) -------------------------------
 
 def test_windowing_excludes_entry_day():
     """Entry day i's high/low happened before entry and must never count:
@@ -194,7 +194,7 @@ def test_min_cushion_normal_and_overflow():
     assert min_cushion_label(all_bad, 0.20) == ">10%"
 
 
-# -- Discontinuity guard (section 4.2) ---------------------------------------
+# -- Discontinuity guard -------------------------------------------------------
 
 def test_discontinuity_guard_excludes_short_clean_tail():
     closes = np.full(400, 100.0)
@@ -226,7 +226,7 @@ def test_clean_series_passes():
     assert reason is None and start == 0
 
 
-# -- Freshness tri-state (section 4.4) ----------------------------------------
+# -- Freshness tri-state --------------------------------------------------------
 
 def test_freshness_tri_state():
     price_as_of = pd.Timestamp("2026-07-14")

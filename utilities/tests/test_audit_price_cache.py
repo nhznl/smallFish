@@ -1,5 +1,5 @@
 """Deterministic fixture tests for the one-time price-cache audit/backfill
-script (Requirements.md section 4.2).
+script (`utilities/audit_price_cache.py`).
 
 Runnable standalone (no pytest, no network -- the yfinance fetch is injected):
 

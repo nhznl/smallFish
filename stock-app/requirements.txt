@@ -1,11 +1,16 @@
 # stock-app — pinned dependencies
 #
 # Pins match exactly what the venv installed (pip freeze), so the FastAPI
-# backend reproduces byte-for-byte. Duplicated strategy code needs pandas /
-# numpy / PyYAML / yfinance / requests at the versions strategy/ uses; the
-# rest are the API + diff-harness + test stack.
+# backend reproduces byte-for-byte. This runtime is separate from utilities/
+# and studies/; both Python runtimes may import services/ for provider transport
+# only — never the other way around.
+#
+# pandas, numpy, PyYAML, yfinance, and requests remain here because the API
+# reads shared artifacts and subprocesses batch jobs that use those libraries.
+# tastytrade and snaptrade-python-sdk back optional brokerage integrations.
+# The rest are the API + test stack.
 
-# --- duplicated-strategy-code deps (match strategy/) ---
+# --- shared artifact / batch-job deps (also in utilities/) ---
 pandas==3.0.0
 numpy==2.4.2
 PyYAML==6.0.3
