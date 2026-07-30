@@ -27,7 +27,7 @@ from models.premium import PREMIUM_SCHEMA_NAME, PREMIUM_SCHEMA_VERSION
 from utilities.options.exchange_calendar import nyse_sessions
 from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
 from utilities.options.market_quotes import QuoteBatch
-from utilities.options.wheel import EVENT_KNOWN, EVENT_NONE_IN_RANGE, EVENT_UNKNOWN_STALE
+from utilities.options.wheel import EVENT_NONE_IN_RANGE, EVENT_UNKNOWN_STALE
 from utilities.options.chains import (
     CONTRACT_INVALID,
     CONTRACT_OK,

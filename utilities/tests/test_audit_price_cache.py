@@ -15,7 +15,6 @@ backfill, uncovered-year reporting, dry-run, idempotency after rewrite, the
 from __future__ import annotations
 
 import csv
-import shutil
 import tempfile
 from pathlib import Path
 import sys

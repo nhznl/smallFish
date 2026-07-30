@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
 
 from services.tastytrade import io as tastytrade_io
 from utilities.options import market_quotes
