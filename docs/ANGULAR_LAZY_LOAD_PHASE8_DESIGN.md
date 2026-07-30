@@ -47,7 +47,8 @@ within budget, so this is a measured performance improvement.
 
 ## Out of scope
 
-- Studies nested `paramMap` race (separate small follow-up)
+- ~~Studies nested `paramMap` race~~ **Done in Phase 9** — see
+  [`STUDIES_ROUTE_RACE_PHASE9_DESIGN.md`](STUDIES_ROUTE_RACE_PHASE9_DESIGN.md)
 - View-model decomposition or shared formatting helpers
 - Changing route paths, titles, or default redirect
 - Bundle-budget policy changes beyond recording the new initial size

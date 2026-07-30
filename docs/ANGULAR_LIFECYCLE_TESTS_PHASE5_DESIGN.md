@@ -34,7 +34,9 @@ cancel/empty/error semantics.
 
 ## Out of scope (still deferred)
 
-- Studies nested-route race, strategy-stocks
-- View-model decomposition (Phase 6)
+- ~~Studies nested-route race~~ **Done in Phase 9** — see
+  [`STUDIES_ROUTE_RACE_PHASE9_DESIGN.md`](STUDIES_ROUTE_RACE_PHASE9_DESIGN.md)
+- Strategy-stocks component tests
+- View-model decomposition (later large phase; not Phase 6 orchestrators)
 - Shared `testing/` package
 - Removing GET job routes or changing API wire shapes

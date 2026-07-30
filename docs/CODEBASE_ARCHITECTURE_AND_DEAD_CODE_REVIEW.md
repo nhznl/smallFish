@@ -108,7 +108,7 @@ shared brokerage page and should remain simple.
 | Priority | Finding | Risk | Recommendation |
 |---|---|---|---|
 | High | Largest screens have no direct component tests | ~~Only 6 of 19 components had specs~~ **5a–5c done.** Behavior specs added for Stock Detail, Momentum Scanner, Wheel, Portfolios, and Sector Rotation. See [`ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md`](ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md). |
-| Medium | Nested or independent route-driven subscriptions can race | ~~Stock Detail race~~ **Stock Detail fixed** with `switchMap` cancel. Studies nested `paramMap` race remains deferred. |
+| Medium | Nested or independent route-driven subscriptions can race | ~~Stock Detail race~~ **Stock Detail fixed** with `switchMap` cancel. ~~Studies nested `paramMap` race~~ **Phase 9 done.** See [`STUDIES_ROUTE_RACE_PHASE9_DESIGN.md`](STUDIES_ROUTE_RACE_PHASE9_DESIGN.md). |
 | Medium | Empty data and failed requests are sometimes conflated | Some stock-service methods catch errors and return an empty array or an error-shaped success value, while other methods propagate errors. | Let view models distinguish `loading`, `empty`, `unavailable`, and `failed`. Centralize transport error translation without hiding failures. |
 | Medium | Most major routes are eager-loaded | ~~Only three lazy chunks~~ **Phase 8 done.** Remaining feature routes use `loadComponent`; 404 stays eager. See [`ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md`](ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md). |
 | Low | Three passing service specs trigger “no expectations” warnings | The HTTP controller assertions throw on failure, but Karma does not count them as Jasmine expectations. | Add explicit response or request assertions so the suite remains warning-free and intent is obvious. |
@@ -275,6 +275,10 @@ methodology changes, compatibility removals, and mechanical cleanup.
    [`ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md`](ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md):
    momentum, studies, wheel, options, retirement, and stock detail converted to
    `loadComponent`; paths/titles/redirect preserved; 404 remains eager.
+9. **~~Cancel Studies nested-route races.~~ Done (9a).** See
+   [`STUDIES_ROUTE_RACE_PHASE9_DESIGN.md`](STUDIES_ROUTE_RACE_PHASE9_DESIGN.md):
+   catalog → `paramMap` → `switchMap` study/scan load; stale `runScan` guard;
+   lifecycle specs. Deferred from Phase 5.
 
 ### Explicit stop conditions
 
