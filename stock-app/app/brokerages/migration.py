@@ -145,3 +145,23 @@ def migrate_gain_loss_snapshots() -> dict[str, Any]:
         "migrated": migrated,
         "summary": {**plan["summary"], "migrated_count": len(migrated)},
     }
+
+
+def legacy_gain_loss_snapshot_files_present() -> bool:
+    """True when any brokerage still has a per-provider legacy snapshot file."""
+    return any(
+        entry.legacy_gain_loss_snapshots_path().is_file()
+        for entry in registry.REGISTRY.values()
+    )
+
+
+def migrate_gain_loss_snapshots_on_sync() -> dict[str, Any] | None:
+    """Steady-state sync entry: skip when no legacy snapshot files exist.
+
+    ``migrate_gain_loss_snapshots()`` remains available for explicit invocation
+    and tests. Legacy files are never deleted here — they stay a rollback
+    boundary until separately retired.
+    """
+    if not legacy_gain_loss_snapshot_files_present():
+        return None
+    return migrate_gain_loss_snapshots()

@@ -446,17 +446,19 @@ def run_sync(brokerage_id: str, payload: dict[str, Any] | None = None) -> dict[s
         commands=entry.sync_commands, capabilities=entry.capabilities,
     )
     # Captured gain/loss percentages predate the common store and cannot be
-    # recomputed. Carrying them over here is idempotent, so it self-heals on any
-    # sync rather than depending on a one-shot step having been run.
+    # recomputed. When legacy per-brokerage files still exist, carrying rows
+    # across is idempotent and self-healing; otherwise skip the report work.
     from . import migration
 
     try:
-        moved = migration.migrate_gain_loss_snapshots()["summary"]["migrated_count"]
+        migration_result = migration.migrate_gain_loss_snapshots_on_sync()
     except OSError:
         logger.exception("carrying over captured gain/loss snapshots failed")
     else:
-        if moved:
-            report["migrated_gain_loss_snapshots"] = moved
+        if migration_result is not None:
+            moved = migration_result["summary"]["migrated_count"]
+            if moved:
+                report["migrated_gain_loss_snapshots"] = moved
     return report
 
 

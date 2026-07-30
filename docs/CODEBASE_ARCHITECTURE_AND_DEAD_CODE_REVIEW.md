@@ -201,7 +201,7 @@ decimal semantics are demonstrably identical.
 | `options_activity.py` is an 863-line responsibility cluster | ~~Monolith~~ **6a/6b:** design + extraction behind thin facade into `brokerages/activity_*.py`. CSV/API contracts frozen. See [`OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md`](OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md). |
 | `utilities/options/chains.py` is a 2,134-line pipeline module | ~~Monolith~~ **6a/6c + 20a:** design + config/scope + publish extract; strikes/eligibility/enrich in `chains_quote.py`, `chains_eligibility.py`, `chains_strikes.py`, `chains_enrich.py`. See [`CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md`](CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md) and [`CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md`](CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md). |
 | Brokerage API routes accept and return raw dictionaries | ~~Untyped write bodies~~ **4c done for closed writes.** Request models in `brokerages/schemas.py` for notes / holdings metadata / archives / sync; deep GET envelopes still projection-owned. |
-| Gain/loss migration runs during every brokerage sync | A one-time compatibility action remains on the steady-state hot path. | Prove all supported files are migrated, document rollback/old-file behavior, then retire the runtime migration separately. |
+| Gain/loss migration runs during every brokerage sync | A one-time compatibility action remains on the steady-state hot path. | ~~Prove migration, then retire~~ **Phase 21a:** evidence gap documented; sync gated on legacy file presence via `migrate_gain_loss_snapshots_on_sync()`. Full removal deferred. See [`GAIN_LOSS_MIGRATION_RETIRE_PHASE21_DESIGN.md`](GAIN_LOSS_MIGRATION_RETIRE_PHASE21_DESIGN.md). |
 | ~~Company-info fetching is a backend network exception~~ | ~~`stock_data_retriever.py` live Yahoo~~ **Phase 13 done.** Documented in `stock-app/README.md` / `docs/ARCHITECTURE.md`; `ticker_factory` injectable; offline retriever tests. Moving into `services/` or a materialized artifact remains optional follow-up. See [`COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md). |
 | Frontend feature components hold transport, transformation, and presentation state | The largest views are hard to test and are vulnerable to route/loading races. | After behavior tests, extract feature facades/view models and focused presentational components. Avoid a global state framework unless shared-state requirements emerge. |
 
@@ -332,6 +332,10 @@ methodology changes, compatibility removals, and mechanical cleanup.
     [`CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md`](CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md):
     `chains_quote`, `chains_eligibility`, `chains_strikes`, `chains_enrich`;
     `chains.py` orchestration + re-exports; methodology frozen.
+21. **~~Gain/loss sync-path migration gating.~~ Done (21a).** See
+    [`GAIN_LOSS_MIGRATION_RETIRE_PHASE21_DESIGN.md`](GAIN_LOSS_MIGRATION_RETIRE_PHASE21_DESIGN.md):
+    skip migration report when no legacy files; explicit migration API unchanged;
+    full retirement deferred pending owner evidence.
 
 ### Explicit stop conditions
 
