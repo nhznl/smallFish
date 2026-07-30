@@ -17,6 +17,7 @@ import {
   SymbolLedgerSummary,
 } from '../../model/brokerage';
 import { ModalComponent } from '../ui/modal.component';
+import { pnlToneClass } from '../format-display';
 
 type StateFilter = 'active' | 'closed' | 'all';
 
@@ -411,8 +412,7 @@ export class SymbolLedgerComponent implements OnChanges {
   }
 
   pnlClass(value: number | null | undefined): string {
-    if (value == null || value === 0) return '';
-    return value > 0 ? 'positive' : 'negative';
+    return pnlToneClass(value);
   }
 
   completenessLabel(value: PnlCompleteness): string {

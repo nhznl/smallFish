@@ -1,6 +1,6 @@
 # Angular brokerage display formatters (Phase 11) design
 
-**Status:** 11a complete
+**Status:** 11a complete; 17a Symbol Ledger `pnlClass`
 **Date:** 2026-07-30
 **Parent audit:** [`CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md`](CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md) Phase 11
 
@@ -33,6 +33,7 @@ exception clarity.
 | Slice | Scope | Status |
 |---|---|---|
 | **11a** | `format-display.ts` helpers + specs; Holdings and Combined Ledger delegate | Done |
+| **17a** | Symbol Ledger `pnlClass` → shared `pnlToneClass` (byte-identical) | Done |
 
 ## Landed
 
@@ -42,6 +43,9 @@ exception clarity.
   `formatIsoTimestamp`, `pnlToneClass`
 - Holdings and Combined Ledger component methods call those helpers; template
   bindings and method names unchanged
+- Symbol Ledger `pnlClass` delegates to `pnlToneClass` (Phase 17a); `money()`
+  and `timestamp()` remain local — browser locale, manual `$` prefix, and
+  `'unavailable'` vs em-dash differ from Holdings helpers
 - Unit specs pin null → `—`, Unicode minus, optional `+`, `en-US` USD, fixed
   two-decimal percents, integer vs three-decimal quantity, and invalid ISO
   passthrough
@@ -62,8 +66,8 @@ for money). Unifying that would change display for some locales.
 
 ## Out of scope
 
-- Symbol Ledger, portfolios, sector rotation, scanner, Stock Detail, strategy,
-  or wheel formatting
+- Symbol Ledger `money()` / `timestamp()` — locale and empty rules differ; only
+  `pnlClass` migrated in Phase 17a
 - Angular pipes (helpers keep existing method call sites)
 - View-model / presentational decomposition
 - Company-info fetcher injection / README exception note — closed in Phase 13
