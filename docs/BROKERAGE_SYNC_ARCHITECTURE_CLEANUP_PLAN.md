@@ -7,7 +7,7 @@ within the settled boundaries below and must pause at a listed stop condition.
 
 ## Resume here
 
-Begin with Phase 3. Work one phase and one focused commit at a time. Update the
+Begin with Phase 2.5. Work one phase and one focused commit at a time. Update the
 dashboard and progress log in the same commit as each completed phase. Do not
 restart the completed Symbol Ledger, common brokerage API, legacy-route
 retirement, or provider-I/O extraction projects.
@@ -22,18 +22,23 @@ The result must:
 1. execute each requested Fidelity sync resource exactly once;
 2. make holdings, activity, market-data, setup/CLI, and orchestration ownership
    explicit;
-3. remove the circular dependency between `snaptrade_service.py` and
+3. separate Tastytrade's brokerage-account role from its incidental role as the
+   current options market-data provider behind one provider-neutral API/model;
+4. remove the circular dependency between `snaptrade_service.py` and
    `retirement_options.py`;
-4. delete proven-dead group/projection/enrichment remnants;
-5. retire `retirement_options.py` as an implementation module;
-6. reduce `snaptrade_service.py` to a documented compatibility facade for its
+5. delete proven-dead group/projection/enrichment remnants;
+6. retire `retirement_options.py` as an implementation module;
+7. reduce `snaptrade_service.py` to a documented compatibility facade for its
    existing CLI/module entry points, unless the owner separately authorizes
    breaking that command path; and
-7. preserve every public API, artifact, accounting, lifecycle, security, and
+8. preserve every public API, artifact, accounting, lifecycle, security, and
    offline-test contract.
 
-This is application architecture cleanup. Provider transport is already
-complete in `services/` and is not being redesigned.
+This is application architecture cleanup plus one narrow refinement to the
+completed `services/` boundary: provider SDK transports remain complete and
+provider-specific, while a shared options market-data API routes neutral
+contract/underlying requests to those transports. It does not redesign
+credentials, sessions, provider calls, artifacts, or financial policy.
 
 ## Why this cleanup is needed
 
@@ -50,10 +55,17 @@ the responsibilities the modules now own:
   materializer. Creating empty `trading_options.py` or
   `tastytrade_service.py` counterparts would add cosmetic symmetry without
   clarifying ownership.
+- Tastytrade currently plays two independent roles: it is a brokerage account
+  source for Tastytrade positions/transactions/marks, and it happens to be the
+  current provider for exact-contract quotes, Greeks/IV, and underlying beta.
+  Brokerage importers and quote enrichment call that provider by name, so
+  replacing the options data source would require edits across both runtimes.
+  Options market-data callers need one neutral request/observation model and
+  routing API; Tastytrade remains only the first implementation.
 
-There is also one concrete behavior problem. The Angular client posts an empty
-body to `POST /api/brokerages/fidelity/sync`, which requests all supported
-resources. The registry currently executes:
+There was also one concrete behavior problem corrected in Phase 2. The Angular
+client posts an empty body to `POST /api/brokerages/fidelity/sync`, which
+requests all supported resources. Before Phase 2 the registry executed:
 
 ```text
 HOLDINGS     -> snaptrade_service.sync()
@@ -64,12 +76,13 @@ ACTIVITY     -> retirement_options.sync_events()
 MARKET_DATA  -> retirement_options.sync_market_data()
 ```
 
-Therefore a normal Fidelity sync can fetch activity twice and, when option
-positions exist, fetch Tastytrade beta and Greeks twice. Idempotent artifact
-writes hide the duplication, but they do not justify duplicate provider calls.
+Therefore a normal Fidelity sync could fetch activity twice and, when option
+positions existed, fetch Tastytrade beta and Greeks twice. Idempotent artifact
+writes hid the duplication, but did not justify duplicate provider calls.
 
-Tastytrade does not have this problem: all three registry resources map to one
-callable and `brokerages.sync.run()` deduplicates it by callable identity.
+Phase 2 split Fidelity into single-purpose resource commands. Tastytrade still
+maps all three registry resources to one callable, and
+`brokerages.sync.run()` deduplicates it by callable identity.
 
 ## Authority and required reading
 
@@ -99,15 +112,46 @@ These are constraints, not design questions.
 - `services/` continues to own environment-backed provider credentials,
   sessions/clients, streaming/pagination, provider calls, and raw payload
   envelopes.
+- `services.options_market` is the shared, provider-neutral read API for
+  exact-contract quotes, exact-contract Greeks/IV, and underlying market
+  metrics such as beta. It owns standard-library-only request/observation
+  contracts and routes to `services.tastytrade` today.
+- Provider-specific symbol conversion (for example OCC to dxFeed) belongs in
+  the provider adapter behind `services.options_market`, never in a brokerage
+  importer or quote-archive materializer.
 - `services/` stays standard-library-only apart from lazy provider SDK imports.
   It must not import FastAPI, pandas, numpy, `stock-app`, `utilities`, `studies`,
   project configuration, artifacts, or financial policy.
+- The neutral API is a small explicit routing table with one supported provider
+  initially, not a generalized plugin or dependency-injection framework.
 - No order-placement API may be added or exposed.
+
+### Options market-data roles
+
+- Tastytrade brokerage-account data remains owned by `options_activity.py` and
+  continues to use `services.tastytrade` for account/history/position transport.
+- All quote, Greek/IV, and underlying-beta retrieval uses
+  `services.options_market`; no application or utility module calls
+  `services.tastytrade.fetch_quotes`, `fetch_greeks`, or
+  `fetch_market_metrics` directly.
+- `options_activity.py` may keep its combined public sync and registry
+  deduplication, but its market-data portion delegates to the neutral API.
+- The planned `utilities.options.market_quotes` module owns quote eligibility, coverage,
+  timestamp policy, and premium-archive enrichment after neutral observations
+  return. Provider routing and provider symbol syntax do not live there.
+- Yahoo remains the chain-discovery source in this cleanup. A future
+  provider-neutral `ChainProvider` is a separate project; chain discovery is
+  not part of `services.options_market` yet.
+- Existing provider-specific artifact provenance such as
+  `TASTYTRADE_DXLINK` and `TASTYTRADE_MARKET_METRICS` remains unchanged. The
+  neutral model carries provenance; it does not erase it.
 
 ### Application materialization
 
-- Backend materializers own raw-payload normalization, lifecycle/accounting
-  policy, artifact writes, summaries, and safe application errors.
+- Backend and utilities materializers own artifact normalization,
+  lifecycle/accounting/eligibility policy, artifact writes, summaries, and safe
+  application errors. The neutral service API normalizes only provider wire
+  values into its common observation model.
 - Brokerage adapters remain read-only. They consume materialized artifacts and
   never call `services/` or a provider.
 - The registry remains the only place where a public brokerage identity selects
@@ -149,9 +193,18 @@ These are constraints, not design questions.
 
 ## Target ownership
 
-Use this target unless Phase 0 proves a dependency makes it unsafe:
+Use this target:
 
 ```text
+services/
+├── options_market/
+│   ├── __init__.py                     # provider-neutral public read API
+│   ├── contracts.py                    # stdlib request/result observations
+│   └── providers/
+│       └── tastytrade.py               # Tastytrade routing + OCC/dxFeed mapping
+└── tastytrade/
+    └── io.py                           # existing raw SDK/session transport
+
 stock-app/app/
 ├── brokerages/
 │   ├── registry.py                     # public identity -> resource commands
@@ -164,9 +217,27 @@ stock-app/app/
 ├── options_activity.py                 # existing Tastytrade application flow
 ├── snaptrade_setup.py                  # register/connect/accounts + env persistence
 └── snaptrade_service.py                # thin legacy CLI/module compatibility facade
+
+utilities/options/
+├── chains.py                            # Yahoo chain discovery + archive orchestration
+└── market_quotes.py                     # neutral observations -> premium artifacts
 ```
 
 Detailed ownership:
+
+### `services.options_market`
+
+- Defines a canonical OCC-based contract reference plus quote, Greek/IV, and
+  underlying-metric observations and batch result/error envelopes.
+- Exposes provider-neutral `fetch_quotes`, `fetch_greeks`, and
+  `fetch_underlying_metrics` entry points.
+- Selects one provider through an explicit, validated provider id; Tastytrade is
+  the only supported provider in this cleanup.
+- Delegates credentials, sessions, SDK calls, and DXLink streaming to
+  `services.tastytrade`; it contains no artifact paths or application policy.
+- Preserves provider provenance and timestamps needed by existing artifacts.
+- Is importable and fake-testable in both Python runtimes without importing a
+  provider SDK, loading credentials, or opening a connection.
 
 ### `brokerages.importers.snaptrade`
 
@@ -183,11 +254,12 @@ Detailed ownership:
 
 - Reads current option legs from the materialized holdings artifact.
 - Determines exact underlying and contract requests.
-- Calls `services.tastytrade` for beta and Greeks.
+- Calls `services.options_market` for beta and Greeks/IV, never
+  `services.tastytrade` directly.
 - Normalizes and atomically writes the existing retirement beta/Greek
   artifacts.
 - Preserves retain-prior-on-miss and independent best-effort beta/Greek results.
-- Contains no SnapTrade SDK/client operation.
+- Contains no provider SDK/client operation or provider-specific symbol syntax.
 
 ### `snaptrade_setup`
 
@@ -211,7 +283,17 @@ Detailed ownership:
 Keep it in place in this cleanup. It combines the existing Tastytrade sync,
 manual reconciliation, and compatibility API behavior. Renaming or splitting
 it would broaden this work and provide no benefit required to fix the Fidelity
-ownership problem.
+ownership problem. Its brokerage account transport remains Tastytrade-specific;
+its quote/Greek/beta retrieval must delegate to `services.options_market`.
+
+### `utilities.options.market_quotes`
+
+- Replaces the provider-named `tastytrade_quotes.py` implementation owner.
+- Accepts canonical option contracts and calls `services.options_market` for
+  live bid/ask observations.
+- Preserves current quote quality, freshness, side-specific timestamps,
+  complete/partial/unavailable coverage, and immutable premium artifacts.
+- Contains no Tastytrade credential/session logic and no dxFeed symbol mapping.
 
 ## Explicitly out of scope
 
@@ -220,9 +302,13 @@ ownership problem.
 - Reworking Symbol Ledger lifecycle, archive/reset behavior, holdings
   projections, option-adjusted basis, risk formulas, or manual reconciliation.
 - Creating `trading_options.py` or `tastytrade_service.py` solely for symmetry.
-- Changing provider SDK versions, credentials, session/client behavior, or the
-  completed `services/` boundary except for import updates required by moved
-  consumers.
+- Changing provider SDK versions, credentials, or session/client behavior.
+- Implementing a second options market-data provider; this cleanup establishes
+  and enforces the seam only.
+- Generalizing Yahoo chain/expiration discovery or replacing
+  `utilities/options/chains.py` with a `ChainProvider`.
+- Changing premium, beta, or Greek artifact schemas or replacing existing
+  provider provenance values with generic labels.
 - Adding a database, queue, dependency-injection framework, repository pattern,
   abstract factory, or generalized plugin system.
 - Live provider verification. All implementation tests remain offline; an
@@ -346,6 +432,79 @@ python3 tools/scan_secrets.py
 git diff --check
 ```
 
+## Phase 2.5 — establish the provider-neutral options market-data API
+
+**Changes**
+
+- Create `services/options_market/` with standard-library-only neutral contracts
+  and API entry points for:
+  - exact-contract bid/ask quotes with side-specific timestamps;
+  - exact-contract Greeks and implied volatility; and
+  - underlying market metrics, initially beta.
+- Use canonical OCC contract identity in requests. Keep OCC-to-dxFeed conversion
+  inside the Tastytrade provider adapter.
+- Route the neutral API to `services.tastytrade` through one explicit provider
+  selector. Tastytrade is the only accepted provider id for now; unknown ids
+  fail with a safe configuration error.
+- Preserve `services.tastytrade.io` as the raw SDK/session transport. Do not move
+  credentials, sessions, streaming, or provider calls into consumers.
+- Refactor both existing application market-data paths to use the neutral API:
+  - Fidelity held-option beta/Greek materialization in
+    `retirement_options.py`; and
+  - the beta/Greek portion of `options_activity.py`, without splitting its
+    combined account sync or changing Tastytrade registry deduplication.
+- Rename the implementation owner
+  `utilities/options/tastytrade_quotes.py` to
+  the `utilities.options.market_quotes` module and route live quote retrieval through
+  `services.options_market`. Update first-party imports/tests; add a compatibility
+  re-export only if a production or documented external caller is found.
+- Keep Yahoo chain discovery and the premium archive format unchanged.
+- Add fake-provider contract tests under `services/tests/` and run them in both
+  Python environments. No test may contact Tastytrade or Yahoo.
+- Update `services/README.md`, `utilities/options/README.md`,
+  `docs/ARCHITECTURE.md`, and `docs/BROKERAGES.md` with the two independent
+  Tastytrade roles and the neutral routing boundary.
+
+**Acceptance checks**
+
+- Fidelity empty-body sync remains one positions fetch, one activity fetch, one
+  neutral beta request, and one neutral Greek request.
+- Tastytrade account sync still executes once for all three registry resources;
+  its account/history/position read remains provider-specific while its
+  Greek/beta reads pass through `services.options_market`.
+- The chain job makes one neutral quote request for its discovered contracts;
+  quote coverage and every premium row remain equivalent for the same fake
+  provider observations.
+- Existing holdings, events, beta, Greek, and premium artifact paths, headers,
+  values, ordering, timestamps, provenance, retention, and atomic-write
+  behavior are unchanged.
+- Importing either runtime without credentials or a loaded provider SDK remains
+  network-free and successful.
+- No production module outside `services/options_market/` directly calls
+  `services.tastytrade` market-metric, Greek, or quote functions.
+
+**Gate**
+
+```bash
+stock-app/.venv/bin/python -m pytest -q services/tests/test_tastytrade_io.py \
+  services/tests/test_options_market.py
+utilities/.venv/bin/python -m pytest -q services/tests/test_tastytrade_io.py \
+  services/tests/test_options_market.py
+
+stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app \
+  stock-app/tests/test_options_activity.py \
+  stock-app/tests/test_retirement_options.py \
+  stock-app/tests/test_fidelity_sync_characterization.py
+utilities/.venv/bin/python -m pytest -q \
+  utilities/tests/test_market_quotes.py \
+  utilities/tests/test_chains.py \
+  utilities/tests/test_verify_premiums.py
+
+python3 tools/check_docs.py
+python3 tools/scan_secrets.py
+git diff --check
+```
+
 ## Phase 3 — move materialization into explicit modules
 
 **Changes**
@@ -354,8 +513,11 @@ git diff --check
   into the target modules.
 - Move SnapTrade holdings/activity normalization and artifact ownership into
   `brokerages.importers.snaptrade`.
-- Move current-held-option selection and Tastytrade beta/Greek materialization
-  into `brokerages.importers.held_option_market_data`.
+- Move current-held-option selection and neutral beta/Greek observation
+  materialization into `brokerages.importers.held_option_market_data`.
+- Keep provider selection, provider symbol mapping, and market-data transport in
+  `services.options_market`; the importer must never import
+  `services.tastytrade`.
 - Replace cross-module calls to private helpers such as
   `snaptrade_service._value`, `_text`, and `_read_ledger` with owned public
   importer functions or small local helpers. Do not introduce a generic helper
@@ -375,13 +537,14 @@ git diff --check
   unchanged for the same fixture artifacts.
 - Importing the FastAPI application with no brokerage SDK or credentials remains
   network-free and successful.
-- No adapter or projection imports `services/`.
+- No adapter or projection imports `services/`, and no brokerage importer
+  imports a provider-specific transport package.
 
 **Gate**
 
 ```bash
 stock-app/.venv/bin/python -m pytest -q services/tests/test_snaptrade_io.py \
-  services/tests/test_tastytrade_io.py
+  services/tests/test_tastytrade_io.py services/tests/test_options_market.py
 stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app \
   stock-app/tests/test_brokerage_api.py \
   stock-app/tests/test_brokerage_adapters.py \
@@ -408,8 +571,9 @@ git diff --check
   test that rejects normalization, artifact schemas, provider calls, or
   financial policy returning to it.
 - Remove obsolete test/module names and update `stock-app/README.md`,
-  `services/README.md`, `docs/ARCHITECTURE.md`, and `docs/BROKERAGES.md` to the
-  final ownership model.
+  `services/README.md`, `utilities/options/README.md`,
+  `docs/ARCHITECTURE.md`, and `docs/BROKERAGES.md` to the final ownership
+  model.
 
 **Gate**
 
@@ -434,7 +598,15 @@ unmasked credential or identifier.
 
 - Add or extend structural tests that enforce:
   - provider SDK imports only under `services/`;
+  - quote/Greek/market-metric transport calls outside provider packages route
+    only through `services.options_market`;
   - read adapters do not import/call provider transport;
+  - brokerage importers contain no provider-specific transport imports or
+    provider-specific symbol mapping;
+  - `options_activity.py` uses `services.tastytrade` only for its brokerage
+    account role and `services.options_market` for market data;
+  - utilities quote enrichment uses `services.options_market`, while Yahoo
+    chain discovery remains explicitly separate;
   - holdings resource commands do not invoke activity or market-data commands;
   - no production reference to `retirement_options` remains;
   - `snaptrade_service` stays a thin compatibility facade;
@@ -450,8 +622,9 @@ stock-app/.venv/bin/python -m pip check
 utilities/.venv/bin/python -m pip check
 
 stock-app/.venv/bin/python -m pytest -q services/tests/test_snaptrade_io.py \
-  services/tests/test_tastytrade_io.py
-utilities/.venv/bin/python -m pytest -q services/tests/test_tastytrade_io.py
+  services/tests/test_tastytrade_io.py services/tests/test_options_market.py
+utilities/.venv/bin/python -m pytest -q services/tests/test_tastytrade_io.py \
+  services/tests/test_options_market.py
 
 stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app stock-app/tests
 utilities/.venv/bin/python -m pytest -q utilities/tests
@@ -483,6 +656,15 @@ Pause and ask the owner before proceeding if:
 - the work would require renaming/migrating existing brokerage artifacts;
 - a provider SDK limitation appears to require transport logic outside
   `services/`;
+- the neutral options API cannot preserve current contract identity, provider
+  provenance, side-specific quote timestamps, beta/Greek selection, or safe
+  optional-error behavior;
+- routing live quotes through the neutral API would change premium archive
+  eligibility, coverage, schema, ordering, or immutable archive verification;
+- provider-neutral quote support would require generalizing Yahoo chain
+  discovery in this cleanup;
+- the common options API would require `services/` to import project models,
+  application configuration, persistence, pandas, or numpy;
 - a proposed cleanup changes accounting, lifecycle, risk, archive, or trend
   semantics;
 - real provider data is needed to establish correctness; or
@@ -499,6 +681,14 @@ The cleanup is complete only when:
 - `snaptrade_service.py` is a thin compatibility facade, not a materializer;
 - setup/CLI, SnapTrade materialization, held-option market data, registry
   orchestration, and read adapters each have one clear owner;
+- Tastytrade's brokerage-account role is separate from its market-data-provider
+  role: all live quote, Greek/IV, and underlying-beta callers route through
+  `services.options_market`;
+- the neutral options API and its request/observation model are fake-tested in
+  both runtimes and can accept a future provider without changing brokerage
+  importers, quote enrichment, public APIs, or artifact schemas;
+- Yahoo chain discovery remains explicit and separate, with no accidental
+  coupling to the live options market-data provider;
 - all existing public routes, response shapes/statuses, artifacts, and financial
   semantics are preserved;
 - both complete Python suites pass normally and with network blocking;
@@ -533,7 +723,8 @@ Phase 1 re-confirms no external command reference.
 | Name | Production callers | Classification |
 |---|---|---|
 | `EVENT_HEADERS`, `sync_events`, `_normalize_activity`, `_read_events` | registry `ACTIVITY`; holdings side-effect; `SnapTradeAdapter` | MOVE → `brokerages.importers.snaptrade` (`sync_activity`) |
-| `BETA_HEADERS`, `GREEKS_HEADERS`, `sync_betas`, `sync_greeks`, `sync_market_data`, `_option_rows`, `_fetch_tasty_*` | registry `MARKET_DATA`; holdings side-effect | MOVE → `brokerages.importers.held_option_market_data` |
+| `BETA_HEADERS`, `GREEKS_HEADERS`, `sync_betas`, `sync_greeks`, `sync_market_data`, `_option_rows` | registry `MARKET_DATA`; holdings side-effect | MOVE → `brokerages.importers.held_option_market_data` |
+| `_fetch_tasty_betas`, `_fetch_tasty_greeks` | current market-data defaults | REPLACE in Phase 2.5 with calls to `services.options_market`; provider adaptation stays in `services/` |
 | `_read_rows`, `_atomic_write`, `_epoch_ms_to_iso`, `_greek_key`, share-coverage helpers | adapter + market-data path | MOVE with market-data / activity owners |
 | `RetirementOptionsError` | `sync_events` validation | MOVE with activity; rename only if a public import requires it |
 | `_group_name`, `_build_groups` | tests only (`test_build_groups_*`); no production caller | DEAD — deleted in Phase 1 |
@@ -559,7 +750,8 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 0 | Characterize ownership, compatibility, and provider call counts | COMPLETE | 13 characterization tests; golden artifacts under `stock-app/tests/fixtures/brokerage_sync/`; caller table above |
 | 1 | Delete proven-dead remnants | COMPLETE | Removed `_group_name`/`_build_groups`, group-only row fields, unused retirement imports/scaffolding, and `UNCLASSIFIED`/`_read_enrichment`/`_round2`; deleted dead-only group/snapshot test helpers |
 | 2 | Make resource commands single-purpose | COMPLETE | Registry: `sync_holdings` / `sync_activity` / `sync_held_option_market_data`; empty-body sync is 1/1/1/1; legacy `sync` orchestrates once each |
-| 3 | Move materialization into explicit modules | NOT STARTED | Begin here |
+| 2.5 | Provider-neutral quotes, Greeks/IV, and beta API/model | NOT STARTED | Begin here; Tastytrade is the first routed provider, Yahoo chain discovery stays separate |
+| 3 | Move materialization into explicit modules | NOT STARTED | Blocked on Phase 2.5 |
 | 4 | Isolate setup/CLI and finish compatibility facade | NOT STARTED | Blocked on Phase 3 |
 | 5 | Enforcement, docs, and full regression | NOT STARTED | Blocked on Phase 4 |
 
@@ -570,7 +762,8 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 2026-07-29 | Planning | COMPLETE | Current callers, registry commands, provider boundaries, dead remnants, CLI compatibility, and duplicate Fidelity orchestration were audited. The completed brokerage/provider refactor plans and unused coordination mailbox were retired. | Hand Phase 0 to the implementation agent |
 | 2026-07-29 | 0 | COMPLETE | Added `test_fidelity_sync_characterization.py` (13 tests): empty-body duplicate call counts (positions 1 / activities 2 / betas 2 / greeks 2), per-resource cases, CLI surface + secret redaction, sync return shape, and golden CSV fixtures for holdings/events/betas/greeks. Caller classification recorded above. Gate suites green; no production behavior change. | Phase 1 — delete proven-dead remnants |
 | 2026-07-29 | 1 | COMPLETE | Deleted dead group projection helpers and enrichment remnants; cleaned unused imports and empty scaffolding; removed `test_build_groups_*` and retired snapshot helpers. Fresh reference audit confirmed no production callers. Full stock-app suite + docs/secret gates green. | Phase 2 — single-purpose resource commands |
-| 2026-07-29 | 2 | COMPLETE | Split `sync_holdings` from legacy `sync`; registry points at holdings/activity/market-data commands; empty-body Fidelity sync is one positions/activity/beta/greeks call each. Characterization updated; 459 stock-app tests pass. | Phase 3 — move materialization into importers |
+| 2026-07-29 | 2 | COMPLETE | Split `sync_holdings` from legacy `sync`; registry points at holdings/activity/market-data commands; empty-body Fidelity sync is one positions/activity/beta/greeks call each. Characterization updated; 459 stock-app tests pass. | Owner boundary review before moving importers |
+| 2026-07-29 | Boundary decision | COMPLETE | Tastytrade's brokerage-account role and options market-data-provider role are independent. Add one cross-runtime neutral API/model for quotes, Greeks/IV, and underlying beta; route both brokerage market-data paths and premium quote enrichment through it. Keep Yahoo chain discovery and a second provider out of scope. | Phase 2.5 — establish the neutral API before moving importers |
 
 ## Implementation-agent kickoff prompt
 
@@ -579,10 +772,11 @@ Implement the focused brokerage sync architecture cleanup described in
 docs/BROKERAGE_SYNC_ARCHITECTURE_CLEANUP_PLAN.md.
 
 Read the plan's required-reading list in order. The common brokerage API,
-Symbol Ledger, legacy-route retirement, and services provider-I/O boundary are
-complete. Do not reopen or redesign them.
+Symbol Ledger, legacy-route retirement, and provider SDK transports are
+complete. Do not reopen them. The owner has authorized the narrow
+`services.options_market` routing/model addition described in Phase 2.5.
 
-Begin with Phase 0. Work one phase and one focused commit at a time. Before each
+Begin with Phase 2.5. Work one phase and one focused commit at a time. Before each
 commit, run that phase's gate, update the phase dashboard and progress log, and
 inspect git status so pre-existing user changes are preserved. Do not push or
 open a pull request.
@@ -592,6 +786,11 @@ HOLDINGS, ACTIVITY, and MARKET_DATA once each, and a single-resource request
 must never invoke a sibling resource. Preserve the existing public API,
 artifacts, financial/lifecycle semantics, safe errors, offline tests, and the
 documented python -m app.snaptrade_service compatibility path.
+
+Keep Tastytrade brokerage-account reads separate from options market-data
+retrieval. Quotes, Greeks/IV, and underlying beta must route through the shared
+provider-neutral API/model; Tastytrade is only its initial provider. Preserve
+Yahoo chain discovery and every existing artifact/provenance contract.
 
 Do not create trading_options.py or tastytrade_service.py for cosmetic
 symmetry. Pause only at a stop condition in the plan, and never make a live
