@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 from .activity_normalize import (
@@ -54,7 +55,8 @@ def _manual_value_fields(request: dict[str, Any], contract_symbol: str) -> dict[
     }
 
 
-def create_manual_event(request: dict[str, Any]) -> dict[str, Any]:
+def create_manual_event(request: dict[str, Any], *,
+                        path: Path | None = None) -> dict[str, Any]:
     """Records a user-entered correction for a broker event the sync never
     delivered — typically an assignment or transfer that predates the imported
     history and leaves the ledger position disagreeing with the broker.
@@ -103,21 +105,24 @@ def create_manual_event(request: dict[str, Any]) -> dict[str, Any]:
             "its underlying; use Symbol Ledger notes for annotation."
         )
     with _lock:
-        events = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
+        activity_path = path or config.options_activity_csv()
+        events = _read_csv(activity_path, ACTIVITY_HEADERS)
         events.append(event)
         events.sort(key=lambda row: (row["executed_at"], row["id"]))
-        _atomic_write(config.options_activity_csv(), ACTIVITY_HEADERS, events)
+        _atomic_write(activity_path, ACTIVITY_HEADERS, events)
     # `group_id` stays in the response as a null: this is a frozen contract and
     # removing a key is a shape change its callers did not ask for.
     return {"event_id": event["id"], "group_id": None}
 
 
-def update_manual_event(event_id: str, request: dict[str, Any]) -> dict[str, Any]:
+def update_manual_event(event_id: str, request: dict[str, Any], *,
+                        path: Path | None = None) -> dict[str, Any]:
     """Edits the user-entered values on a manual row. The contract identity and
     account stay fixed — those tie the row to the mismatch it corrects, so
     changing them would silently move the correction to a different position."""
     with _lock:
-        events = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
+        activity_path = path or config.options_activity_csv()
+        events = _read_csv(activity_path, ACTIVITY_HEADERS)
         event = next((row for row in events if row["id"] == event_id), None)
         if event is None:
             raise ActivityValidationError("broker event not found", 404)
@@ -128,20 +133,22 @@ def update_manual_event(event_id: str, request: dict[str, Any]) -> dict[str, Any
             event["transaction_sub_type"] = _text(request.get("reason")).strip() or "Manual Adjustment"
         event["retrieved_at"] = _now()
         events.sort(key=lambda row: (row["executed_at"], row["id"]))
-        _atomic_write(config.options_activity_csv(), ACTIVITY_HEADERS, events)
+        _atomic_write(activity_path, ACTIVITY_HEADERS, events)
     return {"event_id": event_id, "updated": True}
 
 
-def delete_manual_event(event_id: str) -> dict[str, Any]:
+def delete_manual_event(event_id: str, *,
+                        path: Path | None = None) -> dict[str, Any]:
     """Removes a manual reconciliation row. Broker-imported events are
     immutable facts and are never deletable through this path."""
     with _lock:
-        events = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
+        activity_path = path or config.options_activity_csv()
+        events = _read_csv(activity_path, ACTIVITY_HEADERS)
         event = next((row for row in events if row["id"] == event_id), None)
         if event is None:
             raise ActivityValidationError("broker event not found", 404)
         if event["source"] != MANUAL_SOURCE:
             raise ActivityValidationError("only manual reconciliation rows can be deleted")
-        _atomic_write(config.options_activity_csv(), ACTIVITY_HEADERS,
+        _atomic_write(activity_path, ACTIVITY_HEADERS,
                       [row for row in events if row["id"] != event_id])
     return {"event_id": event_id, "deleted": True}

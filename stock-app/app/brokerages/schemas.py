@@ -73,3 +73,37 @@ class SyncRequest(BaseModel):
         default=None,
         description="Optional HOLDINGS / ACTIVITY / MARKET_DATA subset.",
     )
+
+
+class ManualActivityCreateRequest(BaseModel):
+    """POST /api/brokerages/{id}/activity/manual."""
+
+    model_config = ConfigDict(extra="allow")
+
+    account: Any = None
+    contract_key: Any = None
+    contract_symbol: Any = None
+    underlying_symbol: Any = None
+    quantity: Any = None
+    transaction_date: Any = None
+    price: Any = None
+    net_cash: Any = None
+    fees: Any = None
+    description: Any = None
+    reason: Any = None
+    instrument_type: Any = None
+    group_id: Any = None
+
+
+class ManualActivityUpdateRequest(BaseModel):
+    """PUT /api/brokerages/{id}/activity/manual/{event_id}."""
+
+    model_config = ConfigDict(extra="allow")
+
+    quantity: Any = None
+    transaction_date: Any = None
+    price: Any = None
+    net_cash: Any = None
+    fees: Any = None
+    description: Any = None
+    reason: Any = None

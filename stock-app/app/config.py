@@ -98,7 +98,7 @@ def retired_symbols_csv() -> Path:
 
 
 def options_activity_csv() -> Path:
-    """Immutable normalized broker transactions used by the options activity UI."""
+    """Immutable normalized Tastytrade transactions used by Symbol Ledger."""
     return _under("SFP_OPTIONS_ACTIVITY", data_dir(), "ledger_trading/options_activity.csv")
 
 

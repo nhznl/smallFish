@@ -5,8 +5,7 @@ sync merges rather than rewrites. The Symbol Ledger derives lifecycle from these
 events by normalized underlying; there is no grouping concept here at all.
 
 Implementation lives under ``brokerages/activity_*.py``. This module is a thin
-re-export facade so registry, routers, adapters, and tests keep a stable import
-surface.
+re-export facade so registry, adapters, and tests keep a stable import surface.
 """
 
 from __future__ import annotations

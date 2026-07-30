@@ -10,7 +10,7 @@ analytics, and owns the Trading and Retirement brokerage ledgers.
   rows, wheel candidates, stock details, slopes, and company information.
 - Read-only Tastytrade and SnapTrade sync into common Holdings, Symbol Ledger,
   and Option-Adjusted Basis projections, with immutable broker events and
-  manual reconciliation for Tastytrade.
+  brokerage-scoped manual reconciliation.
 - On-demand strategy and wheel jobs through API endpoints.
 - Static Angular bundle hosting when `./commands.sh build-ui` has been run.
 
@@ -116,9 +116,8 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `GET /api/brokerages/{id}/symbols/{symbol}/events` | Immutable, cursor-paginated current, all, or archived event history. |
 | `POST /api/brokerages/{id}/symbols/{symbol}/archives` | Idempotently archive an eligible completed period. |
 | `POST /api/brokerages/{id}/sync` | Sync common holdings, activity, and market-data resources without creating group state. |
+| `POST /api/brokerages/{id}/activity/manual`, `PUT`/`DELETE /api/brokerages/{id}/activity/manual/{event_id}` | Create, edit, or remove a manual reconciliation event in the selected brokerage ledger. |
 | `GET /api/brokerages/{id}/holdings` | Current equity positions with editable classifications, captured G/L comparison columns, and declining-trend state. |
-| `POST /options/activity/sync` | Internal compatibility Tastytrade sync command; the dashboard uses `POST /api/brokerages/tastytrade/sync`. |
-| `POST /options/activity/manual`, `PUT`/`DELETE /options/activity/manual/{event_id}` | Manual reconciliation rows: immutable-except-by-this-path Symbol Ledger events, not group state. |
 | `GET /runWheel`, `/runChains` | Run the wheel job (with best-effort upcoming-earnings refresh) and manual prospective option-quote collection. |
 | `GET /runEarningsScan` | Refresh the shared upcoming-earnings calendar (Finnhub, only when stale), then report how many scanner symbols have an upcoming report. |
 
@@ -139,18 +138,16 @@ recorded before the move are carried into the common store on the next sync.
 `GET /options/activity` projections, `GET /retirement/options`, and every
 trade-group route are fully retired — not internal compatibility reads, gone.
 Their accounting lives in the common Holdings, Options, Option-Adjusted Basis,
-and Symbol Ledger resources. What remains under `/options` is the Tastytrade
-sync command and the manual reconciliation rows, whose CRUD is unrelated to
-grouping. `options_groups.csv` and `options_group_members.csv` are inert; a
-pre-cutover install may still have them on disk, but nothing reads or writes
-them.
+and Symbol Ledger resources. The `/options/activity/*` write routes are also
+retired. Sync uses `POST /api/brokerages/{id}/sync`; manual reconciliation uses
+the brokerage-scoped `/api/brokerages/{id}/activity/manual` routes so Trading
+and Retirement corrections are written to their respective event ledgers.
+`options_groups.csv` and `options_group_members.csv` are inert; a pre-cutover
+install may still have them on disk, but nothing reads or writes them.
 
-`POST /options/activity/sync` remains an internal compatibility command and
-imports January 1 through today by default. Grouping is retired, so no sync
-path can create or change group state — the counters it reports stay at zero
-and are kept only because the response shape is frozen. The common `POST /api/brokerages/tastytrade/sync` is the dashboard path.
-Both are read-only at the broker and idempotent by Tastytrade transaction ID.
-They retain timestamped Greeks, beta, and marks as broker evidence.
+Tastytrade sync is read-only at the broker and idempotent by transaction ID. It
+retains timestamped Greeks, beta, and marks as broker evidence. Grouping is
+retired, so no sync path can create or change group state.
 
 ### SnapTrade holdings (Fidelity retirement, etc.)
 

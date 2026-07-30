@@ -82,8 +82,7 @@ principal endpoints are:
 - `GET /wheelCandidates?horizon=37` for wheel candidates.
 - `GET /stocks/{symbol}/info` for live company information.
 - `GET`/`POST` `/api/brokerages/{id}/*` for Holdings, Symbol Ledger, and
-  Option-Adjusted Basis; `POST /options/activity/*` only for Tastytrade
-  manual reconciliation compatibility.
+  Option-Adjusted Basis, including brokerage-scoped manual reconciliation.
 
 ## Studies
 

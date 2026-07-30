@@ -153,6 +153,9 @@ SYNC_RESOURCES = frozenset({"HOLDINGS", "ACTIVITY", "MARKET_DATA"})
 NEW_ROUTES = (
     ("GET", "/api/brokerages"),
     ("POST", "/api/brokerages/{brokerage_id}/sync"),
+    ("POST", "/api/brokerages/{brokerage_id}/activity/manual"),
+    ("PUT", "/api/brokerages/{brokerage_id}/activity/manual/{event_id}"),
+    ("DELETE", "/api/brokerages/{brokerage_id}/activity/manual/{event_id}"),
     ("GET", "/api/brokerages/{brokerage_id}/holdings"),
     ("PATCH", "/api/brokerages/{brokerage_id}/holdings/{symbol}/metadata"),
     ("POST", "/api/brokerages/{brokerage_id}/holdings/gain-loss-snapshots"),
@@ -174,12 +177,7 @@ NEW_ROUTES = (
 #
 # Entries leave this list only by that deliberate audit, recorded in
 # RETIRED_LEGACY_ROUTES below — never because a phase found one inconvenient.
-FROZEN_LEGACY_ROUTES = (
-    ("POST", "/options/activity/sync"),
-    ("POST", "/options/activity/manual"),
-    ("PUT", "/options/activity/manual/{event_id}"),
-    ("DELETE", "/options/activity/manual/{event_id}"),
-)
+FROZEN_LEGACY_ROUTES = ()
 
 # Retired by the post-phase cleanup, after the owner confirmed these are not
 # externally consumable and a consumer sweep proved nothing calls them. They are
@@ -190,6 +188,12 @@ FROZEN_LEGACY_ROUTES = (
 # editable classifications, captured gain/loss percentages, and declining-trend
 # state these used to be the only source of.
 RETIRED_LEGACY_ROUTES = (
+    # The provider-specific sync route was replaced by the common resource
+    # runner. Manual reconciliation moved to the same brokerage-scoped API.
+    ("POST", "/options/activity/sync"),
+    ("POST", "/options/activity/manual"),
+    ("PUT", "/options/activity/manual/{event_id}"),
+    ("DELETE", "/options/activity/manual/{event_id}"),
     ("GET", "/retirement/portfolio/live"),
     ("PUT", "/retirement/enrichment/{symbol}"),
     ("POST", "/retirement/holdings/sync"),

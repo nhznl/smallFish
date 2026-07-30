@@ -90,6 +90,40 @@ def post_sync(brokerage_id: str,
         raise _fail(exc) from exc
 
 
+# ------------------------------------------------ manual reconciliation ---
+
+@router.post("/{brokerage_id}/activity/manual")
+def post_manual_activity(
+        brokerage_id: str,
+        request: schemas.ManualActivityCreateRequest) -> dict:
+    try:
+        return service.create_manual_activity(
+            brokerage_id, schemas.request_payload(request)
+        )
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.put("/{brokerage_id}/activity/manual/{event_id:path}")
+def put_manual_activity(
+        brokerage_id: str, event_id: str,
+        request: schemas.ManualActivityUpdateRequest) -> dict:
+    try:
+        return service.update_manual_activity(
+            brokerage_id, event_id, schemas.request_payload(request)
+        )
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.delete("/{brokerage_id}/activity/manual/{event_id:path}")
+def delete_manual_activity(brokerage_id: str, event_id: str) -> dict:
+    try:
+        return service.delete_manual_activity(brokerage_id, event_id)
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
 # ----------------------------------------------------------- symbol ledger ---
 
 @router.get("/{brokerage_id}/symbols")

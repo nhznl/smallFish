@@ -39,8 +39,7 @@ Each needs either new data or an explicit decision before it can start.
 current Angular consumer but may be used by scripts, notebooks, external HTTP
 clients, or out-of-tree Python imports: `brokerage_ids()`, `descriptors()`,
 `GET /stocks`, `GET /api/brokerages`, the two Symbol Ledger archive reads,
-`POST /options/activity/sync`, the manual activity CRUD routes, and the
-deprecated GET aliases for run jobs. Audit access logs and out-of-tree
+and the deprecated GET aliases for run jobs. Audit access logs and out-of-tree
 consumers before an explicit retain-or-remove decision. Do not change response
 shapes during the audit.
 
@@ -59,11 +58,11 @@ served by synchronous execution or needs a small in-process job registry with
 status, identity, and idempotency. A distributed queue is not currently
 justified.
 
-**Deep brokerage API response contracts.** Closed write requests have Pydantic
-models, but deep GET envelopes and legacy options-activity bodies remain
-projection-owned dictionaries. Decide whether stronger response models provide
-enough compatibility and maintenance value to justify the migration. Preserve
-existing wire shapes.
+**Deep brokerage API response contracts.** Brokerage write requests have
+Pydantic models, but deep GET envelopes remain dictionaries serialized directly
+by projection functions. Decide whether stronger response models provide enough
+compatibility and maintenance value to justify the migration. Preserve existing
+wire shapes.
 
 **Remaining Angular view-model decomposition.** Wheel has the first extracted
 view model. Momentum Scanner, Stock Detail, Sector Rotation, Portfolios, and

@@ -45,6 +45,9 @@ class BrokerageRegistration:
     #: Common resource name -> the provider command that satisfies it. One
     #: command may serve several resources; the sync runner calls it once.
     sync_commands: dict[str, Callable[[], dict]] = field(default_factory=dict)
+    #: Immutable activity ledger receiving app-owned manual reconciliation
+    #: events for this brokerage.
+    activity_path: Callable[[], Path] = config.options_activity_csv
 
 
 def _registration(*, brokerage_id: str, label: str, institution: str,
@@ -53,6 +56,7 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
                   holdings_metadata_path: Callable[[], Path],
                   holdings_trend_path: Callable[[], Path],
                   sync_commands: dict[str, Callable[[], dict]],
+                  activity_path: Callable[[], Path],
                   capabilities: BrokerageCapabilities | None = None,
                   ) -> BrokerageRegistration:
     return BrokerageRegistration(
@@ -65,6 +69,7 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
         holdings_metadata_path=holdings_metadata_path,
         holdings_trend_path=holdings_trend_path,
         sync_commands=sync_commands,
+        activity_path=activity_path,
     )
 
 
@@ -85,6 +90,7 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         portfolio_role="TRADING", adapter="TASTYTRADE", factory=TastytradeAdapter,
         holdings_metadata_path=config.trading_holdings_enrichment_csv,
         holdings_trend_path=config.trading_holdings_trend_csv,
+        activity_path=config.options_activity_csv,
         sync_commands={
             "HOLDINGS": _tastytrade_sync,
             "ACTIVITY": _tastytrade_sync,
@@ -98,6 +104,7 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         portfolio_role="RETIREMENT", adapter="SNAPTRADE", factory=SnapTradeAdapter,
         holdings_metadata_path=config.holdings_enrichment_csv,
         holdings_trend_path=config.holdings_trend_csv,
+        activity_path=config.retirement_option_events_csv,
         sync_commands={
             "HOLDINGS": snaptrade_importer.sync_holdings,
             "ACTIVITY": _fidelity_activity_sync,

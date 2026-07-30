@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from . import registry, store, sync
+from . import activity_manual, registry, store, sync
+from .activity_store import ActivityValidationError
 from .contracts import BrokerageSnapshot
 from .projections import (envelope, events, holdings, option_adjusted_basis,
                           options, symbol_ledger)
@@ -423,6 +424,73 @@ def capture_gain_loss_snapshot(brokerage_id: str) -> dict[str, Any]:
         return holdings.capture_snapshot(snapshot, brokerage_id=entry.descriptor.id)
     except holdings.SnapshotUnavailable as exc:
         raise BrokerageRequestError(exc.code, str(exc), 409) from exc
+
+
+# ------------------------------------------------ manual reconciliation ---
+
+def _manual_activity_context(
+        brokerage_id: str, payload: dict[str, Any] | None = None,
+        ) -> tuple[registry.BrokerageRegistration, dict[str, Any]]:
+    try:
+        entry = registry.registration(brokerage_id)
+    except registry.UnknownBrokerageError as exc:
+        raise BrokerageRequestError(
+            "UNKNOWN_BROKERAGE", "That brokerage is not configured.", 404
+        ) from exc
+    if not entry.capabilities.activity:
+        raise BrokerageRequestError(
+            "ACTIVITY_UNAVAILABLE",
+            "Manual reconciliation is unavailable for this brokerage.", 409,
+        )
+    normalized = dict(payload or {})
+    expected_account = entry.descriptor.portfolio_role
+    requested_account = str(normalized.get("account") or "").strip().upper()
+    if requested_account and requested_account != expected_account:
+        raise BrokerageRequestError(
+            "BROKERAGE_ACCOUNT_MISMATCH",
+            "The request account does not match the selected brokerage.", 422,
+        )
+    normalized["account"] = expected_account
+    return entry, normalized
+
+
+def create_manual_activity(brokerage_id: str,
+                           payload: dict[str, Any]) -> dict[str, Any]:
+    entry, normalized = _manual_activity_context(brokerage_id, payload)
+    try:
+        return activity_manual.create_manual_event(
+            normalized, path=entry.activity_path()
+        )
+    except ActivityValidationError as exc:
+        raise BrokerageRequestError(
+            "INVALID_MANUAL_ACTIVITY", str(exc), exc.status_code
+        ) from exc
+
+
+def update_manual_activity(brokerage_id: str, event_id: str,
+                           payload: dict[str, Any]) -> dict[str, Any]:
+    entry, normalized = _manual_activity_context(brokerage_id, payload)
+    try:
+        return activity_manual.update_manual_event(
+            event_id, normalized, path=entry.activity_path()
+        )
+    except ActivityValidationError as exc:
+        raise BrokerageRequestError(
+            "INVALID_MANUAL_ACTIVITY", str(exc), exc.status_code
+        ) from exc
+
+
+def delete_manual_activity(brokerage_id: str,
+                           event_id: str) -> dict[str, Any]:
+    entry, _normalized = _manual_activity_context(brokerage_id)
+    try:
+        return activity_manual.delete_manual_event(
+            event_id, path=entry.activity_path()
+        )
+    except ActivityValidationError as exc:
+        raise BrokerageRequestError(
+            "INVALID_MANUAL_ACTIVITY", str(exc), exc.status_code
+        ) from exc
 
 
 # ------------------------------------------------------------------ sync ---

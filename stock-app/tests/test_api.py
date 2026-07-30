@@ -3,6 +3,7 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 from models.wheel import WHEEL_COLUMNS
 
+from app import config, options_activity
 from app.cache import cache
 from app.events_read import market_today
 from app.main import app
@@ -167,15 +168,17 @@ def test_wheel_candidates_horizon_filter(env_fixtures):
 def test_retired_options_routes_are_not_registered(env_fixtures, tmp_path, monkeypatch):
     """The grouped Options/Trading and Retirement projections, and every
     trade-group route including their former 410 tombstones, are fully
-    retired -- not switched off, gone. What remains is the compatibility sync
-    command and the manual reconciliation CRUD, whose rows are Symbol Ledger
-    events rather than group state."""
+    retired -- not switched off, gone. Sync and manual reconciliation now use
+    the brokerage-scoped API."""
     monkeypatch.setenv("SFP_OPTIONS_ACTIVITY", str(tmp_path / "options_activity.csv"))
     monkeypatch.setenv("SFP_OPTIONS_GROUPS", str(tmp_path / "options_groups.csv"))
     monkeypatch.setenv("SFP_OPTIONS_GROUP_MEMBERS", str(tmp_path / "options_group_members.csv"))
     monkeypatch.setenv("SFP_OPTIONS_POSITION_MARKS", str(tmp_path / "options_position_marks.csv"))
     monkeypatch.setenv("SFP_OPTIONS_GREEKS", str(tmp_path / "options_greeks.csv"))
     monkeypatch.setenv("SFP_OPTIONS_BETAS", str(tmp_path / "options_betas.csv"))
+    monkeypatch.setenv(
+        "SFP_RETIREMENT_OPTION_EVENTS", str(tmp_path / "retirement_activity.csv")
+    )
     monkeypatch.setenv("SFP_EVENTS_CSV", str(tmp_path / "events.csv"))
 
     # A retired GET reaches the static-app fallback: 200 with a built UI, or
@@ -194,20 +197,54 @@ def test_retired_options_routes_are_not_registered(env_fixtures, tmp_path, monke
         ("POST", "/retirement/options/groups"),
         ("PUT", "/retirement/options/groups/legacy"),
         ("PUT", "/retirement/options/activity/event-1/group"),
+        ("POST", "/options/activity/sync"),
+        ("POST", "/options/activity/manual"),
+        ("PUT", "/options/activity/manual/event-1"),
+        ("DELETE", "/options/activity/manual/event-1"),
     ):
         assert client.request(method, path).status_code in (404, 405), path
 
-    sync = client.post("/options/activity/sync", json={})
-    # 200 with a live sync, 502 on an upstream failure, 503 with no Tastytrade
-    # credentials configured -- any of these prove the route still exists and
-    # is not the 410 a retired write path returns.
-    assert sync.status_code in (200, 502, 503)
-    created = client.post("/options/activity/manual", json={
-        "account": "TRADING", "contract_key": "ABC 260821P00050000",
+    created = client.post("/api/brokerages/tastytrade/activity/manual", json={
+        "contract_key": "ABC 260821P00050000",
         "transaction_date": "2026-07-28", "quantity": "1", "position_delta": "-1",
         "net_value": "100",
     })
     assert created.status_code == 200
+    event_id = created.json()["event_id"]
+    trading = options_activity._read_csv(
+        config.options_activity_csv(), options_activity.ACTIVITY_HEADERS
+    )
+    assert [(row["id"], row["account"]) for row in trading] == [
+        (event_id, "TRADING")
+    ]
+    updated = client.put(
+        f"/api/brokerages/tastytrade/activity/manual/{event_id}",
+        json={"transaction_date": "2026-07-29", "quantity": "2"},
+    )
+    assert updated.status_code == 200
     assert client.delete(
-        f"/options/activity/manual/{created.json()['event_id']}"
+        f"/api/brokerages/tastytrade/activity/manual/{event_id}"
     ).status_code == 200
+
+    retirement = client.post("/api/brokerages/fidelity/activity/manual", json={
+        "contract_key": "XYZ", "transaction_date": "2026-07-28",
+        "quantity": "5", "net_cash": "-50",
+    })
+    assert retirement.status_code == 200
+    rows = options_activity._read_csv(
+        config.retirement_option_events_csv(), options_activity.ACTIVITY_HEADERS
+    )
+    assert [(row["id"], row["account"]) for row in rows] == [
+        (retirement.json()["event_id"], "RETIREMENT")
+    ]
+
+
+def test_manual_activity_route_rejects_an_account_from_another_brokerage(tmp_path,
+                                                                         monkeypatch):
+    monkeypatch.setenv("SFP_OPTIONS_ACTIVITY", str(tmp_path / "activity.csv"))
+    response = client.post("/api/brokerages/tastytrade/activity/manual", json={
+        "account": "RETIREMENT", "contract_key": "ABC",
+        "transaction_date": "2026-07-28", "quantity": "1",
+    })
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "BROKERAGE_ACCOUNT_MISMATCH"

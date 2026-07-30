@@ -16,7 +16,6 @@ from . import capabilities, config
 from .path_security import UnsafePathError, contained_path
 from .routers import (
     brokerages,
-    options,
     portfolios,
     premium_quotes,
     run_jobs,
@@ -42,7 +41,6 @@ app.include_router(wheel_candidates.router)
 app.include_router(stock_info.router)
 app.include_router(run_jobs.router)
 app.include_router(brokerages.router)
-app.include_router(options.router)
 app.include_router(premium_quotes.router)
 app.include_router(portfolios.router)
 app.include_router(sector_rotation.router)
