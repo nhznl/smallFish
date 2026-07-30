@@ -249,8 +249,7 @@ write a cache artifact, and is not part of `services/` provider transport.
 Provider failures return HTTP 500 with `detail` naming only the exception
 *type* (never the raw provider message). Tests inject a fake `ticker_factory`
 (or monkeypatch the router’s `fetch_stock_information`) so the suite never
-opens a socket — including under `SFP_BLOCK_NETWORK=1`. Design note:
-[`../docs/COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](../docs/COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md).
+opens a socket — including under `SFP_BLOCK_NETWORK=1`.
 
 ## Tests
 

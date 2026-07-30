@@ -7,7 +7,7 @@ brokerage.
 Two rules make that split hold:
 
 * **Signs are canonical, not provider-shaped.** Cash is signed the way
-  ``docs/BROKERAGE_LEDGER_COMBINED_VIEW.md`` already defines it — credits
+  ``docs/BROKERAGES.md`` defines it — credits
   positive, debits negative — and quantities and market values are signed long
   positive / short negative. A provider that reports a short option's cost basis
   as a negative number has that converted inside its adapter.

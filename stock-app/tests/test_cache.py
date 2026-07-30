@@ -1,22 +1,6 @@
 import app.cache as cache_module
-from app.cache import Cache, read_companies
+from app.cache import Cache
 from app.stock_model import Stock
-
-
-def test_read_companies_uses_registry_minus_retirements(fixtures_dir, tmp_path):
-    retired_path = tmp_path / "retired_symbols.csv"
-    retired_path.write_text(
-        "symbol,last_seen,reason\nBBB,2026-07-17,no data available\n",
-        encoding="utf-8",
-    )
-    companies = read_companies(fixtures_dir / "universe.csv", retired_path)
-
-    assert companies == [
-        ("AAA", "Technology", "STOCK"),
-        ("CCC", "Health Care", "STOCK"),
-        ("DDD", "", "STOCK"),
-    ]
-    assert all(symbol != "BBB" for symbol, _sector, _type in companies)
 
 
 def test_cache_passes_universe_type_into_stock(tmp_path, monkeypatch):

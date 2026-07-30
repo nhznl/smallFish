@@ -35,6 +35,60 @@ when the first one arrives rather than assuming the generic path is right.
 
 Each needs either new data or an explicit decision before it can start.
 
+**Compatibility-surface consumer audit.** Several public surfaces have no
+current Angular consumer but may be used by scripts, notebooks, external HTTP
+clients, or out-of-tree Python imports: `brokerage_ids()`, `descriptors()`,
+`GET /stocks`, `GET /api/brokerages`, the two Symbol Ledger archive reads,
+`POST /options/activity/sync`, the manual activity CRUD routes, and the
+deprecated GET aliases for run jobs. Audit access logs and out-of-tree
+consumers before an explicit retain-or-remove decision. Do not change response
+shapes during the audit.
+
+**Beta and Greek materialization trim.** Greek scalar columns, beta values, IV
+fields, provider fetches, and related sync counts remain compatibility
+evidence. In-repository value consumption is limited, but external consumers
+are unknown. Retain them until access logs and out-of-tree notebooks are
+audited or the owner explicitly authorizes a narrower contract. See
+[`docs/BETA_GREEK_CONSUMER_MEASUREMENT.md`](docs/BETA_GREEK_CONSUMER_MEASUREMENT.md).
+
+**Durable long-running job lifecycle.** Run jobs prefer POST and have per-job
+single-flight locks, but execution remains synchronous and responses have no
+durable job identity. Decide whether the current local deployment is adequately
+served by synchronous execution or needs a small in-process job registry with
+status, identity, and idempotency. A distributed queue is not currently
+justified.
+
+**Deep brokerage API response contracts.** Closed write requests have Pydantic
+models, but deep GET envelopes and legacy options-activity bodies remain
+projection-owned dictionaries. Decide whether stronger response models provide
+enough compatibility and maintenance value to justify the migration. Preserve
+existing wire shapes.
+
+**Remaining Angular view-model decomposition.** Wheel has the first extracted
+view model. Momentum Scanner, Stock Detail, Sector Rotation, Portfolios, and
+Studies still mix transport, transformation, and presentation state. Extract
+facades only where behavior tests demonstrate a concrete lifecycle, loading, or
+error-state benefit; do not introduce a global state framework. Add a direct
+StrategyStocks behavior spec when this work begins.
+
+**Cross-screen formatting convergence.** Brokerage Holdings and Combined
+Ledger share proven-identical formatters, and Symbol Ledger shares only its P/L
+tone helper. Other money, date, sign, locale, and empty-value rules differ by
+screen. Measure and approve each rendered contract before consolidating; do not
+silently force Symbol Ledger or other screens onto `en-US` currency semantics.
+
+**Frozen-study duplicate-helper cleanup.** Candidate and scan modules still
+contain overlapping higher-low, days-since-cross, days-in-band, and
+trailing-return helpers. Remove only copies proven unreachable, with
+artifact-level regression checks. No frozen formula, artifact, or verdict may
+change.
+
+**Company-info transport boundary.** Stock Detail company information remains
+the documented live-network exception inside FastAPI. Decide whether to keep
+that narrow exception or separately design a `services/` transport or
+materialized cache with explicit freshness semantics. This is optional
+architecture work, not a current defect.
+
 **Historical options P&L backtest.** Blocked on point-in-time option-chain,
 event, and membership data, and on a specified simulator. Without those, any
 result would be reconstructed from present-day data and could not support a

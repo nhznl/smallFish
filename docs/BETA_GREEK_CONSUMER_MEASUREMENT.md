@@ -2,7 +2,9 @@
 
 **Status:** 7a–7c complete (measurement only; no fetch/schema deletions)  
 **Date:** 2026-07-30  
-**Parent audit:** [`CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md`](CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md) item 7
+**Current decision:** retain Layer A materialization until the external-consumer
+unknown is closed or the owner authorizes a narrower contract; tracked in
+[`../Requirements.md`](../Requirements.md).
 
 ## Goal
 

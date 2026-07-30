@@ -74,11 +74,11 @@ from utilities.options.chains_config import (
     DEFAULT_THROTTLE_SLEEP,
     VIEW_ENTRY,
     VIEW_ROLL_EXIT,
-    _strategy_data_root,
     chains_config,
     load_config,
     normalize_collection_scope,
 )
+from utilities.options.paths import strategy_data_root
 from utilities.options.chains_publish import (
     ChainsResult,
     runtime_metadata as _runtime_metadata,
@@ -317,7 +317,7 @@ def make_yfinance_fetcher(throttle_sleep: float = DEFAULT_THROTTLE_SLEEP):
 
 def latest_wheel_path(root: Path, strategy: dict, as_of: str) -> Path | None:
     """Latest data/wheel/{date}.csv dated on or before as_of."""
-    return latest_report_path(_strategy_data_root(root, strategy) / "wheel", as_of)
+    return latest_report_path(strategy_data_root(root, strategy) / "wheel", as_of)
 
 
 def run_chains(root: Path, strategy: dict, as_of: str, fetch_fn, *,
@@ -414,7 +414,7 @@ def run_chains(root: Path, strategy: dict, as_of: str, fetch_fn, *,
         symbols = symbols[:limit]
     retrieved_at = (extra_meta or {}).get("generated_at_utc")
 
-    data_root = _strategy_data_root(root, strategy)
+    data_root = strategy_data_root(root, strategy)
     events_by_symbol: dict[str, list[pd.Timestamp]] = {}
     events_path = data_root / "events.csv"
     if events_path.exists():
@@ -794,7 +794,7 @@ def main(argv: list[str] | None = None) -> int:
     for warning in result.warnings:
         print(f"WARNING: {warning}")
     paths = write_chain_artifacts(
-        _strategy_data_root(ROOT, strategy), result,
+        strategy_data_root(ROOT, strategy), result,
         args=vars(args), strategy=strategy)
     scope = result.meta.get("collection_scope", {})
     if scope.get("scoped"):

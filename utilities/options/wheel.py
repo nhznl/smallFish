@@ -53,6 +53,7 @@ from models import wheel as wheel_schema
 from utilities import universe
 from utilities.indicators.ta import compute_atr, compute_bollinger, compute_sma
 from utilities.manifest import sha256_file, write_manifest
+from utilities.options.paths import strategy_data_root
 from utilities.price_reader import read_prices_validated
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -498,7 +499,7 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
     wheel_cfg = strategy.get("wheel", {})
     as_of_ts = pd.to_datetime(as_of)
     cache_root = (root / strategy["stock_app_cache_root"]).resolve()
-    output_root = _strategy_data_root(root, strategy)
+    output_root = strategy_data_root(root, strategy)
 
     horizons = [int(h) for h in wheel_cfg.get("horizons_dte", DEFAULT_HORIZONS_DTE)]
     cushions = [float(c) for c in wheel_cfg.get("cushions_pct", DEFAULT_CUSHIONS_PCT)]
@@ -716,11 +717,6 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
                        warnings=warnings, snapshot=snapshot)
 
 
-def _strategy_data_root(root: Path, strategy: dict) -> Path:
-    configured = Path(strategy.get("strategy_data_root", "data")).expanduser()
-    return (configured if configured.is_absolute() else root / configured).resolve()
-
-
 def load_config() -> dict:
     wheel = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
     if not isinstance(wheel, dict):
@@ -747,7 +743,7 @@ def main(argv: list[str] | None = None) -> int:
     for warning in result.warnings:
         print(f"WARNING: {warning}")
     output_root = (Path(args.output_root).expanduser().resolve() if args.output_root
-                   else _strategy_data_root(ROOT, strategy))
+                   else strategy_data_root(ROOT, strategy))
     wheel_dir = output_root / "wheel"
     exclusions_dir = output_root / "wheel_exclusions"
     wheel_dir.mkdir(parents=True, exist_ok=True)

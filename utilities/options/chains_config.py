@@ -188,11 +188,6 @@ def normalize_collection_scope(cfg: dict, *, horizon_dtes=None, symbol_scope=Non
     }
 
 
-def _strategy_data_root(root: Path, strategy: dict) -> Path:
-    configured = Path(strategy.get("strategy_data_root", "data")).expanduser()
-    return (configured if configured.is_absolute() else root / configured).resolve()
-
-
 def load_config() -> dict:
     chains = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
     if not isinstance(chains, dict):

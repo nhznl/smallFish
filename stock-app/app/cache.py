@@ -55,17 +55,6 @@ def _company_rows(registry: dict[str, dict], retired: set[str]) -> list[tuple[st
     ]
 
 
-def read_companies(registry_path: Path, retired_path: Path) -> list[tuple[str, str, str]]:
-    """Read live registry symbols with their sectors and instrument types.
-
-    The backend independently computes liveness as registry minus retirements;
-    it does not import the utilities package.
-    """
-    registry = load_registry(registry_path)
-    retired = load_retired_symbols(retired_path)
-    return _company_rows(registry, retired)
-
-
 def _read_year(cache_root: Path, symbol: str, year: int) -> list[Daily]:
     try:
         path = symbol_year_path(cache_root, symbol, year)

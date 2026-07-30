@@ -95,8 +95,7 @@ Batch price work is explicit, via `commands.sh`. The one read-path network
 exception is Stock Detail company info: `GET /stocks/{symbol}/info` calls Yahoo
 via `yfinance` inside `stock-app` (`app/stock_data_retriever.py`) rather than
 reading a materialized artifact. That fetcher is injectable for offline tests;
-see [`COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md)
-and `stock-app/README.md`.
+see `stock-app/README.md`.
 
 ## API and UI boundary
 

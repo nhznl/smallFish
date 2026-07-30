@@ -7,6 +7,7 @@ collection, immutable quote archives, and archive verification.
 |---|---|
 | `wheel.py` | Local OHLCV Wheel scan and immutable Wheel artifacts. |
 | `chains.py` | Exact-contract Yahoo discovery, quote enrichment, and immutable premium artifacts. |
+| `paths.py` | Shared strategy-data-root resolution for Wheel and Chains. |
 | `market_quotes.py` | Neutral options market-data observations → coverage metadata and premium-archive enrichment. |
 | `verify_premiums.py` | Offline verification of immutable premium archives and their derived views. |
 | `exchange_calendar.py` | Deterministic NYSE session calendar used for Wheel horizons. |
@@ -71,7 +72,7 @@ All git-ignored and regenerable. Formats are documented in
 ```bash
 utilities/.venv/bin/python -m pytest -q utilities/tests/test_wheel.py \
     utilities/tests/test_chains.py utilities/tests/test_verify_premiums.py \
-    utilities/tests/test_market_quotes.py
+    utilities/tests/test_market_quotes.py utilities/tests/test_options_paths.py
 ```
 
 No test contacts Tastytrade or Yahoo. Quote providers are injected; pass a fake.

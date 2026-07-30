@@ -36,13 +36,6 @@ def test_load_retired_symbols_missing_file_is_empty(tmp_path):
     assert u.load_retired_symbols(tmp_path / "missing.csv") == set()
 
 
-def test_is_member(fixtures_dir):
-    reg = _reg(fixtures_dir)
-    assert u.is_member(reg, "aaa", "sp500") is True
-    assert u.is_member(reg, "AAA", "spMidCap") is False
-    assert u.is_member(reg, "ZZZ", "sp500") is False
-
-
 def test_get_type_and_sector(fixtures_dir):
     reg = _reg(fixtures_dir)
     assert u.get_type(reg, "AAA") == "STOCK"

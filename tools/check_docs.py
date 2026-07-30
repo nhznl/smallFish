@@ -35,30 +35,6 @@ PATH_LIKE = re.compile(
 
 MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
-# Documents that deliberately name paths which do not exist -- a plan describing
-# files yet to be created, say. Path-existence checks are skipped for these.
-NARRATIVE_FILES: set[str] = {
-    "docs/OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md",
-    "docs/CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md",
-    "docs/CONTRACT_TIGHTENING_PHASE4_DESIGN.md",
-    "docs/ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md",
-    "docs/OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md",
-    "docs/CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md",
-    "docs/BETA_GREEK_CONSUMER_MEASUREMENT.md",
-    "docs/ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md",
-    "docs/STUDIES_ROUTE_RACE_PHASE9_DESIGN.md",
-    "docs/ANGULAR_API_BASE_PHASE10_DESIGN.md",
-    "docs/ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md",
-    "docs/ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md",
-    "docs/COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md",
-    "docs/EMPTY_VS_FAILED_VIEW_MODEL_PHASE14_DESIGN.md",
-    "docs/PROJECTION_NUMBER_UTIL_PHASE19_DESIGN.md",
-    "docs/CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md",
-    "docs/GAIN_LOSS_MIGRATION_RETIRE_PHASE21_DESIGN.md",
-    "docs/PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md",
-    "docs/DOC_HYGIENE_PHASE23_DESIGN.md",
-}
-
 # Roots holding generated runtime artifacts. Documentation legitimately names
 # paths under these, and they do not exist in a clean checkout -- only after a
 # scrape, bootstrap, or sync has run. Validating them passes on a developer
@@ -104,9 +80,6 @@ def check_links(path: Path, body: str) -> list[str]:
 
 
 def check_referenced_paths(path: Path, body: str) -> list[str]:
-    if path.relative_to(REPO_ROOT).as_posix() in NARRATIVE_FILES:
-        return []
-
     problems = []
     for candidate in PATH_LIKE.findall(body):
         if candidate in EXAMPLE_PATHS or "/" not in candidate:

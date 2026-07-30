@@ -38,11 +38,6 @@ def live_universe_symbols(registry: dict[str, dict], retired_symbols: set[str]) 
     return sorted(set(registry) - set(retired_symbols))
 
 
-def is_member(registry: dict[str, dict], symbol: str, tag: str) -> bool:
-    record = registry.get(normalize_symbol(symbol))
-    return bool(record) and tag in record.get("memberships", set())
-
-
 def get_type(registry: dict[str, dict], symbol: str) -> str | None:
     record = registry.get(normalize_symbol(symbol))
     return record.get("type") or None if record else None
