@@ -112,7 +112,7 @@ def tastytrade_positions_csv() -> Path:
     ledger. Unlike ``options_position_marks_csv``, this includes every current
     equity and option position and is not consumed by the legacy options API."""
     return _under(
-        "SFP_TASTYTRADE_POSITIONS", data_dir(), "ledger_trading/tastytrade_positions.csv"
+        "SFP_TASTYTRADE_POSITIONS", data_dir(), "ledger_trading/positions.csv"
     )
 
 
@@ -154,7 +154,7 @@ def options_betas_csv() -> Path:
 def snaptrade_holdings_csv() -> Path:
     """Normalized brokerage holdings imported from SnapTrade (Fidelity, etc.)."""
     return _under(
-        "SFP_SNAPTRADE_HOLDINGS", data_dir(), "ledger_retirement/snaptrade_holdings.csv"
+        "SFP_SNAPTRADE_HOLDINGS", data_dir(), "ledger_retirement/positions.csv"
     )
 
 
@@ -193,7 +193,7 @@ def retirement_option_events_csv() -> Path:
     contract's close so a fully-closed group keeps its realized P/L instead of
     vanishing with the live-positions feed (mirrors options_activity.csv)."""
     return _under(
-        "SFP_RETIREMENT_OPTION_EVENTS", data_dir(), "ledger_retirement/option_events.csv"
+        "SFP_RETIREMENT_OPTION_EVENTS", data_dir(), "ledger_retirement/options_activity.csv"
     )
 
 

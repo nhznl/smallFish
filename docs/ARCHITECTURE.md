@@ -137,9 +137,9 @@ A deliberate split in the ledgers:
 
 | Immutable | Editable |
 |---|---|
-| `options_activity.csv` — broker transactions; `tastytrade_positions.csv` — all current positions for the combined ledger | symbol-ledger notes and archive boundaries |
+| `options_activity.csv` — broker transactions; `positions.csv` — all current positions for the combined ledger | symbol-ledger notes and archive boundaries |
 | `options_greeks.csv`, `options_betas.csv` — timestamped observations | symbol-ledger notes and archive boundaries |
-| `snaptrade_holdings.csv` — normalized holdings | holding enrichment metadata and user-captured G/L snapshots |
+| `positions.csv` (retirement) — normalized holdings | holding enrichment metadata and user-captured G/L snapshots |
 
 Broker facts are never edited in place; syncs upsert by provider id. Symbol
 Ledger archives and notes live in separate app-owned files, so a resync never

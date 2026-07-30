@@ -110,7 +110,7 @@ def _provider():
 def test_config_paths(tmp_path, monkeypatch):
     monkeypatch.setenv("SFP_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("SFP_SNAPTRADE_HOLDINGS", raising=False)
-    assert config.snaptrade_holdings_csv() == tmp_path / "ledger_retirement" / "snaptrade_holdings.csv"
+    assert config.snaptrade_holdings_csv() == tmp_path / "ledger_retirement" / "positions.csv"
     override = tmp_path / "custom_holdings.csv"
     monkeypatch.setenv("SFP_SNAPTRADE_HOLDINGS", str(override))
     assert config.snaptrade_holdings_csv() == override

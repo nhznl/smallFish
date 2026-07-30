@@ -183,7 +183,7 @@ def test_market_data_sync_errors_hide_provider_message(monkeypatch):
 
 
 def _ledger_rows():
-    """Shaped like snaptrade_holdings.csv rows: a short put, a long call, cash."""
+    """Shaped like retirement positions.csv rows: a short put, a long call, cash."""
     return [
         {
             "schema_version": "1", "source": "SNAPTRADE",

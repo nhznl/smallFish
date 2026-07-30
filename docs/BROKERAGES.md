@@ -208,10 +208,12 @@ Partial risk inputs are never presented as complete totals.
 | Path | Contents |
 |---|---|
 | `$SFP_DATA_DIR/ledger_trading/options_activity.csv` | Immutable broker transactions |
+| `$SFP_DATA_DIR/ledger_trading/positions.csv` | All current equity and option positions |
 | `$SFP_DATA_DIR/ledger_trading/options_position_marks.csv` | Current marks |
 | `$SFP_DATA_DIR/ledger_trading/options_greeks.csv` | Timestamped IV and Greeks |
 | `$SFP_DATA_DIR/ledger_trading/options_betas.csv` | Timestamped market-metric beta |
-| `$SFP_DATA_DIR/ledger_retirement/snaptrade_holdings.csv` | Normalized holdings |
+| `$SFP_DATA_DIR/ledger_retirement/positions.csv` | Normalized holdings (equity, option, cash) |
+| `$SFP_DATA_DIR/ledger_retirement/options_activity.csv` | Immutable option transaction events |
 
 All git-ignored. All contain real position data — never attach them to an issue.
 

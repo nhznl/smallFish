@@ -133,7 +133,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 versioned vocabulary for Holdings, Options, Option-Adjusted Basis, and Symbol
 Ledger. Missing marks, activity, or reconciliation remain unavailable rather
 than becoming zero. Tastytrade sync materializes all current positions in
-`data/ledger_trading/tastytrade_positions.csv`.
+`data/ledger_trading/positions.csv`.
 
 The legacy `/brokerage-ledgers/{portfolio}/holdings` read and its enrichment and
 gain/loss-snapshot write paths are retired: the common Holdings resource now
@@ -163,7 +163,7 @@ They retain timestamped Greeks, beta, and marks as broker evidence.
 SnapTrade is a brokerage-data aggregator used to import current holdings from a
 linked brokerage account. `GET /api/brokerages/fidelity/holdings` serves
 normalized broker facts written to
-`data/ledger_retirement/snaptrade_holdings.csv` by the last sync. Each row is an
+`data/ledger_retirement/positions.csv` by the last sync. Each row is an
 immutable holding (equity, option, or cash) with quantity, price, cost basis,
 market value, and open P/L; the summary groups value by account and asset class.
 `services.snaptrade` performs registration, portal, account, position, and
