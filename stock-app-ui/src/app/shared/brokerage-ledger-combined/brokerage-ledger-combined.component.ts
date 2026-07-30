@@ -11,6 +11,12 @@ import {
   BrokerageWarning,
   PnlCompleteness,
 } from '../../model/brokerage';
+import {
+  formatIsoTimestamp,
+  formatQuantity,
+  formatUsdMoney,
+  pnlToneClass,
+} from '../format-display';
 
 @Component({
   selector: 'app-brokerage-ledger-combined',
@@ -177,28 +183,19 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
   }
 
   money(value: number | null | undefined, signed = false): string {
-    if (value == null) return '—';
-    const formatted = Math.abs(value).toLocaleString('en-US', {
-      style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2,
-    });
-    if (value < 0) return `−${formatted}`;
-    return signed && value > 0 ? `+${formatted}` : formatted;
+    return formatUsdMoney(value, signed);
   }
 
   quantity(value: number | null | undefined): string {
-    if (value == null) return '—';
-    return Number.isInteger(value) ? String(value) : value.toFixed(3);
+    return formatQuantity(value);
   }
 
   timestamp(value: string | null | undefined): string {
-    if (!value) return '—';
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+    return formatIsoTimestamp(value);
   }
 
   pnlClass(value: number | null | undefined): string {
-    if (value == null || value === 0) return '';
-    return value > 0 ? 'positive' : 'negative';
+    return pnlToneClass(value);
   }
 
   trackSymbol(_index: number, row: AdjustedBasisItem): string {

@@ -5,6 +5,13 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { BrokerageService } from '../../api/brokerage.service';
 import { BrokerageId, HoldingItem, HoldingsResponse } from '../../model/brokerage';
+import {
+  formatFixedPercent,
+  formatIsoTimestamp,
+  formatQuantity,
+  formatUsdMoney,
+  pnlToneClass,
+} from '../format-display';
 import { ModalComponent } from '../ui/modal.component';
 
 /** Columns a user can sort by; the rest are display-only. */
@@ -234,35 +241,23 @@ export class BrokerageHoldingsComponent implements OnChanges {
   }
 
   money(value: number | null | undefined, signed = false): string {
-    if (value == null) return '—';
-    const formatted = Math.abs(value).toLocaleString('en-US', {
-      style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2,
-    });
-    if (value < 0) return `−${formatted}`;
-    return signed && value > 0 ? `+${formatted}` : formatted;
+    return formatUsdMoney(value, signed);
   }
 
   percent(value: number | null | undefined, signed = false): string {
-    if (value == null) return '—';
-    const formatted = `${Math.abs(value).toFixed(2)}%`;
-    if (value < 0) return `−${formatted}`;
-    return signed && value > 0 ? `+${formatted}` : formatted;
+    return formatFixedPercent(value, signed);
   }
 
   quantity(value: number | null | undefined): string {
-    if (value == null) return '—';
-    return Number.isInteger(value) ? String(value) : value.toFixed(3);
+    return formatQuantity(value);
   }
 
   pnlClass(value: number | null | undefined): string {
-    if (value == null || value === 0) return '';
-    return value > 0 ? 'positive' : 'negative';
+    return pnlToneClass(value);
   }
 
   timestamp(value: string | null | undefined): string {
-    if (!value) return '—';
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+    return formatIsoTimestamp(value);
   }
 
   private flash(message: string): void {

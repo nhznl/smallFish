@@ -38,7 +38,8 @@ The audit nevertheless found substantial follow-up work:
 3. ~~The Angular application has three orphan model files, one unused service
    method, repeated infrastructure/formatting code, and weak coverage for its
    largest screens.~~ Orphan models / unused catalog client removed; Phase 5
-   coverage and Phase 10 API-base token landed. Formatting drift and view-model
+   coverage and Phase 10 API-base token landed. Phase 11 shared Holdings /
+   Combined Ledger format helpers; broader formatting drift and view-model
    decomposition remain open.
 4. Several backend endpoints and helpers have no repository consumer, but are
    compatibility surfaces rather than proven dead code. They must not be
@@ -97,7 +98,7 @@ work. The plan should remain closed.
 | Priority | Finding | Affected areas | Recommendation |
 |---|---|---|---|
 | Medium | API-origin selection is duplicated in five services | ~~Five independent port-4200 ternaries~~ **Phase 10 done.** Shared `API_BASE_URL` token + `resolveApiBaseUrl`. See [`ANGULAR_API_BASE_PHASE10_DESIGN.md`](ANGULAR_API_BASE_PHASE10_DESIGN.md). |
-| Medium | Money, percentage, sign, date, and range formatting is repeated with inconsistent behavior | Brokerage Holdings, Combined Ledger, Symbol Ledger, portfolios, sector rotation, scanner, stock detail, and strategy views. Some use a fixed locale and some the browser locale; sign/minus conventions differ. | Introduce a small set of pure pipes or narrow formatting helpers. Preserve each display contract deliberately instead of replacing everything with one broad formatter. |
+| Medium | Money, percentage, sign, date, and range formatting is repeated with inconsistent behavior | ~~Holdings + Combined Ledger identical helpers~~ **Phase 11 done** (`format-display.ts`). Symbol Ledger, portfolios, sector rotation, scanner, stock detail, and strategy still differ (locale, `$` prefix, sign rules). | Migrate only after measuring each surface; do not force Symbol Ledger onto `en-US` currency helpers. See [`ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md`](ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md). |
 | High | Date and nullable API contracts do not match JSON | ~~Several interfaces typed ISO dates as `Date`~~ **4a done.** Stock/gain-loss transport uses ISO `string` + correct `| null` on trade stats and gain/loss blocks; scanner/stock-detail casts removed. See [`CONTRACT_TIGHTENING_PHASE4_DESIGN.md`](CONTRACT_TIGHTENING_PHASE4_DESIGN.md). |
 | Medium | Job and study results use `any` | Stock-service job methods, study candidates, and stock-detail weekly fields lose compile-time coverage of backend changes. | Add response interfaces derived from current payloads; do not change wire shapes. |
 
@@ -286,6 +287,11 @@ methodology changes, compatibility removals, and mechanical cleanup.
     one `API_BASE_URL` injection token replaces five duplicated origin
     ternaries. Remaining mechanical cleanup (`models/price.py`) deferred —
     public `models/` surface needs an adopt-or-delete owner decision.
+11. **~~Narrow brokerage display formatters.~~ Done (11a).** See
+    [`ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md`](ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md):
+    shared `format-display` helpers for Holdings + Combined Ledger only.
+    Broader formatting, view-model decomposition, company-info exception docs,
+    and BrokerageService “no expectations” warnings remain open.
 
 ### Explicit stop conditions
 

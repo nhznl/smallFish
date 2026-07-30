@@ -48,6 +48,7 @@ NARRATIVE_FILES: set[str] = {
     "docs/ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md",
     "docs/STUDIES_ROUTE_RACE_PHASE9_DESIGN.md",
     "docs/ANGULAR_API_BASE_PHASE10_DESIGN.md",
+    "docs/ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md",
 }
 
 # Roots holding generated runtime artifacts. Documentation legitimately names
