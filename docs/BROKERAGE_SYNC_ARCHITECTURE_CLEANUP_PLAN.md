@@ -7,10 +7,10 @@ within the settled boundaries below and must pause at a listed stop condition.
 
 ## Resume here
 
-Begin with Phase 2.5. Work one phase and one focused commit at a time. Update the
+Begin with Phase 3. Work one phase and one focused commit at a time. Update the
 dashboard and progress log in the same commit as each completed phase. Do not
 restart the completed Symbol Ledger, common brokerage API, legacy-route
-retirement, or provider-I/O extraction projects.
+retirement, provider-I/O extraction, or Phase 2.5 options market-data projects.
 
 ## Objective
 
@@ -288,7 +288,7 @@ its quote/Greek/beta retrieval must delegate to `services.options_market`.
 
 ### `utilities.options.market_quotes`
 
-- Replaces the provider-named `tastytrade_quotes.py` implementation owner.
+- Replaces the provider-named tastytrade_quotes implementation owner.
 - Accepts canonical option contracts and calls `services.options_market` for
   live bid/ask observations.
 - Preserves current quote quality, freshness, side-specific timestamps,
@@ -453,9 +453,8 @@ git diff --check
     `retirement_options.py`; and
   - the beta/Greek portion of `options_activity.py`, without splitting its
     combined account sync or changing Tastytrade registry deduplication.
-- Rename the implementation owner
-  `utilities/options/tastytrade_quotes.py` to
-  the `utilities.options.market_quotes` module and route live quote retrieval through
+- Rename the former tastytrade_quotes implementation owner to
+  `utilities/options/market_quotes.py` and route live quote retrieval through
   `services.options_market`. Update first-party imports/tests; add a compatibility
   re-export only if a production or documented external caller is found.
 - Keep Yahoo chain discovery and the premium archive format unchanged.
@@ -750,8 +749,8 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 0 | Characterize ownership, compatibility, and provider call counts | COMPLETE | 13 characterization tests; golden artifacts under `stock-app/tests/fixtures/brokerage_sync/`; caller table above |
 | 1 | Delete proven-dead remnants | COMPLETE | Removed `_group_name`/`_build_groups`, group-only row fields, unused retirement imports/scaffolding, and `UNCLASSIFIED`/`_read_enrichment`/`_round2`; deleted dead-only group/snapshot test helpers |
 | 2 | Make resource commands single-purpose | COMPLETE | Registry: `sync_holdings` / `sync_activity` / `sync_held_option_market_data`; empty-body sync is 1/1/1/1; legacy `sync` orchestrates once each |
-| 2.5 | Provider-neutral quotes, Greeks/IV, and beta API/model | NOT STARTED | Begin here; Tastytrade is the first routed provider, Yahoo chain discovery stays separate |
-| 3 | Move materialization into explicit modules | NOT STARTED | Blocked on Phase 2.5 |
+| 2.5 | Provider-neutral quotes, Greeks/IV, and beta API/model | COMPLETE | `services/options_market/` + tastytrade adapter; consumers routed; `market_quotes` rename; both-runtime `test_options_market.py` |
+| 3 | Move materialization into explicit modules | NOT STARTED | Begin here |
 | 4 | Isolate setup/CLI and finish compatibility facade | NOT STARTED | Blocked on Phase 3 |
 | 5 | Enforcement, docs, and full regression | NOT STARTED | Blocked on Phase 4 |
 
@@ -764,6 +763,7 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 2026-07-29 | 1 | COMPLETE | Deleted dead group projection helpers and enrichment remnants; cleaned unused imports and empty scaffolding; removed `test_build_groups_*` and retired snapshot helpers. Fresh reference audit confirmed no production callers. Full stock-app suite + docs/secret gates green. | Phase 2 — single-purpose resource commands |
 | 2026-07-29 | 2 | COMPLETE | Split `sync_holdings` from legacy `sync`; registry points at holdings/activity/market-data commands; empty-body Fidelity sync is one positions/activity/beta/greeks call each. Characterization updated; 459 stock-app tests pass. | Owner boundary review before moving importers |
 | 2026-07-29 | Boundary decision | COMPLETE | Tastytrade's brokerage-account role and options market-data-provider role are independent. Add one cross-runtime neutral API/model for quotes, Greeks/IV, and underlying beta; route both brokerage market-data paths and premium quote enrichment through it. Keep Yahoo chain discovery and a second provider out of scope. | Phase 2.5 — establish the neutral API before moving importers |
+| 2026-07-29 | 2.5 | COMPLETE | Added `services/options_market/` (stdlib contracts, explicit tastytrade routing, OCC→dxFeed in adapter). Routed `retirement_options`, `options_activity` market-data, and `utilities.options.market_quotes` through it. Renamed tastytrade_quotes→`market_quotes`. Gate: services 18+17 pass both runtimes; stock-app 45; utilities 61; docs/secrets/diff-check clean. No production module outside the adapter calls Tastytrade quote/Greek/metric transport. | Phase 3 — move materialization into explicit modules |
 
 ## Implementation-agent kickoff prompt
 

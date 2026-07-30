@@ -6,8 +6,8 @@ collection, immutable quote archives, and archive verification.
 | Module | Responsibility |
 |---|---|
 | `wheel.py` | Local OHLCV Wheel scan and immutable Wheel artifacts. |
-| `chains.py` | Exact-contract discovery, quote enrichment, and immutable premium artifacts. |
-| `tastytrade_quotes.py` | Maps exact provider symbols and normalizes raw DXLink quotes from `services.tastytrade`. |
+| `chains.py` | Exact-contract Yahoo discovery, quote enrichment, and immutable premium artifacts. |
+| `market_quotes.py` | Neutral options market-data observations → coverage metadata and premium-archive enrichment. |
 | `verify_premiums.py` | Offline verification of immutable premium archives and their derived views. |
 | `exchange_calendar.py` | Deterministic NYSE session calendar used for Wheel horizons. |
 
@@ -29,9 +29,10 @@ non-zero when no requested Tastytrade quote arrives. Yahoo quotes are
 diagnostic-only — they cannot authorize entry economics. Running off-hours is
 allowed for diagnostics, but off-hours or untimestamped observations can never
 become entry-eligible.
-`chains` delegates Tastytrade credential loading, session lifetime, and DXLink
-streaming to `services.tastytrade`; this package retains normalization and
-archive semantics.
+`chains` discovers contracts through Yahoo, then requests live bid/ask
+observations through `services.options_market` (Tastytrade is the routed
+provider today). This package retains quote eligibility, coverage metadata, and
+archive semantics; provider symbol conversion stays in the market-data adapter.
 
 See [`../../docs/BROKERAGES.md`](../../docs/BROKERAGES.md) for setup.
 
@@ -51,9 +52,8 @@ Run these through the stable repository commands: `./commands.sh wheel`,
 `./commands.sh chains`, and `./commands.sh verify-premiums [run-id]`.
 Configuration is colocated in `config/`. Price readers, artifact manifests, and
 the universe registry remain in the parent `utilities/` package.
-`services.tastytrade` owns credentials, session lifetime, and raw DXLink
-collection; this package keeps quote eligibility, timestamp normalization,
-coverage metadata, and archive policy.
+`services.options_market` owns provider routing and OCC-to-dxFeed conversion;
+this package keeps quote eligibility, coverage metadata, and archive policy.
 
 ## Outputs
 
@@ -71,9 +71,10 @@ All git-ignored and regenerable. Formats are documented in
 ```bash
 utilities/.venv/bin/python -m pytest -q utilities/tests/test_wheel.py \
     utilities/tests/test_chains.py utilities/tests/test_verify_premiums.py \
-    utilities/tests/test_tastytrade_quotes.py
+    utilities/tests/test_market_quotes.py
 ```
 
 No test contacts Tastytrade or Yahoo. Quote providers are injected; pass a fake.
-Run `services/tests/test_tastytrade_io.py` under the utilities environment when
-changing shared Tastytrade transport.
+Run `services/tests/test_tastytrade_io.py` and
+`services/tests/test_options_market.py` under the utilities environment when
+changing shared market-data transport.

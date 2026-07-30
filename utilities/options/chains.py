@@ -67,11 +67,11 @@ from utilities.options.exchange_calendar import (
 )
 from utilities.manifest import sha256_file, write_manifest
 from utilities.options.verify_premiums import verify_premium_archive
-from utilities.options.tastytrade_quotes import (
+from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
+from utilities.options.market_quotes import (
     QuoteBatch,
     SOURCE_TASTYTRADE_DXLINK,
-    fetch_quotes as fetch_tastytrade_quotes,
-    streamer_symbol,
+    fetch_quotes as fetch_market_quotes,
 )
 from utilities.options.wheel import (
     EVENT_KNOWN,
@@ -1158,7 +1158,7 @@ def _side_rows(symbol: str, as_of: str, chain_dte: int, expiry: str, actual_dte:
             quote_timestamp=quote_timestamp, retrieved_at=retrieved_at,
             quote_source=QUOTE_SOURCE_YAHOO,
             quote_provider_status=QUOTE_PROVIDER_DIAGNOSTIC_FALLBACK,
-            quote_streamer_symbol=streamer_symbol(
+            quote_streamer_symbol=occ_to_dxfeed_symbol(
                 contract.get("provider_contract_symbol") or ""
             ) or None,
         ))
@@ -2083,7 +2083,7 @@ def main(argv: list[str] | None = None) -> int:
     cfg = chains_config(strategy)
 
     def quote_fetch_fn(symbols):
-        return fetch_tastytrade_quotes(
+        return fetch_market_quotes(
             symbols,
             timeout_seconds=cfg["tastytrade_timeout_seconds"],
             batch_size=cfg["tastytrade_batch_size"],

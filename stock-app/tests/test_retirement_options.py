@@ -24,18 +24,25 @@ def _betas_fetcher(include):
 
 
 def _greeks_fetcher(include):
-    """Fake dxFeed fetch returning Greeks events only for legs whose underlying
-    is in `include`, keyed by streamer symbol."""
+    """Fake Greek fetch returning observations only for legs whose underlying
+    is in `include`."""
+    from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
+
     def fetcher(legs, timeout_seconds):
-        out = {}
+        out = []
         for leg in legs:
             underlying = leg["contract_key"].split()[0].upper()
             if underlying in include:
-                out[leg["streamer"]] = SimpleNamespace(
-                    event_symbol=leg["streamer"], volatility=0.5, delta=-0.2,
-                    gamma=0.01, theta=-0.1, rho=0.0, vega=0.1, price=5.0,
-                    time=1784851143002,
-                )
+                out.append(SimpleNamespace(
+                    contract_symbol=leg["contract_symbol"],
+                    provider_symbol=occ_to_dxfeed_symbol(leg["contract_symbol"]),
+                    implied_volatility=0.5, delta=-0.2,
+                    gamma=0.01, theta=-0.1, rho=0.0, vega=0.1,
+                    option_price=5.0,
+                    event_time_ms=1784851143002,
+                    observed_at=None,
+                    provenance="TASTYTRADE_DXLINK",
+                ))
         return out
     return fetcher
 
@@ -86,7 +93,11 @@ def _install_fake_tastytrade(monkeypatch):
             self.subscribed = (event_type, symbols)
 
         async def get_event(self, _event_type):
-            return SimpleNamespace(event_symbol=".SPCX260821P95", volatility=0.5)
+            return SimpleNamespace(
+                event_symbol=".SPCX260821P95",
+                volatility=0.5,
+                time=1_784_851_143_002,
+            )
 
     metrics = ModuleType("tastytrade.metrics")
 
@@ -118,7 +129,7 @@ def opts_env(tmp_path, monkeypatch):
     return tmp_path
 
 
-def test_default_tastytrade_market_data_fetchers_use_three_credentials_and_close(monkeypatch):
+def test_default_market_data_fetchers_use_three_credentials_and_close(monkeypatch):
     monkeypatch.setenv("TT_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setenv("TT_REFRESH_TOKEN", "test-refresh-token")
     monkeypatch.setenv("TT_ENV", "live")
@@ -128,13 +139,14 @@ def test_default_tastytrade_market_data_fetchers_use_three_credentials_and_close
     monkeypatch.setattr(socket, "create_connection",
                         lambda *_args, **_kwargs: pytest.fail("unexpected network call"))
 
-    betas = retirement_options._fetch_tasty_betas(["SPCX"])
-    events = retirement_options._fetch_tasty_greeks(
-        [{"streamer": ".SPCX260821P95"}], timeout_seconds=1.0
+    betas = retirement_options._fetch_betas(["SPCX"])
+    observations = retirement_options._fetch_greeks(
+        [{"contract_symbol": "SPCX  260821P00095000"}], timeout_seconds=1.0
     )
 
     assert [(beta.symbol, beta.beta) for beta in betas] == [("SPCX", 1.2)]
-    assert set(events) == {".SPCX260821P95"}
+    assert [obs.contract_symbol for obs in observations] == ["SPCX  260821P00095000"]
+    assert [obs.provider_symbol for obs in observations] == [".SPCX260821P95"]
     assert [(session.client_secret, session.refresh_token, session.is_test) for session in sessions] == [
         ("test-client-secret", "test-refresh-token", False),
         ("test-client-secret", "test-refresh-token", False),

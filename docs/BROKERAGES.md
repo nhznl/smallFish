@@ -37,10 +37,18 @@ One entry point for everything below:
 
 The command and API entry points load `app.env`; shared `services/` packages
 then read credentials only from the process environment. `services.tastytrade`
-owns Tastytrade session construction, account/market reads, DXLink streaming,
-and raw payloads. `services.snaptrade` owns SnapTrade client construction,
-registration, connection-portal, account, position, and paginated-activity
-calls.
+owns Tastytrade session construction, account/history/position reads, DXLink
+streaming, and raw payloads. `services.options_market` is the provider-neutral
+read API for exact-contract quotes, Greeks/IV, and underlying beta; it routes
+to Tastytrade today and owns OCC-to-dxFeed conversion in its adapter.
+`services.snaptrade` owns SnapTrade client construction, registration,
+connection-portal, account, position, and paginated-activity calls.
+
+Tastytrade therefore has two independent roles: brokerage-account source for
+the options ledger, and the current options market-data provider behind
+`services.options_market`. Brokerage importers and quote enrichment call the
+neutral API for quotes/Greeks/beta; they do not call Tastytrade market-data
+transport directly.
 
 The backend and utilities retain provider-specific policy: normalization,
 Symbol Ledger selection, quote eligibility, artifact writes, CLI presentation,

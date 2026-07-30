@@ -151,14 +151,19 @@ def _install_providers(monkeypatch, counter: _CallCounter, *,
         ]
 
     def fetch_greeks(legs, timeout_seconds):
-        return {
-            leg["streamer"]: SimpleNamespace(
-                event_symbol=leg["streamer"], volatility=0.5, delta=-0.2,
-                gamma=0.01, theta=-0.1, rho=0.0, vega=0.1, price=1.25,
-                time=1784851143002,
+        from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
+
+        return [
+            SimpleNamespace(
+                contract_symbol=leg["contract_symbol"],
+                provider_symbol=occ_to_dxfeed_symbol(leg["contract_symbol"]),
+                implied_volatility=0.5, delta=-0.2,
+                gamma=0.01, theta=-0.1, rho=0.0, vega=0.1, option_price=1.25,
+                event_time_ms=1784851143002, observed_at=None,
+                provenance="TASTYTRADE_DXLINK",
             )
             for leg in legs
-        }
+        ]
 
     # Default fetchers are bound at def-time; wrap the public sync entry points
     # so both the registry binding and the holdings side-effect see fakes.
@@ -546,14 +551,19 @@ def test_beta_and_greeks_artifacts_match_golden_fixtures(
         ]
 
     def fetch_greeks(legs, timeout_seconds):
-        return {
-            leg["streamer"]: SimpleNamespace(
-                event_symbol=leg["streamer"], volatility=0.5, delta=-0.2,
-                gamma=0.01, theta=-0.1, rho=0.0, vega=0.1, price=1.25,
-                time=1784851143002,
+        from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
+
+        return [
+            SimpleNamespace(
+                contract_symbol=leg["contract_symbol"],
+                provider_symbol=occ_to_dxfeed_symbol(leg["contract_symbol"]),
+                implied_volatility=0.5, delta=-0.2,
+                gamma=0.01, theta=-0.1, rho=0.0, vega=0.1, option_price=1.25,
+                event_time_ms=1784851143002, observed_at=None,
+                provenance="TASTYTRADE_DXLINK",
             )
             for leg in legs
-        }
+        ]
 
     retirement_options.sync_betas(fetcher=fetch_betas)
     retirement_options.sync_greeks(fetcher=fetch_greeks)

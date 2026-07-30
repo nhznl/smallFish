@@ -20,6 +20,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
 
+from services import options_market
+from services import options_market
 from services.tastytrade import io as tastytrade_io
 
 from . import config
@@ -141,22 +143,43 @@ def _epoch_ms_iso(value: Any) -> str:
 
 def _normalize_greek(raw: Any, account: str, retrieved_at: str,
                      contracts: dict[str, str]) -> dict[str, str] | None:
-    streamer = _text(_value(raw, "event_symbol")).strip()
-    contract_symbol = contracts.get(streamer, "")
-    volatility = _decimal(_value(raw, "volatility"))
-    event_time_ms = _value(raw, "time") or _value(raw, "event_time")
-    observed_at = _epoch_ms_iso(event_time_ms)
+    # Neutral observations carry OCC identity directly; raw DXLink events are
+    # still accepted from injected sync providers for offline tests.
+    contract_symbol = _text(_value(raw, "contract_symbol")).strip()
+    streamer = _text(
+        _value(raw, "provider_symbol") or _value(raw, "event_symbol")
+    ).strip()
+    if not contract_symbol:
+        contract_symbol = contracts.get(streamer, "")
+    volatility = _decimal(
+        _value(raw, "implied_volatility")
+        if _value(raw, "implied_volatility") is not None
+        else _value(raw, "volatility")
+    )
+    event_time_ms = (
+        _value(raw, "event_time_ms")
+        or _value(raw, "time")
+        or _value(raw, "event_time")
+    )
+    observed_at = _text(_value(raw, "observed_at")).strip() or _epoch_ms_iso(event_time_ms)
     if not contract_symbol or volatility <= 0 or not observed_at:
         return None
+    option_price = _value(raw, "option_price")
+    if option_price is None:
+        option_price = _value(raw, "price")
+    provenance = (
+        _text(_value(raw, "provenance")).strip()
+        or options_market.PROVENANCE_TASTYTRADE_DXLINK
+    )
     return {
         "schema_version": SCHEMA_VERSION,
-        "source": "TASTYTRADE_DXLINK",
+        "source": provenance,
         "account": account,
         "contract_symbol": contract_symbol,
         "contract_key": _contract_key(contract_symbol),
         "streamer_symbol": streamer,
         "implied_volatility": str(volatility),
-        "option_price": _text(_value(raw, "price")),
+        "option_price": _text(option_price),
         "delta": _text(_value(raw, "delta")),
         "gamma": _text(_value(raw, "gamma")),
         "theta": _text(_value(raw, "theta")),
@@ -178,9 +201,13 @@ def _normalize_beta(raw: Any, retrieved_at: str) -> dict[str, str] | None:
         return None
     if not symbol or not math.isfinite(beta) or observed.tzinfo is None:
         return None
+    provenance = (
+        _text(_value(raw, "provenance")).strip()
+        or options_market.PROVENANCE_TASTYTRADE_MARKET_METRICS
+    )
     return {
         "schema_version": SCHEMA_VERSION,
-        "source": "TASTYTRADE_MARKET_METRICS",
+        "source": provenance,
         "symbol": symbol,
         "beta": str(beta),
         "beta_updated_at": observed.astimezone(timezone.utc).isoformat(),
@@ -242,23 +269,23 @@ def _safe_market_data_error(exc: Exception) -> str:
     )
 
 
-def _fetch_tasty_greeks(positions: list[Any],
-                        timeout_seconds: float = 8.0) -> tuple[list[Any], str | None]:
-    """Collect one timestamped dxFeed Greeks event per open option contract."""
-    symbols = {
-        _streamer_symbol(_text(_value(position, "symbol")))
+def _fetch_option_greeks(positions: list[Any],
+                         timeout_seconds: float = 8.0) -> tuple[list[Any], str | None]:
+    """Collect one timestamped Greek observation per open option contract."""
+    contracts = sorted({
+        _text(_value(position, "symbol")).strip().upper()
         for position in positions
         if _is_option_instrument(_value(position, "instrument_type"))
-    }
-    symbols.discard("")
-    if not symbols:
+        and _text(_value(position, "symbol")).strip()
+    })
+    if not contracts:
         return [], None
 
-    result = tastytrade_io.fetch_greeks(sorted(symbols), timeout_seconds)
-    return list(result.events.values()), result.error
+    result = options_market.fetch_greeks(contracts, timeout_seconds=timeout_seconds)
+    return list(result.observations), result.error
 
 
-def _fetch_tasty_betas(positions: list[Any]) -> tuple[list[Any], str | None]:
+def _fetch_underlying_betas(positions: list[Any]) -> tuple[list[Any], str | None]:
     """Fetch timestamped market-metric beta for each current underlying."""
     symbols = sorted({
         _text(_value(position, "underlying_symbol")).strip().upper()
@@ -267,8 +294,8 @@ def _fetch_tasty_betas(positions: list[Any]) -> tuple[list[Any], str | None]:
     })
     if not symbols:
         return [], None
-    result = tastytrade_io.fetch_market_metrics(symbols)
-    return list(result.metrics), result.error
+    result = options_market.fetch_underlying_metrics(symbols, metrics=("beta",))
+    return list(result.observations), result.error
 
 
 def fetch_tastytrade(start_date: date, end_date: date) -> tuple[list[Any], list[Any], dict[str, Any]]:
@@ -294,8 +321,8 @@ def fetch_tastytrade(start_date: date, end_date: date) -> tuple[list[Any], list[
     betas: list[Any] = []
     betas_error = None
     if data.environment == "live":
-        greeks, greeks_error = _fetch_tasty_greeks(list(data.positions))
-        betas, betas_error = _fetch_tasty_betas(list(data.positions))
+        greeks, greeks_error = _fetch_option_greeks(list(data.positions))
+        betas, betas_error = _fetch_underlying_betas(list(data.positions))
     metadata = {
         "environment": data.environment,
         "nickname": data.account.nickname,

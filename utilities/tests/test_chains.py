@@ -25,7 +25,8 @@ import pandas as pd
 
 from models.premium import PREMIUM_SCHEMA_NAME, PREMIUM_SCHEMA_VERSION
 from utilities.options.exchange_calendar import nyse_sessions
-from utilities.options.tastytrade_quotes import QuoteBatch, normalize_quote, streamer_symbol
+from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
+from utilities.options.market_quotes import QuoteBatch
 from utilities.options.wheel import EVENT_KNOWN, EVENT_NONE_IN_RANGE, EVENT_UNKNOWN_STALE
 from utilities.options.chains import (
     CONTRACT_INVALID,
@@ -660,24 +661,9 @@ def test_tastytrade_missing_quote_keeps_yahoo_diagnostic_fail_closed():
     assert not bool(row["entry_eligible"])
 
 
-def test_tastytrade_streamer_identity_and_side_timestamp_normalization():
-    assert streamer_symbol("XYZ260724P00095000") == ".XYZ260724P95"
-    assert streamer_symbol("not-an-option") == ""
-
-    class Event:
-        event_symbol = ".XYZ260724P95"
-        event_time = 1_768_000_000_000
-        bid_time = 1_768_000_000_000
-        ask_time = 1_768_000_060_000
-        bid_price = 1.85
-        ask_price = 1.95
-        bid_size = 12
-        ask_size = 8
-
-    quote = normalize_quote(Event(), "XYZ260724P00095000")
-    assert quote["quote_timestamp"] == quote["bid_timestamp"]
-    assert quote["ask_timestamp"] > quote["bid_timestamp"]
-    assert quote["streamer_symbol"] == ".XYZ260724P95"
+def test_tastytrade_streamer_identity_uses_provider_adapter_conversion():
+    assert occ_to_dxfeed_symbol("XYZ260724P00095000") == ".XYZ260724P95"
+    assert occ_to_dxfeed_symbol("not-an-option") == ""
 
 
 def test_missing_contract_identity_suppresses_fresh_quote_economics():

@@ -18,7 +18,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from services.tastytrade import io as tastytrade_io
+from services import options_market
 
 from . import config, options_activity, snaptrade_service
 from .options_risk import apply_call_coverage
@@ -280,20 +280,20 @@ def sync_activity(*args, **kwargs) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
-# Tastytrade beta sync (SnapTrade has no beta)                                  #
+# Held-option market data (beta + Greeks via provider-neutral API)              #
 # --------------------------------------------------------------------------- #
 
-def _fetch_tasty_betas(symbols: list[str]) -> list[Any]:
-    """Live Tastytrade market-metric beta objects for ``symbols``."""
-    result = tastytrade_io.fetch_market_metrics(symbols)
+def _fetch_betas(symbols: list[str]) -> list[Any]:
+    """Underlying beta observations for ``symbols`` via options market-data."""
+    result = options_market.fetch_underlying_metrics(symbols, metrics=("beta",))
     if result.error:
         raise RuntimeError(result.error)
-    return list(result.metrics)
+    return list(result.observations)
 
 
-def sync_betas(fetcher=_fetch_tasty_betas) -> dict[str, Any]:
-    """Fetch Tastytrade market-metric beta for each retirement option underlying
-    and store it for the risk table. Requires the Tastytrade integration.
+def sync_betas(fetcher=_fetch_betas) -> dict[str, Any]:
+    """Fetch market-metric beta for each retirement option underlying and store
+    it for the risk table. Requires the options market-data provider.
 
     Retain-prior-on-miss: an underlying whose beta the fetch omits keeps its
     previously stored value instead of disappearing from the risk table."""
@@ -311,9 +311,13 @@ def sync_betas(fetcher=_fetch_tasty_betas) -> dict[str, Any]:
             continue
         symbol = str(getattr(metric, "symbol", "")).upper()
         updated = getattr(metric, "beta_updated_at", None)
+        provenance = (
+            getattr(metric, "provenance", None)
+            or options_market.PROVENANCE_TASTYTRADE_MARKET_METRICS
+        )
         newest_betas[symbol] = {
             "schema_version": "1",
-            "source": "TASTYTRADE_MARKET_METRICS",
+            "source": provenance,
             "symbol": symbol,
             "beta": str(beta),
             "beta_updated_at": updated.isoformat() if hasattr(updated, "isoformat") else str(updated or ""),
@@ -340,65 +344,81 @@ def sync_betas(fetcher=_fetch_tasty_betas) -> dict[str, Any]:
     }
 
 
-def _fetch_tasty_greeks(legs: list[dict[str, str]], timeout_seconds: float) -> dict[str, Any]:
-    """Live dxFeed Greeks events keyed by streamer symbol for ``legs``."""
-    by_streamer = {leg["streamer"]: leg for leg in legs}
-    result = tastytrade_io.fetch_greeks(list(by_streamer), timeout_seconds)
+def _fetch_greeks(legs: list[dict[str, str]], timeout_seconds: float) -> list[Any]:
+    """Exact-contract Greek observations for ``legs`` via options market-data."""
+    contracts = [leg["contract_symbol"] for leg in legs]
+    result = options_market.fetch_greeks(contracts, timeout_seconds=timeout_seconds)
     if result.error:
         raise RuntimeError(result.error)
-    return result.events
+    return list(result.observations)
 
 
-def sync_greeks(fetcher=_fetch_tasty_greeks, timeout_seconds: float = 12.0) -> dict[str, Any]:
-    """Stream exact-contract IV/Greeks from Tastytrade dxFeed for each retirement
-    option leg. Works for any listed contract, not only ones held at Tastytrade.
+def sync_greeks(fetcher=_fetch_greeks, timeout_seconds: float = 12.0) -> dict[str, Any]:
+    """Fetch exact-contract IV/Greeks for each retirement option leg.
 
-    Retain-prior-on-miss: a contract whose stream returns nothing keeps its
+    Retain-prior-on-miss: a contract whose fetch returns nothing keeps its
     previously stored observation instead of dropping out of the risk table."""
-    from . import options_activity
-
     legs = [
         {
             "contract_symbol": row["contract_symbol"],
             "contract_key": row["contract_key"],
             "account": row["account"],
-            "streamer": options_activity._streamer_symbol(row["contract_symbol"]),
         }
         for row in _option_rows()
+        if row["contract_symbol"]
     ]
-    legs = [leg for leg in legs if leg["streamer"]]
     if not legs:
         _atomic_write(config.retirement_option_greeks_csv(), GREEKS_HEADERS, [])
         return {"observed": 0, "retained": 0, "missing": 0, "requested": 0, "streamers": []}
 
-    by_streamer = {leg["streamer"]: leg for leg in legs}
-    events = fetcher(legs, timeout_seconds)
+    by_contract = {leg["contract_symbol"]: leg for leg in legs}
+    observations = fetcher(legs, timeout_seconds)
     now = _now()
     normalized_greeks: list[dict[str, Any]] = []
-    for streamer_symbol, event in events.items():
-        leg = by_streamer[streamer_symbol]
-        iv = getattr(event, "volatility", None)
+    for observation in observations:
+        contract_symbol = str(getattr(observation, "contract_symbol", "") or "")
+        leg = by_contract.get(contract_symbol)
+        if leg is None:
+            continue
+        iv = getattr(observation, "implied_volatility", None)
+        if iv is None:
+            iv = getattr(observation, "volatility", None)
         if iv is None:
             continue
-        # Stamp the observation with the dxFeed quote time, not wall-clock now:
-        # a live fetch after the local day has already rolled past UTC midnight
-        # would otherwise be dated "tomorrow" and dropped by the as-of filter.
-        event_time_ms = getattr(event, "time", None)
-        observed_at = _epoch_ms_to_iso(event_time_ms) or now
+        # Stamp with the provider quote time, not wall-clock now: a live fetch
+        # after UTC midnight would otherwise be dated "tomorrow" and dropped.
+        event_time_ms = getattr(observation, "event_time_ms", None)
+        if event_time_ms in (None, ""):
+            event_time_ms = getattr(observation, "time", None)
+        observed_at = getattr(observation, "observed_at", None) or (
+            _epoch_ms_to_iso(event_time_ms) or now
+        )
+        option_price = getattr(observation, "option_price", None)
+        if option_price is None:
+            option_price = getattr(observation, "price", "") or ""
+        provider_symbol = str(
+            getattr(observation, "provider_symbol", "")
+            or getattr(observation, "event_symbol", "")
+            or ""
+        )
+        provenance = (
+            getattr(observation, "provenance", None)
+            or options_market.PROVENANCE_TASTYTRADE_DXLINK
+        )
         normalized_greeks.append({
             "schema_version": "1",
-            "source": "TASTYTRADE_DXLINK",
+            "source": provenance,
             "account": leg["account"],
             "contract_symbol": leg["contract_symbol"],
             "contract_key": leg["contract_key"],
-            "streamer_symbol": streamer_symbol,
+            "streamer_symbol": provider_symbol,
             "implied_volatility": str(iv),
-            "option_price": str(getattr(event, "price", "") or ""),
-            "delta": str(getattr(event, "delta", "") or ""),
-            "gamma": str(getattr(event, "gamma", "") or ""),
-            "theta": str(getattr(event, "theta", "") or ""),
-            "rho": str(getattr(event, "rho", "") or ""),
-            "vega": str(getattr(event, "vega", "") or ""),
+            "option_price": str(option_price),
+            "delta": str(getattr(observation, "delta", "") or ""),
+            "gamma": str(getattr(observation, "gamma", "") or ""),
+            "theta": str(getattr(observation, "theta", "") or ""),
+            "rho": str(getattr(observation, "rho", "") or ""),
+            "vega": str(getattr(observation, "vega", "") or ""),
             "observed_at": observed_at,
             "event_time_ms": str(event_time_ms or ""),
             "retrieved_at": now,
@@ -433,7 +453,7 @@ def sync_greeks(fetcher=_fetch_tasty_greeks, timeout_seconds: float = 12.0) -> d
 
 
 def sync_market_data() -> dict[str, Any]:
-    """Refresh both Tastytrade betas and dxFeed Greeks for the risk table.
+    """Refresh both betas and Greeks for the risk table.
 
     Each leg is best-effort so one failing source doesn't sink the other.
     """
