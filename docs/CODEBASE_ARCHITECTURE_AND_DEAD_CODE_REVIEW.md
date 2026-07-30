@@ -39,7 +39,8 @@ The audit nevertheless found substantial follow-up work:
    method, repeated infrastructure/formatting code, and weak coverage for its
    largest screens.~~ Orphan models / unused catalog client removed; Phase 5
    coverage and Phase 10 API-base token landed. Phase 11 shared Holdings /
-   Combined Ledger format helpers; broader formatting drift and view-model
+   Combined Ledger format helpers; Phase 12 cleared BrokerageService
+   “no expectations” warnings. Broader formatting drift and view-model
    decomposition remain open.
 4. Several backend endpoints and helpers have no repository consumer, but are
    compatibility surfaces rather than proven dead code. They must not be
@@ -114,7 +115,7 @@ shared brokerage page and should remain simple.
 | Medium | Nested or independent route-driven subscriptions can race | ~~Stock Detail race~~ **Stock Detail fixed** with `switchMap` cancel. ~~Studies nested `paramMap` race~~ **Phase 9 done.** See [`STUDIES_ROUTE_RACE_PHASE9_DESIGN.md`](STUDIES_ROUTE_RACE_PHASE9_DESIGN.md). |
 | Medium | Empty data and failed requests are sometimes conflated | Some stock-service methods catch errors and return an empty array or an error-shaped success value, while other methods propagate errors. | Let view models distinguish `loading`, `empty`, `unavailable`, and `failed`. Centralize transport error translation without hiding failures. |
 | Medium | Most major routes are eager-loaded | ~~Only three lazy chunks~~ **Phase 8 done.** Remaining feature routes use `loadComponent`; 404 stays eager. See [`ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md`](ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md). |
-| Low | Three passing service specs trigger “no expectations” warnings | The HTTP controller assertions throw on failure, but Karma does not count them as Jasmine expectations. | Add explicit response or request assertions so the suite remains warning-free and intent is obvious. |
+| Low | Three passing service specs trigger “no expectations” warnings | ~~HTTP controller alone~~ **Phase 12 done.** Explicit `GET` method expectations on path-building and query-param cases. See [`ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md`](ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md). |
 
 ## 3. Backend duplicate and unused-code review
 
@@ -290,8 +291,13 @@ methodology changes, compatibility removals, and mechanical cleanup.
 11. **~~Narrow brokerage display formatters.~~ Done (11a).** See
     [`ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md`](ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md):
     shared `format-display` helpers for Holdings + Combined Ledger only.
-    Broader formatting, view-model decomposition, company-info exception docs,
-    and BrokerageService “no expectations” warnings remain open.
+    Broader formatting, view-model decomposition, and company-info exception
+    docs remained open after 11a.
+12. **~~BrokerageService “no expectations” warnings.~~ Done (12a).** See
+    [`ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md`](ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md):
+    path-building and query-param cases assert `GET` explicitly so Karma no
+    longer reports SPEC HAS NO EXPECTATIONS. Broader formatting, view-model
+    decomposition, and company-info exception docs remain open.
 
 ### Explicit stop conditions
 

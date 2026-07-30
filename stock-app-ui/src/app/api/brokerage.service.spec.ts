@@ -27,35 +27,51 @@ describe('BrokerageService', () => {
   for (const id of ids) {
     it(`builds identical resource paths for ${id}`, () => {
       service.getHoldings(id).subscribe();
-      http.expectOne(`${base}/api/brokerages/${id}/holdings`).flush({});
+      const holdings = http.expectOne(`${base}/api/brokerages/${id}/holdings`);
+      expect(holdings.request.method).toBe('GET');
+      holdings.flush({});
 
       service.getOptions(id).subscribe();
-      http.expectOne(`${base}/api/brokerages/${id}/options`).flush({});
+      const options = http.expectOne(`${base}/api/brokerages/${id}/options`);
+      expect(options.request.method).toBe('GET');
+      options.flush({});
 
       service.getOptionAdjustedBasis(id).subscribe();
-      http.expectOne(`${base}/api/brokerages/${id}/option-adjusted-basis`).flush({});
+      const basis = http.expectOne(`${base}/api/brokerages/${id}/option-adjusted-basis`);
+      expect(basis.request.method).toBe('GET');
+      basis.flush({});
 
       service.listSymbols(id).subscribe();
-      http.expectOne(`${base}/api/brokerages/${id}/symbols`).flush({});
+      const symbols = http.expectOne(`${base}/api/brokerages/${id}/symbols`);
+      expect(symbols.request.method).toBe('GET');
+      symbols.flush({});
     });
   }
 
   it('omits unset query parameters instead of sending empty values', () => {
     service.listSymbols('tastytrade').subscribe();
-    http.expectOne(`${base}/api/brokerages/tastytrade/symbols`).flush({});
+    const allSymbols = http.expectOne(`${base}/api/brokerages/tastytrade/symbols`);
+    expect(allSymbols.request.method).toBe('GET');
+    allSymbols.flush({});
 
     service.listSymbols('tastytrade', { state: 'closed' }).subscribe();
-    http.expectOne(`${base}/api/brokerages/tastytrade/symbols?state=closed`).flush({});
+    const closed = http.expectOne(`${base}/api/brokerages/tastytrade/symbols?state=closed`);
+    expect(closed.request.method).toBe('GET');
+    closed.flush({});
 
     service.listSymbols('tastytrade', { state: 'active', exposure: 'options' }).subscribe();
-    http.expectOne(
+    const filtered = http.expectOne(
       `${base}/api/brokerages/tastytrade/symbols?state=active&exposure=options`
-    ).flush({});
+    );
+    expect(filtered.request.method).toBe('GET');
+    filtered.flush({});
 
     service.getSymbolEvents('tastytrade', 'ABC', { period: 'current', cursor: null }).subscribe();
-    http.expectOne(
+    const events = http.expectOne(
       `${base}/api/brokerages/tastytrade/symbols/ABC/events?period=current`
-    ).flush({});
+    );
+    expect(events.request.method).toBe('GET');
+    events.flush({});
   });
 
   it('encodes a symbol that contains a dot', () => {

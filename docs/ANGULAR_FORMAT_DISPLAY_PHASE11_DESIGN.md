@@ -1,7 +1,7 @@
 # Angular brokerage display formatters (Phase 11) design
 
-**Status:** 11a complete (uncommitted pending review)  
-**Date:** 2026-07-30  
+**Status:** 11a complete
+**Date:** 2026-07-30
 **Parent audit:** [`CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md`](CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md) Phase 11
 
 ## Goal
@@ -23,7 +23,7 @@ exception clarity.
 |---|---|
 | Formatting across all screens | Too broad — locale (`en-US` vs browser), currency style vs `$` prefix, Unicode vs ASCII minus, and percent scaling differ by surface. |
 | Holdings + Combined Ledger helpers | **Chosen.** Byte-identical `money` / `quantity` / `timestamp` / `pnlClass`; Holdings also owns the matching `percent` helper. |
-| Service-spec “no expectations” | Still open (Low). Three BrokerageService cases rely on `HttpTestingController` alone. |
+| Service-spec “no expectations” | ~~Still open~~ **Phase 12 done.** |
 | View-model decomposition | Still open (Medium). Deferred as a later design phase; formatting does not unblock it. |
 | Company-info live fetch exception | Still open (Medium). Document/inject in a dedicated phase; not mixed here. |
 | `models/price.py` | Stop condition — adopt-or-delete owner decision. No beta/Greek trim. |
@@ -32,7 +32,7 @@ exception clarity.
 
 | Slice | Scope | Status |
 |---|---|---|
-| **11a** | `format-display.ts` helpers + specs; Holdings and Combined Ledger delegate | Done (pending review) |
+| **11a** | `format-display.ts` helpers + specs; Holdings and Combined Ledger delegate | Done |
 
 ## Landed
 
@@ -67,7 +67,8 @@ for money). Unifying that would change display for some locales.
 - Angular pipes (helpers keep existing method call sites)
 - View-model / presentational decomposition
 - Company-info fetcher injection / README exception note
-- BrokerageService “no expectations” warnings
+- BrokerageService “no expectations” warnings — closed in Phase 12
+  ([`ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md`](ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md))
 - Deleting or adopting `models/price.py`
 - Beta/Greek trim
 

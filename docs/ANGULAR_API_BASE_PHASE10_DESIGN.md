@@ -1,7 +1,7 @@
 # Angular shared API-base token (Phase 10) design
 
-**Status:** 10a complete (uncommitted pending review)  
-**Date:** 2026-07-30  
+**Status:** 10a complete
+**Date:** 2026-07-30
 **Parent audit:** [`CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md`](CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md) Phase 10
 
 ## Goal
