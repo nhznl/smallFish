@@ -193,7 +193,8 @@ Symbol Ledger and related projections read positions and activity for P/L and
 lifecycle; call-coverage accounting selects which held option legs to fetch for
 market sync. Greek and beta **values** are retained provider evidence (and feed
 IV / `as_of.market` where projected), not Symbol Ledger arithmetic and not a
-separate risk UI. Measurement:
+separate risk UI. The owner confirmed on 2026-07-30 that there are no external
+consumers and chose to retain this materialization for now. Measurement:
 [`BETA_GREEK_CONSUMER_MEASUREMENT.md`](BETA_GREEK_CONSUMER_MEASUREMENT.md).
 
 ## Materialized market inputs
@@ -201,7 +202,7 @@ separate risk UI. Measurement:
 Exact-contract Greeks/IV and market-metric beta are still fetched and written
 during sync when Tastytrade is configured. They remain available as materialized
 CSV evidence for adapters, IV on `GET …/options`, market timestamps, and any
-future or external consumer. Call coverage decides which legs to enrich; it does
+future in-repository consumer. Call coverage decides which legs to enrich; it does
 not consume Greek or beta values. Retirement option enrichment that needs those
 inputs still depends on Tastytrade as the market-data provider:
 

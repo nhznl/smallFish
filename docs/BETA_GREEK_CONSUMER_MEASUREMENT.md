@@ -2,8 +2,9 @@
 
 **Status:** 7a–7c complete (measurement only; no fetch/schema deletions)  
 **Date:** 2026-07-30  
-**Current decision:** retain Layer A materialization until the external-consumer
-unknown is closed or the owner authorizes a narrower contract; tracked in
+**Current decision:** the owner confirmed on 2026-07-30 that there are no
+external consumers and chose to retain Layer A materialization for now. Any
+future trim requires a new explicit decision; tracked in
 [`../Requirements.md`](../Requirements.md).
 
 ## Goal
@@ -92,32 +93,32 @@ Hit counts only; no absolute data-dir or account paths.
 | 1c. Home-dir-safe search (Documents / Desktop / Downloads / projects, excl. this checkout; depth-capped; secrets trees skipped) | Documents/Desktop/Downloads: **0**. Other projects: **12** files, all under one sibling checkout (`smallFishPrivate`) — docs/tests/config mirrors, not proven independent value consumers |
 | 2. `studies/` / `utilities/` production readers of these ledger CSVs | **None** |
 | 3. Angular production `getOptions()` / greek-beta binds | **None** (service + spec only; no template binds) |
-| 4. HTTP access logs; notebooks outside searchable trees | **Unknown** (owner evidence required) |
+| 4. HTTP clients and out-of-tree notebooks | **None** (owner-confirmed 2026-07-30) |
 
 ## Consumer status
 
 | Layer / field family | Status |
 |---|---|
-| A — CSV Greek scalars (delta…vega) | In-repo live (writers/tests) · In-repo unused as values beyond CSV · External unknown |
-| A — CSV IV | In-repo live (writers → adapters → `/options`) · External unknown |
-| A — CSV beta values | In-repo live (writers → adapters) · In-repo unused as Layer C values · External unknown |
-| B — `MarketObservation.implied_volatility` | In-repo live (→ options projection) · External unknown |
-| B — `MarketObservation.beta` | In-repo live (adapters; feeds `as_of.market` timestamps) · In-repo unused as a displayed/API value field · External unknown |
+| A — CSV Greek scalars (delta…vega) | In-repo live (writers/tests) · In-repo unused as values beyond CSV · No external consumers |
+| A — CSV IV | In-repo live (writers → adapters → `/options`) · No external consumers |
+| A — CSV beta values | In-repo live (writers → adapters) · In-repo unused as Layer C values · No external consumers |
+| B — `MarketObservation.implied_volatility` | In-repo live (→ options projection) · No external consumers |
+| B — `MarketObservation.beta` | In-repo live (adapters; feeds `as_of.market` timestamps) · In-repo unused as a displayed/API value field · No external consumers |
 | B — Greek scalars on observation | In-repo unused (not mapped) |
-| C — `GET …/options` IV fields | In-repo unused (API exists; no Angular production caller) · External unknown |
+| C — `GET …/options` IV fields | In-repo unused (API exists; no Angular production caller) · No external consumers |
 | C — `as_of.market` | In-repo live (envelope + combined-ledger UI) |
 | C — Sync `greeks_*` / `betas_*` counts | In-repo live (sync response / CLI presentation) |
 
 ## Recommendation (7c)
 
-**Retain Layer A materialization and `services.options_market` fetches** until the
-owner closes **External unknown** (access logs / out-of-tree notebooks) or
-explicitly authorizes a follow-up trim.
+**Retain Layer A materialization and `services.options_market` fetches for
+now.** The owner confirmed there are no external consumers but chose not to trim
+the materialized contract at this time.
 
 A **future** trim candidate (separate phase, owner gate) would be: stop
 persisting unused Greek scalar columns and/or beta **values** while keeping IV
-(and `as_of.market` semantics that depend on market observations)—only after
-external consumers are ruled out.
+and the `as_of.market` semantics that depend on market observations. Starting
+that trim requires a new explicit owner decision.
 
 **Phase 7 does not remove** CSV columns, sync fetches, `/options` IV fields, or
 capability ids.

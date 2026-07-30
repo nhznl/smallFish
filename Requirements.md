@@ -44,11 +44,12 @@ deprecated GET aliases for run jobs. Audit access logs and out-of-tree
 consumers before an explicit retain-or-remove decision. Do not change response
 shapes during the audit.
 
-**Beta and Greek materialization trim.** Greek scalar columns, beta values, IV
-fields, provider fetches, and related sync counts remain compatibility
-evidence. In-repository value consumption is limited, but external consumers
-are unknown. Retain them until access logs and out-of-tree notebooks are
-audited or the owner explicitly authorizes a narrower contract. See
+**Beta and Greek materialization trim (deferred by decision).** The owner
+confirmed on 2026-07-30 that there are no external consumers. In-repository
+value consumption is limited, but Greek scalar columns, beta values, IV fields,
+provider fetches, and related sync counts will be retained for now. Any future
+trim requires a new explicit decision and must preserve the currently used IV
+and `as_of.market` semantics. See
 [`docs/BETA_GREEK_CONSUMER_MEASUREMENT.md`](docs/BETA_GREEK_CONSUMER_MEASUREMENT.md).
 
 **Durable long-running job lifecycle.** Run jobs prefer POST and have per-job
