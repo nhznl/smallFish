@@ -13,14 +13,14 @@ Before changing UI code, inspect the existing implementation that is closest to
 the work:
 
 - `src/styles.scss` owns the Material theme, design tokens, base styles, and
-  shared CSS primitives, including the Options/Retirement portfolio-risk
-  comparison card and beta table.
+  shared CSS primitives for tables, filters, and ledger shells.
 - `src/app/shared/ui/` owns reusable behavior for drawers and modals.
 - `src/app/app.html` and `src/app/app.css` define the application shell and
   primary navigation.
 - Momentum is the reference for scan/filter/results workflows. Strategy and
   Wheel show how that language extends to other research tools. Options and
-  Retirement are the reference for ledger, warning, and portfolio-risk views.
+  Retirement are the reference for the shared Holdings, Symbol Ledger, and
+  Option-Adjusted Basis views.
 
 Code is authoritative when this document and the implementation differ. Fix
 the documentation as part of any intentional convention change.

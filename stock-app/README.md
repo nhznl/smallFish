@@ -2,17 +2,15 @@
 
 `stock-app` is the FastAPI backend for smallFish. It serves the Angular
 dashboard, reads the shared data artifacts under `data/`, computes stock-trend
-analytics, and owns the options and retirement ledgers.
+analytics, and owns the Trading and Retirement brokerage ledgers.
 
 ## Responsibilities
 
 - Stock-analysis endpoints: all stocks, classifications, price action, strategy
   rows, wheel candidates, stock details, slopes, and company information.
-- Read-only Tastytrade activity import with immutable broker events, manual
-  reconciliation, current marks, and Symbol Ledger metadata.
-- Broker-position options risk dashboard sourced from current Tastytrade marks
-  and timestamped live DXLink Greeks/IV, with market inputs, warnings, and
-  beta-delta analytics.
+- Read-only Tastytrade and SnapTrade sync into common Holdings, Symbol Ledger,
+  and Option-Adjusted Basis projections, with immutable broker events and
+  manual reconciliation for Tastytrade.
 - On-demand strategy and wheel jobs through API endpoints.
 - Static Angular bundle hosting when `./commands.sh build-ui` has been run.
 
@@ -31,8 +29,8 @@ stock-app/
 │   ├── trend_engine.py     # technical trend calculations
 │   ├── stock_model.py      # stock, weekly, and gain/loss models
 │   ├── options_activity.py # Tastytrade sync policy, normalization, marks, reconciliation
-│   ├── options_market.py   # market inputs for options positions
-│   ├── options_risk.py     # options-risk calculations
+│   ├── options_market.py   # legacy market-risk inputs (no production consumer)
+│   ├── options_risk.py     # legacy risk formulas; `apply_call_coverage` remains live
 │   ├── portfolios.py       # named symbol lists, returns, sector exposure
 │   ├── snaptrade_setup.py  # SnapTrade registration, credential persistence, CLI
 │   ├── snaptrade_service.py  # thin compatibility facade for the legacy CLI path
@@ -70,7 +68,9 @@ artifacts bundled with the repository, so pointing `SFP_DATA_DIR` at an empty
 external directory does not make them disappear. A corrupt local artifact still
 fails closed.
 
-Options-risk settings are in `config/options_risk.yaml`.
+`config/options_risk.yaml` configures the legacy options-risk helpers that
+remain in-tree pending a separate retirement of that subsystem. It is not a
+user-facing dashboard setting.
 
 ## Setup and run
 

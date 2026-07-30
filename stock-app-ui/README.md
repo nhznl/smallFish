@@ -1,8 +1,8 @@
 # smallFish Angular dashboard
 
 Angular 22 single-page application for the smallFish FastAPI backend. It
-visualizes stock analysis, research studies, wheel candidates, and the stock
-and options trade ledgers.
+visualizes stock analysis, research studies, wheel candidates, and the shared
+brokerage ledgers (Holdings, Symbol Ledger, and Option-Adjusted Basis).
 
 ## Setup and run
 
@@ -41,10 +41,12 @@ port 4200 where they target `http://localhost:8000`. A single-server deployment
 therefore follows `APP_PORT` automatically, with no rebuild. Do not hardcode an
 origin in a service.
 
-Note that `/options` and `/portfolios` are both Angular routes and API paths. In
+Note that `/portfolios` is both an Angular route and an API path. In
 single-server mode a backend middleware serves this app for browser navigations
-and leaves JSON clients on the API. A new route colliding with an API path must
-be added to `SPA_ROUTE_COLLISIONS` in `stock-app/app/main.py`.
+to that path and leaves JSON clients on the API. `/options` is an Angular route
+only — the former JSON collection there is retired — so the SPA catch-all serves
+it unconditionally. A new route colliding with an API path must be added to
+`SPA_ROUTE_COLLISIONS` in `stock-app/app/main.py`.
 
 ## Routes
 
@@ -56,8 +58,8 @@ be added to `SPA_ROUTE_COLLISIONS` in `stock-app/app/main.py`.
 | `/studies/:studyId` | Study Detail | Evidence, methodology, variations, provenance, and optional candidate scan. |
 | `/wheel` | Wheel | Wheel candidates, probability context, and archived option quotes. |
 | `/wheelExplainer` | Wheel Explainer | Wheel methodology and field definitions. |
-| `/options` | Options Trading Ledger | Options-wheel journal, grouped positions, warnings, and risk dashboard. |
-| `/retirement` | Retirement Holdings Ledger | Retirement holdings, enrichment, and retirement option positions. |
+| `/options` | Trading Ledger | Shared brokerage shell for Tastytrade: Holdings, Options (Symbol Ledger), and Option-Adjusted Basis. |
+| `/retirement` | Retirement Ledger | Same three tabs for SnapTrade/Fidelity retirement holdings and option history. |
 | `/portfolios` | Portfolios | Named symbol lists with returns, sector exposure, and SPY comparison. |
 | `/stockDetail/:symbol` | Stock Detail | Company and momentum snapshot, weekly-close chart, and slope heatmap. |
 | `/` | — | Redirects to `/momentum`. |
@@ -79,8 +81,9 @@ principal endpoints are:
 - `POST /api/studies/{studyId}/scan` for explicitly allowlisted scan execution.
 - `GET /wheelCandidates?horizon=37` for wheel candidates.
 - `GET /stocks/{symbol}/info` for live company information.
-- `GET`, `POST`, and `PUT /options*` for the separate options journal and risk
-  dashboard.
+- `GET`/`POST` `/api/brokerages/{id}/*` for Holdings, Symbol Ledger, and
+  Option-Adjusted Basis; `POST /options/activity/*` only for Tastytrade
+  manual reconciliation compatibility.
 
 ## Studies
 
@@ -91,10 +94,17 @@ snapshot in the reusable sortable table without changing the study verdict.
 ## Brokerage ledgers
 
 Trading and Retirement are thin route shells over the same three tabs:
-Holdings, Options, and Option-Adjusted Basis. Options is a Symbol Ledger: one
-durable record per underlying with derived Active/Archived lifecycle, immutable
-event history, optional archived-period detail, and deliberate archive/reset
-confirmation. Trade groups and event reassignment are not part of the UI.
+
+1. **Holdings** — open equity positions with editable category/industry/note
+   metadata, snapshot G/L comparison columns, and declining-trend state.
+2. **Options** — the shared Symbol Ledger: one durable record per underlying
+   with derived Active/Closed lifecycle, immutable event history, optional
+   archived-period detail, and deliberate archive confirmation.
+3. **Option-Adjusted Basis** — combined equity and option economics for symbols
+   that still hold long shares and have option activity affecting their basis.
+
+Trade groups, event reassignment, and the former portfolio-risk dashboard are
+not part of the UI.
 
 ## Stock detail
 
@@ -116,8 +126,8 @@ src/app/
 ├── strategy-stocks/     # Reusable pre-earnings candidate table and drawer
 ├── wheel/               # Wheel scan and archived option quotes
 ├── wheel-explainer/     # Wheel methodology
-├── options/             # Options ledger and risk dashboard
-├── retirement-portfolio/ # Holdings, analysis, and retirement options
+├── options/             # Trading ledger route shell (shared brokerage page)
+├── retirement-portfolio/ # Retirement ledger route shell (shared brokerage page)
 ├── portfolios/          # Named symbol lists and sector exposure
 ├── stock-detail/        # Per-symbol charts and heatmaps
 ├── page-not-found/      # Fallback route

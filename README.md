@@ -44,27 +44,31 @@ Everything here works with **no account and no API key**:
        alt="The Wheel screen ranking cash-secured put candidates from the local price cache">
 </p>
 
-With a brokerage connected, the ledgers show positions, group P/L, and
-portfolio risk. Both frames below use **synthetic demonstration data** — no real
-account or position:
+With a brokerage connected, Trading and Retirement share the same three tabs:
+**Holdings** (open equities), **Options** (the Symbol Ledger — one durable
+record per underlying with immutable event history), and **Option-Adjusted
+Basis** (combined equity and option economics for symbols that still hold
+shares). Trade groups and portfolio-risk dashboards are retired. Both frames
+below use **synthetic demonstration data** — no real account or position:
 
 <p align="center">
   <img src="docs/screenshots/options-ledger-connected.png" width="49%"
-       alt="The Options Ledger with Tastytrade connected, showing cash-secured put groups, per-leg risk with live IV and Greeks, and a complete portfolio-risk panel">
-  <img src="docs/screenshots/retirement-options-connected.png" width="49%"
-       alt="The Retirement Ledger options tab showing covered calls held against retirement holdings, with per-leg beta-delta and a complete risk panel">
+       alt="The Trading Ledger Symbol Ledger tab with synthetic Tastytrade data, showing Active/Closed lifecycle and immutable option event history">
+  <img src="docs/screenshots/retirement-ledger-connected.png" width="49%"
+       alt="The Retirement Ledger Holdings tab with synthetic SnapTrade data, showing equity cost basis, gain/loss, and editable classifications">
 </p>
 
-Both ledgers show an actionable optional-setup card until a brokerage is
-connected. More in [`docs/screenshots/`](docs/screenshots/README.md).
+Until a brokerage is synced, each ledger simply has nothing imported yet — that
+is a normal optional state, not an error. More in
+[`docs/screenshots/`](docs/screenshots/README.md).
 
 Optional, each independently:
 
 | Feature | Needs | Without it |
 |---|---|---|
 | Upcoming earnings dates | Finnhub API key (free) | The Pre-Earnings Momentum scan cannot run, and Wheel candidates and ledger positions show their earnings window as unknown |
-| Options ledger, quotes, Greeks, beta | Tastytrade (read-only) | Options page shows an optional-setup card |
-| Retirement holdings | SnapTrade — Fidelity and others connect *through* it | Retirement page shows an optional-setup card |
+| Trading ledger, quotes, Greeks, beta | Tastytrade (read-only) | Trading page stays empty until credentials are set and a sync runs |
+| Retirement holdings | SnapTrade — Fidelity and others connect *through* it | Retirement page stays empty until credentials are set and a sync runs |
 
 smallFish never receives your brokerage password, and never places, modifies, or
 cancels an order. See [`docs/BROKERAGES.md`](docs/BROKERAGES.md).

@@ -59,8 +59,8 @@ they never persist credentials or brokerage data.
 
 ## Tastytrade
 
-Adds the options ledger, DXLink quotes, exact-contract Greeks, and market-metric
-beta.
+Adds the Trading ledger (Holdings, Symbol Ledger, Option-Adjusted Basis),
+DXLink quotes, exact-contract Greeks, and market-metric beta.
 
 ### What smallFish reads
 
@@ -121,7 +121,7 @@ number.
 
 ## SnapTrade (Fidelity and other retirement brokerages)
 
-Adds the retirement holdings ledger and retirement option positions.
+Adds the Retirement ledger and retirement option activity through SnapTrade.
 
 **Fidelity connects through SnapTrade.** You authenticate with Fidelity on
 SnapTrade's own portal. smallFish receives only read-only holdings and
@@ -177,18 +177,37 @@ linked accounts means the credentials work but no brokerage is connected yet.
 
 ---
 
-## Combined risk inputs
+## Ledger views
 
-Retirement option risk is reported as its own capability because **SnapTrade
-alone cannot supply exact-contract Greeks or the beta inputs.**
+Trading (`/options`) and Retirement (`/retirement`) share one three-tab shell:
 
-| Configured | Risk figures |
+| Tab | What it shows |
+|---|---|
+| **Holdings** | Open equity positions with editable category, industry, and note metadata. Options are excluded. |
+| **Options** | The Symbol Ledger: one durable record per underlying, derived Active/Closed lifecycle, immutable event history, and optional archived-period detail. |
+| **Option-Adjusted Basis** | Combined equity and option economics for symbols that still hold long shares and have option activity affecting their basis. |
+
+Trade groups and the former portfolio-risk dashboard are retired. Sync
+materializes provider artifacts (positions, activity, marks, Greeks, beta) that
+the Symbol Ledger and related projections read; those retained fields are
+provider evidence, not a separate risk UI.
+
+## Materialized market inputs
+
+Exact-contract Greeks/IV and market-metric beta are still fetched and written
+during sync when Tastytrade is configured. They remain available as
+materialized evidence for Symbol Ledger coverage and for any future consumer.
+Retirement option enrichment that needs those inputs still depends on Tastytrade
+as the market-data provider:
+
+| Configured | Market inputs |
 |---|---|
 | Neither | Unavailable |
-| SnapTrade only | Fall back to realized volatility and a locally computed beta, and are **labelled** as fallbacks. The UI shows a warning banner. Not a complete risk picture. |
-| Both | Exact-contract IV, Greeks, and market-metric beta |
+| SnapTrade only | Holdings and option activity import; exact-contract Greeks/IV and market-metric beta are not available from SnapTrade alone |
+| Both | Exact-contract IV, Greeks, and market-metric beta can be materialized alongside SnapTrade holdings |
 
-Partial risk inputs are never presented as complete totals.
+Partial inputs must never be presented as complete risk totals — and there is
+no portfolio-risk dashboard in the current UI that would do so.
 
 ## Security
 

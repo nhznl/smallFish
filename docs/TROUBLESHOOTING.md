@@ -137,13 +137,20 @@ If you have no pinned evidence, delete the broken files from
 
 ### A route shows raw JSON instead of the dashboard
 
-`/options` and `/portfolios` are both Angular routes and API paths; the API used
-to win. Rebuild the UI and restart:
+`/portfolios` is both an Angular route and an API path. In single-server mode,
+browser navigations to that path are served the SPA (`index.html`) via
+`SPA_ROUTE_COLLISIONS` in `stock-app/app/main.py`, while JSON clients still
+reach the API. `/options` used to collide the same way; the JSON collection
+there is retired, so the SPA catch-all serves that path unconditionally.
+
+If you still see raw JSON on `/portfolios`, rebuild the UI and restart:
 
 ```bash
 ./commands.sh build-ui && ./commands.sh server --no-reload
 ```
 
+Confirm the process listening on the port is the one you just started
+(`lsof -nP -iTCP:8000 -sTCP:LISTEN`).
 ### `Built UI unavailable`
 
 You are running single-server without a build:

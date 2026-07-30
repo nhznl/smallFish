@@ -108,18 +108,22 @@ through the scraper's validation and atomic-write paths.
 ## Network boundaries
 
 Every non-broker network call sits behind an **injected** fetch function
-(`make_yfinance_fetcher` and its equivalents). Tastytrade transport is likewise
-injected through `services.tastytrade`, which owns credentials, SDK sessions,
-and raw DXLink collection while `utilities.options` owns symbol mapping,
-normalization, coverage policy, and archives. That separation keeps the
-pipeline deterministically testable.
+(`make_yfinance_fetcher` and its equivalents). Brokerage-account transport for
+Tastytrade is injected through `services.tastytrade`. Exact-contract quotes,
+Greeks/IV, market-metric beta, and OCC-to-dxFeed conversion are owned by
+`services.options_market` (Tastytrade is the routed provider today);
+`utilities.options` retains eligibility policy, archive writes, and chain
+orchestration on top of that boundary. That separation keeps the pipeline
+deterministically testable.
 
 **No test in this package may contact a provider.** Pass a fake fetcher; several
 tests assert that no socket is opened. Live-provider checks are manual.
 
-Providers used directly here: Yahoo Finance (prices, company info), Wikipedia
-and index providers (universe membership), and Finnhub (earnings, optional).
-Tastytrade is optional provider transport supplied by `services.tastytrade`.
+Providers used directly here: Yahoo Finance (prices and universe metadata),
+Wikipedia and index providers (universe membership), and Finnhub (earnings,
+optional). Live company-info for Stock Detail is owned by `stock-app`, not this
+package. Tastytrade market-data transport is supplied by
+`services.options_market` / `services.tastytrade`.
 
 ## Tests
 
