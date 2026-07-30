@@ -136,8 +136,10 @@ The following are **not proven dead** and must remain pending a consumer audit:
   endpoints.
 - Beta and Greek data are still fetched and materialized although current
   common projections use little of it. The cleanup plan explicitly preserved
-  those artifacts. Measure artifact/external consumers before eliminating
-  provider work or response fields.
+  those artifacts. **Phase 7 measured** consumers; see
+  [`BETA_GREEK_CONSUMER_MEASUREMENT.md`](BETA_GREEK_CONSUMER_MEASUREMENT.md).
+  Retain Layer A until External unknown is closed; do not eliminate provider
+  work or response fields in this phase.
 
 ### Unused imports and residual study helpers
 
@@ -264,9 +266,11 @@ methodology changes, compatibility removals, and mechanical cleanup.
    and [`CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md`](CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md):
    design notes, activity modules behind a thin facade, chains config/scope +
    publish extract. Further chains stage splits remain follow-up.
-7. **Measure retained provider work.** Determine whether beta/Greek materialized
-   fields have non-Angular consumers before changing fetches, schemas, or
-   dependencies.
+7. **~~Measure retained provider work.~~ Done (7a–7c).** See
+   [`BETA_GREEK_CONSUMER_MEASUREMENT.md`](BETA_GREEK_CONSUMER_MEASUREMENT.md):
+   Layer A/B/C inventory, evidence checklist, Consumer status table. **Retain**
+   Layer A fetches and materialization until External unknown is closed or the
+   owner authorizes a trim; no fetch/schema deletions in Phase 7.
 
 ### Explicit stop conditions
 
@@ -276,8 +280,8 @@ Stop for an owner decision before:
   file solely because no in-repository caller exists;
 - changing a brokerage CSV filename, column, archival rule, or response shape;
 - changing a frozen study formula, threshold, evidence artifact, or verdict;
-- eliminating beta/Greek retrieval without measuring external/materialized
-  consumers;
+- eliminating beta/Greek retrieval while External unknown remains open (see
+  [`BETA_GREEK_CONSUMER_MEASUREMENT.md`](BETA_GREEK_CONSUMER_MEASUREMENT.md));
 - merging the two Python runtimes or importing batch modules from FastAPI.
 
 ## Verification evidence

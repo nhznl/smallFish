@@ -188,17 +188,22 @@ Trading (`/options`) and Retirement (`/retirement`) share one three-tab shell:
 | **Option-Adjusted Basis** | Combined equity and option economics for symbols that still hold long shares and have option activity affecting their basis. |
 
 Trade groups and the former portfolio-risk dashboard are retired. Sync
-materializes provider artifacts (positions, activity, marks, Greeks, beta) that
-the Symbol Ledger and related projections read; those retained fields are
-provider evidence, not a separate risk UI.
+materializes provider artifacts (positions, activity, marks, Greeks, beta).
+Symbol Ledger and related projections read positions and activity for P/L and
+lifecycle; call-coverage accounting selects which held option legs to fetch for
+market sync. Greek and beta **values** are retained provider evidence (and feed
+IV / `as_of.market` where projected), not Symbol Ledger arithmetic and not a
+separate risk UI. Measurement:
+[`BETA_GREEK_CONSUMER_MEASUREMENT.md`](BETA_GREEK_CONSUMER_MEASUREMENT.md).
 
 ## Materialized market inputs
 
 Exact-contract Greeks/IV and market-metric beta are still fetched and written
-during sync when Tastytrade is configured. They remain available as
-materialized evidence for Symbol Ledger coverage and for any future consumer.
-Retirement option enrichment that needs those inputs still depends on Tastytrade
-as the market-data provider:
+during sync when Tastytrade is configured. They remain available as materialized
+CSV evidence for adapters, IV on `GET …/options`, market timestamps, and any
+future or external consumer. Call coverage decides which legs to enrich; it does
+not consume Greek or beta values. Retirement option enrichment that needs those
+inputs still depends on Tastytrade as the market-data provider:
 
 | Configured | Market inputs |
 |---|---|
