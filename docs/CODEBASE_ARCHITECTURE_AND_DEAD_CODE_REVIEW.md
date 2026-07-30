@@ -27,9 +27,10 @@ backend cannot import the batch runtimes.
 
 The audit nevertheless found substantial follow-up work:
 
-1. The public documentation and screenshots still advertise the retired Trade
-   Groups and options-risk dashboards. This is the only user-facing correctness
-   problem found and should be fixed first.
+1. ~~The public documentation and screenshots still advertise the retired Trade
+   Groups and options-risk dashboards.~~ **Resolved in Phase 22** — see
+   [`PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md`](PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md)
+   (prose/screenshots landed in `29ec548`; audit closure in 22a).
 2. ~~Former `app.options_market` / `app.options_risk` risk-dashboard modules~~
    **Resolved in Phase 3** — see
    [`OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md`](OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md).
@@ -189,7 +190,7 @@ decimal semantics are demonstrably identical.
 
 | Finding | Why it matters | Design direction |
 |---|---|---|
-| Documentation describes removed product behavior | A new user is told to expect Trade Groups and risk dashboards that no longer exist. This damages trust even though the software works. | Correct text and recapture screenshots from representative fake data before other refactors. |
+| ~~Documentation describes removed product behavior~~ | ~~Trade Groups / risk dashboards in public docs~~ **Phase 22 done.** | See [`PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md`](PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md). |
 | Artifact-mutating jobs use `GET` | ~~Long-running writes via GET~~ **4b done.** POST preferred for `/runWheel`, `/runChains`, `/runSectorRotation`, `/runEarningsScan`; deprecated GET retained; per-job 409 locks. See [`CONTRACT_TIGHTENING_PHASE4_DESIGN.md`](CONTRACT_TIGHTENING_PHASE4_DESIGN.md). |
 | Long-running jobs execute synchronously without admission control | Commands may run for up to five minutes. Concurrent tabs can start overlapping artifact writers, and the response has no durable job identity. | Add single-flight locking or a small job registry with status/idempotency. A full distributed queue is unnecessary unless deployment requirements demand it. |
 | Retired risk subsystem obscures ownership | A dead API-era module keeps risk configuration, formulas, dependencies, and tests looking active, while one coverage helper prevents removal. | Complete the consumer-first extraction described in the backend section. |
@@ -223,14 +224,14 @@ decimal semantics are demonstrably identical.
 
 | Priority | Document | Required correction |
 |---|---|---|
-| High | Root `README.md` | The brokerage overview promises group P/L and portfolio risk and embeds screenshots of retired views. Describe Holdings, Combined Ledger, and Symbol Ledger instead. |
-| High | `docs/screenshots/README.md` and brokerage images | The captions and images still show Trade Groups, old allocations/risk, and old navigation. Replace all connected/unconfigured brokerage screenshots using sanitized representative data and update their captions. |
-| High | `stock-app-ui/README.md` | Remove the grouped-positions/risk-dashboard description and the separate `/options*` journal/risk model. Its later description of the shared three-tab ledger is the current behavior. |
+| ~~High~~ Done | Root `README.md` | ~~Group P/L and portfolio risk~~ Updated: Holdings, Symbol Ledger, Option-Adjusted Basis; synthetic connected screenshots (`29ec548`). |
+| ~~High~~ Done | `docs/screenshots/README.md` and brokerage images | ~~Trade Groups / risk imagery~~ Recaptured 2026-07-29 with synthetic ledger CSVs; captions updated. |
+| ~~High~~ Done | `stock-app-ui/README.md` | ~~Grouped-positions / risk-dashboard model~~ Shared three-tab ledger documented. |
 | High | `stock-app/README.md` | ~~Advertised dead market-risk modules~~ Updated with Phase 3: layout lists `brokerages/` (including call coverage); `options_risk.yaml` paragraph removed. |
 | High | `docs/CONFIGURATION.md` | ~~`options_risk.yaml` as active config~~ Row removed with the subsystem. |
-| Medium | `docs/BROKERAGES.md` | “Combined risk inputs” describes a retirement risk UI that no longer exists. Distinguish retained materialized provider fields from user-visible features, and document the three current ledger views. |
-| Medium | `docs/TROUBLESHOOTING.md` | It says both `/options` and `/portfolios` collide with API paths. The current SPA collision set contains only `/portfolios`; explain the current fallback behavior precisely. |
-| Medium | `utilities/README.md` | Quote/Greek/beta transport and OCC-to-dxFeed mapping now belong to `services.options_market` provider adapters, not the old utilities path. ~~Company-info ownership~~ **Current prose correctly attributes live company-info to `stock-app`** (Phase 13). |
+| ~~Medium~~ Done | `docs/BROKERAGES.md` | ~~“Combined risk inputs” / retired risk UI~~ Ledger views table; materialized Greeks/beta vs user-visible features (`29ec548`). |
+| ~~Medium~~ Done | `docs/TROUBLESHOOTING.md` | ~~Both `/options` and `/portfolios` collide~~ Only `/portfolios` in `SPA_ROUTE_COLLISIONS`; `/options` JSON collection retired (`29ec548`). |
+| ~~Medium~~ Done | `utilities/README.md` | ~~Quote/Greek/beta transport in utilities~~ `services.options_market` ownership documented (`29ec548`). |
 | Low | `stock-app/requirements.txt` comments | Header comments refer to an old `strategy/` duplication problem and no longer explain the current runtime boundary. |
 | Low | `Requirements.md` | Seven source-file references include stale section-number annotations. Paths remain useful, but anchors should use durable headings rather than line/section numbers. |
 
@@ -248,9 +249,10 @@ documentation corrections above need human visual verification as well.
 Each phase should be a focused concern with its own verification. Do not combine
 methodology changes, compatibility removals, and mechanical cleanup.
 
-1. **Correct public documentation and screenshots.** This is behavior-neutral
-   and resolves the active user-facing mismatch. Use sanitized data and verify
-   every affected route visually.
+1. **~~Correct public documentation and screenshots.~~ Done (22a).** See
+   [`PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md`](PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md):
+   prose and brokerage screenshots in `29ec548`; audit closure and verification
+   in 22a.
 2. **Land proven mechanical cleanup.** Remove orphan Angular models, the unused
    frontend catalog method, and unambiguous unused imports/helpers. Run both
    full Python suites and the Angular gates because shared contracts are
@@ -336,6 +338,10 @@ methodology changes, compatibility removals, and mechanical cleanup.
     [`GAIN_LOSS_MIGRATION_RETIRE_PHASE21_DESIGN.md`](GAIN_LOSS_MIGRATION_RETIRE_PHASE21_DESIGN.md):
     skip migration report when no legacy files; explicit migration API unchanged;
     full retirement deferred pending owner evidence.
+22. **~~Public docs and brokerage screenshots.~~ Done (22a).** See
+    [`PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md`](PUBLIC_DOCS_SCREENSHOTS_PHASE22_DESIGN.md):
+    Holdings / Symbol Ledger / Option-Adjusted Basis in README and screenshots;
+    Trade Groups and risk-dashboard imagery retired; synthetic data only.
 
 ### Explicit stop conditions
 
