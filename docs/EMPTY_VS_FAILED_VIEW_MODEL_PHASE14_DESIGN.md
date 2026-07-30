@@ -55,17 +55,17 @@ Shared type: [`data-view-state.ts`](../stock-app-ui/src/app/shared/data-view-sta
 
 ## Conflation inventory
 
-| Site | Current behaviour | Target |
+| Site | Pre-fix behaviour | Landed / target |
 |---|---|---|
-| `StockService.getWheelCandidates` | `catchError(handleError, [])` hides failures | Propagate; Wheel `error` → `failed` |
+| `StockService.getWheelCandidates` | `catchError(handleError, [])` hid failures | **Done (15a):** propagates; Wheel / VM → `failed` |
 | `StockService.getMomentumStocks` | Propagates | No change (reference) |
-| `WheelComponent.load` | `error` sets `loadError` but service never errors today | Works once service propagates |
+| `WheelComponent.load` | `error` set `loadError` but service never errored | **Done (15a/16a):** VM `markFailed` / `loadError` |
 | `WheelComponent` empty table | `dataSource.data.length === 0 && !loadError` | Unchanged contract |
 | `MomentumScannerComponent.loadStocks` | `error` sets `error` string | Reference consumer |
 | `MomentumScannerComponent` empty + `core-data` | Capability `unavailable` + empty universe | `unavailable` via capability-state |
 | `SectorRotationComponent.load` | HTTP `error` → banner | Reference |
 | `StudiesComponent.getScan` catch | Clears candidates on error (no failed banner) | Acceptable: scan is optional overlay; catalog/study errors use `failed` |
-| Job methods in `StockService` | `catchError → { status: 'error' }` | Keep; job status is not list empty |
+| Job methods in `StockService` | `catchError → { status: 'error' }` | Keep; job status is not list empty (typed in Phase 18) |
 | `OptionQuotesTabComponent` | Distinct `error` string | Reference |
 
 ## Per-screen extraction map

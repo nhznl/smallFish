@@ -100,7 +100,7 @@ work. The plan should remain closed.
 | Priority | Finding | Affected areas | Recommendation |
 |---|---|---|---|
 | Medium | API-origin selection is duplicated in five services | ~~Five independent port-4200 ternaries~~ **Phase 10 done.** Shared `API_BASE_URL` token + `resolveApiBaseUrl`. See [`ANGULAR_API_BASE_PHASE10_DESIGN.md`](ANGULAR_API_BASE_PHASE10_DESIGN.md). |
-| Medium | Money, percentage, sign, date, and range formatting is repeated with inconsistent behavior | ~~Holdings + Combined Ledger identical helpers~~ **Phase 11 done** (`format-display.ts`). Symbol Ledger, portfolios, sector rotation, scanner, stock detail, and strategy still differ (locale, `$` prefix, sign rules). | Migrate only after measuring each surface; do not force Symbol Ledger onto `en-US` currency helpers. See [`ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md`](ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md). |
+| Medium | Money, percentage, sign, date, and range formatting is repeated with inconsistent behavior | ~~Holdings + Combined Ledger identical helpers~~ **Phase 11 done** (`format-display.ts`). ~~Symbol Ledger `pnlClass`~~ **Phase 17a** delegates to `pnlToneClass`. Symbol Ledger `money()` / `timestamp()`, portfolios, sector rotation, scanner, stock detail, and strategy still differ (locale, `$` prefix, sign rules). | Migrate only after measuring each surface; do not force Symbol Ledger onto `en-US` currency helpers. See [`ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md`](ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md). |
 | High | Date and nullable API contracts do not match JSON | ~~Several interfaces typed ISO dates as `Date`~~ **4a done.** Stock/gain-loss transport uses ISO `string` + correct `| null` on trade stats and gain/loss blocks; scanner/stock-detail casts removed. See [`CONTRACT_TIGHTENING_PHASE4_DESIGN.md`](CONTRACT_TIGHTENING_PHASE4_DESIGN.md). |
 | Medium | Job and study results use `any` | ~~Stock-service job methods and study scan candidates~~ **Phase 18 done** — typed from current wire shapes. Stock-detail weekly fields already typed on `StockAnalysis`. | Add further interfaces only when new payloads appear; do not change wire shapes. |
 
@@ -304,16 +304,23 @@ methodology changes, compatibility removals, and mechanical cleanup.
     README/ARCHITECTURE document the Yahoo on-demand path; injectable
     `ticker_factory`; offline retriever tests. Broader formatting and
     view-model / empty-vs-failed decomposition remained open after 13a.
-14. **~~Empty-vs-failed vocabulary and first facade.~~ Done (14a–16a).** See
+14. **~~Empty-vs-failed vocabulary / view-model design.~~ Done (14a).** See
     [`EMPTY_VS_FAILED_VIEW_MODEL_PHASE14_DESIGN.md`](EMPTY_VS_FAILED_VIEW_MODEL_PHASE14_DESIGN.md):
-    `DataViewState` types; `getWheelCandidates` propagates errors; Wheel
-    empty vs failed specs; `WheelCandidatesViewModel` extract. Further screen
-    facades and format-display migration remain open.
-15. **~~Byte-identical format-display migration (next pair).~~ Done (17a).** See
+    state vocabulary, transport policy, conflation inventory, per-screen
+    extraction map; shared `DataViewState` / `ScreenDataState`; design in
+    `NARRATIVE_FILES`.
+15. **~~Empty-vs-failed implementation (Wheel).~~ Done (15a).**
+    `getWheelCandidates` propagates HTTP errors (no `catchError → []`); Wheel
+    specs assert distinct empty vs failed messaging. Wire shapes unchanged.
+16. **~~First view-model extract (Wheel).~~ Done (16a).**
+    `WheelCandidatesViewModel` owns load state + candidates; component remains
+    a thin presentation shell. No global state framework. Further screen
+    facades remain open.
+17. **~~Byte-identical format-display migration (next pair).~~ Done (17a).** See
     [`ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md`](ANGULAR_FORMAT_DISPLAY_PHASE11_DESIGN.md):
     Symbol Ledger `pnlClass` delegates to shared `pnlToneClass`. `money()` /
     `timestamp()` remain local (locale and empty-string rules differ).
-16. **~~Job and study response interfaces.~~ Done (18a).** See
+18. **~~Job and study response interfaces.~~ Done (18a).** See
     [`job-results.ts`](../stock-app-ui/src/app/model/job-results.ts): typed
     stock-service job methods and study scan snapshot; wire shapes unchanged.
 
