@@ -538,9 +538,10 @@ def test_only_the_registry_names_a_brokerage():
     """Phase 2's exit criterion, enforced rather than reviewed.
 
     Common code may not contain an `if fidelity` / `if trading` transformation
-    branch. Provider vocabulary belongs in `adapters/` and `importers/`, and
-    identity selection belongs in `registry.py`; every other module in the
-    package must work purely from the descriptor it is handed.
+    branch. Provider vocabulary belongs in `adapters/`, `importers/`, and the
+    Tastytrade ``activity_*.py`` materializers (moved from ``options_activity``
+    in Phase 6); identity selection belongs in `registry.py`. Every other
+    module in the package must work purely from the descriptor it is handed.
     """
     from pathlib import Path
 
@@ -551,6 +552,7 @@ def test_only_the_registry_names_a_brokerage():
         path for path in sorted(root.rglob("*.py"))
         if path.name != "registry.py"
         and path.parent.name not in {"adapters", "importers"}
+        and not path.name.startswith("activity_")
     ]
     assert {path.name for path in common} >= {"contracts.py", "__init__.py"}
 

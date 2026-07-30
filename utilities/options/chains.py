@@ -48,25 +48,20 @@ Conventions (match wheel.py / stock_app_reader.py):
 from __future__ import annotations
 
 import argparse
-import json
 import math
-import os
 import re
 import time
-from dataclasses import dataclass, field
 from datetime import datetime, time as dtime, timezone
 from pathlib import Path
 
 import pandas as pd
-import yaml
 
 from models.premium import PREMIUM_SCHEMA_NAME, PREMIUM_SCHEMA_VERSION
 from utilities.options.exchange_calendar import (
     NYSE_STANDARD_CALENDAR_SOURCE,
     nyse_sessions,
 )
-from utilities.manifest import sha256_file, write_manifest
-from utilities.options.verify_premiums import verify_premium_archive
+from utilities.manifest import sha256_file
 from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
 from utilities.options.market_quotes import (
     QuoteBatch,
@@ -83,35 +78,45 @@ from utilities.options.wheel import (
     latest_report_path,
     load_events_meta,
 )
+from utilities.options.chains_config import (
+    CONFIG_PATH,
+    DEFAULT_BAND_MULT,
+    DEFAULT_CHAIN_DTES,
+    DEFAULT_ENTRY_EXTRA_STRIKES,
+    DEFAULT_EXPIRY_TOLERANCE_DAYS,
+    DEFAULT_FETCH_POOL_N,
+    DEFAULT_FUTURE_QUOTE_TOLERANCE_SECONDS,
+    DEFAULT_MAX_QUOTE_AGE_SECONDS,
+    DEFAULT_MAX_SPREAD_PCT,
+    DEFAULT_MIN_DOLLAR_VOLUME,
+    DEFAULT_NEGATIVE_EXTRINSIC_TOLERANCE,
+    DEFAULT_OI_MIN,
+    DEFAULT_PER_EXPIRY_TOP_N,
+    DEFAULT_QUOTE_PROVIDER,
+    DEFAULT_REQUIRE_RTH,
+    DEFAULT_ROLL_EXIT_STRIKES,
+    DEFAULT_RV_WINDOW_BY_MAX_DTE,
+    DEFAULT_TASTYTRADE_BATCH_SIZE,
+    DEFAULT_TASTYTRADE_TIMEOUT_SECONDS,
+    DEFAULT_THROTTLE_SLEEP,
+    VIEW_ENTRY,
+    VIEW_ROLL_EXIT,
+    _strategy_data_root,
+    chains_config,
+    load_config,
+    normalize_collection_scope,
+)
+from utilities.options.chains_publish import (
+    ChainsResult,
+    runtime_metadata as _runtime_metadata,
+    write_chain_artifacts,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG_PATH = Path(__file__).resolve().parent / "config" / "chains.yaml"
 
 # ---------------------------------------------------------------------------
 # Report schema
 # ---------------------------------------------------------------------------
-
-DEFAULT_CHAIN_DTES = [7, 37]           # section 7 (user, v6): matches how the
-                                       # wheel is actually traded; two DTEs
-                                       # ~halve the request count vs all five.
-DEFAULT_MIN_DOLLAR_VOLUME = 10_000_000
-DEFAULT_FETCH_POOL_N = 60
-DEFAULT_PER_EXPIRY_TOP_N = 60
-DEFAULT_RV_WINDOW_BY_MAX_DTE = {10: 7, 40: 21, 365: 37}
-DEFAULT_BAND_MULT = 1.0
-DEFAULT_ENTRY_EXTRA_STRIKES = 3
-DEFAULT_ROLL_EXIT_STRIKES = 3
-DEFAULT_OI_MIN = 100
-DEFAULT_MAX_SPREAD_PCT = 0.10
-DEFAULT_THROTTLE_SLEEP = 0.5
-DEFAULT_EXPIRY_TOLERANCE_DAYS = 0  # fail closed until product approves nonzero values
-DEFAULT_MAX_QUOTE_AGE_SECONDS = 20 * 60
-DEFAULT_FUTURE_QUOTE_TOLERANCE_SECONDS = 60
-DEFAULT_NEGATIVE_EXTRINSIC_TOLERANCE = 0.01
-DEFAULT_REQUIRE_RTH = True
-DEFAULT_QUOTE_PROVIDER = "TASTYTRADE_DXLINK"
-DEFAULT_TASTYTRADE_TIMEOUT_SECONDS = 8.0
-DEFAULT_TASTYTRADE_BATCH_SIZE = 400
 
 SIDE_PUT = "PUT"
 SIDE_CALL = "CALL"
@@ -166,8 +171,6 @@ ENTRY_QUOTE_NOT_OK = "quote_not_ok"
 ENTRY_CONTRACT_NOT_OK = "contract_not_ok"
 ENTRY_ATM_EXCLUDED = "atm_entry_excluded"
 
-VIEW_ENTRY = "ENTRY"
-VIEW_ROLL_EXIT = "ROLL_EXIT"
 ROLE_CSP_ENTRY = "CSP_ENTRY"
 ROLE_COVERED_CALL_ENTRY = "COVERED_CALL_ENTRY"
 ROLE_PUT_ROLL_EXIT = "PUT_ROLL_EXIT"
@@ -1319,168 +1322,9 @@ def make_yfinance_fetcher(throttle_sleep: float = DEFAULT_THROTTLE_SLEEP):
 # Orchestration
 # ---------------------------------------------------------------------------
 
-def chains_config(strategy: dict) -> dict:
-    """Normalized `chains:` config block with section-7 defaults."""
-    c = strategy.get("chains", {}) or {}
-    deprecated_strike_keys = {"strikes_per_side", "one_sigma_strike_band"} & set(c)
-    if deprecated_strike_keys:
-        raise ValueError(
-            "chains strike policy uses strike_policy.put_entry/call_entry/roll_exit; "
-            f"remove deprecated keys: {', '.join(sorted(deprecated_strike_keys))}")
-    deprecated_pool_keys = {"shortlist_horizon_dte", "top_n"} & set(c)
-    if deprecated_pool_keys:
-        raise ValueError(
-            "chains expiry-first pool uses fetch_pool_n/per_expiry_top_n; "
-            f"remove deprecated keys: {', '.join(sorted(deprecated_pool_keys))}")
-    strike_cfg = c.get("strike_policy", {}) or {}
-    put_entry_cfg = strike_cfg.get("put_entry", {}) or {}
-    call_entry_cfg = strike_cfg.get("call_entry", {}) or {}
-    roll_exit_cfg = strike_cfg.get("roll_exit", {}) or {}
-    quote_cfg = c.get("quote_quality", {}) or {}
-    provider_cfg = c.get("quote_provider", {}) or {}
-    execution_cfg = c.get("execution", {}) or {}
-    actual_context_cfg = c.get("actual_expiry_context", {}) or {}
-    dtes = [int(x) for x in c.get("chain_dtes", DEFAULT_CHAIN_DTES)]
-    raw_tolerances = c.get("expiry_tolerance_days", {}) or {}
-    tolerances = {
-        dte: int(raw_tolerances.get(str(dte), raw_tolerances.get(
-            dte, DEFAULT_EXPIRY_TOLERANCE_DAYS)))
-        for dte in dtes
-    }
-    if any(value < 0 for value in tolerances.values()):
-        raise ValueError("chains expiry_tolerance_days values must be nonnegative")
-    max_quote_age = int(quote_cfg.get(
-        "max_age_seconds", DEFAULT_MAX_QUOTE_AGE_SECONDS))
-    future_tolerance = int(quote_cfg.get(
-        "future_tolerance_seconds", DEFAULT_FUTURE_QUOTE_TOLERANCE_SECONDS))
-    negative_extrinsic_tolerance = float(quote_cfg.get(
-        "negative_extrinsic_tolerance", DEFAULT_NEGATIVE_EXTRINSIC_TOLERANCE))
-    if max_quote_age < 0 or future_tolerance < 0 or negative_extrinsic_tolerance < 0:
-        raise ValueError("chains quote-quality tolerances must be nonnegative")
-    put_band_mult = float(put_entry_cfg.get("band_mult", DEFAULT_BAND_MULT))
-    call_band_mult = float(call_entry_cfg.get("band_mult", DEFAULT_BAND_MULT))
-    put_extra = int(put_entry_cfg.get(
-        "extra_strikes_beyond_band", DEFAULT_ENTRY_EXTRA_STRIKES))
-    call_extra = int(call_entry_cfg.get(
-        "extra_strikes_beyond_band", DEFAULT_ENTRY_EXTRA_STRIKES))
-    roll_exit_max = int(roll_exit_cfg.get(
-        "max_itm_strikes_per_side", DEFAULT_ROLL_EXIT_STRIKES))
-    if min(put_band_mult, call_band_mult, put_extra, call_extra, roll_exit_max) < 0:
-        raise ValueError("chains strike-policy values must be nonnegative")
-    seller_fill_method = str(execution_cfg.get("seller_fill_method", "BID")).upper()
-    if seller_fill_method != "BID":
-        raise ValueError("chains execution.seller_fill_method currently supports BID only")
-    fetch_pool_n = int(c.get("fetch_pool_n", DEFAULT_FETCH_POOL_N))
-    per_expiry_top_n = int(c.get("per_expiry_top_n", DEFAULT_PER_EXPIRY_TOP_N))
-    raw_rv_mapping = (actual_context_cfg.get("rv_window_by_max_dte", {})
-                      or DEFAULT_RV_WINDOW_BY_MAX_DTE)
-    rv_window_by_max_dte = {int(max_dte): int(window)
-                            for max_dte, window in raw_rv_mapping.items()}
-    if fetch_pool_n < 0 or per_expiry_top_n < 0:
-        raise ValueError("chains pool caps must be nonnegative")
-    if (not rv_window_by_max_dte
-            or min(rv_window_by_max_dte) < 0
-            or min(rv_window_by_max_dte.values()) < 2):
-        raise ValueError("chains actual-expiry RV mapping is invalid")
-    quote_provider = str(provider_cfg.get(
-        "primary", DEFAULT_QUOTE_PROVIDER)).upper()
-    if quote_provider != SOURCE_TASTYTRADE_DXLINK:
-        raise ValueError("chains quote_provider.primary must be TASTYTRADE_DXLINK")
-    tastytrade_timeout = float(provider_cfg.get(
-        "timeout_seconds", DEFAULT_TASTYTRADE_TIMEOUT_SECONDS))
-    tastytrade_batch_size = int(provider_cfg.get(
-        "batch_size", DEFAULT_TASTYTRADE_BATCH_SIZE))
-    if tastytrade_timeout <= 0 or tastytrade_batch_size <= 0:
-        raise ValueError("chains Tastytrade timeout and batch size must be positive")
-    return {
-        "chain_dtes": dtes,
-        "expiry_tolerance_days": tolerances,
-        "min_dollar_volume": float(c.get("min_dollar_volume", DEFAULT_MIN_DOLLAR_VOLUME)),
-        "fetch_pool_n": fetch_pool_n,
-        "per_expiry_top_n": per_expiry_top_n,
-        "rv_window_by_max_dte": rv_window_by_max_dte,
-        "put_entry_band_mult": put_band_mult,
-        "put_entry_extra_strikes": put_extra,
-        "call_entry_band_mult": call_band_mult,
-        "call_entry_extra_strikes": call_extra,
-        "roll_exit_max_itm_strikes": roll_exit_max,
-        "oi_min": float(c.get("oi_min", DEFAULT_OI_MIN)),
-        "max_spread_pct": float(c.get("max_spread_pct", DEFAULT_MAX_SPREAD_PCT)),
-        "max_quote_age_seconds": max_quote_age,
-        "future_quote_tolerance_seconds": future_tolerance,
-        "negative_extrinsic_tolerance": negative_extrinsic_tolerance,
-        "require_rth": bool(quote_cfg.get("require_rth", DEFAULT_REQUIRE_RTH)),
-        "quote_provider": quote_provider,
-        "tastytrade_timeout_seconds": tastytrade_timeout,
-        "tastytrade_batch_size": tastytrade_batch_size,
-        "seller_fill_method": seller_fill_method,
-        "throttle_sleep": float(c.get("throttle_sleep", DEFAULT_THROTTLE_SLEEP)),
-        "exclude_earnings_in_window": bool(c.get("exclude_earnings_in_window", False)),
-    }
-
-
-def normalize_collection_scope(cfg: dict, *, horizon_dtes=None, symbol_scope=None,
-                               min_otm_pct: float | None = None,
-                               limit: int | None = None) -> dict:
-    """Validate and describe a narrowed collection request.
-
-    Scope only ever *removes* work from the configured collection: a requested
-    DTE must already be configured, symbols must already survive the pool gates,
-    and the cushion is applied on top of the configured sigma band. Nothing here
-    can widen a run or relax a quality gate, so a scoped archive stays a subset
-    of what the unscoped run would have collected. Raises ValueError with an
-    actionable message when a request cannot be honored.
-    """
-    configured = list(cfg["chain_dtes"])
-    if horizon_dtes is None:
-        requested = list(configured)
-    else:
-        requested = sorted({int(dte) for dte in horizon_dtes})
-        if not requested:
-            raise ValueError("collection scope requested an empty horizon set")
-        unknown = [dte for dte in requested if dte not in configured]
-        if unknown:
-            raise ValueError(
-                "requested collection horizon(s) "
-                f"{', '.join(str(dte) for dte in unknown)} are not configured "
-                f"chain_dtes (configured: {', '.join(str(dte) for dte in configured)}). "
-                "Collection cannot invent an expiry the chain policy does not cover."
-            )
-    symbols = None
-    if symbol_scope is not None:
-        symbols = sorted({str(item).strip().upper() for item in symbol_scope
-                          if str(item).strip()})
-        if not symbols:
-            raise ValueError("collection scope requested an empty symbol set")
-    if min_otm_pct is not None and not 0.0 <= min_otm_pct < 1.0:
-        raise ValueError("min_otm_pct must be a fraction in [0, 1)")
-    if limit is not None and limit < 0:
-        raise ValueError("limit must be nonnegative")
-    scoped = bool(horizon_dtes is not None or symbols or min_otm_pct or limit is not None)
-    return {
-        "scoped": scoped,
-        "configured_dtes": configured,
-        "requested_dtes": requested,
-        "symbols": symbols,
-        "symbol_count": len(symbols) if symbols is not None else None,
-        "min_otm_pct": min_otm_pct,
-        # ROLL_EXIT strikes are ITM, so an OTM cushion cannot describe them.
-        "min_otm_applies_to": VIEW_ENTRY if min_otm_pct else None,
-        "limit": limit,
-    }
-
-
 def latest_wheel_path(root: Path, strategy: dict, as_of: str) -> Path | None:
     """Latest data/wheel/{date}.csv dated on or before as_of."""
     return latest_report_path(_strategy_data_root(root, strategy) / "wheel", as_of)
-
-
-@dataclass
-class ChainsResult:
-    report: pd.DataFrame
-    meta: dict
-    warnings: list[str]
-    statuses: list[dict] = field(default_factory=list)
 
 
 def run_chains(root: Path, strategy: dict, as_of: str, fetch_fn, *,
@@ -1890,152 +1734,6 @@ def _base_meta(as_of, wheel_path, cfg, sl_meta, symbols, report, statuses,
     if extra_meta:
         meta.update(extra_meta)
     return meta
-
-
-def _strategy_data_root(root: Path, strategy: dict) -> Path:
-    configured = Path(strategy.get("strategy_data_root", "data")).expanduser()
-    return (configured if configured.is_absolute() else root / configured).resolve()
-
-
-def load_config() -> dict:
-    chains = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
-    if not isinstance(chains, dict):
-        raise ValueError(f"chains config must be a mapping: {CONFIG_PATH}")
-    output_root = os.environ.get("SFP_DATA_DIR", "").strip()
-    if not output_root:
-        raise SystemExit("SFP_DATA_DIR is required for chains")
-    return {
-        "utility_runtime": True,
-        "chains": chains,
-        "strategy_data_root": str(Path(output_root).expanduser().resolve()),
-    }
-
-
-def _runtime_metadata() -> dict:
-    generated_utc = datetime.now(timezone.utc)
-    try:
-        from zoneinfo import ZoneInfo
-        eastern = generated_utc.astimezone(ZoneInfo("America/New_York"))
-        session = market_session_at(generated_utc)
-        is_rth = session == MARKET_RTH
-        fetched_at = eastern.isoformat()
-    except Exception:  # noqa: BLE001 - tz db is a non-fatal display detail
-        session = MARKET_UNKNOWN
-        is_rth = None
-        fetched_at = None
-    try:
-        import yfinance
-        yfinance_version = yfinance.__version__
-    except Exception:  # noqa: BLE001 - the fetcher gives the actionable error
-        yfinance_version = None
-    try:
-        from importlib.metadata import version
-        tastytrade_version = version("tastytrade")
-    except Exception:  # noqa: BLE001 - provider failure is recorded separately
-        tastytrade_version = None
-    return {
-        "run_id": generated_utc.strftime("%Y%m%dT%H%M%S%fZ"),
-        "generated_at_utc": generated_utc.isoformat(),
-        "yfinance_version": yfinance_version,
-        "tastytrade_version": tastytrade_version,
-        "fetched_at_et": fetched_at,
-        "market_session": session,
-        "is_rth": is_rth,
-        "rth_note": ("Tastytrade DXLink supplies side-specific provider quote "
-                     "timestamps. Freshness uses the older bid/ask timestamp. "
-                     "Yahoo values remain diagnostic-only when an exact "
-                     "Tastytrade observation is unavailable; timestamped fresh "
-                     "quotes use BID as the conservative seller fill."),
-    }
-
-
-def write_chain_artifacts(output_root: Path, result: ChainsResult, *,
-                          args: dict, strategy: dict) -> dict[str, Path]:
-    """Write an immutable C2 run plus compatibility daily/latest views.
-
-    The run directory is creation-only: a duplicate run ID raises rather than
-    overwriting an observation. The dated CSV remains for existing consumers,
-    while ``latest.json`` identifies the immutable source behind that view.
-    """
-    premiums_root = Path(output_root) / "premiums"
-    premiums_root.mkdir(parents=True, exist_ok=True)
-    run_id = str(result.meta.get("run_id", "")).strip()
-    if not run_id:
-        raise ValueError("chain artifact metadata requires a run_id")
-    run_dir = premiums_root / "runs" / run_id
-    run_dir.mkdir(parents=True, exist_ok=False)
-
-    immutable_report = run_dir / "premiums.csv"
-    immutable_entry_report = run_dir / "entry_candidates.csv"
-    immutable_roll_exit_report = run_dir / "roll_exit.csv"
-    immutable_meta = run_dir / "run_meta.json"
-    result.report.to_csv(immutable_report, index=False)
-    if "analysis_view" in result.report.columns:
-        entry_report = result.report[result.report["analysis_view"] == VIEW_ENTRY]
-        roll_exit_report = result.report[
-            result.report["analysis_view"] == VIEW_ROLL_EXIT]
-    else:
-        entry_report = result.report.iloc[0:0]
-        roll_exit_report = result.report.iloc[0:0]
-    entry_report.to_csv(immutable_entry_report, index=False)
-    roll_exit_report.to_csv(immutable_roll_exit_report, index=False)
-    immutable_meta.write_text(
-        json.dumps(result.meta, indent=2, default=str) + "\n", encoding="utf-8")
-    immutable_manifest = write_manifest(
-        immutable_report,
-        command="chains",
-        args=args,
-        config={"chains": strategy.get("chains", {})},
-        extra={"run_id": run_id, "chain_run_meta": result.meta},
-    )
-
-    daily_report = premiums_root / f"{result.meta['as_of']}.csv"
-    daily_meta = premiums_root / f"{result.meta['as_of']}_meta.json"
-    daily_view_dir = premiums_root / "views" / str(result.meta["as_of"])
-    daily_view_dir.mkdir(parents=True, exist_ok=True)
-    daily_entry_report = daily_view_dir / "entry_candidates.csv"
-    daily_roll_exit_report = daily_view_dir / "roll_exit.csv"
-    result.report.to_csv(daily_report, index=False)
-    entry_report.to_csv(daily_entry_report, index=False)
-    roll_exit_report.to_csv(daily_roll_exit_report, index=False)
-    daily_meta.write_text(
-        json.dumps(result.meta, indent=2, default=str) + "\n", encoding="utf-8")
-    # Fail closed before promoting a run to latest: all compatibility views must
-    # be faithful materializations of this immutable observation.
-    verify_premium_archive(premiums_root, run_id)
-    latest = premiums_root / "latest.json"
-    latest_tmp = premiums_root / ".latest.json.tmp"
-    latest_tmp.write_text(json.dumps({
-        "run_id": run_id,
-        "schema_name": result.meta.get("schema_name", PREMIUM_SCHEMA_NAME),
-        "schema_version": result.meta.get("schema_version", PREMIUM_SCHEMA_VERSION),
-        "as_of": result.meta["as_of"],
-        "quote_provider": result.meta.get("quote_provider", {}),
-        "immutable_report": str(immutable_report.relative_to(premiums_root)),
-        "immutable_entry_report": str(
-            immutable_entry_report.relative_to(premiums_root)),
-        "immutable_roll_exit_report": str(
-            immutable_roll_exit_report.relative_to(premiums_root)),
-        "immutable_meta": str(immutable_meta.relative_to(premiums_root)),
-        "immutable_manifest": str(immutable_manifest.relative_to(premiums_root)),
-        "daily_report": daily_report.name,
-        "daily_entry_report": str(daily_entry_report.relative_to(premiums_root)),
-        "daily_roll_exit_report": str(
-            daily_roll_exit_report.relative_to(premiums_root)),
-    }, indent=2) + "\n", encoding="utf-8")
-    latest_tmp.replace(latest)
-    return {
-        "immutable_report": immutable_report,
-        "immutable_entry_report": immutable_entry_report,
-        "immutable_roll_exit_report": immutable_roll_exit_report,
-        "immutable_meta": immutable_meta,
-        "immutable_manifest": immutable_manifest,
-        "daily_report": daily_report,
-        "daily_entry_report": daily_entry_report,
-        "daily_roll_exit_report": daily_roll_exit_report,
-        "daily_meta": daily_meta,
-        "latest": latest,
-    }
 
 
 def main(argv: list[str] | None = None) -> int:

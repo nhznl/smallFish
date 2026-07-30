@@ -76,8 +76,8 @@ work. The plan should remain closed.
   the current Angular views do not display them. Materialized artifacts and
   external API consumers must be audited first.
 - The cleanup intentionally left activity synchronization in
-  `options_activity.py`. Its size is a future design concern, not incomplete
-  cleanup-plan work.
+  `options_activity.py`. Phase 6 decomposes that cluster behind a thin facade;
+  see [`OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md`](OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md).
 
 ## 2. Frontend duplicate and unused-code review
 
@@ -120,7 +120,7 @@ shared brokerage page and should remain simple.
 | Priority | Finding | Classification and disposition |
 |---|---|---|
 | ~~High~~ Done | Retired options-risk subsystem | **Implemented 2026-07-29.** Call coverage moved to `brokerages/call_coverage.py`; legacy risk-dashboard modules (`app.options_market`, `app.options_risk`), `config/options_risk.yaml`, and dashboard-only tests deleted. Capability `retirement-risk` reworded to market-data enrichment. Design: [`OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md`](OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md). |
-| Medium | Tests-only activity maintenance helpers | `options_activity.import_broker_events` and `remove_symbols` have no router, CLI, documentation, or production caller. Decide whether they are intended recovery tools. If so, expose and document a safe administrative command; otherwise remove them with their isolated tests. |
+| Medium | Tests-only activity maintenance helpers | ~~Decide expose vs remove~~ **Phase 6 decision:** keep as tests-backed recovery APIs; do **not** add a public router/CLI in this phase. See [`OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md`](OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md). |
 | Medium | Unused retrieval helpers | `stock_data_retriever.fetch_period_history` and `fetch_range_history` have no caller; the file's company-info function is live. Remove the unused functions after checking any external imports. |
 | Medium | Unused shared price contract | `models/price.py` defines `DailyPriceBar`, but neither runtime nor tests consume it. Delete it, or deliberately adopt it for standard-library row validation; do not force pandas into `models/`. |
 | Low | Zero-reference helpers | `brokerages.store.notes_for`, `brokerages.projections.envelope.capabilities_block`, `brokerages.adapters.base.decimal_or_zero`, and `config.strategy_config_yaml` have no repository reference. Remove after confirming they are not supported import surfaces. |
@@ -191,8 +191,8 @@ decimal semantics are demonstrably identical.
 
 | Finding | Why it matters | Design direction |
 |---|---|---|
-| `options_activity.py` is an 863-line responsibility cluster | It combines provider sync, event normalization, several CSV stores, market enrichment, trend advancement, CRUD, and repair helpers. Changes can cross persistence and provider boundaries accidentally. | First write a dedicated design note. Separate provider ingestion, canonical activity normalization, activity store, derived trend state, and administrative repair while preserving all CSV/API contracts. |
-| `utilities/options/chains.py` is a 2,134-line pipeline module | Discovery, eligibility, provider enrichment, archive handling, and metadata publication are difficult to test and reason about independently. | Extract pipeline stages behind existing artifact contracts. Preserve validation and atomic publication; do not change selection methodology during structural work. |
+| `options_activity.py` is an 863-line responsibility cluster | ~~Monolith~~ **6a/6b:** design + extraction behind thin facade into `brokerages/activity_*.py`. CSV/API contracts frozen. See [`OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md`](OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md). |
+| `utilities/options/chains.py` is a 2,134-line pipeline module | ~~Monolith~~ **6a/6c:** design + first extract of config/scope + publish (`chains_config.py`, `chains_publish.py`); strikes/eligibility remain until a follow-up. See [`CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md`](CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md). |
 | Brokerage API routes accept and return raw dictionaries | ~~Untyped write bodies~~ **4c done for closed writes.** Request models in `brokerages/schemas.py` for notes / holdings metadata / archives / sync; deep GET envelopes still projection-owned. |
 | Gain/loss migration runs during every brokerage sync | A one-time compatibility action remains on the steady-state hot path. | Prove all supported files are migrated, document rollback/old-file behavior, then retire the runtime migration separately. |
 | Company-info fetching is a backend network exception | `stock_data_retriever.py` performs live Yahoo/yfinance retrieval in the read-oriented API runtime, unlike the artifact-first price path and injected service transports. | Either document this narrow exception and inject the fetcher for tests, or move raw transport into `services/`/a materialized artifact. Do not make the backend import `utilities/`. |
@@ -259,9 +259,11 @@ methodology changes, compatibility removals, and mechanical cleanup.
    [`ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md`](ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md):
    Stock Detail race/cancel, scanner/wheel empty-vs-error, portfolios mutations
    and sector-rotation job reload.
-6. **Decompose large orchestrators.** Start with design documents for options
-   activity and chains. Preserve artifacts, provider boundaries, frozen study
-   results, and atomic-write behavior.
+6. **~~Decompose large orchestrators.~~ Done (6a–6c).** See
+   [`OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md`](OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md)
+   and [`CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md`](CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md):
+   design notes, activity modules behind a thin facade, chains config/scope +
+   publish extract. Further chains stage splits remain follow-up.
 7. **Measure retained provider work.** Determine whether beta/Greek materialized
    fields have non-Angular consumers before changing fetches, schemas, or
    dependencies.

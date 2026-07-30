@@ -13,8 +13,8 @@ The rules, in the order the cleanup plan states them:
 * read adapters consume artifacts and never a service or a provider;
 * brokerage importers carry no market-data transport and no provider symbol
   syntax;
-* ``options_activity`` uses ``services.tastytrade`` for its brokerage-account
-  role only;
+* ``activity_sync`` (via the ``options_activity`` facade) uses
+  ``services.tastytrade`` for its brokerage-account role only;
 * utilities quote enrichment routes through the neutral API while Yahoo chain
   discovery stays separate;
 * a holdings command materializes holdings and nothing else; and
@@ -276,7 +276,7 @@ def test_importers_carry_no_provider_symbol_syntax(module):
 
 
 # --------------------------------------------------------------------------- #
-# options_activity: brokerage account role vs market-data role                 #
+# activity_sync: brokerage account role vs market-data role                    #
 # --------------------------------------------------------------------------- #
 
 #: Tastytrade's *brokerage account* surface. Anything else on that transport is
@@ -285,13 +285,13 @@ ACCOUNT_TRANSPORT = frozenset({"fetch_account_data", "TastytradeConfigurationErr
 
 
 def test_options_activity_uses_tastytrade_only_for_its_account_role():
-    tree = parse(APP / "options_activity.py")
+    tree = parse(APP / "brokerages" / "activity_sync.py")
     used = attributes_used_on(tree, names_bound_to(tree, "services.tastytrade"))
     assert used <= ACCOUNT_TRANSPORT, sorted(used - ACCOUNT_TRANSPORT)
 
 
 def test_options_activity_reads_market_data_through_the_neutral_api():
-    tree = parse(APP / "options_activity.py")
+    tree = parse(APP / "brokerages" / "activity_sync.py")
     assert imports_package(tree, "services.options_market")
     market_data = attributes_used_on(tree, names_bound_to(tree, "services.options_market"))
     assert {"fetch_greeks", "fetch_underlying_metrics"} <= market_data

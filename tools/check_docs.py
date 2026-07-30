@@ -42,6 +42,8 @@ NARRATIVE_FILES: set[str] = {
     "docs/CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md",
     "docs/CONTRACT_TIGHTENING_PHASE4_DESIGN.md",
     "docs/ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md",
+    "docs/OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md",
+    "docs/CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md",
 }
 
 # Roots holding generated runtime artifacts. Documentation legitimately names
