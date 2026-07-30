@@ -129,7 +129,6 @@ Behavioural parameters live in YAML next to the code that reads them, not in
 | `utilities/config/sector_rotation.yaml` | Sector leadership parameters |
 | `utilities/options/config/wheel.yaml` | Wheel screen gates |
 | `utilities/options/config/chains.yaml` | Quote collection |
-| `stock-app/config/options_risk.yaml` | **Legacy.** Risk bands for the retired options-risk helpers still in-tree; not a user-facing dashboard setting. Pending subsystem cleanup. |
 | `studies/*/config/*.yaml` | Frozen study parameters. Do not edit; see [ARCHITECTURE.md](ARCHITECTURE.md). |
 
 ## Checking your configuration

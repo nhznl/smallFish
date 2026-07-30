@@ -207,11 +207,11 @@ def snaptrade_capability() -> Capability:
 
 
 def retirement_risk_capability() -> Capability:
-    """Enhanced retirement-option risk needs Tastytrade *in addition to* SnapTrade.
+    """Exact-contract Greeks/beta for retirement options need Tastytrade too.
 
-    SnapTrade does not supply exact-contract Greeks or the beta inputs, so this
-    is reported separately rather than folded into either provider. Partial risk
-    inputs must never be presented as complete.
+    SnapTrade does not supply those market-data inputs, so this is reported
+    separately from the SnapTrade capability. The id remains ``retirement-risk``
+    for compatibility; it describes enrichment readiness, not a risk dashboard.
     """
     snaptrade_ready = snaptrade_capability().available
     tastytrade_ready = tastytrade_capability().available
@@ -219,26 +219,29 @@ def retirement_risk_capability() -> Capability:
 
     if not snaptrade_ready:
         return Capability(
-            id="retirement-risk", label="Retirement option risk", provides=provides,
+            id="retirement-risk", label="Retirement option market data",
+            provides=provides,
             state=NOT_CONFIGURED, available=False,
             reason="Requires a connected retirement brokerage.",
             action="./setup-brokerages.sh setup snaptrade", provider="SnapTrade")
 
     if not tastytrade_ready:
         return Capability(
-            id="retirement-risk", label="Retirement option risk", provides=provides,
+            id="retirement-risk", label="Retirement option market data",
+            provides=provides,
             state=INCOMPLETE, available=False,
             reason="Holdings are available, but SnapTrade does not supply "
-                   "exact-contract Greeks or beta. Risk figures fall back to "
-                   "realized volatility and a locally computed beta, and are "
-                   "labelled as such. They are not a complete risk picture.",
+                   "exact-contract Greeks or market-metric beta. Connect "
+                   "Tastytrade to enrich held retirement option market data.",
             action="./setup-brokerages.sh setup tastytrade",
             provider="Tastytrade + SnapTrade")
 
     return Capability(
-        id="retirement-risk", label="Retirement option risk", provides=provides,
+        id="retirement-risk", label="Retirement option market data",
+        provides=provides,
         state=CONFIGURED, available=True,
-        reason="Both providers are configured; exact-contract inputs are available.",
+        reason="Both providers are configured; exact-contract market inputs "
+               "can be materialized for held retirement options.",
         provider="Tastytrade + SnapTrade")
 
 

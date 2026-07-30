@@ -36,9 +36,11 @@ PATH_LIKE = re.compile(
 MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
 # Documents that deliberately name paths which do not exist -- a plan describing
-# files yet to be created, say. Empty today; every current document is expected
-# to reference only real files.
-NARRATIVE_FILES: set[str] = set()
+# files yet to be created, say. Path-existence checks are skipped for these.
+NARRATIVE_FILES: set[str] = {
+    "docs/OPTIONS_RISK_SUBSYSTEM_RETIREMENT_DESIGN.md",
+    "docs/CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md",
+}
 
 # Roots holding generated runtime artifacts. Documentation legitimately names
 # paths under these, and they do not exist in a clean checkout -- only after a

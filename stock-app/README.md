@@ -29,14 +29,12 @@ stock-app/
 │   ├── trend_engine.py     # technical trend calculations
 │   ├── stock_model.py      # stock, weekly, and gain/loss models
 │   ├── options_activity.py # Tastytrade sync policy, normalization, marks, reconciliation
-│   ├── options_market.py   # legacy market-risk inputs (no production consumer)
-│   ├── options_risk.py     # legacy risk formulas; `apply_call_coverage` remains live
 │   ├── portfolios.py       # named symbol lists, returns, sector exposure
 │   ├── snaptrade_setup.py  # SnapTrade registration, credential persistence, CLI
 │   ├── snaptrade_service.py  # thin compatibility facade for the legacy CLI path
 │   ├── studies_read.py     # fail-closed Research Studies reader
 │   ├── capabilities.py     # optional-integration and core-data states
-│   ├── brokerages/         # registry, importers, provider adapters, canonical facts
+│   ├── brokerages/         # registry, importers, adapters, call coverage, canonical facts
 │   └── routers/            # HTTP endpoint groups
 └── tests/
 ```
@@ -67,10 +65,6 @@ Research Studies resolve from the mutable studies root first and fall back to th
 artifacts bundled with the repository, so pointing `SFP_DATA_DIR` at an empty
 external directory does not make them disappear. A corrupt local artifact still
 fails closed.
-
-`config/options_risk.yaml` configures the legacy options-risk helpers that
-remain in-tree pending a separate retirement of that subsystem. It is not a
-user-facing dashboard setting.
 
 ## Setup and run
 

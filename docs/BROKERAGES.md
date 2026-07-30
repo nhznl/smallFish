@@ -206,8 +206,8 @@ as the market-data provider:
 | SnapTrade only | Holdings and option activity import; exact-contract Greeks/IV and market-metric beta are not available from SnapTrade alone |
 | Both | Exact-contract IV, Greeks, and market-metric beta can be materialized alongside SnapTrade holdings |
 
-Partial inputs must never be presented as complete risk totals — and there is
-no portfolio-risk dashboard in the current UI that would do so.
+Partial inputs must never be presented as complete market-data enrichment —
+holdings alone are not exact-contract Greeks or market-metric beta.
 
 ## Security
 

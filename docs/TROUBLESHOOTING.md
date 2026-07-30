@@ -213,11 +213,12 @@ The credentials work; no brokerage is linked. Personal (`PERS-`) keys link on
 the SnapTrade dashboard; commercial keys use the connection portal. See
 [BROKERAGES.md](BROKERAGES.md).
 
-### Retirement risk shows a partial-inputs warning
+### `retirement-risk` capability is incomplete with only SnapTrade
 
-Correct and deliberate. SnapTrade cannot supply exact-contract Greeks or beta,
-so those figures fall back to realized volatility and a locally computed beta
-and are labelled as such. Connect Tastytrade for exact inputs.
+Correct and deliberate. SnapTrade holdings work without Tastytrade, but
+exact-contract Greeks and market-metric beta for retirement options need
+Tastytrade as well. Connect Tastytrade to enrich those market-data inputs;
+the capability id remains `retirement-risk` for compatibility.
 
 ## Tests
 

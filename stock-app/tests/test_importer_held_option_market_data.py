@@ -320,13 +320,9 @@ def test_epoch_ms_to_iso_utc_date():
     assert market_data._epoch_ms_to_iso("nope") == ""
 
 
-def test_greeks_csv_matches_risk_engine_loader(opts_env):
-    # A greeks row written in our schema must be accepted by the shared loader and
-    # matched to a risk row on (contract_key, account).
-    from datetime import date
-
-    from app.options_market import _load_tasty_greeks
-
+def test_greeks_csv_schema_is_readable_for_held_contracts(opts_env):
+    """A greeks row written in the importer schema must round-trip with required
+    columns and match the held contract identity used for market sync."""
     _write_ledger(opts_env)
     rows = market_data._option_rows()
     spcx = next(r for r in rows if r["symbol"] == "SPCX")
@@ -344,10 +340,13 @@ def test_greeks_csv_matches_risk_engine_loader(opts_env):
             "observed_at": "2026-07-22T20:00:00+00:00", "event_time_ms": "1784851143002",
             "retrieved_at": "2026-07-22T20:00:05+00:00",
         })
-    loaded = _load_tasty_greeks(path, date(2026, 7, 23))
-    assert loaded is not None and len(loaded) == 1
-    assert loaded.iloc[0]["contract_key"] == spcx["contract_key"]
-    assert loaded.iloc[0]["account"].upper() == spcx["account"].upper()
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        loaded = list(csv.DictReader(handle))
+    assert len(loaded) == 1
+    assert loaded[0]["contract_key"] == spcx["contract_key"]
+    assert loaded[0]["account"].upper() == spcx["account"].upper()
+    assert set(market_data.GREEKS_HEADERS) <= set(loaded[0])
+    assert float(loaded[0]["implied_volatility"]) > 0
 
 
 def test_sync_betas_retains_on_miss(opts_env):

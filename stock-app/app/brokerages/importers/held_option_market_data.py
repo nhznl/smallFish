@@ -2,8 +2,7 @@
 
 Reads the materialized SnapTrade holdings ledger, decides which underlyings and
 exact contracts need fresh market data, asks the provider-neutral
-``services.options_market`` API for them, and writes the beta/Greek artifacts the
-risk table reads:
+``services.options_market`` API for them, and writes the beta/Greek artifacts:
 
     sync_betas(fetcher)               -> underlying beta observations
     sync_greeks(fetcher)              -> exact-contract IV/Greek observations
@@ -31,7 +30,7 @@ from typing import Any
 from services import options_market
 
 from ... import config, options_activity
-from ...options_risk import apply_call_coverage
+from ..call_coverage import apply_call_coverage
 from . import snaptrade as snaptrade_importer
 
 BETA_HEADERS = [
@@ -130,8 +129,11 @@ def _share_pool(ledger: list[dict[str, Any]]) -> dict[tuple[str, str], Decimal]:
 
 
 def _option_rows() -> list[dict[str, Any]]:
-    """Current option legs from the SnapTrade ledger, in the risk-engine row
-    shape (underlying in ``symbol`` for price-cache/beta lookup)."""
+    """Current option legs from the SnapTrade ledger, shaped for market sync.
+
+    ``symbol`` is the underlying (for beta lookup); ``contract_key`` is the
+    exact OCC identity used for Greek/IV fetch.
+    """
     ledger = snaptrade_importer.read_holdings_ledger()
     rows: list[dict[str, Any]] = []
     for row in ledger:
@@ -184,11 +186,11 @@ def _fetch_betas(symbols: list[str]) -> list[Any]:
 
 
 def sync_betas(fetcher=_fetch_betas) -> dict[str, Any]:
-    """Fetch market-metric beta for each held option underlying and store it for
-    the risk table. Requires the options market-data provider.
+    """Fetch market-metric beta for each held option underlying and store it.
 
-    Retain-prior-on-miss: an underlying whose beta the fetch omits keeps its
-    previously stored value instead of disappearing from the risk table."""
+    Requires the options market-data provider. Retain-prior-on-miss: an
+    underlying whose beta the fetch omits keeps its previously stored value.
+    """
     current_underlyings = {row["symbol"] for row in _option_rows() if row["symbol"]}
     if not current_underlyings:
         atomic_write(config.retirement_option_betas_csv(), BETA_HEADERS, [])

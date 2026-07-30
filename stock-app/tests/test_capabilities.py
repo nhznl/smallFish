@@ -162,16 +162,17 @@ def test_retirement_risk_needs_snaptrade_first(blank_env):
     assert "retirement brokerage" in item["reason"]
 
 
-def test_retirement_risk_names_the_fallback_when_only_snaptrade_is_present(
+def test_retirement_risk_names_tastytrade_when_only_snaptrade_is_present(
         blank_env, monkeypatch):
-    """Partial inputs must never be presented as a complete risk picture."""
+    """Without Tastytrade, retirement option market-data enrichment is incomplete."""
     monkeypatch.setenv("SNAPTRADE_CLIENT_ID", "PERS-abc")
     monkeypatch.setenv("SNAPTRADE_CONSUMER_KEY", "key")
     item = _by_id(client.get("/capabilities").json())["retirement-risk"]
     assert item["state"] == capabilities.INCOMPLETE
-    assert "realized volatility" in item["reason"]
-    assert "not a complete risk picture" in item["reason"]
+    assert "exact-contract Greeks" in item["reason"]
+    assert "market-metric beta" in item["reason"]
     assert item["action"] == "./setup-brokerages.sh setup tastytrade"
+    assert item["label"] == "Retirement option market data"
 
 
 def test_retirement_risk_is_complete_with_both_providers(blank_env, monkeypatch):
