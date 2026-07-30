@@ -199,7 +199,7 @@ decimal semantics are demonstrably identical.
 | Finding | Why it matters | Design direction |
 |---|---|---|
 | `options_activity.py` is an 863-line responsibility cluster | ~~Monolith~~ **6a/6b:** design + extraction behind thin facade into `brokerages/activity_*.py`. CSV/API contracts frozen. See [`OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md`](OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md). |
-| `utilities/options/chains.py` is a 2,134-line pipeline module | ~~Monolith~~ **6a/6c:** design + first extract of config/scope + publish (`chains_config.py`, `chains_publish.py`); strikes/eligibility remain until a follow-up. See [`CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md`](CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md). |
+| `utilities/options/chains.py` is a 2,134-line pipeline module | ~~Monolith~~ **6a/6c + 20a:** design + config/scope + publish extract; strikes/eligibility/enrich in `chains_quote.py`, `chains_eligibility.py`, `chains_strikes.py`, `chains_enrich.py`. See [`CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md`](CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md) and [`CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md`](CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md). |
 | Brokerage API routes accept and return raw dictionaries | ~~Untyped write bodies~~ **4c done for closed writes.** Request models in `brokerages/schemas.py` for notes / holdings metadata / archives / sync; deep GET envelopes still projection-owned. |
 | Gain/loss migration runs during every brokerage sync | A one-time compatibility action remains on the steady-state hot path. | Prove all supported files are migrated, document rollback/old-file behavior, then retire the runtime migration separately. |
 | ~~Company-info fetching is a backend network exception~~ | ~~`stock_data_retriever.py` live Yahoo~~ **Phase 13 done.** Documented in `stock-app/README.md` / `docs/ARCHITECTURE.md`; `ticker_factory` injectable; offline retriever tests. Moving into `services/` or a materialized artifact remains optional follow-up. See [`COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md). |
@@ -266,11 +266,12 @@ methodology changes, compatibility removals, and mechanical cleanup.
    [`ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md`](ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md):
    Stock Detail race/cancel, scanner/wheel empty-vs-error, portfolios mutations
    and sector-rotation job reload.
-6. **~~Decompose large orchestrators.~~ Done (6a–6c).** See
+6. **~~Decompose large orchestrators.~~ Done (6a–6c, 20a).** See
    [`OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md`](OPTIONS_ACTIVITY_DECOMPOSITION_DESIGN.md)
-   and [`CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md`](CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md):
+   and [`CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md`](CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md) /
+   [`CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md`](CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md):
    design notes, activity modules behind a thin facade, chains config/scope +
-   publish extract. Further chains stage splits remain follow-up.
+   publish extract, then eligibility/strikes/enrich stage modules.
 7. **~~Measure retained provider work.~~ Done (7a–7c).** See
    [`BETA_GREEK_CONSUMER_MEASUREMENT.md`](BETA_GREEK_CONSUMER_MEASUREMENT.md):
    Layer A/B/C inventory, evidence checklist, Consumer status table. **Retain**
@@ -327,6 +328,10 @@ methodology changes, compatibility removals, and mechanical cleanup.
     [`PROJECTION_NUMBER_UTIL_PHASE19_DESIGN.md`](PROJECTION_NUMBER_UTIL_PHASE19_DESIGN.md):
     `brokerages/projections/numbers.py`; six call sites migrated; conversion
     byte-identical.
+20. **~~Chains strikes/eligibility/enrich extract.~~ Done (20a).** See
+    [`CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md`](CHAINS_STAGE_EXTRACT_PHASE20_DESIGN.md):
+    `chains_quote`, `chains_eligibility`, `chains_strikes`, `chains_enrich`;
+    `chains.py` orchestration + re-exports; methodology frozen.
 
 ### Explicit stop conditions
 

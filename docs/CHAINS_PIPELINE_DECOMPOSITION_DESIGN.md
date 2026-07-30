@@ -1,12 +1,12 @@
 # Chains pipeline decomposition (Phase 6) design
 
-**Status:** 6a–6c complete (further stage splits deferred)  
+**Status:** 6a–6c + 20a complete
 **Date:** 2026-07-30  
 **Parent audit:** [`CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md`](CODEBASE_ARCHITECTURE_AND_DEAD_CODE_REVIEW.md) item 6
 
 ## Goal
 
-Begin splitting [`utilities/options/chains.py`](../utilities/options/chains.py) (~2134 lines) into pipeline stages behind frozen premium archive contracts. This phase extracts **config/scope + artifact publish only**; strike selection, eligibility, and `process_symbol` stay in `chains.py`.
+Split [`utilities/options/chains.py`](../utilities/options/chains.py) into pipeline stages behind frozen premium archive contracts. Phase 6c extracted **config/scope + artifact publish**; Phase 20a extracted **pool/eligibility, strikes, and quote enrichment**.
 
 ## Inventory (current monolith)
 

@@ -48,54 +48,27 @@ Conventions (match wheel.py / stock_app_reader.py):
 from __future__ import annotations
 
 import argparse
-import math
-import re
 import time
-from datetime import datetime, time as dtime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 
 from models.premium import PREMIUM_SCHEMA_NAME, PREMIUM_SCHEMA_VERSION
-from utilities.options.exchange_calendar import (
-    NYSE_STANDARD_CALENDAR_SOURCE,
-    nyse_sessions,
-)
 from utilities.manifest import sha256_file
-from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
 from utilities.options.market_quotes import (
     QuoteBatch,
-    SOURCE_TASTYTRADE_DXLINK,
     fetch_quotes as fetch_market_quotes,
 )
 from utilities.options.wheel import (
-    EVENT_KNOWN,
-    EVENT_NONE_IN_RANGE,
-    EVENT_UNKNOWN_STALE,
     RUN_MODE_CURRENT_CONTEXT_ONLY,
     WHEEL_SCHEMA_VERSION,
-    event_window_state,
     latest_report_path,
     load_events_meta,
 )
 from utilities.options.chains_config import (
     CONFIG_PATH,
-    DEFAULT_BAND_MULT,
-    DEFAULT_CHAIN_DTES,
-    DEFAULT_ENTRY_EXTRA_STRIKES,
     DEFAULT_EXPIRY_TOLERANCE_DAYS,
-    DEFAULT_FETCH_POOL_N,
-    DEFAULT_FUTURE_QUOTE_TOLERANCE_SECONDS,
-    DEFAULT_MAX_QUOTE_AGE_SECONDS,
-    DEFAULT_MAX_SPREAD_PCT,
-    DEFAULT_MIN_DOLLAR_VOLUME,
-    DEFAULT_NEGATIVE_EXTRINSIC_TOLERANCE,
-    DEFAULT_OI_MIN,
-    DEFAULT_PER_EXPIRY_TOP_N,
-    DEFAULT_QUOTE_PROVIDER,
-    DEFAULT_REQUIRE_RTH,
-    DEFAULT_ROLL_EXIT_STRIKES,
-    DEFAULT_RV_WINDOW_BY_MAX_DTE,
     DEFAULT_TASTYTRADE_BATCH_SIZE,
     DEFAULT_TASTYTRADE_TIMEOUT_SECONDS,
     DEFAULT_THROTTLE_SLEEP,
@@ -111,93 +84,102 @@ from utilities.options.chains_publish import (
     runtime_metadata as _runtime_metadata,
     write_chain_artifacts,
 )
+from utilities.options.chains_eligibility import (
+    PAIR_EVENT_COVERAGE_UNKNOWN,
+    PAIR_EVENT_EXCLUDED,
+    PAIR_NO_FUTURE_SESSIONS,
+    PAIR_RANK_CAP,
+    PAIR_RV_UNAVAILABLE,
+    PAIR_SPOT_UNAVAILABLE,
+    SKIP_NO_ELIGIBLE_PAIRS,
+    SKIP_NO_EXPIRIES,
+    SKIP_NO_EXPIRY_WITHIN_TOLERANCE,
+    SKIP_NO_ROWS,
+    SKIP_NO_STRIKES_IN_SCOPE,
+    build_underlying_pool,
+    derive_actual_expiry_context,
+    rv_window_for_actual_dte,
+)
+from utilities.options.chains_enrich import (
+    ENTRY_ATM_EXCLUDED,
+    ENTRY_CONTRACT_NOT_OK,
+    ENTRY_ITM_EXCLUDED,
+    ENTRY_MONEYNESS_UNKNOWN,
+    ENTRY_QUOTE_NOT_OK,
+    ROLE_CALL_ROLL_EXIT,
+    ROLE_COVERED_CALL_ENTRY,
+    ROLE_CSP_ENTRY,
+    ROLE_PUT_ROLL_EXIT,
+    apply_quote_observation,
+    enrich_tastytrade_quotes,
+    process_symbol_chains,
+)
+from utilities.options.chains_quote import (
+    CONTRACT_INVALID,
+    CONTRACT_OK,
+    CONTRACT_REASON_CURRENCY_UNAVAILABLE,
+    CONTRACT_REASON_EXPIRY_MISMATCH,
+    CONTRACT_REASON_NONSTANDARD,
+    CONTRACT_REASON_SYMBOL_MALFORMED,
+    CONTRACT_REASON_SYMBOL_UNAVAILABLE,
+    CONTRACT_REASON_STRIKE_MISMATCH,
+    CONTRACT_REASON_TERMS_UNAVAILABLE,
+    CONTRACT_REASON_UNDERLYING_MISMATCH,
+    CONTRACT_UNKNOWN,
+    GATE_NO_QUOTE,
+    GATE_OI_BELOW_MIN,
+    GATE_SPREAD_ABOVE_MAX,
+    MARKET_OFF_HOURS,
+    MARKET_RTH,
+    MARKET_UNKNOWN,
+    MARKET_WEEKEND,
+    QUOTE_INVALID,
+    QUOTE_OK,
+    QUOTE_PROVIDER_DIAGNOSTIC_FALLBACK,
+    QUOTE_PROVIDER_MISSING,
+    QUOTE_PROVIDER_NOT_REQUESTED,
+    QUOTE_PROVIDER_RECEIVED,
+    QUOTE_REASON_CROSSED,
+    QUOTE_REASON_FUTURE_TIMESTAMP,
+    QUOTE_REASON_NEGATIVE_EXTRINSIC,
+    QUOTE_REASON_NON_EXECUTABLE,
+    QUOTE_REASON_OUTSIDE_RTH,
+    QUOTE_REASON_RETRIEVAL_TIMESTAMP_INVALID,
+    QUOTE_REASON_RETRIEVAL_TIMESTAMP_UNAVAILABLE,
+    QUOTE_REASON_TIMESTAMP_INVALID,
+    QUOTE_REASON_TIMESTAMP_UNAVAILABLE,
+    QUOTE_REASON_TOO_OLD,
+    QUOTE_SOURCE_YAHOO,
+    QUOTE_STALE,
+    QUOTE_UNKNOWN,
+    SIDE_CALL,
+    SIDE_PUT,
+    annualized_rv,
+    canonical_contract,
+    cc_period_yield,
+    compute_mid,
+    csp_period_yield,
+    iv_vs_rv,
+    liquidity_gate,
+    market_session_at,
+    option_intrinsic_value,
+    quote_quality,
+    simple_apr,
+    spread,
+)
+from utilities.options.chains_strikes import (
+    MONEYNESS_ATM,
+    MONEYNESS_ITM,
+    MONEYNESS_OTM,
+    nearest_expiry,
+    option_moneyness,
+    select_entry_strikes,
+    select_roll_exit_strikes,
+)
+from utilities.options.wheel import EVENT_KNOWN
+
 
 ROOT = Path(__file__).resolve().parents[2]
-
-# ---------------------------------------------------------------------------
-# Report schema
-# ---------------------------------------------------------------------------
-
-SIDE_PUT = "PUT"
-SIDE_CALL = "CALL"
-
-# Gate reasons (';'-joined in the CSV so a cell never contains a comma --
-# same convention as the strategy report's reason_summary).
-GATE_NO_QUOTE = "no_quote"             # missing/zero/one-sided/crossed bid|ask
-GATE_OI_BELOW_MIN = "oi_below_min"
-GATE_SPREAD_ABOVE_MAX = "spread_above_max"
-
-QUOTE_OK = "OK"
-QUOTE_STALE = "STALE"
-QUOTE_UNKNOWN = "UNKNOWN"
-QUOTE_INVALID = "INVALID"
-QUOTE_REASON_TIMESTAMP_UNAVAILABLE = "quote_timestamp_unavailable"
-QUOTE_REASON_TIMESTAMP_INVALID = "quote_timestamp_invalid"
-QUOTE_REASON_RETRIEVAL_TIMESTAMP_UNAVAILABLE = "retrieval_timestamp_unavailable"
-QUOTE_REASON_RETRIEVAL_TIMESTAMP_INVALID = "retrieval_timestamp_invalid"
-QUOTE_REASON_FUTURE_TIMESTAMP = "quote_timestamp_in_future"
-QUOTE_REASON_TOO_OLD = "quote_too_old"
-QUOTE_REASON_OUTSIDE_RTH = "quote_outside_rth"
-QUOTE_REASON_NON_EXECUTABLE = "non_executable_quote"
-QUOTE_REASON_CROSSED = "crossed_quote"
-QUOTE_REASON_NEGATIVE_EXTRINSIC = "negative_extrinsic"
-
-MARKET_RTH = "RTH"
-MARKET_OFF_HOURS = "OFF_HOURS"
-MARKET_WEEKEND = "WEEKEND"
-MARKET_UNKNOWN = "UNKNOWN"
-
-# Per-symbol skip reasons recorded in the metadata sidecar.
-SKIP_NO_EXPIRIES = "no_expiries"
-SKIP_NO_ROWS = "no_rows"
-SKIP_NO_EXPIRY_WITHIN_TOLERANCE = "no_expiry_within_tolerance"
-SKIP_NO_ELIGIBLE_PAIRS = "no_eligible_expiry_pairs"
-# Every listed entry strike sat inside the requested minimum OTM cushion, so the
-# scope -- not the market or the data -- emptied this symbol.
-SKIP_NO_STRIKES_IN_SCOPE = "no_entry_strikes_within_min_otm"
-PAIR_EVENT_COVERAGE_UNKNOWN = "actual_expiry_event_coverage_unknown"
-PAIR_EVENT_EXCLUDED = "actual_expiry_earnings_excluded"
-PAIR_RV_UNAVAILABLE = "actual_expiry_rv_unavailable"
-PAIR_SPOT_UNAVAILABLE = "actual_expiry_spot_unavailable"
-PAIR_NO_FUTURE_SESSIONS = "actual_expiry_no_future_sessions"
-PAIR_RANK_CAP = "per_expiry_rank_cap"
-
-MONEYNESS_OTM = "OTM"
-MONEYNESS_ATM = "ATM"
-MONEYNESS_ITM = "ITM"
-ENTRY_ITM_EXCLUDED = "itm_entry_excluded"
-ENTRY_MONEYNESS_UNKNOWN = "moneyness_unknown"
-ENTRY_QUOTE_NOT_OK = "quote_not_ok"
-ENTRY_CONTRACT_NOT_OK = "contract_not_ok"
-ENTRY_ATM_EXCLUDED = "atm_entry_excluded"
-
-ROLE_CSP_ENTRY = "CSP_ENTRY"
-ROLE_COVERED_CALL_ENTRY = "COVERED_CALL_ENTRY"
-ROLE_PUT_ROLL_EXIT = "PUT_ROLL_EXIT"
-ROLE_CALL_ROLL_EXIT = "CALL_ROLL_EXIT"
-
-CONTRACT_OK = "OK"
-CONTRACT_UNKNOWN = "UNKNOWN"
-CONTRACT_INVALID = "INVALID"
-CONTRACT_SOURCE = "YAHOO_YFINANCE"
-CONTRACT_REASON_SYMBOL_UNAVAILABLE = "provider_contract_symbol_unavailable"
-CONTRACT_REASON_SYMBOL_MALFORMED = "provider_contract_symbol_malformed"
-CONTRACT_REASON_UNDERLYING_MISMATCH = "contract_underlying_mismatch"
-CONTRACT_REASON_EXPIRY_MISMATCH = "contract_expiry_mismatch"
-CONTRACT_REASON_SIDE_MISMATCH = "contract_side_mismatch"
-CONTRACT_REASON_STRIKE_MISMATCH = "contract_strike_mismatch"
-CONTRACT_REASON_TERMS_UNAVAILABLE = "contract_terms_unavailable"
-CONTRACT_REASON_NONSTANDARD = "nonstandard_contract"
-CONTRACT_REASON_CURRENCY_UNAVAILABLE = "contract_currency_unavailable"
-
-QUOTE_SOURCE_YAHOO = "YAHOO_YFINANCE"
-QUOTE_PROVIDER_RECEIVED = "RECEIVED"
-QUOTE_PROVIDER_DIAGNOSTIC_FALLBACK = "DIAGNOSTIC_FALLBACK"
-QUOTE_PROVIDER_MISSING = "MISSING"
-QUOTE_PROVIDER_NOT_REQUESTED = "NOT_REQUESTED"
-
-_OCC_SYMBOL = re.compile(r"^(?P<root>.+?)(?P<expiry>\d{6})(?P<side>[CP])(?P<strike>\d{8})$")
-
 
 # Keep in sync with the Premiums view and wheel.py's column-sync rule.
 # Long format: one row per symbol x chain-DTE x side x strike.
@@ -292,995 +274,6 @@ PREMIUM_COLUMNS = [
     "entry_eligible",       # false for ITM or failed-liquidity rows
     "entry_reason",         # immediate-safety exclusion reason
 ]
-
-
-# ---------------------------------------------------------------------------
-# Small numeric helpers
-# ---------------------------------------------------------------------------
-
-def _num(value) -> float | None:
-    """Coerce to a finite float or None (NaN/inf/blank/non-numeric -> None).
-    The universal guard against divide-by-zero and crashing on a bad cell."""
-    if value is None:
-        return None
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        return None
-    if math.isnan(f) or math.isinf(f):
-        return None
-    return f
-
-
-def _utc_timestamp(value) -> tuple[pd.Timestamp | None, bool]:
-    """Return an aware UTC timestamp and whether a nonblank value was supplied.
-
-    Naive timestamps are deliberately invalid: silently assuming a timezone
-    would make quote-age enforcement look more certain than the provider data.
-    Numeric provider timestamps are accepted as Unix seconds (or milliseconds
-    when their magnitude indicates that unit).
-    """
-    if value is None or (isinstance(value, str) and not value.strip()):
-        return None, False
-    try:
-        if pd.isna(value):
-            return None, False
-    except (TypeError, ValueError):
-        pass
-    try:
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            unit = "ms" if abs(float(value)) >= 100_000_000_000 else "s"
-            ts = pd.to_datetime(value, unit=unit, utc=True)
-        else:
-            ts = pd.Timestamp(value)
-            if ts.tzinfo is None:
-                return None, True
-            ts = ts.tz_convert("UTC")
-    except (TypeError, ValueError, OverflowError):
-        return None, True
-    return ts, True
-
-
-def _timestamp_text(value) -> str | None:
-    ts, _ = _utc_timestamp(value)
-    return ts.isoformat() if ts is not None else None
-
-
-def market_session_at(retrieved_at) -> str:
-    """Classify the retrieval wall clock for the live entry screen.
-
-    This is deliberately a session label, not an exchange-calendar assertion;
-    the chain provider does not provide an authoritative market-session flag.
-    Weekend and weekday clock-time states are still enough to fail closed
-    outside the normal 09:30--16:00 New York entry window.
-    """
-    ts, _ = _utc_timestamp(retrieved_at)
-    if ts is None:
-        return MARKET_UNKNOWN
-    try:
-        from zoneinfo import ZoneInfo
-        eastern = ts.tz_convert(ZoneInfo("America/New_York"))
-    except Exception:  # noqa: BLE001 - missing tz data becomes unknown
-        return MARKET_UNKNOWN
-    if eastern.weekday() >= 5:
-        return MARKET_WEEKEND
-    wall = eastern.time().replace(tzinfo=None)
-    return MARKET_RTH if dtime(9, 30) <= wall < dtime(16, 0) else MARKET_OFF_HOURS
-
-
-def quote_quality(quote_timestamp, retrieved_at, bid, ask,
-                  raw_extrinsic_value: float | None, *,
-                  max_age_seconds: int,
-                  future_tolerance_seconds: int,
-                  negative_extrinsic_tolerance: float,
-                  require_rth: bool) -> tuple[str, str | None, float | None, str, list[str]]:
-    """Typed quality for one bid/ask observation.
-
-    Returns ``(status, normalized_quote_timestamp, age_seconds,
-    market_session, reasons)``. Retrieval time is only the expected/reference
-    time; it is never substituted for a missing quote timestamp.
-    """
-    if max_age_seconds < 0 or future_tolerance_seconds < 0:
-        raise ValueError("quote age tolerances must be nonnegative")
-    if negative_extrinsic_tolerance < 0:
-        raise ValueError("negative_extrinsic_tolerance must be nonnegative")
-
-    reasons: list[str] = []
-    states: list[str] = [QUOTE_OK]
-    quote_ts, quote_supplied = _utc_timestamp(quote_timestamp)
-    retrieved_ts, retrieved_supplied = _utc_timestamp(retrieved_at)
-    session = market_session_at(retrieved_at)
-    age_seconds: float | None = None
-
-    if quote_ts is None:
-        states.append(QUOTE_INVALID if quote_supplied else QUOTE_UNKNOWN)
-        reasons.append(QUOTE_REASON_TIMESTAMP_INVALID if quote_supplied
-                       else QUOTE_REASON_TIMESTAMP_UNAVAILABLE)
-    if retrieved_ts is None:
-        states.append(QUOTE_INVALID if retrieved_supplied else QUOTE_UNKNOWN)
-        reasons.append(QUOTE_REASON_RETRIEVAL_TIMESTAMP_INVALID if retrieved_supplied
-                       else QUOTE_REASON_RETRIEVAL_TIMESTAMP_UNAVAILABLE)
-    if quote_ts is not None and retrieved_ts is not None:
-        age_seconds = (retrieved_ts - quote_ts).total_seconds()
-        if age_seconds < -future_tolerance_seconds:
-            states.append(QUOTE_INVALID)
-            reasons.append(QUOTE_REASON_FUTURE_TIMESTAMP)
-        elif age_seconds > max_age_seconds:
-            states.append(QUOTE_STALE)
-            reasons.append(QUOTE_REASON_TOO_OLD)
-
-    b, a = _num(bid), _num(ask)
-    if b is None or a is None or b <= 0 or a <= 0:
-        states.append(QUOTE_UNKNOWN)
-        reasons.append(QUOTE_REASON_NON_EXECUTABLE)
-    elif a < b:
-        states.append(QUOTE_INVALID)
-        reasons.append(QUOTE_REASON_CROSSED)
-
-    if (raw_extrinsic_value is not None
-            and raw_extrinsic_value < -negative_extrinsic_tolerance):
-        states.append(QUOTE_INVALID)
-        reasons.append(QUOTE_REASON_NEGATIVE_EXTRINSIC)
-
-    if require_rth:
-        if session == MARKET_UNKNOWN:
-            states.append(QUOTE_UNKNOWN)
-            if not ({QUOTE_REASON_RETRIEVAL_TIMESTAMP_UNAVAILABLE,
-                     QUOTE_REASON_RETRIEVAL_TIMESTAMP_INVALID} & set(reasons)):
-                reasons.append(QUOTE_REASON_RETRIEVAL_TIMESTAMP_UNAVAILABLE)
-        elif session != MARKET_RTH:
-            states.append(QUOTE_STALE)
-            reasons.append(QUOTE_REASON_OUTSIDE_RTH)
-
-    severity = {QUOTE_OK: 0, QUOTE_STALE: 1, QUOTE_UNKNOWN: 2, QUOTE_INVALID: 3}
-    status = max(states, key=severity.__getitem__)
-    return (status, quote_ts.isoformat() if quote_ts is not None else None,
-            age_seconds, session, reasons)
-
-
-def option_intrinsic_value(side: str, strike: float | None,
-                           spot: float | None) -> float | None:
-    """Per-share intrinsic value for a call or put at snapshot spot."""
-    k, s = _num(strike), _num(spot)
-    if k is None or s is None:
-        return None
-    if side == SIDE_CALL:
-        return max(s - k, 0.0)
-    if side == SIDE_PUT:
-        return max(k - s, 0.0)
-    raise ValueError(f"unsupported option side: {side}")
-
-
-def _text(value) -> str | None:
-    if value is None:
-        return None
-    try:
-        if pd.isna(value):
-            return None
-    except (TypeError, ValueError):
-        pass
-    text = str(value).strip()
-    return text or None
-
-
-def _normalized_root(value: str) -> str:
-    return "".join(character for character in value.upper() if character.isalnum())
-
-
-def canonical_contract(symbol: str, expiry: str, side: str,
-                       strike: float, row) -> dict:
-    """Build and validate the canonical identity for one provider contract.
-
-    Yahoo's exact ``contractSymbol`` is the durable provider identity. Its OCC-
-    shaped components are reconciled to the selected underlying, expiry, side,
-    and strike so a mismatched row cannot masquerade as the requested contract.
-    Missing or non-standard terms remain archived but fail entry eligibility.
-    """
-    provider_symbol = _text(row.get("contractSymbol"))
-    if provider_symbol is None:
-        provider_symbol = _text(row.get("provider_contract_symbol"))
-    contract_size = _text(row.get("contractSize"))
-    if contract_size is None:
-        contract_size = _text(row.get("contract_size"))
-    contract_size = contract_size.upper() if contract_size else None
-    currency = _text(row.get("currency"))
-    currency = currency.upper() if currency else None
-
-    reasons: list[str] = []
-    adjustments: list[str] = []
-    states = [CONTRACT_OK]
-    is_standard: bool | None
-    multiplier: int | None
-    deliverable: str | None
-    adjustment_code: str | None = None
-
-    if contract_size == "REGULAR":
-        is_standard, multiplier, deliverable = True, 100, "100 SHARES"
-    elif contract_size:
-        is_standard, multiplier, deliverable = False, None, None
-        adjustment_code = contract_size
-        adjustments.append(CONTRACT_REASON_NONSTANDARD)
-        reasons.append(CONTRACT_REASON_NONSTANDARD)
-        states.append(CONTRACT_UNKNOWN)
-    else:
-        is_standard, multiplier, deliverable = None, None, None
-        reasons.append(CONTRACT_REASON_TERMS_UNAVAILABLE)
-        states.append(CONTRACT_UNKNOWN)
-
-    if currency is None:
-        reasons.append(CONTRACT_REASON_CURRENCY_UNAVAILABLE)
-        states.append(CONTRACT_UNKNOWN)
-
-    if provider_symbol is None:
-        reasons.append(CONTRACT_REASON_SYMBOL_UNAVAILABLE)
-        states.append(CONTRACT_UNKNOWN)
-    else:
-        match = _OCC_SYMBOL.fullmatch(provider_symbol.upper())
-        if match is None:
-            reasons.append(CONTRACT_REASON_SYMBOL_MALFORMED)
-            states.append(CONTRACT_INVALID)
-        else:
-            provider_root = _normalized_root(match.group("root"))
-            expected_root = _normalized_root(symbol)
-            if provider_root != expected_root:
-                if is_standard is False:
-                    adjustment_code = adjustment_code or match.group("root")
-                    adjustments.append(CONTRACT_REASON_UNDERLYING_MISMATCH)
-                    if CONTRACT_REASON_UNDERLYING_MISMATCH not in reasons:
-                        reasons.append(CONTRACT_REASON_UNDERLYING_MISMATCH)
-                    states.append(CONTRACT_UNKNOWN)
-                else:
-                    reasons.append(CONTRACT_REASON_UNDERLYING_MISMATCH)
-                    states.append(CONTRACT_INVALID)
-            try:
-                expected_expiry = pd.Timestamp(expiry).strftime("%y%m%d")
-            except (TypeError, ValueError):
-                expected_expiry = ""
-            if match.group("expiry") != expected_expiry:
-                reasons.append(CONTRACT_REASON_EXPIRY_MISMATCH)
-                states.append(CONTRACT_INVALID)
-            expected_side = "P" if side == SIDE_PUT else "C" if side == SIDE_CALL else ""
-            if match.group("side") != expected_side:
-                reasons.append(CONTRACT_REASON_SIDE_MISMATCH)
-                states.append(CONTRACT_INVALID)
-            provider_strike = int(match.group("strike")) / 1000.0
-            if abs(provider_strike - float(strike)) > 0.0005:
-                reasons.append(CONTRACT_REASON_STRIKE_MISMATCH)
-                states.append(CONTRACT_INVALID)
-
-    severity = {CONTRACT_OK: 0, CONTRACT_UNKNOWN: 1, CONTRACT_INVALID: 2}
-    quality = max(states, key=severity.__getitem__)
-    return {
-        "contract_id": f"YAHOO:{provider_symbol}" if provider_symbol else None,
-        "provider_contract_symbol": provider_symbol,
-        "underlying_symbol": symbol,
-        "source": CONTRACT_SOURCE,
-        "currency": currency,
-        "multiplier": multiplier,
-        "deliverable": deliverable,
-        "is_standard": is_standard,
-        "adjustment_code": adjustment_code,
-        "adjustment_reason": ";".join(dict.fromkeys(adjustments)),
-        "contract_quality": quality,
-        "contract_quality_reasons": ";".join(dict.fromkeys(reasons)),
-    }
-
-
-def compute_mid(bid, ask) -> float | None:
-    """(bid + ask) / 2, or None for any degenerate quote: missing, zero, or
-    crossed (ask < bid). Yahoo bid/ask are stale outside RTH and far-OTM
-    contracts routinely quote 0 bid -- all of those become a null, flagged
-    mid rather than a fabricated price (section 7)."""
-    b = _num(bid)
-    a = _num(ask)
-    if b is None or a is None or b <= 0 or a <= 0 or a < b:
-        return None
-    return (b + a) / 2.0
-
-
-def spread(bid, ask, mid: float | None) -> tuple[float | None, float | None]:
-    """(absolute spread, spread as a fraction of mid). (None, None) when mid
-    is null -- there is no meaningful spread without a two-sided quote."""
-    if mid is None or mid == 0:
-        return None, None
-    b = _num(bid)
-    a = _num(ask)
-    if b is None or a is None:
-        return None, None
-    abs_spread = a - b
-    return abs_spread, abs_spread / mid
-
-
-def csp_period_yield(premium: float | None, strike: float | None) -> float | None:
-    """Cash-secured-put period yield = supplied premium / strike."""
-    if premium is None or strike in (None, 0):
-        return None
-    return premium / strike
-
-
-def cc_period_yield(premium: float | None, spot: float | None) -> float | None:
-    """Covered-call period yield = supplied premium / spot."""
-    if premium is None or spot in (None, 0):
-        return None
-    return premium / spot
-
-
-def simple_apr(period_yield: float | None, dte: int | float | None) -> float | None:
-    """simple_APR = period_yield * 365 / calendar_DTE. LABELLED simple on
-    purpose: no compounding is implied (section 7)."""
-    if period_yield is None or dte in (None, 0):
-        return None
-    return period_yield * 365.0 / dte
-
-
-def annualized_rv(rv_used_daily: float | None) -> float | None:
-    """Annualize a DAILY realized-vol sigma: rv_used_daily * sqrt(252)
-    (section 4.3 units convention -- the wheel stores daily sigma)."""
-    rv = _num(rv_used_daily)
-    if rv is None:
-        return None
-    return rv * math.sqrt(252.0)
-
-
-def iv_vs_rv(iv: float | None, ann_rv: float | None) -> tuple[float | None, float | None]:
-    """(ratio, difference) of chain IV vs the annualized realized vol. IV is
-    juiciness; RV is the realized baseline -- a ratio > 1 means options are
-    pricing in more than the stock has recently realized. Yahoo IV is
-    unreliable, so this is context, never a gate (section 7)."""
-    iv = _num(iv)
-    if iv is None or ann_rv in (None, 0):
-        return None, None
-    return iv / ann_rv, iv - ann_rv
-
-
-def liquidity_gate(mid: float | None, open_interest, spread_pct: float | None,
-                   oi_min: float, max_spread_pct: float) -> tuple[bool, list[str]]:
-    """Hard liquidity gate (section 7). Fails on: no two-sided quote,
-    open interest below `oi_min`, or a bid-ask spread wider than
-    `max_spread_pct` of mid. Returns (ok, reasons); reasons is empty iff ok.
-    The record of *what* was gated is preserved on every row (gate_reason)."""
-    reasons: list[str] = []
-    if mid is None:
-        reasons.append(GATE_NO_QUOTE)
-    else:
-        if spread_pct is None or spread_pct > max_spread_pct:
-            reasons.append(GATE_SPREAD_ABOVE_MAX)
-    oi = _num(open_interest)
-    if oi is None or oi < oi_min:
-        reasons.append(GATE_OI_BELOW_MIN)
-    return (not reasons), reasons
-
-
-# ---------------------------------------------------------------------------
-# Expiry + strike selection (pure)
-# ---------------------------------------------------------------------------
-
-def nearest_expiry(expiries: list[str], as_of_ts: pd.Timestamp,
-                   target_dte: int,
-                   max_deviation_days: int | None = None) -> tuple[str, int] | None:
-    """From a symbol's `ticker.options` listing, pick the expiry whose calendar
-    DTE is nearest `target_dte`. Already-expired listings (DTE < 0) are ignored;
-    ties break to the EARLIER expiry (smaller DTE). Returns (expiry, actual_dte)
-    or None when no future expiry exists. When ``max_deviation_days`` is
-    supplied, an otherwise-nearest expiry outside that tolerance is rejected.
-    This prevents a requested horizon from silently describing a distant
-    contract."""
-    if max_deviation_days is not None and max_deviation_days < 0:
-        raise ValueError("max_deviation_days must be nonnegative")
-    best_key: tuple[int, int] | None = None
-    best: tuple[str, int] | None = None
-    for e in expiries:
-        try:
-            ed = pd.to_datetime(e)
-        except (ValueError, TypeError):
-            continue
-        dte = (ed - as_of_ts).days
-        if dte < 0:
-            continue
-        key = (abs(dte - target_dte), dte)  # distance, then earliest wins ties
-        if best_key is None or key < best_key:
-            best_key = key
-            best = (e, dte)
-    if (best is not None and max_deviation_days is not None
-            and abs(best[1] - target_dte) > max_deviation_days):
-        return None
-    return best
-
-
-def option_moneyness(side: str, strike: float | None,
-                     spot: float | None) -> str | None:
-    """Classify a contract against current spot for entry-screen safety."""
-    k, s = _num(strike), _num(spot)
-    if k is None or s is None or s <= 0:
-        return None
-    if k == s:
-        return MONEYNESS_ATM
-    if side == SIDE_PUT:
-        return MONEYNESS_OTM if k < s else MONEYNESS_ITM
-    if side == SIDE_CALL:
-        return MONEYNESS_OTM if k > s else MONEYNESS_ITM
-    raise ValueError(f"unsupported option side: {side}")
-
-
-def select_entry_strikes(side: str, strikes: list[float], spot: float | None,
-                         one_sigma_pct: float | None, *, band_mult: float,
-                         extra_strikes_beyond_band: int,
-                         min_otm_pct: float | None = None) -> list[float]:
-    """K2 side-specific OTM entry strikes around the sigma boundary.
-
-    Puts retain only strikes below spot, from the lower sigma boundary up to
-    spot, plus the configured nearest strikes beyond the lower boundary. Calls
-    mirror that policy above spot. ATM and ITM strikes are never returned.
-
-    `min_otm_pct` is the caller's requested minimum OTM cushion as a fraction of
-    spot. It is a collection-scope narrowing applied AFTER the configured sigma
-    band: it can only remove strikes the band already admitted, never add one
-    the band excluded, so the governed band policy still bounds the result. An
-    empty return is a legitimate outcome when the whole band sits inside the
-    cushion; callers record that as an explicit scope exclusion.
-    """
-    if band_mult < 0 or extra_strikes_beyond_band < 0:
-        raise ValueError("entry strike policy values must be nonnegative")
-    if min_otm_pct is not None and not 0.0 <= min_otm_pct < 1.0:
-        raise ValueError("min_otm_pct must be a fraction in [0, 1)")
-    s = _num(spot)
-    if s is None or s <= 0:
-        return []
-    clean = sorted({value for value in (_num(item) for item in strikes)
-                    if value is not None})
-    sigma = _num(one_sigma_pct) or 0.0
-    if side == SIDE_PUT:
-        boundary = s * (1.0 - band_mult * sigma)
-        inside = [value for value in clean if boundary <= value < s]
-        beyond = [value for value in clean if value < boundary]
-        extra = beyond[-extra_strikes_beyond_band:] if extra_strikes_beyond_band else []
-    elif side == SIDE_CALL:
-        boundary = s * (1.0 + band_mult * sigma)
-        inside = [value for value in clean if s < value <= boundary]
-        beyond = [value for value in clean if value > boundary]
-        extra = beyond[:extra_strikes_beyond_band] if extra_strikes_beyond_band else []
-    else:
-        raise ValueError(f"unsupported option side: {side}")
-    chosen = sorted(set(inside + extra))
-    if min_otm_pct:
-        # "At least this far OTM" is inclusive, so a strike sitting exactly on
-        # the boundary must survive. Binary rounding makes an exact bound
-        # unreliable (100 * (1 + 0.10) is 110.00000000000001), which would drop
-        # it on the call side but keep it on the put side. A relative epsilon
-        # keeps the two sides symmetric.
-        tolerance = 1.0 + 1e-9
-        if side == SIDE_PUT:
-            cushion_bound = s * (1.0 - min_otm_pct) * tolerance
-            chosen = [value for value in chosen if value <= cushion_bound]
-        else:
-            cushion_bound = s * (1.0 + min_otm_pct) / tolerance
-            chosen = [value for value in chosen if value >= cushion_bound]
-    return chosen
-
-
-def select_roll_exit_strikes(side: str, strikes: list[float], spot: float | None,
-                             *, max_itm_strikes: int) -> list[float]:
-    """Nearest ITM strikes for a separately labelled roll/exit diagnostic."""
-    if max_itm_strikes < 0:
-        raise ValueError("max_itm_strikes must be nonnegative")
-    s = _num(spot)
-    if s is None or s <= 0 or max_itm_strikes == 0:
-        return []
-    clean = sorted({value for value in (_num(item) for item in strikes)
-                    if value is not None})
-    if side == SIDE_PUT:
-        chosen = [value for value in clean if value > s][:max_itm_strikes]
-    elif side == SIDE_CALL:
-        chosen = [value for value in clean if value < s][-max_itm_strikes:]
-    else:
-        raise ValueError(f"unsupported option side: {side}")
-    return sorted(chosen)
-
-
-def build_underlying_pool(wheel_df: pd.DataFrame, *, min_dollar_volume: float,
-                          fetch_pool_n: int,
-                          trend_exclude: set[str] | None = None,
-                          symbol_scope: set[str] | None = None) -> tuple[pd.DataFrame, dict]:
-    """Horizon-independent S2 fetch pool.
-
-    Wheel symbol context is repeated on every horizon row, so one deterministic
-    row per symbol owns the underlying gates. Event-window state is deliberately
-    not consulted here; it is evaluated only after listed expiry discovery.
-
-    `symbol_scope` narrows the request to symbols the caller asked for. It is
-    applied after the quality/liquidity/trend gates but BEFORE the RV rank cap,
-    so an explicitly requested symbol is ranked within the requested set rather
-    than being silently displaced by higher-RV symbols the caller did not ask
-    for. A symbol dropped here therefore failed a real gate.
-    """
-    if fetch_pool_n < 0:
-        raise ValueError("fetch_pool_n must be nonnegative")
-    rows = (wheel_df.sort_values(["symbol", "horizon_dte"])
-            .drop_duplicates("symbol", keep="first").copy())
-    rows = rows[rows["data_quality"] == "OK"]
-    rows = rows[pd.to_numeric(rows["avg_dollar_volume_20"], errors="coerce")
-                >= min_dollar_volume]
-    if trend_exclude:
-        excluded = {symbol.upper() for symbol in trend_exclude}
-        rows = rows[~rows["symbol"].astype(str).str.upper().isin(excluded)]
-        trend_applied = True
-    else:
-        trend_applied = False
-    if symbol_scope:
-        requested = {symbol.upper() for symbol in symbol_scope}
-        rows = rows[rows["symbol"].astype(str).str.upper().isin(requested)]
-    rows["rv_percentile_252"] = pd.to_numeric(
-        rows["rv_percentile_252"], errors="coerce")
-    rows = rows.sort_values(
-        ["rv_percentile_252", "symbol"], ascending=[False, True],
-        na_position="last").head(fetch_pool_n).reset_index(drop=True)
-    return rows, {
-        "pool_size": int(len(rows)),
-        "trend_filter_applied": trend_applied,
-    }
-
-
-def rv_window_for_actual_dte(actual_dte: int,
-                             rv_window_by_max_dte: dict[int, int]) -> int | None:
-    """Declared step-function RV mapping for an actual listed expiry."""
-    for max_dte, window in sorted(rv_window_by_max_dte.items()):
-        if actual_dte <= max_dte:
-            return window
-    return None
-
-
-def derive_actual_expiry_context(symbol_rows: pd.DataFrame, *, actual_dte: int,
-                                 expiry: str, event_dates: list[pd.Timestamp],
-                                 events_coverage_end: pd.Timestamp | None,
-                                 rv_window_by_max_dte: dict[int, int]) -> tuple[dict, list[str]]:
-    """Derive volatility/session/event context after listed-expiry discovery."""
-    if symbol_rows.empty:
-        return {}, [PAIR_SPOT_UNAVAILABLE]
-    base = symbol_rows.sort_values("horizon_dte").iloc[0]
-    spot = _num(base.get("last_close"))
-    price_as_of = pd.to_datetime(base.get("price_as_of"), errors="coerce")
-    expiry_ts = pd.to_datetime(expiry, errors="coerce")
-    reasons: list[str] = []
-    if spot is None or spot <= 0 or pd.isna(price_as_of) or pd.isna(expiry_ts):
-        reasons.append(PAIR_SPOT_UNAVAILABLE)
-        sessions = pd.DatetimeIndex([])
-    else:
-        sessions = nyse_sessions(price_as_of, expiry_ts)
-    if len(sessions) == 0:
-        reasons.append(PAIR_NO_FUTURE_SESSIONS)
-
-    rv_window = rv_window_for_actual_dte(actual_dte, rv_window_by_max_dte)
-    sigma_daily = (_num(base.get(f"rv{rv_window}_used"))
-                   if rv_window is not None else None)
-    if sigma_daily is None:
-        exact = symbol_rows[symbol_rows["horizon_dte"] == actual_dte]
-        if not exact.empty and _num(exact.iloc[0].get("rv_window_sessions")) == rv_window:
-            sigma_daily = _num(exact.iloc[0].get("rv_used_daily"))
-    if rv_window is None or sigma_daily is None:
-        reasons.append(PAIR_RV_UNAVAILABLE)
-
-    exact = symbol_rows[symbol_rows["horizon_dte"] == actual_dte]
-    exact_event_state = (_text(exact.iloc[0].get("earnings_window_state"))
-                         if not exact.empty else None)
-    if exact_event_state in {EVENT_KNOWN, EVENT_NONE_IN_RANGE, EVENT_UNKNOWN_STALE}:
-        event_state = exact_event_state
-        context_source = "ACTUAL_EXPIRY_DERIVED_WHEEL_EVENT_EXACT"
-    elif pd.isna(price_as_of):
-        event_state = EVENT_UNKNOWN_STALE
-        context_source = "ACTUAL_EXPIRY_DERIVED_EVENT_UNAVAILABLE"
-    else:
-        event_state = event_window_state(
-            price_as_of, actual_dte, event_dates, events_coverage_end)
-        context_source = "ACTUAL_EXPIRY_DERIVED_RAW_EVENT_COVERAGE"
-    if event_state == EVENT_UNKNOWN_STALE:
-        reasons.append(PAIR_EVENT_COVERAGE_UNKNOWN)
-
-    move_pct = (sigma_daily * math.sqrt(len(sessions))
-                if sigma_daily is not None and len(sessions) > 0 else None)
-    return {
-        "spot": spot,
-        "rv_used_daily": sigma_daily,
-        "annualized_rv": annualized_rv(sigma_daily),
-        "one_sigma_pct": move_pct,
-        "rv_percentile_252": _num(base.get("rv_percentile_252")),
-        "earnings_in_window": event_state == EVENT_KNOWN,
-        "earnings_window_state": event_state,
-        "context_dte": actual_dte,
-        "context_sessions": int(len(sessions)),
-        "context_sessions_source": NYSE_STANDARD_CALENDAR_SOURCE,
-        "context_source": context_source,
-        "context_price_as_of": (price_as_of.strftime("%Y-%m-%d")
-                                if not pd.isna(price_as_of) else None),
-        "rv_window_sessions": rv_window,
-        "pair_eligible": not reasons,
-    }, list(dict.fromkeys(reasons))
-
-
-# ---------------------------------------------------------------------------
-# Per-symbol chain processing (pure w.r.t. an injected chain object)
-# ---------------------------------------------------------------------------
-
-def apply_quote_observation(row: dict, cfg: dict, *, bid, ask,
-                            quote_timestamp, retrieved_at,
-                            quote_source: str,
-                            quote_provider_status: str,
-                            quote_streamer_symbol: str | None = None,
-                            bid_timestamp=None, ask_timestamp=None,
-                            quote_event_timestamp=None,
-                            bid_size=None, ask_size=None) -> dict:
-    """Apply one quote to a canonical contract row and recompute every gate.
-
-    Yahoo and Tastytrade observations pass through this same function so quote
-    freshness, liquidity, seller economics, and entry eligibility cannot drift
-    between the diagnostic fallback and executable provider paths.
-    """
-    result = dict(row)
-    bid_value, ask_value = _num(bid), _num(ask)
-    mid = compute_mid(bid_value, ask_value)
-    spread_abs, spread_pct = spread(bid_value, ask_value, mid)
-    seller_fill = bid_value if bid_value is not None and bid_value > 0 else None
-    intrinsic = option_intrinsic_value(
-        str(result.get("side")), result.get("strike"), result.get("spot")
-    )
-    raw_extrinsic = (
-        seller_fill - intrinsic
-        if seller_fill is not None and intrinsic is not None
-        else None
-    )
-    negative_tolerance = float(cfg.get(
-        "negative_extrinsic_tolerance", DEFAULT_NEGATIVE_EXTRINSIC_TOLERANCE
-    ))
-    extrinsic = (
-        max(raw_extrinsic, 0.0)
-        if raw_extrinsic is not None and raw_extrinsic >= -negative_tolerance
-        else None
-    )
-    quality, normalized_timestamp, quote_age, market_session, quality_reasons = (
-        quote_quality(
-            quote_timestamp, retrieved_at, bid_value, ask_value, raw_extrinsic,
-            max_age_seconds=int(cfg.get(
-                "max_quote_age_seconds", DEFAULT_MAX_QUOTE_AGE_SECONDS)),
-            future_tolerance_seconds=int(cfg.get(
-                "future_quote_tolerance_seconds",
-                DEFAULT_FUTURE_QUOTE_TOLERANCE_SECONDS)),
-            negative_extrinsic_tolerance=negative_tolerance,
-            require_rth=bool(cfg.get("require_rth", DEFAULT_REQUIRE_RTH)),
-        )
-    )
-
-    side = str(result.get("side"))
-    strike = _num(result.get("strike"))
-    spot = _num(result.get("spot"))
-    moneyness = result.get("moneyness")
-    analysis_view = result.get("analysis_view")
-    economics_allowed = (
-        quality == QUOTE_OK
-        and moneyness == MONEYNESS_OTM
-        and analysis_view == VIEW_ENTRY
-        and result.get("contract_quality") == CONTRACT_OK
-        and result.get("is_standard") is True
-    )
-    if economics_allowed and side == SIDE_PUT:
-        gross_yield = csp_period_yield(seller_fill, strike)
-        midpoint_yield = csp_period_yield(mid, strike)
-        extrinsic_yield = csp_period_yield(extrinsic, strike)
-        net_assignment_basis = (
-            strike - seller_fill
-            if strike is not None and seller_fill is not None else None
-        )
-        basis_cushion = (
-            (spot - net_assignment_basis) / spot
-            if spot not in (None, 0) and net_assignment_basis is not None else None
-        )
-        called_away_pnl = None
-        downside_breakeven = None
-    elif economics_allowed and side == SIDE_CALL:
-        gross_yield = cc_period_yield(seller_fill, spot)
-        midpoint_yield = cc_period_yield(mid, spot)
-        extrinsic_yield = cc_period_yield(extrinsic, spot)
-        net_assignment_basis = None
-        basis_cushion = None
-        called_away_pnl = (
-            strike + seller_fill - spot
-            if None not in (strike, seller_fill, spot) else None
-        )
-        downside_breakeven = (
-            spot - seller_fill
-            if spot is not None and seller_fill is not None else None
-        )
-    else:
-        gross_yield = midpoint_yield = extrinsic_yield = None
-        net_assignment_basis = basis_cushion = None
-        called_away_pnl = downside_breakeven = None
-
-    liquidity_ok, gate_reasons = liquidity_gate(
-        mid, result.get("open_interest"), spread_pct,
-        cfg["oi_min"], cfg["max_spread_pct"]
-    )
-    if analysis_view == VIEW_ROLL_EXIT or moneyness == MONEYNESS_ITM:
-        entry_reasons = [ENTRY_ITM_EXCLUDED]
-    elif moneyness == MONEYNESS_ATM:
-        entry_reasons = [ENTRY_ATM_EXCLUDED]
-    elif moneyness is None:
-        entry_reasons = [ENTRY_MONEYNESS_UNKNOWN]
-    else:
-        entry_reasons = []
-    if quality != QUOTE_OK:
-        entry_reasons.append(ENTRY_QUOTE_NOT_OK)
-    if (result.get("contract_quality") != CONTRACT_OK
-            or result.get("is_standard") is not True):
-        entry_reasons.append(ENTRY_CONTRACT_NOT_OK)
-
-    result.update({
-        "bid": bid_value,
-        "ask": ask_value,
-        "mid": mid,
-        "spread_abs": spread_abs,
-        "spread_pct": spread_pct,
-        "quote_source": quote_source,
-        "quote_provider_status": quote_provider_status,
-        "quote_streamer_symbol": quote_streamer_symbol,
-        "bid_timestamp": _timestamp_text(bid_timestamp),
-        "ask_timestamp": _timestamp_text(ask_timestamp),
-        "quote_event_timestamp": _timestamp_text(quote_event_timestamp),
-        "bid_size": _num(bid_size),
-        "ask_size": _num(ask_size),
-        "quote_timestamp": normalized_timestamp,
-        "retrieved_at": _timestamp_text(retrieved_at),
-        "market_session": market_session,
-        "quote_age_seconds": quote_age,
-        "quote_quality": quality,
-        "quote_quality_reasons": ";".join(quality_reasons),
-        "seller_fill_method": "BID",
-        "seller_fill": seller_fill,
-        "intrinsic_value": intrinsic,
-        "raw_extrinsic_value": raw_extrinsic,
-        "extrinsic_value": extrinsic,
-        "gross_premium_yield": gross_yield,
-        "midpoint_premium_yield": midpoint_yield,
-        "extrinsic_yield": extrinsic_yield,
-        "net_assignment_basis": net_assignment_basis,
-        "basis_cushion": basis_cushion,
-        "called_away_pnl_vs_spot": called_away_pnl,
-        "downside_breakeven": downside_breakeven,
-        "period_yield": gross_yield,
-        "simple_apr": simple_apr(gross_yield, result.get("actual_dte")),
-        "liquidity_ok": liquidity_ok,
-        "gate_reason": ";".join(gate_reasons),
-        "entry_eligible": (
-            analysis_view == VIEW_ENTRY and liquidity_ok and not entry_reasons
-        ),
-        "entry_reason": ";".join(entry_reasons),
-    })
-    return result
-
-
-def _side_rows(symbol: str, as_of: str, chain_dte: int, expiry: str, actual_dte: int,
-               side: str, chain_df, ctx: dict, cfg: dict,
-               retrieved_at=None, min_otm_pct: float | None = None) -> list[dict]:
-    """Build the premium rows for ONE side (puts or calls) of one expiry.
-
-    `min_otm_pct` narrows only the ENTRY view. ROLL_EXIT strikes are ITM by
-    definition, so an OTM cushion cannot describe them; they are collected
-    unchanged and stay entry-ineligible.
-    """
-    out: list[dict] = []
-    if chain_df is None or len(chain_df) == 0:
-        return out
-    spot = ctx.get("spot")
-    ann_rv = ctx.get("annualized_rv")
-    one_sigma = ctx.get("one_sigma_pct")
-    rv_pct = ctx.get("rv_percentile_252")
-    earnings = ctx.get("earnings_in_window", False)
-
-    strikes = [_num(s) for s in chain_df["strike"].tolist()]
-    clean_strikes = [s for s in strikes if s is not None]
-    policy_prefix = "put_entry" if side == SIDE_PUT else "call_entry"
-    entry_chosen = set(select_entry_strikes(
-        side, clean_strikes, spot, one_sigma,
-        band_mult=float(cfg.get(f"{policy_prefix}_band_mult", DEFAULT_BAND_MULT)),
-        extra_strikes_beyond_band=int(cfg.get(
-            f"{policy_prefix}_extra_strikes", DEFAULT_ENTRY_EXTRA_STRIKES)),
-        min_otm_pct=min_otm_pct,
-    ))
-    roll_exit_chosen = set(select_roll_exit_strikes(
-        side, clean_strikes, spot,
-        max_itm_strikes=int(cfg.get(
-            "roll_exit_max_itm_strikes", DEFAULT_ROLL_EXIT_STRIKES)),
-    ))
-    chosen = entry_chosen | roll_exit_chosen
-
-    for _, r in chain_df.iterrows():
-        strike = _num(r.get("strike"))
-        if strike is None or strike not in chosen:
-            continue
-        analysis_view = VIEW_ENTRY if strike in entry_chosen else VIEW_ROLL_EXIT
-        if side == SIDE_PUT:
-            strategy_role = ROLE_CSP_ENTRY if analysis_view == VIEW_ENTRY else ROLE_PUT_ROLL_EXIT
-        else:
-            strategy_role = (ROLE_COVERED_CALL_ENTRY if analysis_view == VIEW_ENTRY
-                             else ROLE_CALL_ROLL_EXIT)
-        if analysis_view == VIEW_ENTRY:
-            # The row records the cushion narrowing so an archived strike set is
-            # readable without consulting the run manifest.
-            selection_policy = (f"{side}_OTM_SIGMA_BAND_MIN_OTM" if min_otm_pct
-                                else f"{side}_OTM_SIGMA_BAND")
-        else:
-            selection_policy = f"{side}_NEAREST_ITM"
-        moneyness = option_moneyness(side, strike, spot)
-        contract = canonical_contract(symbol, expiry, side, strike, r)
-        quote_timestamp = r.get("quoteTimestamp")
-        if quote_timestamp is None or pd.isna(quote_timestamp):
-            quote_timestamp = r.get("quote_timestamp")
-        iv = _num(r.get("impliedVolatility"))
-        iv_ratio, iv_diff = iv_vs_rv(iv, ann_rv)
-        oi = _num(r.get("openInterest"))
-        vol = _num(r.get("volume"))
-        base = {
-            "schema_version": PREMIUM_SCHEMA_VERSION,
-            **contract,
-            "symbol": symbol,
-            "as_of": as_of,
-            "spot": spot,
-            "chain_dte": chain_dte,
-            "requested_dte": chain_dte,
-            "expiry": expiry,
-            "actual_dte": actual_dte,
-            "dte_deviation": abs(actual_dte - chain_dte),
-            "context_dte": ctx.get("context_dte", chain_dte),
-            "context_sessions": ctx.get("context_sessions"),
-            "context_sessions_source": ctx.get("context_sessions_source"),
-            "context_source": ctx.get("context_source"),
-            "context_price_as_of": ctx.get("context_price_as_of"),
-            "rv_window_sessions": ctx.get("rv_window_sessions"),
-            "horizon_status": ("EXACT" if actual_dte == chain_dte
-                               else "WITHIN_TOLERANCE"),
-            "side": side,
-            "strike": strike,
-            "moneyness": moneyness,
-            "analysis_view": analysis_view,
-            "strategy_role": strategy_role,
-            "selection_policy": selection_policy,
-            "last_price": _num(r.get("lastPrice")),
-            "implied_volatility": iv,
-            "open_interest": oi,
-            "volume": vol,
-            "last_trade_timestamp": _timestamp_text(r.get("lastTradeDate")),
-            "annualized_rv": ann_rv,
-            "iv_vs_rv_ratio": iv_ratio,
-            "iv_vs_rv_diff": iv_diff,
-            "rv_percentile_252": rv_pct,
-            "one_sigma_pct": one_sigma,
-            "earnings_in_window": earnings,
-            "earnings_window_state": ctx.get("earnings_window_state"),
-            "pair_eligible": bool(ctx.get("pair_eligible", True)),
-        }
-        out.append(apply_quote_observation(
-            base, cfg,
-            bid=r.get("bid"), ask=r.get("ask"),
-            quote_timestamp=quote_timestamp, retrieved_at=retrieved_at,
-            quote_source=QUOTE_SOURCE_YAHOO,
-            quote_provider_status=QUOTE_PROVIDER_DIAGNOSTIC_FALLBACK,
-            quote_streamer_symbol=occ_to_dxfeed_symbol(
-                contract.get("provider_contract_symbol") or ""
-            ) or None,
-        ))
-    return out
-
-
-def process_symbol_chains(symbol: str, chain_obj, chain_dtes: list[int],
-                          as_of: str, as_of_ts: pd.Timestamp,
-                          ctx_by_dte: dict[int, dict], cfg: dict, *,
-                          retrieved_at=None, min_otm_pct: float | None = None,
-                          listed_expiries: list[str] | None = None) -> tuple[list[dict], dict]:
-    """Fetch + parse one symbol's chains for every configured chain DTE. Reads
-    the expiry listing once, caches each expiry's chain (so two DTEs mapping to
-    the same expiry cost one request), and is defensive per-expiry: a bad expiry
-    is skipped, the rest continue. `chain_obj` is the injected yfinance-Ticker-
-    shaped object (real in prod, a fake in tests). Returns (rows, status)."""
-    rows: list[dict] = []
-    status: dict = {"symbol": symbol, "expiries_used": {},
-                    "horizon_exclusions": {}, "reason": ""}
-
-    if listed_expiries is None:
-        try:
-            expiries = list(chain_obj.options or [])
-        except Exception as exc:  # noqa: BLE001 - per-symbol isolation
-            status["reason"] = f"options_error:{str(exc)[:120]}"
-            return rows, status
-    else:
-        expiries = list(listed_expiries)
-    if not expiries:
-        status["reason"] = SKIP_NO_EXPIRIES
-        return rows, status
-
-    chain_cache: dict[str, tuple | None] = {}
-    for dte in chain_dtes:
-        ctx = ctx_by_dte.get(dte)
-        if ctx is None:
-            continue
-        tolerance = int(cfg.get("expiry_tolerance_days", {}).get(
-            dte, DEFAULT_EXPIRY_TOLERANCE_DAYS))
-        unrestricted = nearest_expiry(expiries, as_of_ts, dte)
-        sel = nearest_expiry(expiries, as_of_ts, dte, tolerance)
-        if sel is None:
-            status["horizon_exclusions"][str(dte)] = {
-                "reason": SKIP_NO_EXPIRY_WITHIN_TOLERANCE,
-                "tolerance_days": tolerance,
-                "nearest_actual_dte": unrestricted[1] if unrestricted else None,
-            }
-            continue
-        expiry, actual_dte = sel
-        status["expiries_used"][str(dte)] = expiry
-        if expiry not in chain_cache:
-            try:
-                oc = chain_obj.option_chain(expiry)
-                chain_cache[expiry] = (oc.puts, oc.calls)
-            except Exception as exc:  # noqa: BLE001 - per-expiry isolation
-                chain_cache[expiry] = None
-                status.setdefault("expiry_errors", {})[expiry] = str(exc)[:120]
-        cached = chain_cache[expiry]
-        if cached is None:
-            continue
-        puts, calls = cached
-        rows += _side_rows(symbol, as_of, dte, expiry, actual_dte, SIDE_PUT,
-                           puts, ctx, cfg, retrieved_at, min_otm_pct)
-        rows += _side_rows(symbol, as_of, dte, expiry, actual_dte, SIDE_CALL,
-                           calls, ctx, cfg, retrieved_at, min_otm_pct)
-
-    if not rows and not status["reason"]:
-        status["reason"] = (SKIP_NO_EXPIRY_WITHIN_TOLERANCE
-                            if status["horizon_exclusions"] else SKIP_NO_ROWS)
-    elif min_otm_pct and not any(row.get("analysis_view") == VIEW_ENTRY
-                                 for row in rows):
-        # Chains were fetched and ROLL_EXIT rows may exist, but the cushion left
-        # no entry candidate. Attribute that to the scope, not to the market.
-        status["min_otm_excluded_all_entries"] = True
-    return rows, status
-
-
-def enrich_tastytrade_quotes(report: pd.DataFrame, cfg: dict,
-                             batch: QuoteBatch) -> pd.DataFrame:
-    """Replace diagnostic Yahoo prices with exact Tastytrade observations.
-
-    Contracts missing from the provider batch retain Yahoo values for visual
-    diagnostics, but are explicitly marked ``MISSING`` and remain fail-closed
-    because Yahoo supplies no bid/ask observation timestamp.
-    """
-    if report.empty:
-        return report.copy()
-    enriched: list[dict] = []
-    for row in report.to_dict(orient="records"):
-        provider_symbol = str(row.get("provider_contract_symbol") or "").upper()
-        observation = batch.quotes.get(provider_symbol)
-        if observation is None:
-            eligible_contract = (
-                row.get("contract_quality") == CONTRACT_OK
-                and row.get("is_standard") is True
-                and bool(provider_symbol)
-            )
-            row["quote_provider_status"] = (
-                QUOTE_PROVIDER_MISSING if eligible_contract
-                else QUOTE_PROVIDER_NOT_REQUESTED
-            )
-            enriched.append(row)
-            continue
-        enriched.append(apply_quote_observation(
-            row, cfg,
-            bid=observation.get("bid"), ask=observation.get("ask"),
-            quote_timestamp=observation.get("quote_timestamp"),
-            retrieved_at=batch.retrieved_at,
-            quote_source=SOURCE_TASTYTRADE_DXLINK,
-            quote_provider_status=QUOTE_PROVIDER_RECEIVED,
-            quote_streamer_symbol=observation.get("streamer_symbol"),
-            bid_timestamp=observation.get("bid_timestamp"),
-            ask_timestamp=observation.get("ask_timestamp"),
-            quote_event_timestamp=observation.get("event_timestamp"),
-            bid_size=observation.get("bid_size"),
-            ask_size=observation.get("ask_size"),
-        ))
-    return pd.DataFrame(enriched, columns=PREMIUM_COLUMNS)
-
 
 # ---------------------------------------------------------------------------
 # yfinance bridge (network) -- injected so the core stays test-isolated
