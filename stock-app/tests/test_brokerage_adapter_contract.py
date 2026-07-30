@@ -20,8 +20,9 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, options_activity, retirement_options
+from app import config, options_activity
 from app.brokerages import registry
+from app.brokerages.importers import snaptrade as snaptrade_importer
 from app.main import app
 from tests import brokerage_contract_spec as spec
 from tests.test_brokerage_adapters import (CONTRACT, adapter_env,  # noqa: F401
@@ -97,7 +98,7 @@ def test_a_sync_creates_no_group_state(adapter_env, monkeypatch):
 
     assert "legacy_groups" not in inspect.signature(options_activity.sync).parameters
     assert "legacy_groups" not in inspect.signature(
-        retirement_options.sync_events
+        snaptrade_importer.sync_events
     ).parameters
     # The mutation entry points, the group artifact paths, and the header
     # constants that described their rows are gone rather than merely
@@ -105,7 +106,7 @@ def test_a_sync_creates_no_group_state(adapter_env, monkeypatch):
     for module, names in (
         (options_activity, ("create_group", "update_group", "assign_event",
                             "GROUP_HEADERS", "MEMBER_HEADERS")),
-        (retirement_options, ("create_group", "update_group", "assign_event",
+        (snaptrade_importer, ("create_group", "update_group", "assign_event",
                               "GROUP_HEADERS")),
         (config, ("options_groups_csv", "options_group_members_csv",
                   "retirement_option_groups_csv")),

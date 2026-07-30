@@ -1,8 +1,8 @@
 """Self-contained options portfolio risk calculations.
 
 Broker-position rows are prepared by :mod:`app.options_activity` and
-:mod:`app.retirement_options`; this analytics layer uses floats for
-Black-Scholes, volatility, regression, and exposure estimates.
+:mod:`app.brokerages.importers.held_option_market_data`; this analytics layer
+uses floats for Black-Scholes, volatility, regression, and exposure estimates.
 """
 
 from __future__ import annotations

@@ -1,15 +1,22 @@
+"""Held-option beta/Greek materialization from the SnapTrade holdings ledger.
+
+Covers current-leg selection, short-call share coverage, provider-quote
+timestamps, retain-prior-on-miss, and the safe optional-error surface.
+"""
+
 from __future__ import annotations
 
 import csv
 import socket
 import sys
-from datetime import date, datetime, timezone
-from types import SimpleNamespace
-from types import ModuleType
+from datetime import datetime, timezone
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from app import config, retirement_options, snaptrade_service
+from app import config
+from app.brokerages.importers import held_option_market_data as market_data
+from app.brokerages.importers import snaptrade as importer
 
 
 def _betas_fetcher(include):
@@ -48,17 +55,17 @@ def _greeks_fetcher(include):
 
 
 def _beta_symbols():
-    return {r["symbol"] for r in retirement_options._read_rows(
-        config.retirement_option_betas_csv(), retirement_options.BETA_HEADERS)}
+    return {r["symbol"] for r in market_data.read_rows(
+        config.retirement_option_betas_csv(), market_data.BETA_HEADERS)}
 
 
 def _greek_keys():
-    return {r["contract_key"] for r in retirement_options._read_rows(
-        config.retirement_option_greeks_csv(), retirement_options.GREEKS_HEADERS)}
+    return {r["contract_key"] for r in market_data.read_rows(
+        config.retirement_option_greeks_csv(), market_data.GREEKS_HEADERS)}
 
 
 def _install_fake_tastytrade(monkeypatch):
-    """Install only the SDK surface the retirement market-data calls use."""
+    """Install only the SDK surface the held-option market-data calls use."""
     sessions = []
     streamers = []
 
@@ -121,9 +128,6 @@ def _install_fake_tastytrade(monkeypatch):
 def opts_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SFP_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("SFP_SNAPTRADE_HOLDINGS", str(tmp_path / "holdings.csv"))
-    monkeypatch.setenv("SFP_RETIREMENT_OPTION_GROUPS", str(tmp_path / "groups.csv"))
-    monkeypatch.setenv("SFP_OPTIONS_GROUPS", str(tmp_path / "app_groups.csv"))
-    monkeypatch.setenv("SFP_OPTIONS_GROUP_MEMBERS", str(tmp_path / "app_group_members.csv"))
     monkeypatch.setenv("SFP_RETIREMENT_OPTION_BETAS", str(tmp_path / "betas.csv"))
     monkeypatch.setenv("SFP_RETIREMENT_OPTION_EVENTS", str(tmp_path / "events.csv"))
     return tmp_path
@@ -139,8 +143,8 @@ def test_default_market_data_fetchers_use_three_credentials_and_close(monkeypatc
     monkeypatch.setattr(socket, "create_connection",
                         lambda *_args, **_kwargs: pytest.fail("unexpected network call"))
 
-    betas = retirement_options._fetch_betas(["SPCX"])
-    observations = retirement_options._fetch_greeks(
+    betas = market_data._fetch_betas(["SPCX"])
+    observations = market_data._fetch_greeks(
         [{"contract_symbol": "SPCX  260821P00095000"}], timeout_seconds=1.0
     )
 
@@ -163,10 +167,10 @@ def test_market_data_sync_errors_hide_provider_message(monkeypatch):
     def fail():
         raise RuntimeError(f"provider rejected {secret} for {account}")
 
-    monkeypatch.setattr(retirement_options, "sync_betas", fail)
-    monkeypatch.setattr(retirement_options, "sync_greeks", fail)
+    monkeypatch.setattr(market_data, "sync_betas", fail)
+    monkeypatch.setattr(market_data, "sync_greeks", fail)
 
-    report = retirement_options.sync_market_data()
+    report = market_data.sync_market_data()
 
     assert report == {
         "betas_error": "RuntimeError: Tastytrade market data is unavailable; "
@@ -216,13 +220,17 @@ def _ledger_rows():
     ]
 
 
-def _write_ledger(env):
+def _write_rows(rows):
     path = config.snaptrade_holdings_csv()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=snaptrade_service.HOLDINGS_HEADERS)
+        writer = csv.DictWriter(handle, fieldnames=importer.HOLDINGS_HEADERS)
         writer.writeheader()
-        writer.writerows(_ledger_rows())
+        writer.writerows(rows)
+
+
+def _write_ledger(env):
+    _write_rows(_ledger_rows())
 
 
 # --------------------------------------------------------------------------- #
@@ -231,7 +239,7 @@ def _write_ledger(env):
 
 def test_option_rows_map_trade_type_and_underlying(opts_env):
     _write_ledger(opts_env)
-    rows = retirement_options._option_rows()
+    rows = market_data._option_rows()
     assert len(rows) == 2  # cash excluded
     by_symbol = {r["symbol"]: r for r in rows}
     assert by_symbol["SPCX"]["trade_type"] == "SHORT_PUT"   # negative qty put
@@ -268,15 +276,6 @@ def _short_call(symbol, quantity="-1", *, strike="61", account_name="BrokerageLi
     }
 
 
-def _write_rows(rows):
-    path = config.snaptrade_holdings_csv()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=snaptrade_service.HOLDINGS_HEADERS)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
 def test_short_calls_report_share_coverage_from_the_holdings_ledger(opts_env):
     """The retirement wheel is written against shares held in the same account."""
     _write_rows([
@@ -291,7 +290,7 @@ def test_short_calls_report_share_coverage_from_the_holdings_ledger(opts_env):
         _holding("AMD", "500", account_name="ROTH IRA"),
     ])
 
-    by_symbol = {row["symbol"]: row for row in retirement_options._option_rows()}
+    by_symbol = {row["symbol"]: row for row in market_data._option_rows()}
 
     assert by_symbol["CLX"]["trade_type"] == "COVERED_CALL"
     assert by_symbol["CLX"]["coverage"] == "COVERED"
@@ -306,7 +305,7 @@ def test_short_calls_report_share_coverage_from_the_holdings_ledger(opts_env):
 def test_cash_is_not_share_coverage(opts_env):
     _write_rows([_short_call("CLX"), _holding("FDRXX", "100000", asset_class="CASH")])
 
-    rows = retirement_options._option_rows()
+    rows = market_data._option_rows()
 
     assert rows[0]["coverage"] == "UNCOVERED"
 
@@ -314,26 +313,27 @@ def test_cash_is_not_share_coverage(opts_env):
 def test_epoch_ms_to_iso_utc_date():
     # dxFeed quote time (epoch ms) -> UTC ISO; preserves the market-day date so a
     # post-UTC-midnight fetch is not dated "tomorrow" and dropped by the as-of filter.
-    iso = retirement_options._epoch_ms_to_iso(1784851143002)
+    iso = market_data._epoch_ms_to_iso(1784851143002)
     assert iso.startswith("2026-07-23T23:59:03")
-    assert retirement_options._epoch_ms_to_iso(None) == ""
-    assert retirement_options._epoch_ms_to_iso(0) == ""
-    assert retirement_options._epoch_ms_to_iso("nope") == ""
+    assert market_data._epoch_ms_to_iso(None) == ""
+    assert market_data._epoch_ms_to_iso(0) == ""
+    assert market_data._epoch_ms_to_iso("nope") == ""
 
 
 def test_greeks_csv_matches_risk_engine_loader(opts_env):
     # A greeks row written in our schema must be accepted by the shared loader and
     # matched to a risk row on (contract_key, account).
     from datetime import date
+
     from app.options_market import _load_tasty_greeks
 
     _write_ledger(opts_env)
-    rows = retirement_options._option_rows()
+    rows = market_data._option_rows()
     spcx = next(r for r in rows if r["symbol"] == "SPCX")
     path = config.retirement_option_greeks_csv()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=retirement_options.GREEKS_HEADERS)
+        writer = csv.DictWriter(handle, fieldnames=market_data.GREEKS_HEADERS)
         writer.writeheader()
         writer.writerow({
             "schema_version": "1", "source": "TASTYTRADE_DXLINK",
@@ -353,17 +353,17 @@ def test_greeks_csv_matches_risk_engine_loader(opts_env):
 def test_sync_betas_retains_on_miss(opts_env):
     _write_ledger(opts_env)  # underlyings: FLKR, SPCX
 
-    r1 = retirement_options.sync_betas(fetcher=_betas_fetcher({"FLKR", "SPCX"}))
+    r1 = market_data.sync_betas(fetcher=_betas_fetcher({"FLKR", "SPCX"}))
     assert (r1["observed"], r1["retained"], r1["missing"]) == (2, 0, 0)
     assert _beta_symbols() == {"FLKR", "SPCX"}
 
     # FLKR omitted this run: kept from the prior file, not dropped.
-    r2 = retirement_options.sync_betas(fetcher=_betas_fetcher({"SPCX"}))
+    r2 = market_data.sync_betas(fetcher=_betas_fetcher({"SPCX"}))
     assert (r2["observed"], r2["retained"], r2["missing"]) == (1, 1, 0)
     assert _beta_symbols() == {"FLKR", "SPCX"}
 
     # Both omitted: both retained.
-    r3 = retirement_options.sync_betas(fetcher=_betas_fetcher(set()))
+    r3 = market_data.sync_betas(fetcher=_betas_fetcher(set()))
     assert (r3["observed"], r3["retained"]) == (0, 2)
     assert _beta_symbols() == {"FLKR", "SPCX"}
 
@@ -371,162 +371,37 @@ def test_sync_betas_retains_on_miss(opts_env):
 def test_sync_betas_missing_without_prior(opts_env):
     _write_ledger(opts_env)
     # No prior file and nothing returned -> counted missing, none stored.
-    r = retirement_options.sync_betas(fetcher=_betas_fetcher(set()))
+    r = market_data.sync_betas(fetcher=_betas_fetcher(set()))
     assert (r["observed"], r["retained"], r["missing"]) == (0, 0, 2)
     assert _beta_symbols() == set()
 
 
 def test_sync_greeks_retains_on_miss(opts_env):
     _write_ledger(opts_env)
-    spcx_key = next(r["contract_key"] for r in retirement_options._option_rows()
+    spcx_key = next(r["contract_key"] for r in market_data._option_rows()
                     if r["symbol"] == "SPCX")
-    flkr_key = next(r["contract_key"] for r in retirement_options._option_rows()
+    flkr_key = next(r["contract_key"] for r in market_data._option_rows()
                     if r["symbol"] == "FLKR")
 
-    r1 = retirement_options.sync_greeks(fetcher=_greeks_fetcher({"FLKR", "SPCX"}))
+    r1 = market_data.sync_greeks(fetcher=_greeks_fetcher({"FLKR", "SPCX"}))
     assert (r1["observed"], r1["retained"]) == (2, 0)
     assert _greek_keys() == {spcx_key, flkr_key}
 
     # FLKR contract returns nothing this run: prior observation retained.
-    r2 = retirement_options.sync_greeks(fetcher=_greeks_fetcher({"SPCX"}))
+    r2 = market_data.sync_greeks(fetcher=_greeks_fetcher({"SPCX"}))
     assert (r2["observed"], r2["retained"], r2["missing"]) == (1, 1, 0)
     assert _greek_keys() == {spcx_key, flkr_key}
 
 
 def test_sync_greeks_drops_contract_no_longer_held(opts_env, monkeypatch):
     _write_ledger(opts_env)
-    retirement_options.sync_greeks(fetcher=_greeks_fetcher({"FLKR", "SPCX"}))
+    market_data.sync_greeks(fetcher=_greeks_fetcher({"FLKR", "SPCX"}))
     assert len(_greek_keys()) == 2
 
     # Positions now hold only the SPCX leg; FLKR is no longer open.
-    spcx_only = [r for r in retirement_options._option_rows() if r["symbol"] == "SPCX"]
-    monkeypatch.setattr(retirement_options, "_option_rows", lambda: spcx_only)
-    retirement_options.sync_greeks(fetcher=_greeks_fetcher(set()))  # nothing fresh
+    spcx_only = [r for r in market_data._option_rows() if r["symbol"] == "SPCX"]
+    monkeypatch.setattr(market_data, "_option_rows", lambda: spcx_only)
+    market_data.sync_greeks(fetcher=_greeks_fetcher(set()))  # nothing fresh
     keys = _greek_keys()
     assert len(keys) == 1  # SPCX retained; FLKR dropped (no longer held)
     assert next(iter(keys)).split()[0] == "SPCX"
-
-
-# --------------------------------------------------------------------------- #
-# immutable option-event ledger (realized P/L survives a close)                 #
-# --------------------------------------------------------------------------- #
-
-def _account():
-    return SimpleNamespace(id="acct-1", name="BrokerageLink")
-
-
-def _opt_activity(act_id, action, activity_type, occ, underlying, opt_type, strike,
-                  expiry, amount, units, price="1.0", fee="0.66",
-                  trade_date="2026-07-15T04:00:00Z"):
-    """A SnapTrade get_account_activities option row, shaped like the SDK body
-    (structured option_symbol + activity-level option_type action)."""
-    return SimpleNamespace(
-        id=act_id, type=activity_type, option_type=action, amount=amount,
-        units=units, price=price, fee=fee, trade_date=trade_date,
-        settlement_date=trade_date,
-        description=f"{action} {opt_type} ({underlying})",
-        option_symbol=SimpleNamespace(
-            ticker=occ, strike_price=strike, expiration_date=expiry,
-            option_type=opt_type,
-            underlying_symbol=SimpleNamespace(symbol=underlying),
-        ),
-    )
-
-
-def _provider(*activities):
-    return lambda start_date, end_date: [(_account(), list(activities))]
-
-
-def _write_empty_ledger(env):
-    """Holdings ledger with a header but no option legs (contracts all closed)."""
-    path = config.snaptrade_holdings_csv()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        csv.DictWriter(handle, fieldnames=snaptrade_service.HOLDINGS_HEADERS).writeheader()
-
-
-_MSFT_OCC = "MSFT  260724P00380000"
-_SPCX_OCC = "SPCX  260821P00095000"
-
-
-def test_sync_events_imports_options_and_is_idempotent(opts_env):
-    provider = _provider(
-        _opt_activity("a1", "SELL_TO_OPEN", "SELL", _MSFT_OCC, "MSFT", "PUT", 380,
-                      "2026-07-24", "370.34", "-1"),
-        SimpleNamespace(id="d1", type="DIVIDEND", option_symbol=None, amount="5",
-                        units="0"),  # non-option: skipped
-    )
-    r = retirement_options.sync_events(provider=provider)
-    assert (r["events_received"], r["events_inserted"], r["events_updated"]) == (1, 1, 0)
-
-    events = retirement_options._read_events()
-    assert len(events) == 1
-    ev = events[0]
-    assert ev["underlying_symbol"] == "MSFT"
-    assert ev["option_type"] == "PUT"          # from option_symbol
-    assert ev["action"] == "SELL_TO_OPEN"      # from activity-level option_type
-    assert ev["occ_symbol"] == _MSFT_OCC
-    assert ev["net_value"] == "370.34"
-    assert ev["units"] == "-1"
-
-    # Re-running the same window upserts by id — no duplicates.
-    r2 = retirement_options.sync_events(provider=provider)
-    assert (r2["events_inserted"], r2["events_updated"]) == (0, 1)
-    assert len(retirement_options._read_events()) == 1
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def test_sync_events_rejects_inverted_window(opts_env):
-    with pytest.raises(retirement_options.RetirementOptionsError):
-        retirement_options.sync_events(provider=_provider(),
-                                       start_date=date(2026, 7, 10),
-                                       end_date=date(2026, 7, 1))
-
-
-
-
-# --------------------------------------------------------------------------- #
-# migration baseline: what the symbol ledger must preserve                      #
-# --------------------------------------------------------------------------- #
-
-_MSFT_OCC_2 = "MSFT  260821P00370000"
-
-
-def _multi_account_provider(*pairs):
-    """Activities split across several Fidelity sub-accounts."""
-    accounts = {}
-    for account_id, account_name, activity in pairs:
-        accounts.setdefault(
-            (account_id, account_name),
-            (SimpleNamespace(id=account_id, name=account_name), []),
-        )[1].append(activity)
-    return lambda start_date, end_date: list(accounts.values())
-
-
-def _open_option_holding(occ, underlying, *, account_id="acct-1",
-                         account_name="BrokerageLink", quantity="-1",
-                         price="2.00", cost_basis="-300", market_value="-200"):
-    return {
-        "schema_version": "1", "source": "SNAPTRADE",
-        "retrieved_at": "2026-07-23T22:00:00+00:00",
-        "imported_at": "2026-07-23T22:00:05+00:00",
-        "account_id": account_id, "account_name": account_name,
-        "account_number": "652", "institution": "Fidelity", "asset_class": "OPTION",
-        "symbol": occ, "description": f"{underlying} put",
-        "underlying_symbol": underlying, "option_type": "PUT", "strike": "370",
-        "expiry": "2026-08-21", "currency": "USD",
-        "quantity": quantity, "price": price, "average_purchase_price": "300",
-        "cost_basis": cost_basis, "market_value": market_value,
-        "open_pnl": "0", "open_pnl_pct": "0",
-    }

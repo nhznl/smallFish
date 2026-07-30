@@ -57,8 +57,9 @@ normalization, and artifact writes.
 | Consumer | Owns after transport returns |
 |---|---|
 | `stock-app/app/options_activity.py` | Account selection, option-event normalization, API sync policy, ledger writes; market-data portion uses `services.options_market` |
-| `stock-app/app/retirement_options.py` | Held-option beta/Greek materialization via `services.options_market`; SnapTrade activity normalization |
-| `stock-app/app/snaptrade_service.py` | Credential persistence, CLI output, holdings/activity normalization, ledger writes |
+| `stock-app/app/brokerages/importers/held_option_market_data.py` | Held-option beta/Greek materialization via `services.options_market` |
+| `stock-app/app/brokerages/importers/snaptrade.py` | SnapTrade holdings/activity normalization and ledger writes |
+| `stock-app/app/snaptrade_service.py` | Credential persistence, setup CLI output, legacy sync orchestration |
 | `utilities/options/market_quotes.py` | Quote coverage metadata, freshness, and premium-archive enrichment from neutral observations |
 | `tools/brokerages.py` | Standard-library verification orchestration and safe human-facing status |
 

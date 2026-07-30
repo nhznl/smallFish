@@ -12,11 +12,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .. import config, options_activity, retirement_options, snaptrade_service
+from .. import config, options_activity
 from .adapters.base import ArtifactAdapter, BrokerageAdapter
 from .adapters.snaptrade import SnapTradeAdapter
 from .adapters.tastytrade import TastytradeAdapter
 from .contracts import BrokerageCapabilities, BrokerageDescriptor
+from .importers import held_option_market_data
+from .importers import snaptrade as snaptrade_importer
 
 
 class UnknownBrokerageError(ValueError):
@@ -81,7 +83,7 @@ def _tastytrade_sync() -> dict:
 
 def _fidelity_activity_sync() -> dict:
     """Production activity sync records facts, never mutable group state."""
-    return retirement_options.sync_activity()
+    return snaptrade_importer.sync_activity()
 
 
 #: Ordered so the catalog is stable for the UI.
@@ -109,9 +111,9 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         holdings_trend_path=config.holdings_trend_csv,
         legacy_gain_loss_snapshots_path=config.holdings_gain_loss_snapshots_csv,
         sync_commands={
-            "HOLDINGS": snaptrade_service.sync_holdings,
+            "HOLDINGS": snaptrade_importer.sync_holdings,
             "ACTIVITY": _fidelity_activity_sync,
-            "MARKET_DATA": retirement_options.sync_held_option_market_data,
+            "MARKET_DATA": held_option_market_data.sync_held_option_market_data,
         },
     ),
 }

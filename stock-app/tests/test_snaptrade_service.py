@@ -241,10 +241,10 @@ def test_sync_reports_unchanged_and_removed_positions(holdings_env):
 
 
 def test_sync_includes_reactivated_option_group_count(holdings_env, monkeypatch):
-    from app import retirement_options
+    from app.brokerages.importers import snaptrade as importer
 
     monkeypatch.setattr(
-        retirement_options, "sync_events",
+        importer, "sync_events",
         lambda *args, **kwargs: {"groups_reactivated": 2},
     )
 

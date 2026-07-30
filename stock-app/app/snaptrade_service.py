@@ -1,16 +1,15 @@
-"""SnapTrade-backed brokerage holdings import (Fidelity retirement and others).
+"""SnapTrade setup, credential persistence, CLI, and the legacy sync entry point.
 
 SnapTrade is an aggregator that exposes read access to a linked brokerage
-through an OAuth-style connection portal. This module owns credential
-persistence, the setup/CLI path, holdings normalization, and the legacy
-``sync`` entry that also best-effort refreshes activity and market data:
+through an OAuth-style connection portal. This module owns the one-time setup
+path and the documented ``python -m app.snaptrade_service`` command surface.
 
-    provider() -> [(account, holdings), ...]   # raw SnapTrade response objects
-    sync(provider) -> writes the normalized holdings ledger, returns a summary
-    snapshot() -> reads the ledger back into the same summary shape
-
-Normalized holdings are immutable broker facts. Editable classifications and
-the Symbol Ledger live outside this module under `/api/brokerages`.
+Holdings and option-activity materialization moved to
+``app.brokerages.importers.snaptrade``; held-option beta and Greeks moved to
+``app.brokerages.importers.held_option_market_data``. The names this module
+still exposes for them are compatibility re-exports, not a second
+implementation. ``sync`` remains an orchestrator that runs each resource command
+once, preserving the CLI contract.
 
 SnapTrade issues two kinds of API keys, distinguished by the client-id prefix:
 
@@ -31,46 +30,41 @@ CLI, run from ``stock-app/`` with the repo root on PYTHONPATH:
 
 from __future__ import annotations
 
-import csv
 import os
 import tempfile
-import threading
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from services.snaptrade import io as snaptrade_io
 
 from . import config
+from .brokerages.importers import held_option_market_data
+from .brokerages.importers import snaptrade as importer
 
-try:  # models/ is standard-library-only and importable in both environments.
-    from models.snaptrade_holdings import (
-        SNAPTRADE_HOLDINGS_SCHEMA_VERSION,
-        SUPPORTED_SNAPTRADE_HOLDINGS_SCHEMA_VERSIONS,
-    )
-except ImportError:  # pragma: no cover - fallback when models/ is not on the path.
-    SNAPTRADE_HOLDINGS_SCHEMA_VERSION = 1
-    SUPPORTED_SNAPTRADE_HOLDINGS_SCHEMA_VERSIONS = frozenset({1})
+# --------------------------------------------------------------------------- #
+# compatibility re-exports: the artifact owners now live under                 #
+# ``brokerages.importers``; these names keep existing callers and the CLI      #
+# working without a second implementation.                                     #
+# --------------------------------------------------------------------------- #
 
-SOURCE = "SNAPTRADE"
+SOURCE = importer.SOURCE
+OPTION_MULTIPLIER = importer.OPTION_MULTIPLIER
+HOLDINGS_HEADERS = importer.HOLDINGS_HEADERS
+HoldingsProvider = importer.HoldingsProvider
+ActivitiesProvider = importer.ActivitiesProvider
 
-# Equity option contracts are quoted per share; one contract controls 100 shares.
-OPTION_MULTIPLIER = Decimal("100")
+fetch_snaptrade = importer.fetch_snaptrade
+fetch_activities = importer.fetch_activities
+sync_holdings = importer.sync_holdings
+snapshot = importer.snapshot
 
-HOLDINGS_HEADERS = [
-    "schema_version", "source", "retrieved_at", "imported_at",
-    "account_id", "account_name", "account_number", "institution",
-    "asset_class", "symbol", "description", "underlying_symbol",
-    "option_type", "strike", "expiry", "currency",
-    "quantity", "price", "average_purchase_price",
-    "cost_basis", "market_value", "open_pnl", "open_pnl_pct",
-]
-
-# provider() yields (account, holdings) pairs of raw SnapTrade response bodies.
-HoldingsProvider = Callable[[], list[tuple[Any, Any]]]
-
-_lock = threading.RLock()
+_value = importer.value
+_text = importer.text
+_decimal = importer._decimal
+_num = importer._num
+_atomic_write = importer.atomic_write
+_read_ledger = importer.read_holdings_ledger
+_update_trend = importer._update_trend
 
 
 class SnapTradeValidationError(ValueError):
@@ -79,82 +73,6 @@ class SnapTradeValidationError(ValueError):
     def __init__(self, message: str, status_code: int = 422):
         super().__init__(message)
         self.status_code = status_code
-
-
-# --------------------------------------------------------------------------- #
-# small value helpers (kept local, mirroring options_activity.py)             #
-# --------------------------------------------------------------------------- #
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _value(obj: Any, name: str, default: Any = None) -> Any:
-    """Read ``name`` from a dict or an attribute-style object (SDK responses)."""
-    if isinstance(obj, dict):
-        return obj.get(name, default)
-    return getattr(obj, name, default)
-
-
-def _text(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(getattr(value, "value", value))
-
-
-def _decimal(value: Any, default: Decimal = Decimal("0")) -> Decimal:
-    if value in (None, ""):
-        return default
-    try:
-        result = Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        return default
-    return result if result.is_finite() else default
-
-
-def _num(value: Decimal) -> str:
-    """Serialize a Decimal without scientific notation or trailing exponent."""
-    return format(value.normalize(), "f") if value else "0"
-
-
-# --------------------------------------------------------------------------- #
-# CSV ledger IO                                                                #
-# --------------------------------------------------------------------------- #
-
-def _atomic_write(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=headers, lineterminator="\n")
-            writer.writeheader()
-            for row in rows:
-                writer.writerow({key: _text(row.get(key)) for key in headers})
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_name, path)
-    except Exception:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
-
-
-def _read_ledger(path: Path) -> list[dict[str, str]]:
-    if not path.is_file():
-        return []
-    with path.open("r", newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        rows = list(reader)
-    for row in rows:
-        version = row.get("schema_version", "")
-        if version and int(version) not in SUPPORTED_SNAPTRADE_HOLDINGS_SCHEMA_VERSIONS:
-            raise SnapTradeValidationError(
-                f"unsupported {path.name} schema; expected version "
-                f"{SNAPTRADE_HOLDINGS_SCHEMA_VERSION}", 409
-            )
-    return rows
 
 
 # --------------------------------------------------------------------------- #
@@ -289,325 +207,8 @@ def list_accounts() -> list[dict[str, Any]]:
 
 
 # --------------------------------------------------------------------------- #
-# live provider                                                                #
+# legacy all-resource orchestrator                                             #
 # --------------------------------------------------------------------------- #
-
-def fetch_snaptrade(account_ids: list[str] | None = None) -> list[tuple[Any, Any]]:
-    """Read each linked account's positions through the official SnapTrade SDK.
-
-    Uses ``get_all_account_positions`` (the consolidated replacement for the
-    removed ``get_user_holdings``): every row is a position whose
-    ``instrument.kind`` distinguishes stocks, ETFs, options, and money-market
-    cash (``cash_equivalent``), so no separate balance call is needed.
-    """
-    try:
-        return snaptrade_io.fetch_positions(account_ids)
-    except snaptrade_io.SnapTradeConfigurationError as exc:
-        raise SnapTradeValidationError(str(exc), 503) from exc
-    except snaptrade_io.SnapTradeServiceError as exc:
-        raise SnapTradeValidationError(str(exc), 502) from exc
-
-
-# activities() yields (account, [activity, ...]) pairs of raw SnapTrade bodies.
-ActivitiesProvider = Callable[[Any, Any], list[tuple[Any, list[Any]]]]
-
-# Page size for the paginated activities pull. The endpoint returns a single
-# window by default; we still page defensively so a capped response is complete.
-def fetch_activities(start_date: Any, end_date: Any,
-                     account_ids: list[str] | None = None) -> list[tuple[Any, list[Any]]]:
-    """Read each linked account's transaction activities over a date window.
-
-    Uses ``get_account_activities`` (endpoint ``GET /accounts/{id}/activities``),
-    the full-history transaction feed — distinct from the current-only positions
-    feed. Returns raw SnapTrade activity bodies so the caller normalizes only the
-    rows it cares about (option transactions). Paginated by ``offset``/``limit``
-    so a capped page still yields the complete window.
-    """
-    try:
-        return snaptrade_io.fetch_activities(start_date, end_date, account_ids)
-    except snaptrade_io.SnapTradeConfigurationError as exc:
-        raise SnapTradeValidationError(str(exc), 503) from exc
-    except snaptrade_io.SnapTradeServiceError as exc:
-        raise SnapTradeValidationError(str(exc), 502) from exc
-
-
-# --------------------------------------------------------------------------- #
-# normalization                                                                #
-# --------------------------------------------------------------------------- #
-
-def _account_context(account: Any) -> dict[str, str]:
-    return {
-        "account_id": _text(_value(account, "id")),
-        "account_name": _text(_value(account, "name")),
-        "account_number": _text(_value(account, "number")),
-        "institution": _text(_value(account, "institution_name")),
-    }
-
-
-def _base_row(ctx: dict[str, str], retrieved_at: str) -> dict[str, Any]:
-    return {
-        "schema_version": SNAPTRADE_HOLDINGS_SCHEMA_VERSION,
-        "source": SOURCE,
-        "retrieved_at": retrieved_at,
-        "imported_at": "",
-        **ctx,
-        "underlying_symbol": "",
-        "option_type": "",
-        "strike": "",
-        "expiry": "",
-        "open_pnl": "",
-        "open_pnl_pct": "",
-    }
-
-
-def _finalize(row: dict[str, Any], quantity: Decimal, price: Decimal,
-              avg_price: Decimal, market_value: Decimal,
-              cost_basis: Decimal, open_pnl: Decimal | None) -> dict[str, Any]:
-    if open_pnl is None:
-        open_pnl = market_value - cost_basis
-    pnl_pct = (open_pnl / cost_basis * Decimal("100")) if cost_basis else Decimal("0")
-    row["quantity"] = _num(quantity)
-    row["price"] = _num(price)
-    row["average_purchase_price"] = _num(avg_price)
-    row["market_value"] = _num(market_value)
-    row["cost_basis"] = _num(cost_basis)
-    row["open_pnl"] = _num(open_pnl)
-    row["open_pnl_pct"] = _num(pnl_pct)
-    return row
-
-
-def _normalize_position(pos: Any, ctx: dict[str, str], retrieved_at: str) -> dict[str, Any]:
-    """Normalize one ``get_all_account_positions`` row.
-
-    ``price`` is quoted per share, while ``cost_basis`` is per *unit* (per
-    contract for options), so the multiplier applies to price only — verified
-    against broker-reported totals.
-    """
-    instrument = _value(pos, "instrument")
-    kind = _text(_value(instrument, "kind")).lower()
-    quantity = _decimal(_value(pos, "units"))
-    price = _decimal(_value(pos, "price"))
-    unit_cost = _decimal(_value(pos, "cost_basis"))
-
-    row = _base_row(ctx, retrieved_at)
-    row["symbol"] = _text(_value(instrument, "symbol"))
-    row["description"] = _text(_value(instrument, "description"))
-    row["currency"] = _text(_value(pos, "currency"))
-
-    if kind == "option":
-        multiplier = _decimal(_value(instrument, "multiplier"), OPTION_MULTIPLIER)
-        row["asset_class"] = "OPTION"
-        row["underlying_symbol"] = _text(
-            _value(_value(instrument, "underlying"), "symbol")
-        )
-        row["option_type"] = _text(_value(instrument, "option_type")).upper()
-        row["strike"] = _num(_decimal(_value(instrument, "strike_price")))
-        row["expiry"] = _text(_value(instrument, "expiration_date"))
-        market_value = quantity * price * multiplier
-    else:
-        cash_like = bool(_value(pos, "cash_equivalent"))
-        row["asset_class"] = "CASH" if cash_like else kind.upper() or "OTHER"
-        market_value = quantity * price
-
-    return _finalize(
-        row, quantity, price, avg_price=unit_cost,
-        market_value=market_value,
-        cost_basis=quantity * unit_cost,
-        open_pnl=None,
-    )
-
-
-def _normalize_account(account: Any, positions: Any, retrieved_at: str) -> list[dict[str, Any]]:
-    ctx = _account_context(account)
-    return [
-        _normalize_position(pos, ctx, retrieved_at)
-        for pos in (_value(positions, "results") or [])
-    ]
-
-
-# --------------------------------------------------------------------------- #
-# summary shape (shared by sync + snapshot)                                    #
-# --------------------------------------------------------------------------- #
-
-def _typed_holding(row: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "accountId": row.get("account_id", ""),
-        "accountName": row.get("account_name", ""),
-        "institution": row.get("institution", ""),
-        "assetClass": row.get("asset_class", ""),
-        "symbol": row.get("symbol", ""),
-        "description": row.get("description", ""),
-        "underlyingSymbol": row.get("underlying_symbol", ""),
-        "optionType": row.get("option_type", ""),
-        "strike": float(_decimal(row.get("strike"))),
-        "expiry": row.get("expiry", ""),
-        "quantity": float(_decimal(row.get("quantity"))),
-        "price": float(_decimal(row.get("price"))),
-        "costBasis": float(_decimal(row.get("cost_basis"))),
-        "marketValue": float(_decimal(row.get("market_value"))),
-        "openPnl": float(_decimal(row.get("open_pnl"))),
-        "openPnlPct": float(_decimal(row.get("open_pnl_pct"))),
-    }
-
-
-def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    holdings = [_typed_holding(row) for row in rows]
-    total_value = sum(_decimal(row.get("market_value")) for row in rows)
-    total_cost = sum(_decimal(row.get("cost_basis")) for row in rows)
-    total_pnl = total_value - total_cost
-
-    by_account: dict[str, dict[str, Any]] = {}
-    by_asset_class: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        market_value = _decimal(row.get("market_value"))
-        account_name = row.get("account_name") or row.get("account_id") or "Unknown"
-        account = by_account.setdefault(
-            account_name, {"currentValue": Decimal("0"), "holdingCount": 0}
-        )
-        account["currentValue"] += market_value
-        account["holdingCount"] += 1
-
-        asset_class = row.get("asset_class") or "OTHER"
-        bucket = by_asset_class.setdefault(
-            asset_class, {"currentValue": Decimal("0"), "holdingCount": 0}
-        )
-        bucket["currentValue"] += market_value
-        bucket["holdingCount"] += 1
-
-    def _finalize_group(group: dict[str, dict[str, Any]]) -> dict[str, Any]:
-        return {
-            name: {
-                "currentValue": float(data["currentValue"]),
-                "pctOfPortfolio": float(
-                    data["currentValue"] / total_value * Decimal("100")
-                ) if total_value else 0.0,
-                "holdingCount": data["holdingCount"],
-            }
-            for name, data in sorted(
-                group.items(), key=lambda kv: kv[1]["currentValue"], reverse=True
-            )
-        }
-
-    retrieved_at = rows[0].get("retrieved_at", "") if rows else ""
-    return {
-        "holdings": holdings,
-        "totalValue": float(total_value),
-        "totalCostBasis": float(total_cost),
-        "totalOpenPnl": float(total_pnl),
-        "totalOpenPnlPct": float(
-            total_pnl / total_cost * Decimal("100")
-        ) if total_cost else 0.0,
-        "byAccount": _finalize_group(by_account),
-        "byAssetClass": _finalize_group(by_asset_class),
-        "retrievedAt": retrieved_at,
-        "source": SOURCE,
-    }
-
-
-def _holding_key(row: dict[str, Any]) -> tuple[str, str, str]:
-    """Stable identity for one broker position in a holdings sync."""
-    return (
-        _text(row.get("account_id")),
-        _text(row.get("asset_class")),
-        _text(row.get("symbol")),
-    )
-
-
-def _sync_changes(previous: list[dict[str, Any]], current: list[dict[str, Any]]) -> dict[str, int]:
-    """Describe what the latest broker snapshot changed in the local ledger.
-
-    Broker observation/import timestamps intentionally do not count as a position
-    change: every successful sync refreshes them, even when the actual position
-    is identical.
-    """
-    previous_by_key = {_holding_key(row): row for row in previous}
-    current_by_key = {_holding_key(row): row for row in current}
-    shared_keys = previous_by_key.keys() & current_by_key.keys()
-    fields = tuple(field for field in HOLDINGS_HEADERS
-                   if field not in {"retrieved_at", "imported_at"})
-
-    unchanged = sum(
-        all(_text(previous_by_key[key].get(field)) == _text(current_by_key[key].get(field))
-            for field in fields)
-        for key in shared_keys
-    )
-    return {
-        "added": len(current_by_key.keys() - previous_by_key.keys()),
-        "changed": len(shared_keys) - unchanged,
-        "unchanged": unchanged,
-        "removed": len(previous_by_key.keys() - current_by_key.keys()),
-    }
-
-
-# --------------------------------------------------------------------------- #
-# gain/loss trend tracking (peak high-water mark + adverse-move alerts)         #
-# --------------------------------------------------------------------------- #
-
-def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[str, str], dict[str, str]]:
-    """Advance each holding's gain/loss trend one sync and persist it.
-
-    The peak high-water rule is shared with every other brokerage and lives in
-    ``brokerages.trend``. Only reading a percentage off a SnapTrade ledger row
-    belongs here; options trend through their own event ledger, not this.
-    """
-    from .brokerages import trend
-
-    return trend.advance(
-        [
-            trend.Observation(
-                account_id=_text(row.get("account_id")),
-                account_name=_text(row.get("account_name")),
-                symbol=_text(row.get("symbol")),
-                gain_loss_pct=_decimal(row.get("open_pnl_pct")),
-            )
-            for row in ledger_rows
-            if row.get("asset_class") != "OPTION" and _text(row.get("symbol"))
-        ],
-        path=config.holdings_trend_csv(), now=now,
-    )
-
-
-def sync_holdings(provider: HoldingsProvider | None = None) -> dict[str, Any]:
-    """Pull holdings only: normalize, write the ledger, advance trend, summarize.
-
-    Does not fetch activity or market data. The registry HOLDINGS resource and the
-    legacy ``sync`` orchestrator are the callers that decide sibling resources.
-    """
-    provider = provider or fetch_snaptrade
-    previous_rows = _read_ledger(config.snaptrade_holdings_csv())
-    retrieved_at = _now()
-    rows: list[dict[str, Any]] = []
-    accounts_and_holdings = provider()
-    accounts_synced = {
-        _text(_value(account, "id"))
-        for account, _holdings in accounts_and_holdings
-        if _text(_value(account, "id"))
-    }
-    for account, holdings in accounts_and_holdings:
-        rows.extend(_normalize_account(account, holdings, retrieved_at))
-
-    imported_at = _now()
-    for row in rows:
-        row["imported_at"] = imported_at
-    _atomic_write(config.snaptrade_holdings_csv(), HOLDINGS_HEADERS, rows)
-
-    # Advance each holding's gain/loss trend once per sync (peak high-water mark
-    # plus adverse-move alerts). Best-effort: never fail the holdings sync over it.
-    try:
-        _update_trend(rows, now=imported_at)
-    except Exception:  # noqa: BLE001 — trend is advisory; holdings sync must succeed.
-        pass
-
-    summary = _summarize(rows)
-    summary["sync"] = {
-        "accounts_synced": len(accounts_synced),
-        "positions_synced": len(rows),
-        **_sync_changes(previous_rows, rows),
-        # Activity owns reactivation counting; holdings alone always reports 0.
-        "groups_reactivated": 0,
-    }
-    return summary
-
 
 def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:
     """Compatibility orchestrator: holdings, then activity, then market data.
@@ -615,10 +216,8 @@ def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:
     Each sibling resource runs at most once. Prefer the registry's single-purpose
     commands for API sync; this entry point preserves the CLI/module contract.
     """
-    from . import retirement_options
-
-    summary = sync_holdings(provider=provider)
-    rows = _read_ledger(config.snaptrade_holdings_csv())
+    summary = importer.sync_holdings(provider=provider)
+    rows = importer.read_holdings_ledger()
 
     # Best-effort: refresh the immutable option-event ledger so a closed contract
     # keeps its realized P/L after it leaves the current-positions feed. Run
@@ -626,15 +225,15 @@ def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:
     # needs its closing event. Never fail the holdings summary over it.
     option_event_sync: dict[str, Any] | None = None
     try:
-        option_event_sync = retirement_options.sync_activity()
+        option_event_sync = importer.sync_activity()
     except Exception:  # noqa: BLE001 — event ledger is best-effort.
         pass
 
-    # Best-effort: refresh Tastytrade betas + dxFeed Greeks for any option legs.
-    # Never fail the holdings summary over optional market data.
+    # Best-effort: refresh betas + Greeks for any option legs. Never fail the
+    # holdings summary over optional market data.
     if any(row.get("asset_class") == "OPTION" for row in rows):
         try:
-            retirement_options.sync_held_option_market_data()
+            held_option_market_data.sync_held_option_market_data()
         except Exception:  # noqa: BLE001 — market data is optional.
             pass
 
@@ -642,11 +241,6 @@ def sync(provider: HoldingsProvider | None = None) -> dict[str, Any]:
         (option_event_sync or {}).get("groups_reactivated") or 0
     )
     return summary
-
-
-def snapshot() -> dict[str, Any]:
-    """Read the most recent holdings ledger into the summary shape."""
-    return _summarize(_read_ledger(config.snaptrade_holdings_csv()))
 
 
 # --------------------------------------------------------------------------- #

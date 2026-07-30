@@ -1,9 +1,20 @@
-"""Retirement option event sync and market-data support.
+"""Beta and Greeks for the option legs a brokerage currently holds.
 
-SnapTrade option transaction events are pulled into an immutable local ledger.
-The Symbol Ledger and Options resources under `/api/brokerages` are the current
-surface. This module owns event sync plus the current-option-leg reading that
-`sync_market_data` uses to decide which underlyings need fresh betas and greeks.
+Reads the materialized SnapTrade holdings ledger, decides which underlyings and
+exact contracts need fresh market data, asks the provider-neutral
+``services.options_market`` API for them, and writes the beta/Greek artifacts the
+risk table reads:
+
+    sync_betas(fetcher)               -> underlying beta observations
+    sync_greeks(fetcher)              -> exact-contract IV/Greek observations
+    sync_held_option_market_data()    -> both, best-effort and independent
+
+Provider selection and provider symbol syntax (OCC to dxFeed, for instance) stay
+behind the neutral API; nothing here imports a provider transport package.
+
+Retain-prior-on-miss is the rule for both artifacts: a currently held
+symbol/contract the provider omits keeps its previously stored observation, and
+an observation is dropped only when the holding itself is no longer current.
 """
 
 from __future__ import annotations
@@ -11,24 +22,18 @@ from __future__ import annotations
 import csv
 import os
 import tempfile
-import threading
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 from services import options_market
 
-from . import config, options_activity, snaptrade_service
-from .options_risk import apply_call_coverage
+from ... import config, options_activity
+from ...options_risk import apply_call_coverage
+from . import snaptrade as snaptrade_importer
 
-EVENT_HEADERS = [
-    "schema_version", "id", "source", "account_id", "account",
-    "underlying_symbol", "option_type", "strike", "expiry", "occ_symbol",
-    "action", "activity_type", "units", "net_value", "price", "fee",
-    "trade_date", "settlement_date", "description", "imported_at", "retrieved_at",
-]
 BETA_HEADERS = [
     "schema_version", "source", "symbol", "beta", "beta_updated_at", "retrieved_at",
 ]
@@ -38,17 +43,9 @@ GREEKS_HEADERS = [
     "theta", "rho", "vega", "observed_at", "event_time_ms", "retrieved_at",
 ]
 
-_lock = threading.RLock()
-
-
-class RetirementOptionsError(ValueError):
-    def __init__(self, message: str, status_code: int = 422):
-        super().__init__(message)
-        self.status_code = status_code
-
 
 # --------------------------------------------------------------------------- #
-# helpers                                                                       #
+# helpers                                                                      #
 # --------------------------------------------------------------------------- #
 
 def _now() -> str:
@@ -76,7 +73,8 @@ def _dec(value: Any) -> Decimal:
     return result if result.is_finite() else Decimal("0")
 
 
-def _atomic_write(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> None:
+def atomic_write(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> None:
+    """Replace ``path`` with ``rows`` in one rename, or leave it untouched."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
@@ -96,26 +94,23 @@ def _atomic_write(path: Path, headers: list[str], rows: list[dict[str, Any]]) ->
         raise
 
 
-def _greek_key(row: dict[str, str]) -> tuple[str, str]:
-    """Identity of a greeks row: (account, contract). Retirement legs can span
-    sub-accounts, so both dimensions are part of the key."""
-    return (str(row.get("account", "")).upper(), str(row.get("contract_key", "")))
-
-
-def _read_rows(path: Path, headers: list[str]) -> list[dict[str, str]]:
+def read_rows(path: Path, headers: list[str]) -> list[dict[str, str]]:
+    """Read a materialized market-data artifact, restricted to ``headers``."""
     if not path.is_file():
         return []
     with path.open("r", newline="", encoding="utf-8") as handle:
         return [{key: row.get(key, "") for key in headers} for row in csv.DictReader(handle)]
 
 
-# --------------------------------------------------------------------------- #
-# risk rows from the SnapTrade holdings ledger                                  #
-# --------------------------------------------------------------------------- #
+def _greek_key(row: dict[str, str]) -> tuple[str, str]:
+    """Identity of a greeks row: (account, contract). Retirement legs can span
+    sub-accounts, so both dimensions are part of the key."""
+    return (str(row.get("account", "")).upper(), str(row.get("contract_key", "")))
 
-def _read_holdings_ledger() -> list[dict[str, Any]]:
-    return snaptrade_service._read_ledger(config.snaptrade_holdings_csv())
 
+# --------------------------------------------------------------------------- #
+# current option legs from the holdings ledger                                 #
+# --------------------------------------------------------------------------- #
 
 def _is_share_holding(row: dict[str, Any]) -> bool:
     """Cash is not a deliverable share; every other non-option class is."""
@@ -137,7 +132,7 @@ def _share_pool(ledger: list[dict[str, Any]]) -> dict[tuple[str, str], Decimal]:
 def _option_rows() -> list[dict[str, Any]]:
     """Current option legs from the SnapTrade ledger, in the risk-engine row
     shape (underlying in ``symbol`` for price-cache/beta lookup)."""
-    ledger = _read_holdings_ledger()
+    ledger = snaptrade_importer.read_holdings_ledger()
     rows: list[dict[str, Any]] = []
     for row in ledger:
         if row.get("asset_class") != "OPTION":
@@ -177,110 +172,7 @@ def _option_rows() -> list[dict[str, Any]]:
 
 
 # --------------------------------------------------------------------------- #
-# immutable option-event ledger (realized P/L survives a contract closing)      #
-# --------------------------------------------------------------------------- #
-
-def _read_events() -> list[dict[str, str]]:
-    return _read_rows(config.retirement_option_events_csv(), EVENT_HEADERS)
-
-
-def _normalize_activity(activity: Any, ctx: dict[str, str], retrieved_at: str,
-                        existing_by_id: dict[str, dict[str, str]]) -> dict[str, Any] | None:
-    """Normalize one SnapTrade activity into an option-event row, or ``None`` for
-    non-option activities (stock trades, dividends, fees, cash moves).
-
-    Option details come from the structured ``option_symbol`` object and the
-    activity-level ``option_type`` action (``SELL_TO_OPEN``/``BUY_TO_CLOSE``/…),
-    not the free-text description. ``amount`` is signed net cash flow including
-    fees (credit +, debit −), stored as ``net_value``.
-    """
-    sv, st = snaptrade_service._value, snaptrade_service._text
-    option_symbol = sv(activity, "option_symbol")
-    activity_id = st(sv(activity, "id"))
-    if not option_symbol or not activity_id:
-        return None
-    underlying = st(sv(sv(option_symbol, "underlying_symbol"), "symbol")).upper()
-    return {
-        "schema_version": "1",
-        "id": activity_id,
-        "source": "SNAPTRADE",
-        "account_id": ctx.get("account_id", ""),
-        "account": ctx.get("account", ""),
-        "underlying_symbol": underlying,
-        "option_type": st(sv(option_symbol, "option_type")).upper(),
-        "strike": st(sv(option_symbol, "strike_price")),
-        "expiry": st(sv(option_symbol, "expiration_date")),
-        "occ_symbol": st(sv(option_symbol, "ticker")),
-        "action": st(sv(activity, "option_type")).upper(),
-        "activity_type": st(sv(activity, "type")).upper(),
-        "units": st(sv(activity, "units")),
-        "net_value": st(sv(activity, "amount")),
-        "price": st(sv(activity, "price")),
-        "fee": st(sv(activity, "fee")),
-        "trade_date": st(sv(activity, "trade_date")),
-        "settlement_date": st(sv(activity, "settlement_date")),
-        "description": " ".join(st(sv(activity, "description")).split()),
-        "imported_at": existing_by_id.get(activity_id, {}).get("imported_at") or retrieved_at,
-        "retrieved_at": retrieved_at,
-    }
-
-
-def sync_events(provider=None, *, start_date: date | None = None,
-                end_date: date | None = None,
-                ) -> dict[str, Any]:
-    """Pull SnapTrade option transaction events over a full window and upsert them
-    into the immutable ledger, keyed by activity id — never deleting.
-
-    Full-window + upsert-by-id is idempotent and self-heals batches that post
-    late (SnapTrade serves Fidelity positions in real time but transactions on a
-    slower cadence, so a close can trail the position leaving the feed).
-    """
-    end_date = end_date or date.today()
-    start_date = start_date or date(end_date.year, 1, 1)
-    if start_date > end_date:
-        raise RetirementOptionsError("start_date cannot be after end_date")
-    provider = provider or snaptrade_service.fetch_activities
-    retrieved_at = _now()
-    pairs = provider(start_date, end_date)
-    sv, st = snaptrade_service._value, snaptrade_service._text
-    with _lock, options_activity._lock:
-        existing = _read_events()
-        existing_by_id = {row["id"]: row for row in existing}
-        normalized: list[dict[str, Any]] = []
-        for account, activities in pairs:
-            ctx = {
-                "account_id": st(sv(account, "id")),
-                "account": st(sv(account, "name")),
-            }
-            for activity in activities or []:
-                row = _normalize_activity(activity, ctx, retrieved_at, existing_by_id)
-                if row is not None:
-                    normalized.append(row)
-        merged = {row["id"]: row for row in existing}
-        merged.update({row["id"]: row for row in normalized})
-        events = sorted(merged.values(), key=lambda row: (row["trade_date"], row["id"]))
-        _atomic_write(config.retirement_option_events_csv(), EVENT_HEADERS, events)
-
-        # Grouping is retired: the Symbol Ledger derives lifecycle from the
-        # events themselves. The counter stays in this frozen response.
-        groups_reactivated = 0
-    return {
-        "events_received": len(normalized),
-        "events_inserted": sum(1 for row in normalized if row["id"] not in existing_by_id),
-        "events_updated": sum(1 for row in normalized if row["id"] in existing_by_id),
-        "groups_reactivated": groups_reactivated,
-        "window": [start_date.isoformat(), end_date.isoformat()],
-        "retrieved_at": retrieved_at,
-    }
-
-
-#: Registry and new callers prefer this name; ``sync_events`` stays for seams.
-def sync_activity(*args, **kwargs) -> dict[str, Any]:
-    return sync_events(*args, **kwargs)
-
-
-# --------------------------------------------------------------------------- #
-# Held-option market data (beta + Greeks via provider-neutral API)              #
+# underlying beta                                                              #
 # --------------------------------------------------------------------------- #
 
 def _fetch_betas(symbols: list[str]) -> list[Any]:
@@ -292,14 +184,14 @@ def _fetch_betas(symbols: list[str]) -> list[Any]:
 
 
 def sync_betas(fetcher=_fetch_betas) -> dict[str, Any]:
-    """Fetch market-metric beta for each retirement option underlying and store
-    it for the risk table. Requires the options market-data provider.
+    """Fetch market-metric beta for each held option underlying and store it for
+    the risk table. Requires the options market-data provider.
 
     Retain-prior-on-miss: an underlying whose beta the fetch omits keeps its
     previously stored value instead of disappearing from the risk table."""
     current_underlyings = {row["symbol"] for row in _option_rows() if row["symbol"]}
     if not current_underlyings:
-        _atomic_write(config.retirement_option_betas_csv(), BETA_HEADERS, [])
+        atomic_write(config.retirement_option_betas_csv(), BETA_HEADERS, [])
         return {"observed": 0, "retained": 0, "missing": 0, "symbols": []}
 
     metrics = fetcher(sorted(current_underlyings))
@@ -327,13 +219,13 @@ def sync_betas(fetcher=_fetch_betas) -> dict[str, Any]:
     # Retain-prior-on-miss, mirroring options_activity: newest fresh beta per
     # underlying, else the previously stored row; underlyings no longer held drop.
     previous_betas = {row["symbol"].upper(): row
-                      for row in _read_rows(config.retirement_option_betas_csv(), BETA_HEADERS)}
+                      for row in read_rows(config.retirement_option_betas_csv(), BETA_HEADERS)}
     persisted = []
     for symbol in sorted(current_underlyings):
         row = newest_betas.get(symbol) or previous_betas.get(symbol)
         if row is not None:
             persisted.append(row)
-    _atomic_write(config.retirement_option_betas_csv(), BETA_HEADERS, persisted)
+    atomic_write(config.retirement_option_betas_csv(), BETA_HEADERS, persisted)
     return {
         "observed": len(newest_betas),
         "retained": sum(1 for s in current_underlyings
@@ -343,6 +235,10 @@ def sync_betas(fetcher=_fetch_betas) -> dict[str, Any]:
         "symbols": [row["symbol"] for row in persisted],
     }
 
+
+# --------------------------------------------------------------------------- #
+# exact-contract Greeks and implied volatility                                 #
+# --------------------------------------------------------------------------- #
 
 def _fetch_greeks(legs: list[dict[str, str]], timeout_seconds: float) -> list[Any]:
     """Exact-contract Greek observations for ``legs`` via options market-data."""
@@ -354,7 +250,7 @@ def _fetch_greeks(legs: list[dict[str, str]], timeout_seconds: float) -> list[An
 
 
 def sync_greeks(fetcher=_fetch_greeks, timeout_seconds: float = 12.0) -> dict[str, Any]:
-    """Fetch exact-contract IV/Greeks for each retirement option leg.
+    """Fetch exact-contract IV/Greeks for each held option leg.
 
     Retain-prior-on-miss: a contract whose fetch returns nothing keeps its
     previously stored observation instead of dropping out of the risk table."""
@@ -368,7 +264,7 @@ def sync_greeks(fetcher=_fetch_greeks, timeout_seconds: float = 12.0) -> dict[st
         if row["contract_symbol"]
     ]
     if not legs:
-        _atomic_write(config.retirement_option_greeks_csv(), GREEKS_HEADERS, [])
+        atomic_write(config.retirement_option_greeks_csv(), GREEKS_HEADERS, [])
         return {"observed": 0, "retained": 0, "missing": 0, "requested": 0, "streamers": []}
 
     by_contract = {leg["contract_symbol"]: leg for leg in legs}
@@ -432,7 +328,7 @@ def sync_greeks(fetcher=_fetch_greeks, timeout_seconds: float = 12.0) -> dict[st
     }
     previous_current = {
         _greek_key(row): row
-        for row in _read_rows(config.retirement_option_greeks_csv(), GREEKS_HEADERS)
+        for row in read_rows(config.retirement_option_greeks_csv(), GREEKS_HEADERS)
     }
     current_keys = {(leg["account"].upper(), leg["contract_key"]) for leg in legs}
     persisted = []
@@ -440,7 +336,7 @@ def sync_greeks(fetcher=_fetch_greeks, timeout_seconds: float = 12.0) -> dict[st
         row = newest_greeks.get(key) or previous_current.get(key)
         if row is not None:
             persisted.append(row)
-    _atomic_write(config.retirement_option_greeks_csv(), GREEKS_HEADERS, persisted)
+    atomic_write(config.retirement_option_greeks_csv(), GREEKS_HEADERS, persisted)
     return {
         "observed": len(newest_greeks),
         "retained": sum(1 for k in current_keys
@@ -451,6 +347,10 @@ def sync_greeks(fetcher=_fetch_greeks, timeout_seconds: float = 12.0) -> dict[st
         "streamers": [row["streamer_symbol"] for row in persisted],
     }
 
+
+# --------------------------------------------------------------------------- #
+# MARKET_DATA resource command                                                 #
+# --------------------------------------------------------------------------- #
 
 def sync_market_data() -> dict[str, Any]:
     """Refresh both betas and Greeks for the risk table.

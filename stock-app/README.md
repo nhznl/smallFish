@@ -34,11 +34,10 @@ stock-app/
 │   ├── options_market.py   # market inputs for options positions
 │   ├── options_risk.py     # options-risk calculations
 │   ├── portfolios.py       # named symbol lists, returns, sector exposure
-│   ├── retirement_options.py # retirement events and Tastytrade market-data normalization
-│   ├── snaptrade_service.py  # SnapTrade credential persistence, CLI, and holdings normalization
+│   ├── snaptrade_service.py  # SnapTrade setup, credential persistence, and CLI
 │   ├── studies_read.py     # fail-closed Research Studies reader
 │   ├── capabilities.py     # optional-integration and core-data states
-│   ├── brokerages/         # brokerage registry, provider adapters, canonical facts
+│   ├── brokerages/         # registry, importers, provider adapters, canonical facts
 │   └── routers/            # HTTP endpoint groups
 └── tests/
 ```

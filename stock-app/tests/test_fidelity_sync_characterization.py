@@ -16,8 +16,10 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, retirement_options, snaptrade_service
+from app import config, snaptrade_service
 from app.brokerages import registry
+from app.brokerages.importers import held_option_market_data as market_data
+from app.brokerages.importers import snaptrade as importer
 from app.main import app
 from tests.test_brokerage_adapters import adapter_env  # noqa: F401
 
@@ -33,8 +35,8 @@ CONTRACT = "CLX   260918P00070000"
 @pytest.fixture
 def fidelity_sync_env(adapter_env, monkeypatch):
     """Isolated ledger paths plus frozen clocks for deterministic artifacts."""
-    monkeypatch.setattr(snaptrade_service, "_now", lambda: FROZEN_NOW)
-    monkeypatch.setattr(retirement_options, "_now", lambda: FROZEN_NOW)
+    monkeypatch.setattr(importer, "_now", lambda: FROZEN_NOW)
+    monkeypatch.setattr(market_data, "_now", lambda: FROZEN_NOW)
     return adapter_env
 
 
@@ -167,8 +169,8 @@ def _install_providers(monkeypatch, counter: _CallCounter, *,
 
     # Default fetchers are bound at def-time; wrap the public sync entry points
     # so both the registry binding and the holdings side-effect see fakes.
-    real_sync_betas = retirement_options.sync_betas
-    real_sync_greeks = retirement_options.sync_greeks
+    real_sync_betas = market_data.sync_betas
+    real_sync_greeks = market_data.sync_greeks
 
     def sync_betas_counted():
         counter.betas += 1
@@ -178,10 +180,10 @@ def _install_providers(monkeypatch, counter: _CallCounter, *,
         counter.greeks += 1
         return real_sync_greeks(fetcher=fetch_greeks)
 
-    monkeypatch.setattr(snaptrade_service, "fetch_snaptrade", fetch_positions)
-    monkeypatch.setattr(snaptrade_service, "fetch_activities", fetch_activities)
-    monkeypatch.setattr(retirement_options, "sync_betas", sync_betas_counted)
-    monkeypatch.setattr(retirement_options, "sync_greeks", sync_greeks_counted)
+    monkeypatch.setattr(importer, "fetch_snaptrade", fetch_positions)
+    monkeypatch.setattr(importer, "fetch_activities", fetch_activities)
+    monkeypatch.setattr(market_data, "sync_betas", sync_betas_counted)
+    monkeypatch.setattr(market_data, "sync_greeks", sync_greeks_counted)
 
     # Count registry command identity without altering behavior.
     entry = registry.REGISTRY["fidelity"]
@@ -374,7 +376,7 @@ def test_legacy_sync_orchestrates_each_resource_at_most_once(
     counter = _CallCounter()
     _install_providers(monkeypatch, counter)
 
-    summary = snaptrade_service.sync(provider=snaptrade_service.fetch_snaptrade)
+    summary = snaptrade_service.sync(provider=importer.fetch_snaptrade)
 
     assert summary["sync"]["positions_synced"] == 2
     assert counter.as_dict() == {
@@ -390,10 +392,10 @@ def test_legacy_sync_orchestrates_each_resource_at_most_once(
 
 def test_legacy_sync_provider_injection_return_shape(fidelity_sync_env, monkeypatch):
     monkeypatch.setattr(
-        retirement_options, "sync_events",
+        importer, "sync_events",
         lambda: {"groups_reactivated": 0, "events_received": 0},
     )
-    monkeypatch.setattr(retirement_options, "sync_market_data", lambda: {})
+    monkeypatch.setattr(market_data, "sync_market_data", lambda: {})
 
     summary = snaptrade_service.sync(
         provider=lambda: [(_account(), _positions_with_option())]
@@ -504,10 +506,10 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
 def test_holdings_and_activity_artifacts_match_golden_fixtures(
         fidelity_sync_env, monkeypatch):
     monkeypatch.setattr(
-        retirement_options, "sync_market_data", lambda: {},
+        market_data, "sync_market_data", lambda: {},
     )
     monkeypatch.setattr(
-        snaptrade_service, "fetch_activities",
+        importer, "fetch_activities",
         lambda start_date, end_date, account_ids=None: [
             (_account(), [_opt_activity()])
         ],
@@ -516,7 +518,7 @@ def test_holdings_and_activity_artifacts_match_golden_fixtures(
     snaptrade_service.sync(
         provider=lambda: [(_account(), _positions_with_option())]
     )
-    retirement_options.sync_events(
+    importer.sync_events(
         provider=lambda start_date, end_date: [(_account(), [_opt_activity()])]
     )
 
@@ -533,10 +535,10 @@ def test_holdings_and_activity_artifacts_match_golden_fixtures(
 def test_beta_and_greeks_artifacts_match_golden_fixtures(
         fidelity_sync_env, monkeypatch):
     # Write holdings without invoking the live market-data side effect.
-    monkeypatch.setattr(retirement_options, "sync_events", lambda: {
+    monkeypatch.setattr(importer, "sync_events", lambda: {
         "groups_reactivated": 0,
     })
-    monkeypatch.setattr(retirement_options, "sync_market_data", lambda: {})
+    monkeypatch.setattr(market_data, "sync_market_data", lambda: {})
     snaptrade_service.sync(
         provider=lambda: [(_account(), _positions_with_option())]
     )
@@ -565,8 +567,8 @@ def test_beta_and_greeks_artifacts_match_golden_fixtures(
             for leg in legs
         ]
 
-    retirement_options.sync_betas(fetcher=fetch_betas)
-    retirement_options.sync_greeks(fetcher=fetch_greeks)
+    market_data.sync_betas(fetcher=fetch_betas)
+    market_data.sync_greeks(fetcher=fetch_greeks)
 
     betas = _read_csv(config.retirement_option_betas_csv())
     greeks = _read_csv(config.retirement_option_greeks_csv())

@@ -7,10 +7,11 @@ within the settled boundaries below and must pause at a listed stop condition.
 
 ## Resume here
 
-Begin with Phase 3. Work one phase and one focused commit at a time. Update the
+Begin with Phase 4. Work one phase and one focused commit at a time. Update the
 dashboard and progress log in the same commit as each completed phase. Do not
 restart the completed Symbol Ledger, common brokerage API, legacy-route
-retirement, provider-I/O extraction, or Phase 2.5 options market-data projects.
+retirement, provider-I/O extraction, options market-data, or importer-move
+projects.
 
 ## Objective
 
@@ -45,9 +46,10 @@ credentials, sessions, provider calls, artifacts, or financial policy.
 The current filenames reflect the order in which integrations were added, not
 the responsibilities the modules now own:
 
-- `stock-app/app/retirement_options.py` imports SnapTrade activity, reads the
-  SnapTrade holdings ledger, and uses Tastytrade for beta and Greeks. It is
-  neither a provider module nor a general retirement-domain module.
+- The former `retirement_options` module in `stock-app/app/` imported SnapTrade
+  activity, read the SnapTrade holdings ledger, and used Tastytrade for beta and
+  Greeks. It was neither a provider module nor a general retirement-domain
+  module. Phase 3 split it into the two brokerage importers and deleted it.
 - `stock-app/app/snaptrade_service.py` no longer owns the SnapTrade SDK boundary.
   It mixes setup CLI behavior, credential persistence, raw-payload adaptation,
   holdings materialization, summaries, trend updates, and orchestration.
@@ -750,8 +752,8 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 1 | Delete proven-dead remnants | COMPLETE | Removed `_group_name`/`_build_groups`, group-only row fields, unused retirement imports/scaffolding, and `UNCLASSIFIED`/`_read_enrichment`/`_round2`; deleted dead-only group/snapshot test helpers |
 | 2 | Make resource commands single-purpose | COMPLETE | Registry: `sync_holdings` / `sync_activity` / `sync_held_option_market_data`; empty-body sync is 1/1/1/1; legacy `sync` orchestrates once each |
 | 2.5 | Provider-neutral quotes, Greeks/IV, and beta API/model | COMPLETE | `services/options_market/` + tastytrade adapter; consumers routed; `market_quotes` rename; both-runtime `test_options_market.py` |
-| 3 | Move materialization into explicit modules | NOT STARTED | Begin here |
-| 4 | Isolate setup/CLI and finish compatibility facade | NOT STARTED | Blocked on Phase 3 |
+| 3 | Move materialization into explicit modules | COMPLETE | `brokerages.importers.snaptrade` + `held_option_market_data`; `retirement_options.py` deleted; registry/adapter retargeted; 461 stock-app tests |
+| 4 | Isolate setup/CLI and finish compatibility facade | NOT STARTED | Begin here |
 | 5 | Enforcement, docs, and full regression | NOT STARTED | Blocked on Phase 4 |
 
 ## Progress log
@@ -764,6 +766,7 @@ Documented by `stock-app/tests/test_fidelity_sync_characterization.py`:
 | 2026-07-29 | 2 | COMPLETE | Split `sync_holdings` from legacy `sync`; registry points at holdings/activity/market-data commands; empty-body Fidelity sync is one positions/activity/beta/greeks call each. Characterization updated; 459 stock-app tests pass. | Owner boundary review before moving importers |
 | 2026-07-29 | Boundary decision | COMPLETE | Tastytrade's brokerage-account role and options market-data-provider role are independent. Add one cross-runtime neutral API/model for quotes, Greeks/IV, and underlying beta; route both brokerage market-data paths and premium quote enrichment through it. Keep Yahoo chain discovery and a second provider out of scope. | Phase 2.5 — establish the neutral API before moving importers |
 | 2026-07-29 | 2.5 | COMPLETE | Added `services/options_market/` (stdlib contracts, explicit tastytrade routing, OCC→dxFeed in adapter). Routed `retirement_options`, `options_activity` market-data, and `utilities.options.market_quotes` through it. Renamed tastytrade_quotes→`market_quotes`. Gate: services 18+17 pass both runtimes; stock-app 45; utilities 61; docs/secrets/diff-check clean. No production module outside the adapter calls Tastytrade quote/Greek/metric transport. | Phase 3 — move materialization into explicit modules |
+| 2026-07-29 | 3 | COMPLETE | Created `brokerages.importers.snaptrade` (holdings+activity) and `held_option_market_data` (beta/Greeks via options_market). Deleted `retirement_options.py`; registry/adapter use public importer readers; `snaptrade_service` is setup/CLI + COMPAT re-exports/orchestrator. Gate: services 22; targeted 159; full stock-app 461; docs/secrets/diff-check clean. | Phase 4 — isolate setup/CLI facade |
 
 ## Implementation-agent kickoff prompt
 

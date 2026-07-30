@@ -5,19 +5,23 @@ it is not the brokerage the user sees. One adapter therefore serves any
 brokerage the registry configures against it, and the public ``brokerage_id``
 comes from the descriptor rather than being hard-coded here.
 
-Reads only. Provider access stays in ``snaptrade_service`` and
-``retirement_options.sync_events``.
+Reads only. Provider access and artifact writes stay in
+``brokerages.importers.snaptrade`` and
+``brokerages.importers.held_option_market_data``; this adapter consumes the
+artifacts they materialize and never calls a provider.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
 
-from ... import config, retirement_options, snaptrade_service
+from ... import config
 from ..contracts import (MISSING_MARK, MISSING_MARKET_VALUE,
                          MISSING_NET_CASH_FLOW, MISSING_OPEN_CASH_FLOW,
                          MISSING_POSITION_DELTA, AccountRef, ActivityFact,
                          MarketObservation, PositionFact)
+from ..importers import held_option_market_data
+from ..importers import snaptrade as snaptrade_importer
 from .base import (DEFAULT_OPTION_MULTIPLIER, ArtifactAdapter, contract_key,
                    normalized_action, normalized_symbol, option_contract,
                    optional_decimal, text)
@@ -56,7 +60,7 @@ class SnapTradeAdapter(ArtifactAdapter):
 
     def positions(self) -> list[PositionFact]:
         facts: list[PositionFact] = []
-        for row in snaptrade_service._read_ledger(config.snaptrade_holdings_csv()):
+        for row in snaptrade_importer.read_holdings_ledger():
             quantity = optional_decimal(row.get("quantity"))
             if quantity is None or quantity == 0:
                 continue
@@ -120,7 +124,7 @@ class SnapTradeAdapter(ArtifactAdapter):
 
     def activity(self) -> list[ActivityFact]:
         facts: list[ActivityFact] = []
-        for row in retirement_options._read_events():
+        for row in snaptrade_importer.read_events():
             action = normalized_action(row.get("action"))
             missing = list(self.action_missing_reasons(action))
 
@@ -163,8 +167,9 @@ class SnapTradeAdapter(ArtifactAdapter):
 
     def market_observations(self) -> list[MarketObservation]:
         observations: list[MarketObservation] = []
-        for row in retirement_options._read_rows(
-            config.retirement_option_greeks_csv(), retirement_options.GREEKS_HEADERS
+        for row in held_option_market_data.read_rows(
+            config.retirement_option_greeks_csv(),
+            held_option_market_data.GREEKS_HEADERS,
         ):
             observations.append(MarketObservation(
                 brokerage_id=self.brokerage_id,
@@ -179,8 +184,9 @@ class SnapTradeAdapter(ArtifactAdapter):
                     observed_at=row.get("observed_at"),
                 ),
             ))
-        for row in retirement_options._read_rows(
-            config.retirement_option_betas_csv(), retirement_options.BETA_HEADERS
+        for row in held_option_market_data.read_rows(
+            config.retirement_option_betas_csv(),
+            held_option_market_data.BETA_HEADERS,
         ):
             observations.append(MarketObservation(
                 brokerage_id=self.brokerage_id,

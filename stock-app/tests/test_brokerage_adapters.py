@@ -18,9 +18,10 @@ from decimal import Decimal
 
 import pytest
 
-from app import (brokerages, config, options_activity, retirement_options,
-                 snaptrade_service)
+from app import brokerages, config, options_activity, snaptrade_service
 from app.brokerages import contracts, registry
+from app.brokerages.importers import held_option_market_data
+from app.brokerages.importers import snaptrade as snaptrade_importer
 from app.brokerages.adapters.base import BrokerageAdapter
 
 CONTRACT = "ABC   260821P00050000"
@@ -96,7 +97,7 @@ def _write_snaptrade(*, holdings=(), events=(), greeks=(), betas=()) -> None:
         return row
 
     def event(**kw):
-        row = {header: "" for header in retirement_options.EVENT_HEADERS}
+        row = {header: "" for header in snaptrade_importer.EVENT_HEADERS}
         row.update({"schema_version": "1", "source": "SNAPTRADE",
                     "account_id": "acct-1", "account": "BrokerageLink",
                     "activity_type": "TRADE",
@@ -111,16 +112,16 @@ def _write_snaptrade(*, holdings=(), events=(), greeks=(), betas=()) -> None:
         writer = csv.DictWriter(handle, fieldnames=snaptrade_service.HOLDINGS_HEADERS)
         writer.writeheader()
         writer.writerows(holding(**row) for row in holdings)
-    retirement_options._atomic_write(
-        config.retirement_option_events_csv(), retirement_options.EVENT_HEADERS,
+    snaptrade_importer.atomic_write(
+        config.retirement_option_events_csv(), snaptrade_importer.EVENT_HEADERS,
         [event(**row) for row in events],
     )
-    retirement_options._atomic_write(
-        config.retirement_option_greeks_csv(), retirement_options.GREEKS_HEADERS,
+    held_option_market_data.atomic_write(
+        config.retirement_option_greeks_csv(), held_option_market_data.GREEKS_HEADERS,
         list(greeks),
     )
-    retirement_options._atomic_write(
-        config.retirement_option_betas_csv(), retirement_options.BETA_HEADERS,
+    held_option_market_data.atomic_write(
+        config.retirement_option_betas_csv(), held_option_market_data.BETA_HEADERS,
         list(betas),
     )
 
@@ -485,7 +486,8 @@ def test_read_adapters_never_call_a_provider(adapter_env, brokerage_id, monkeypa
         raise AssertionError("a read adapter attempted provider access")
 
     monkeypatch.setattr(options_activity, "fetch_tastytrade", forbidden)
-    monkeypatch.setattr(snaptrade_service, "fetch_activities", forbidden)
+    monkeypatch.setattr(snaptrade_importer, "fetch_snaptrade", forbidden)
+    monkeypatch.setattr(snaptrade_importer, "fetch_activities", forbidden)
     monkeypatch.setattr(snaptrade_service, "sync", forbidden)
     write_covered_put(brokerage_id)
     registry.resolve(brokerage_id).snapshot()
@@ -536,9 +538,9 @@ def test_only_the_registry_names_a_brokerage():
     """Phase 2's exit criterion, enforced rather than reviewed.
 
     Common code may not contain an `if fidelity` / `if trading` transformation
-    branch. Provider vocabulary belongs in `adapters/`, and identity selection
-    belongs in `registry.py`; every other module in the package must work purely
-    from the descriptor it is handed.
+    branch. Provider vocabulary belongs in `adapters/` and `importers/`, and
+    identity selection belongs in `registry.py`; every other module in the
+    package must work purely from the descriptor it is handed.
     """
     from pathlib import Path
 
@@ -547,7 +549,8 @@ def test_only_the_registry_names_a_brokerage():
     root = Path(package.__file__).resolve().parent
     common = [
         path for path in sorted(root.rglob("*.py"))
-        if path.name != "registry.py" and path.parent.name != "adapters"
+        if path.name != "registry.py"
+        and path.parent.name not in {"adapters", "importers"}
     ]
     assert {path.name for path in common} >= {"contracts.py", "__init__.py"}
 
