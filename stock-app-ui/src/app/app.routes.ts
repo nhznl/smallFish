@@ -1,11 +1,5 @@
 import { ActivatedRouteSnapshot, Routes } from '@angular/router';
-import { MomentumScannerComponent } from './momentum-scanner/momentum-scanner.component';
-import { StockDetailComponent } from './stock-detail/stock-detail.component';
-import { StudiesComponent } from './studies/studies.component';
-import { WheelComponent } from './wheel/wheel.component';
-import { RetirementPortfolioComponent } from './retirement-portfolio/retirement-portfolio.component';
 import { PageNotFoundComponent } from './page-not-found/page-not-found.component';
-import { OptionsComponent } from './options/options.component';
 
 /** Stock detail is the one route whose title depends on the URL. */
 const stockDetailTitle = (route: ActivatedRouteSnapshot) => {
@@ -14,16 +8,16 @@ const stockDetailTitle = (route: ActivatedRouteSnapshot) => {
 };
 
 export const routes: Routes = [
-  { path: 'momentum', component: MomentumScannerComponent, title: 'Momentum · smallFish' },
-  { path: 'studies', component: StudiesComponent, title: 'Research Studies · smallFish' },
-  { path: 'studies/:studyId', component: StudiesComponent, title: 'Research Studies · smallFish' },
+  { path: 'momentum', title: 'Momentum · smallFish', loadComponent: () => import('./momentum-scanner/momentum-scanner.component').then(m => m.MomentumScannerComponent) },
+  { path: 'studies', title: 'Research Studies · smallFish', loadComponent: () => import('./studies/studies.component').then(m => m.StudiesComponent) },
+  { path: 'studies/:studyId', title: 'Research Studies · smallFish', loadComponent: () => import('./studies/studies.component').then(m => m.StudiesComponent) },
   { path: 'sectors', title: 'Sectors · smallFish', loadComponent: () => import('./sector-rotation/sector-rotation.component').then(m => m.SectorRotationComponent) },
-  { path: 'wheel', component: WheelComponent, title: 'Wheel · smallFish' },
+  { path: 'wheel', title: 'Wheel · smallFish', loadComponent: () => import('./wheel/wheel.component').then(m => m.WheelComponent) },
   { path: 'wheelExplainer', title: 'Wheel Explainer · smallFish', loadComponent: () => import('./wheel-explainer/wheel-explainer.component').then(m => m.WheelExplainerComponent) },
-  { path: 'options', component: OptionsComponent, title: 'Trading Ledger · smallFish' },
-  { path: 'retirement', component: RetirementPortfolioComponent, title: 'Retirement Ledger · smallFish' },
+  { path: 'options', title: 'Trading Ledger · smallFish', loadComponent: () => import('./options/options.component').then(m => m.OptionsComponent) },
+  { path: 'retirement', title: 'Retirement Ledger · smallFish', loadComponent: () => import('./retirement-portfolio/retirement-portfolio.component').then(m => m.RetirementPortfolioComponent) },
   { path: 'portfolios', title: 'Portfolios · smallFish', loadComponent: () => import('./portfolios/portfolios.component').then(m => m.PortfoliosComponent) },
-  { path: 'stockDetail/:symbol', component: StockDetailComponent, title: stockDetailTitle },
+  { path: 'stockDetail/:symbol', title: stockDetailTitle, loadComponent: () => import('./stock-detail/stock-detail.component').then(m => m.StockDetailComponent) },
   { path: '', redirectTo: '/momentum', pathMatch: 'full' },
   { path: '**', component: PageNotFoundComponent, title: 'Not Found · smallFish' }
 ];

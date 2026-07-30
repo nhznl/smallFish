@@ -110,7 +110,7 @@ shared brokerage page and should remain simple.
 | High | Largest screens have no direct component tests | ~~Only 6 of 19 components had specs~~ **5a–5c done.** Behavior specs added for Stock Detail, Momentum Scanner, Wheel, Portfolios, and Sector Rotation. See [`ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md`](ANGULAR_LIFECYCLE_TESTS_PHASE5_DESIGN.md). |
 | Medium | Nested or independent route-driven subscriptions can race | ~~Stock Detail race~~ **Stock Detail fixed** with `switchMap` cancel. Studies nested `paramMap` race remains deferred. |
 | Medium | Empty data and failed requests are sometimes conflated | Some stock-service methods catch errors and return an empty array or an error-shaped success value, while other methods propagate errors. | Let view models distinguish `loading`, `empty`, `unavailable`, and `failed`. Centralize transport error translation without hiding failures. |
-| Medium | Most major routes are eager-loaded | The successful build reports a 1.12 MB raw initial bundle; only portfolios, wheel explainer, and sector rotation are lazy chunks. | Lazy-load the remaining heavy feature routes after route-state tests exist. The build is within budget, so this is a measured performance improvement rather than an emergency. |
+| Medium | Most major routes are eager-loaded | ~~Only three lazy chunks~~ **Phase 8 done.** Remaining feature routes use `loadComponent`; 404 stays eager. See [`ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md`](ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md). |
 | Low | Three passing service specs trigger “no expectations” warnings | The HTTP controller assertions throw on failure, but Karma does not count them as Jasmine expectations. | Add explicit response or request assertions so the suite remains warning-free and intent is obvious. |
 
 ## 3. Backend duplicate and unused-code review
@@ -271,6 +271,10 @@ methodology changes, compatibility removals, and mechanical cleanup.
    Layer A/B/C inventory, evidence checklist, Consumer status table. **Retain**
    Layer A fetches and materialization until External unknown is closed or the
    owner authorizes a trim; no fetch/schema deletions in Phase 7.
+8. **~~Lazy-load remaining heavy Angular routes.~~ Done (8a).** See
+   [`ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md`](ANGULAR_LAZY_LOAD_PHASE8_DESIGN.md):
+   momentum, studies, wheel, options, retirement, and stock detail converted to
+   `loadComponent`; paths/titles/redirect preserved; 404 remains eager.
 
 ### Explicit stop conditions
 
@@ -298,7 +302,7 @@ The following checks were run against the stated baseline:
 | Services tests in utilities environment | 17 passed, 1 skipped |
 | Backend `pip check` | No broken requirements |
 | Utilities `pip check` | No broken requirements |
-| Angular production build (Node 24) | Passed; 1.12 MB raw initial bundle, within budget |
+| Angular production build (Node 24) | Passed; Phase 8 initial total 457 kB raw (was ~1.12 MB at audit baseline) |
 | Angular CI tests | 91 passed; 3 no-expectation warnings noted above |
 | Angular strict unused-symbol compilation | Passed |
 
