@@ -1,10 +1,22 @@
+"""Live Yahoo company-info adapter for Stock Detail.
+
+Most FastAPI reads are artifact-first under ``SFP_DATA_DIR``. This module is the
+intentional exception: ``GET /stocks/{symbol}/info`` calls Yahoo via yfinance on
+demand. Pass ``ticker_factory`` in tests so the suite never opens a socket.
+"""
+
+from __future__ import annotations
+
 import math
 from datetime import datetime, timezone
+from typing import Any, Callable
 
 import yfinance as yf
 
 
 MAX_NEWS_ITEMS = 10
+
+TickerFactory = Callable[[str], Any]
 
 
 def safe_numeric(value):
@@ -118,8 +130,18 @@ def format_news_items(items):
     return news
 
 
-def fetch_stock_information(ticker_symbol: str):
-    ticker = yf.Ticker(ticker_symbol)
+def fetch_stock_information(
+    ticker_symbol: str,
+    *,
+    ticker_factory: TickerFactory | None = None,
+):
+    """Map a Yahoo ticker surface into the Stock Detail info JSON payload.
+
+    ``ticker_factory`` defaults to ``yfinance.Ticker``. Tests inject a fake that
+    exposes ``.info`` and ``.news`` so this path stays offline.
+    """
+    factory = yf.Ticker if ticker_factory is None else ticker_factory
+    ticker = factory(ticker_symbol)
     info = getattr(ticker, "info", {}) or {}
     news = getattr(ticker, "news", []) or []
 

@@ -25,7 +25,7 @@ exception clarity.
 | Holdings + Combined Ledger helpers | **Chosen.** Byte-identical `money` / `quantity` / `timestamp` / `pnlClass`; Holdings also owns the matching `percent` helper. |
 | Service-spec “no expectations” | ~~Still open~~ **Phase 12 done.** |
 | View-model decomposition | Still open (Medium). Deferred as a later design phase; formatting does not unblock it. |
-| Company-info live fetch exception | Still open (Medium). Document/inject in a dedicated phase; not mixed here. |
+| Company-info live fetch exception | ~~Still open~~ **Phase 13 done.** See [`COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md). |
 | `models/price.py` | Stop condition — adopt-or-delete owner decision. No beta/Greek trim. |
 
 ## Sequence
@@ -66,7 +66,8 @@ for money). Unifying that would change display for some locales.
   or wheel formatting
 - Angular pipes (helpers keep existing method call sites)
 - View-model / presentational decomposition
-- Company-info fetcher injection / README exception note
+- Company-info fetcher injection / README exception note — closed in Phase 13
+  ([`COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md))
 - BrokerageService “no expectations” warnings — closed in Phase 12
   ([`ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md`](ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md))
 - Deleting or adopting `models/price.py`

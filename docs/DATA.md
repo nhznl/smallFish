@@ -205,7 +205,7 @@ Broker ledgers can be re-synced from the providers.
 
 | Provider | Used for | Note |
 |---|---|---|
-| Yahoo Finance (`yfinance`) | Price history, company info | Unofficial API. Rate-limited, occasionally changes shape. Personal use. |
+| Yahoo Finance (`yfinance`) | Price history (batch scraper); live company info on `GET /stocks/{symbol}/info` | Unofficial API. Rate-limited, occasionally changes shape. Personal use. Company info is the FastAPI live-fetch exception — see `stock-app/README.md`. |
 | Wikipedia | Index membership | Read at run time. Only the resulting symbol list is kept. |
 | Finnhub | Earnings calendar | Free tier. Your key, your quota. |
 | Tastytrade | Options activity, quotes, Greeks, beta | Read-only, your account. |

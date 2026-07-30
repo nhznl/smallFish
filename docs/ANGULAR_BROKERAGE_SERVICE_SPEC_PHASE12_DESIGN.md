@@ -20,7 +20,7 @@ decomposition design note only.
 | Option | Disposition |
 |---|---|
 | BrokerageService “no expectations” | **Chosen.** Bounded, high hygiene value; three cases already assert URLs via `expectOne` but Karma does not count those as Jasmine expectations. |
-| Company-info exception docs | Still open (Medium). Dedicated phase; not mixed here. |
+| Company-info exception docs | ~~Still open~~ **Phase 13 done.** |
 | View-model decomposition design | Still open (Medium). Design-only follow-up; formatting and transport do not unblock it. |
 | Broader format-display migration | Still open after Phase 11; measure each surface separately. |
 | `models/price.py` | Stop condition — adopt-or-delete owner decision. |
@@ -45,7 +45,7 @@ decomposition design note only.
 
 - New BrokerageService methods or URL shape changes
 - CapabilityService or component specs
-- Company-info fetcher injection / README exception note
+- Company-info fetcher injection / README exception note — closed in Phase 13
 - View-model / presentational decomposition
 - Further format-display call-site migration
 - Deleting or adopting `models/price.py`

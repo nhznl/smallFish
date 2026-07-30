@@ -1,4 +1,10 @@
-"""GET /stocks/{symbol}/info using the backend's yfinance adapter directly."""
+"""GET /stocks/{symbol}/info — live Yahoo company-info (artifact-first exception).
+
+Most stock-app reads use materialized files under ``SFP_DATA_DIR``. This route
+calls ``stock_data_retriever.fetch_stock_information``, which talks to Yahoo via
+yfinance on demand. Provider exception details stay out of the HTTP body; only
+the exception type is surfaced. See ``stock-app/README.md``.
+"""
 
 from __future__ import annotations
 

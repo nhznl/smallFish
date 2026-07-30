@@ -111,7 +111,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `GET /api/studies/{studyId}/scan` | Latest materialized candidate snapshot for a scan-capable study. |
 | `POST /api/studies/{studyId}/scan` | Verify/refresh upcoming earnings, then run an explicitly allowlisted study scan; fails closed when freshness is unavailable. |
 | `GET /wheelCandidates?horizon=37` | Wheel candidates with trend data. |
-| `GET /stocks/{symbol}/info` | Company information. |
+| `GET /stocks/{symbol}/info` | Live Yahoo company information for Stock Detail (see below). |
 | `GET /api/brokerages/{id}/symbols` | Brokerage-agnostic Symbol Ledger list with derived lifecycle and retained-history P/L. |
 | `GET /api/brokerages/{id}/symbols/{symbol}/events` | Immutable, cursor-paginated current, all, or archived event history. |
 | `POST /api/brokerages/{id}/symbols/{symbol}/archives` | Idempotently archive an eligible completed period. |
@@ -236,6 +236,22 @@ the API declares it eligible. Trade-group creation, status changes, and event
 reassignment routes return `410 Gone`. Legacy group artifacts remain readable
 only as rollback material and production sync no longer writes them.
 
+## Live company-info exception
+
+Almost every stock-app read is artifact-first under `SFP_DATA_DIR`: OHLCV,
+scanner rows, brokerage ledgers, and study reports are files written by batch
+jobs or sync. **`GET /stocks/{symbol}/info` is the narrow exception.** It calls
+`app/stock_data_retriever.py`, which uses Yahoo Finance through `yfinance` on
+demand for Stock Detail company metadata, quote summary fields, valuation
+ratios, and a short news list. That path does not import `utilities/`, does not
+write a cache artifact, and is not part of `services/` provider transport.
+
+Provider failures return HTTP 500 with `detail` naming only the exception
+*type* (never the raw provider message). Tests inject a fake `ticker_factory`
+(or monkeypatch the router’s `fetch_stock_information`) so the suite never
+opens a socket — including under `SFP_BLOCK_NETWORK=1`. Design note:
+[`../docs/COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](../docs/COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md).
+
 ## Tests
 
 ```bash
@@ -247,7 +263,8 @@ opened. Fixtures live in `tests/fixtures/`, and path settings are redirected at
 them with `monkeypatch.setenv`, so the suite is independent of your `app.env`
 and your `data/`.
 Provider transport is separately covered by `services/tests/` with fake SDK
-sessions and clients.
+sessions and clients. The company-info adapter is covered the same way: pass a
+fake ticker factory rather than calling Yahoo.
 
 This package must never import `utilities/` or `studies/`. It consumes generated
 artifacts instead; see [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).

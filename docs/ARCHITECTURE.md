@@ -90,8 +90,13 @@ Brokerage sync consumers call `services/*` for raw provider payloads, then
 normalize and materialize their own ledger artifacts under `SFP_DATA_DIR`.
 Brokerage adapters read those artifacts only; they never call `services/`.
 
-Nothing in the API triggers a scrape as a side effect of a page load. Batch work
-is explicit, via `commands.sh`.
+Nothing in the API triggers a **price scrape** as a side effect of a page load.
+Batch price work is explicit, via `commands.sh`. The one read-path network
+exception is Stock Detail company info: `GET /stocks/{symbol}/info` calls Yahoo
+via `yfinance` inside `stock-app` (`app/stock_data_retriever.py`) rather than
+reading a materialized artifact. That fetcher is injectable for offline tests;
+see [`COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md)
+and `stock-app/README.md`.
 
 ## API and UI boundary
 

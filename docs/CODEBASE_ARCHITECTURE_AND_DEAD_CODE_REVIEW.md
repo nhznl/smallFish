@@ -40,8 +40,9 @@ The audit nevertheless found substantial follow-up work:
    largest screens.~~ Orphan models / unused catalog client removed; Phase 5
    coverage and Phase 10 API-base token landed. Phase 11 shared Holdings /
    Combined Ledger format helpers; Phase 12 cleared BrokerageService
-   “no expectations” warnings. Broader formatting drift and view-model
-   decomposition remain open.
+   “no expectations” warnings; Phase 13 documented the company-info
+   live-fetch exception and injected its ticker factory. Broader formatting
+   drift and view-model decomposition remain open.
 4. Several backend endpoints and helpers have no repository consumer, but are
    compatibility surfaces rather than proven dead code. They must not be
    removed solely because the Angular client does not call them.
@@ -201,7 +202,7 @@ decimal semantics are demonstrably identical.
 | `utilities/options/chains.py` is a 2,134-line pipeline module | ~~Monolith~~ **6a/6c:** design + first extract of config/scope + publish (`chains_config.py`, `chains_publish.py`); strikes/eligibility remain until a follow-up. See [`CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md`](CHAINS_PIPELINE_DECOMPOSITION_DESIGN.md). |
 | Brokerage API routes accept and return raw dictionaries | ~~Untyped write bodies~~ **4c done for closed writes.** Request models in `brokerages/schemas.py` for notes / holdings metadata / archives / sync; deep GET envelopes still projection-owned. |
 | Gain/loss migration runs during every brokerage sync | A one-time compatibility action remains on the steady-state hot path. | Prove all supported files are migrated, document rollback/old-file behavior, then retire the runtime migration separately. |
-| Company-info fetching is a backend network exception | `stock_data_retriever.py` performs live Yahoo/yfinance retrieval in the read-oriented API runtime, unlike the artifact-first price path and injected service transports. | Either document this narrow exception and inject the fetcher for tests, or move raw transport into `services/`/a materialized artifact. Do not make the backend import `utilities/`. |
+| ~~Company-info fetching is a backend network exception~~ | ~~`stock_data_retriever.py` live Yahoo~~ **Phase 13 done.** Documented in `stock-app/README.md` / `docs/ARCHITECTURE.md`; `ticker_factory` injectable; offline retriever tests. Moving into `services/` or a materialized artifact remains optional follow-up. See [`COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md). |
 | Frontend feature components hold transport, transformation, and presentation state | The largest views are hard to test and are vulnerable to route/loading races. | After behavior tests, extract feature facades/view models and focused presentational components. Avoid a global state framework unless shared-state requirements emerge. |
 
 ### Architecture strengths to preserve
@@ -229,7 +230,7 @@ decimal semantics are demonstrably identical.
 | High | `docs/CONFIGURATION.md` | ~~`options_risk.yaml` as active config~~ Row removed with the subsystem. |
 | Medium | `docs/BROKERAGES.md` | “Combined risk inputs” describes a retirement risk UI that no longer exists. Distinguish retained materialized provider fields from user-visible features, and document the three current ledger views. |
 | Medium | `docs/TROUBLESHOOTING.md` | It says both `/options` and `/portfolios` collide with API paths. The current SPA collision set contains only `/portfolios`; explain the current fallback behavior precisely. |
-| Medium | `utilities/README.md` | Quote/Greek/beta transport and OCC-to-dxFeed mapping now belong to `services.options_market` provider adapters, not the old utilities path. The company-info ownership statement also points to the wrong runtime. |
+| Medium | `utilities/README.md` | Quote/Greek/beta transport and OCC-to-dxFeed mapping now belong to `services.options_market` provider adapters, not the old utilities path. ~~Company-info ownership~~ **Current prose correctly attributes live company-info to `stock-app`** (Phase 13). |
 | Low | `stock-app/requirements.txt` comments | Header comments refer to an old `strategy/` duplication problem and no longer explain the current runtime boundary. |
 | Low | `Requirements.md` | Seven source-file references include stale section-number annotations. Paths remain useful, but anchors should use durable headings rather than line/section numbers. |
 
@@ -297,7 +298,12 @@ methodology changes, compatibility removals, and mechanical cleanup.
     [`ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md`](ANGULAR_BROKERAGE_SERVICE_SPEC_PHASE12_DESIGN.md):
     path-building and query-param cases assert `GET` explicitly so Karma no
     longer reports SPEC HAS NO EXPECTATIONS. Broader formatting, view-model
-    decomposition, and company-info exception docs remain open.
+    decomposition, and company-info exception docs remained open after 12a.
+13. **~~Company-info live-fetch exception.~~ Done (13a).** See
+    [`COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md`](COMPANY_INFO_LIVE_FETCH_PHASE13_DESIGN.md):
+    README/ARCHITECTURE document the Yahoo on-demand path; injectable
+    `ticker_factory`; offline retriever tests. Broader formatting and
+    view-model / empty-vs-failed decomposition remain open.
 
 ### Explicit stop conditions
 
