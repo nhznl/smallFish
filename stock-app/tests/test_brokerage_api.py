@@ -312,12 +312,10 @@ def test_holdings_exclude_a_lot_that_is_no_longer_held(adapter_env, brokerage_id
 
 
 def test_account_value_counts_cash_and_matches_the_legacy_total(adapter_env):
-    """The retirement risk cash limit is measured against this number.
+    """Cash-equivalents are holdings and also count toward account value.
 
-    Holdings lists what you hold, so it excludes cash; the account value asks
-    what the account is worth, so it includes it. Proving the two agree before
-    the legacy projection is deleted is what makes that deletion safe — reading
-    the Holdings total instead would have quietly tightened the risk bands.
+    Options stay out of both figures. Proving Holdings and account value agree
+    on the cash+equity total keeps the risk cash limit honest.
     """
     _write_snaptrade(holdings=[
         {"asset_class": "STOCK", "symbol": "ABC", "quantity": "100",
@@ -332,13 +330,13 @@ def test_account_value_counts_cash_and_matches_the_legacy_total(adapter_env):
     ])
     body = _get("fidelity", "holdings")
 
-    # Cash is not a holding and never becomes a component...
-    assert [item["symbol"] for item in body["items"]] == ["ABC"]
-    assert body["summary"]["total_market_value"] == pytest.approx(12000)
-    # ...but it is part of what the account is worth. The option is not.
-    # 12000 of equity plus 2500 of cash. This matched the legacy projection's
-    # `totalCurrent` field for field when both existed; that comparison was
-    # removed with the projection, and the figure is pinned here instead.
+    assert [item["symbol"] for item in body["items"]] == ["ABC", "USD"]
+    cash = next(item for item in body["items"] if item["symbol"] == "USD")
+    assert cash["instrument"] == "CASH"
+    assert cash["category"] == "CASH"
+    assert cash["market_value"] == pytest.approx(2500)
+    assert body["summary"]["total_market_value"] == pytest.approx(14500)
+    # Equity 12000 + cash 2500. Options are excluded from both.
     assert body["summary"]["total_account_value"] == pytest.approx(14500)
 
 

@@ -115,12 +115,37 @@ export class BrokerageHoldingsComponent implements OnChanges {
     });
   }
 
-  /** Invested / Current totals for the currently filtered rows. Fail closed. */
-  filteredTotals(): { cost_basis: number | null; market_value: number | null } {
+  /** Aggregates for the currently filtered rows. Fail closed on missing inputs. */
+  filteredTotals(): {
+    cost_basis: number | null;
+    market_value: number | null;
+    pct_of_total: number | null;
+    unrealized_pnl: number | null;
+    unrealized_pnl_pct: number | null;
+  } {
     const rows = this.filteredHoldings();
+    const cost_basis = this.sumExact(rows.map(row => row.cost_basis));
+    const market_value = this.sumExact(rows.map(row => row.market_value));
+    const portfolioTotal = this.data?.summary.total_market_value ?? null;
+    const unrealized_pnl = (
+      cost_basis == null || market_value == null
+        ? null
+        : market_value - cost_basis
+    );
     return {
-      cost_basis: this.sumExact(rows.map(row => row.cost_basis)),
-      market_value: this.sumExact(rows.map(row => row.market_value)),
+      cost_basis,
+      market_value,
+      pct_of_total: (
+        market_value == null || portfolioTotal == null || portfolioTotal === 0
+          ? null
+          : (market_value / portfolioTotal) * 100
+      ),
+      unrealized_pnl,
+      unrealized_pnl_pct: (
+        unrealized_pnl == null || cost_basis == null || cost_basis === 0
+          ? null
+          : (unrealized_pnl / cost_basis) * 100
+      ),
     };
   }
 

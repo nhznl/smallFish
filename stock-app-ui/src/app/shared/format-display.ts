@@ -31,10 +31,10 @@ export function formatFixedPercent(
   return signed && value > 0 ? `+${formatted}` : formatted;
 }
 
-/** Whole numbers stay unpadded; fractions use three decimals. */
+/** Whole numbers stay unpadded; fractions use two decimals. */
 export function formatQuantity(value: number | null | undefined): string {
   if (value == null) return '—';
-  return Number.isInteger(value) ? String(value) : value.toFixed(3);
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
 /** ISO / parseable timestamps via the browser locale; invalid → raw string. */

@@ -59,7 +59,7 @@ they never persist credentials or brokerage data.
 
 ## Tastytrade
 
-Adds the Trading ledger (Holdings, Symbol Ledger, Equity+Option-Adjusted Basis),
+Adds the Trading ledger (Holdings, Symbol Ledger, Combined Adjusted Basis),
 DXLink quotes, exact-contract Greeks, and market-metric beta.
 
 ### What smallFish reads
@@ -179,9 +179,9 @@ Trading (`/options`) and Retirement (`/retirement`) share one three-tab shell:
 
 | Tab | What it shows |
 |---|---|
-| **Holdings** | Open equity positions with an Edit dialog for category, industry, note, and any missing cost basis. Options are excluded. |
+| **Holdings** | Open equity and cash-equivalent positions with an Edit dialog for category, industry, note, and any missing cost basis. Options are excluded. |
 | **Options** | The Symbol Ledger: one durable record per underlying, derived Active/Closed lifecycle, option-only positions and P/L, immutable event history, and optional archived-period detail. |
-| **Equity+Option-Adjusted Basis** | Combined equity and option P/L for each symbol that still holds long shares, plus the basis adjusted by its option history. |
+| **Combined Adjusted Basis** | Combined equity and option P/L for each symbol that still holds long shares, plus the basis adjusted by its option history. |
 
 Some employer-plan holdings arrive without provider cost basis. Those rows show
 an em dash for cost and gain/loss values, and affected portfolio totals remain

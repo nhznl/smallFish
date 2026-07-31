@@ -1,4 +1,4 @@
-"""Holdings: current equity positions, one contract for every brokerage.
+"""Holdings: current equity and cash positions, one contract for every brokerage.
 
 Options are excluded — they have their own resource. Category, industry, and
 note and missing-cost-basis overrides are app-owned metadata merged onto
@@ -10,7 +10,8 @@ equity component for a share lot that has already been sold, because the Symbol
 Ledger needs its realized cash. Holdings is a statement of what is held now, so
 a flat lot is not a holding here: including one would list a sold position at
 zero quantity and, worse, fold its realized result into the invested and
-unrealized totals.
+unrealized totals. Cash-equivalents (money-market funds reported as CASH) are
+included: they are part of what the account holds today.
 """
 
 from __future__ import annotations
@@ -119,10 +120,10 @@ def account_value(snapshot: BrokerageSnapshot, *,
 
 def held_equity(snapshot: BrokerageSnapshot, *,
                 account_id: str | None = None) -> list[Any]:
-    """Equity components that are still open, for one account or all of them."""
+    """Open equity and cash components for one account or all of them."""
     return [
         component for component in component_projection.build(snapshot)
-        if component.instrument == "EQUITY" and component.state == "OPEN"
+        if component.instrument in {"EQUITY", "CASH"} and component.state == "OPEN"
         and (account_id is None or component.account_id == account_id)
     ]
 
@@ -194,7 +195,9 @@ def build(snapshot: BrokerageSnapshot, *,
             })
         items.append({
             **serialized,
-            "category": (tags.get("category") or "").upper() or UNCLASSIFIED,
+            "category": (tags.get("category") or "").upper() or (
+                "CASH" if component.instrument == "CASH" else UNCLASSIFIED
+            ),
             "industry": (tags.get("industry") or "").upper() or UNCLASSIFIED,
             "note": tags.get("note", ""),
             "metadata_updated_at": max(

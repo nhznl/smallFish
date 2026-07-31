@@ -198,7 +198,7 @@ describe('BrokerageHoldingsComponent', () => {
     expect(text).toContain('75.00%');    // % Portfolio, first row
   });
 
-  it('sums Invested and Current for the filtered holdings at the top of the table', async () => {
+  it('sums Invested, Current, portfolio share, and G/L for filtered holdings', async () => {
     const api = stub();
     api.getHoldings.and.returnValue(of(response(BROKERAGES[0])));
     const fixture = await mount(api, 'tastytrade');
@@ -206,21 +206,33 @@ describe('BrokerageHoldingsComponent', () => {
     const totals = fixture.nativeElement.querySelector('tbody tr.totals-row') as HTMLTableRowElement;
     expect(totals).toBeTruthy();
     expect(totals.textContent).toContain('Total');
-    expect(totals.textContent?.replace(/\s+/g, ' ')).toContain('$1,300.00');
-    expect(totals.textContent?.replace(/\s+/g, ' ')).toContain('$1,200.00');
+    const allText = totals.textContent?.replace(/\s+/g, ' ') ?? '';
+    expect(allText).toContain('$1,300.00');
+    expect(allText).toContain('$1,200.00');
+    expect(allText).toContain('100.00%');
+    expect(allText).toContain('−$100.00');
+    expect(allText).toContain('−7.69%');
 
     fixture.componentInstance.category = 'GROWTH';
     fixture.detectChanges();
     const filtered = fixture.nativeElement.querySelector('tbody tr.totals-row') as HTMLTableRowElement;
-    expect(filtered.textContent?.replace(/\s+/g, ' ')).toContain('$1,000.00');
-    expect(filtered.textContent?.replace(/\s+/g, ' ')).toContain('$900.00');
-    expect(filtered.textContent?.replace(/\s+/g, ' ')).not.toContain('$1,300.00');
+    const growthText = filtered.textContent?.replace(/\s+/g, ' ') ?? '';
+    expect(growthText).toContain('$1,000.00');
+    expect(growthText).toContain('$900.00');
+    expect(growthText).toContain('75.00%');
+    expect(growthText).toContain('−$100.00');
+    expect(growthText).toContain('−10.00%');
+    expect(growthText).not.toContain('$1,300.00');
 
     fixture.componentInstance.category = '';
     fixture.componentInstance.account = 'IRA';
     fixture.detectChanges();
     const byAccount = fixture.nativeElement.querySelector('tbody tr.totals-row') as HTMLTableRowElement;
-    expect(byAccount.textContent?.replace(/\s+/g, ' ')).toContain('$300.00');
+    const iraText = byAccount.textContent?.replace(/\s+/g, ' ') ?? '';
+    expect(iraText).toContain('$300.00');
+    expect(iraText).toContain('25.00%');
+    expect(iraText).toContain('$0.00');
+    expect(iraText).toContain('0.00%');
   });
 
   it('renders a missing value as an em dash rather than zero', async () => {

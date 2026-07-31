@@ -231,7 +231,7 @@ def _component(*, brokerage_id: str, position: PositionFact | None,
         basis = "UNAVAILABLE"
         missing.append(
             POSITION_ACTIVITY_MISMATCH if events
-            else (EQUITY_COST_BASIS if instrument == "EQUITY"
+            else (EQUITY_COST_BASIS if instrument in {"EQUITY", "CASH"}
                   else OPTION_ACTIVITY_HISTORY)
         )
 
@@ -327,7 +327,7 @@ def build(snapshot: BrokerageSnapshot) -> list[Component]:
     components: list[Component] = []
     for key in sorted(set(positions_by_key) | set(events_by_key)):
         account_id, instrument, identity = key
-        if instrument not in {"EQUITY", "OPTION"}:
+        if instrument not in {"EQUITY", "OPTION", "CASH"}:
             continue
         position = positions_by_key.get(key)
         events = events_by_key.get(key, [])
@@ -358,9 +358,9 @@ def build(snapshot: BrokerageSnapshot) -> list[Component]:
             missing_mark_code=(
                 CURRENT_OPTION_MARK if instrument == "OPTION" else CURRENT_EQUITY_MARK
             ),
-            # Only shares have a broker cost basis to fall back on when their
-            # imported executions do not cover the whole position.
-            cost_basis_fallback=instrument == "EQUITY",
+            # Shares and cash-equivalents carry a broker cost basis to fall back
+            # on when imported equity activity does not cover the whole position.
+            cost_basis_fallback=instrument in {"EQUITY", "CASH"},
         ))
     return components
 

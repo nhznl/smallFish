@@ -20,7 +20,7 @@ the work:
 - Momentum is the reference for scan/filter/results workflows. Strategy and
   Wheel show how that language extends to other research tools. Options and
   Retirement are the reference for the shared Holdings, Symbol Ledger, and
-  Equity+Option-Adjusted Basis views.
+  Combined Adjusted Basis views.
 
 Code is authoritative when this document and the implementation differ. Fix
 the documentation as part of any intentional convention change.
@@ -210,15 +210,17 @@ other textual state.
 ### Ledgers and portfolio risk
 
 - Trading and Retirement expose the same three brokerage tabs in the same
-  order: Holdings, Options, and Equity+Option-Adjusted Basis. Holdings contain equity
-  information only; Options contain option information only.
+  order: Holdings, Options, and Combined Adjusted Basis. Holdings contain
+  equity and cash-equivalent positions; Options contain option information only.
 - Holdings uses one shared, chart-free table on both brokerage pages. Show the
   Category or Account selector only when that field has more than one choice;
   always retain search, Declining only, Snapshot G/L %, Copy Symbols, sortable
   columns, snapshot columns, and deliberate modal editing for classification
   and notes. Keep a top Total row that sums Invested and Current for the
-  currently filtered rows (Category, Account, search, and Declining). Fail
-  closed to an em dash when any filtered row lacks cost basis. Label the
+  currently filtered rows (Category, Account, search, and Declining), and
+  derives % Portfolio from the filtered Current over the full portfolio
+  Current, plus G/L $ and G/L % from those totals. Fail closed to an em dash
+  when any filtered row lacks cost basis. Label the
   trailing action column **Edit**. When provider cost basis
   is missing, the same dialog accepts either total cost basis or cost per
   share/unit. Treat that value as account-scoped app metadata that survives
@@ -240,7 +242,7 @@ other textual state.
   only symbols that still have at least one open option contract — shares left
   after every option is flat belong on Holdings, not Options Active. Mark
   nearest open shorts that are ITM in red and those within 5% of strike in
-  yellow, with a matching badge so color is never the only signal. Current
+  Combined Adjusted Basise so color is never the only signal. Current
   period P/L is sortable so accounts deepest in the red can be surfaced first.
 - Equity+Option-Adjusted Basis includes only symbols with open long-equity positions
   and option activity that affects their basis. Keep completed option cycles

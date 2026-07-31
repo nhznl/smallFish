@@ -96,7 +96,7 @@ describe('BrokerageLedgerCombinedComponent', () => {
 
     const text = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
     expect(api.getOptionAdjustedBasis).toHaveBeenCalledWith('fidelity');
-    expect(text).toContain('Fidelity Equity+Option-Adjusted Basis');
+    expect(text).toContain('Fidelity Combined Adjusted Basis');
     expect(text).toContain('Combined P/L includes both the open equity position');
     expect(text).toContain('UNAVAILABLE');
     expect(text).toContain('READY');

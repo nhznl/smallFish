@@ -9,7 +9,7 @@ analytics, and owns the Trading and Retirement brokerage ledgers.
 - Stock-analysis endpoints: all stocks, classifications, price action, strategy
   rows, wheel candidates, stock details, slopes, and company information.
 - Read-only Tastytrade and SnapTrade sync into common Holdings, Symbol Ledger,
-  and Equity+Option-Adjusted Basis projections, with immutable broker events and
+  and Combined Adjusted Basis projections, with immutable broker events and
   brokerage-scoped manual reconciliation.
 - On-demand strategy and wheel jobs through API endpoints.
 - Static Angular bundle hosting when `./commands.sh build-ui` has been run.
@@ -121,7 +121,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 
 `/api/brokerages/{id}` is the dashboard contract. It uses public brokerage IDs
 (`tastytrade`, `fidelity`), reads materialized artifacts only, and returns one
-versioned vocabulary for Holdings, Options, Equity+Option-Adjusted Basis, and Symbol
+versioned vocabulary for Holdings, Options, Combined Adjusted Basis, and Symbol
 Ledger. Missing marks, activity, or reconciliation remain unavailable rather
 than becoming zero. Tastytrade sync materializes all current positions in
 `data/ledger_trading/positions.csv`.
@@ -135,7 +135,7 @@ recorded before the move are carried into the common store on the next sync.
 `/brokerage-ledgers/{portfolio}/combined`, the grouped `GET /options` and
 `GET /options/activity` projections, `GET /retirement/options`, and every
 trade-group route are fully retired — not internal compatibility reads, gone.
-Their accounting lives in the common Holdings, Options, Equity+Option-Adjusted Basis,
+Their accounting lives in the common Holdings, Options, Combined Adjusted Basis,
 and Symbol Ledger resources. The `/options/activity/*` write routes are also
 retired. Sync uses `POST /api/brokerages/{id}/sync`; manual reconciliation uses
 the brokerage-scoped `/api/brokerages/{id}/activity/manual` routes so Trading
@@ -202,10 +202,12 @@ industry, and note are editable symbol-wide metadata (originally seeded from
 the Google Sheet). A manually supplied missing cost basis is stored in the same
 app-owned file but scoped to symbol and account so accounts cannot overwrite
 one another. Broker rows stay immutable facts, and a sync only rewrites those
-broker artifacts. Cash-equivalents classify themselves as CASH, and anything
-untagged shows as UNCLASSIFIED until you add a row for it. Account names map
-onto the sheet-era account types (ROTH IRA / PRE TAX / BROKERAGE). Option legs
-are excluded from this holdings view — they have their own tables (below).
+broker artifacts. Cash-equivalents (for example SPAXX / FRGXX) classify
+themselves as CASH and appear in Holdings with a default CASH category; anything
+untagged otherwise shows as UNCLASSIFIED until you add a row for it. Account
+names map onto the sheet-era account types (ROTH IRA / PRE TAX / BROKERAGE).
+Option legs are excluded from this holdings view — they have their own tables
+(below).
 
 The holdings header's **Snapshot G/L %** action calls
 `POST /api/brokerages/{brokerage_id}/holdings/gain-loss-snapshots`. It saves
@@ -227,7 +229,7 @@ reassignment routes return `410 Gone`. Legacy group artifacts remain readable
 only as rollback material and production sync no longer writes them.
 
 The dashboard requests the Symbol Ledger with `exposure=options`. In that scope,
-positions, current and archived period totals, and lifetime P/L contain option
+positions, current and archived periCombined Adjusted Basiscontain option
 components only. Equity remains available to the unscoped ledger contract and
 to projections such as Holdings and Equity+Option-Adjusted Basis.
 

@@ -144,14 +144,14 @@ contains no secret and no account identifier.
 
 Each brokerage has its own artifact namespace; there is no global
 `positions.csv`. The common projections load one brokerage snapshot at a time.
-In particular, **Equity+Option-Adjusted Basis** combines the current equity and option
+In particular, **Combined Adjusted Basis** combines the current equity and option
 facts for the same symbol within the requested Trading or Retirement ledger. It
 never mixes positions across the two brokerages.
 
 | Immutable provider facts | Editable app-owned metadata |
 |---|---|
-| Trading: `ledger_trading/options_activity.csv` contains broker transactions; `ledger_trading/positions.csv` contains current Trading equity and option positions used by its Holdings, Symbol Ledger reconciliation, and Equity+Option-Adjusted Basis projections | Trading holding enrichment, including account-scoped missing-basis overrides, and user-captured G/L snapshots; brokerage-scoped Symbol Ledger notes and archive boundaries |
-| Retirement: `ledger_retirement/options_activity.csv` contains option transaction events; `ledger_retirement/positions.csv` contains current Fidelity equity, option, and cash positions used by its Holdings, Symbol Ledger reconciliation, and Equity+Option-Adjusted Basis projections | Retirement holding enrichment, including account-scoped missing-basis overrides, and user-captured G/L snapshots; brokerage-scoped Symbol Ledger notes and archive boundaries |
+| Trading: `ledger_trading/options_activity.csv` contains broker transactions; `ledger_trading/positions.csv` contains current Trading equity and option positions used by its Holdings, Symbol Ledger reconciliation, and Combined Adjusted Basis projections | Trading holding enrichment, including account-scoped missing-basis overrides, and user-captured G/L snapshots; brokerage-scoped Symbol Ledger notes and archive boundaries |
+| Retirement: `ledger_retirement/options_activity.csv` contains option transaction events; `ledger_retirement/positions.csv` contains current Fidelity equity, option, and cash positions used by its Holdings, Symbol Ledger reconciliation, and Combined Adjusted Basis projections | Retirement holding enrichment, including account-scoped missing-basis overrides, and user-captured G/L snapshots; brokerage-scoped Symbol Ledger notes and archive boundaries |
 | Per-ledger Greek, IV, beta, and mark artifacts contain timestamped market observations | Not directly editable; sync refreshes provider observations while retaining the applicable prior-on-miss evidence |
 
 Broker facts are never edited in place; syncs upsert by provider id. Symbol
@@ -163,7 +163,7 @@ The Options tab requests the Symbol Ledger's `exposure=options` projection.
 That projection calculates current, archived, and lifetime P/L from option
 components only and returns only option rows in detail. Equity facts remain in
 the immutable brokerage snapshot for reconciliation, underlying-risk context,
-Holdings, and Equity+Option-Adjusted Basis; they do not enter Options-tab accounting.
+Holdings, and Combined Adjusted Basis; they do not enter Options-tab accounting.
 
 Observations are timestamped, and their timestamps matter: an option component whose
 mark-observation time is unavailable is labelled *indicative* rather than

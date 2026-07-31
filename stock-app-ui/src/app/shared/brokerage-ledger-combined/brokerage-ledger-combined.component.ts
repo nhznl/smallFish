@@ -62,7 +62,7 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
         this.data = null;
         this.loading = false;
         this.error = err?.error?.detail
-          ?? 'The Equity+Option-Adjusted Basis view could not be loaded.';
+          ?? 'The Combined Adjusted Basis view could not be loaded.';
       },
     });
   }

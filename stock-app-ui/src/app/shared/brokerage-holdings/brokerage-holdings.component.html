@@ -146,7 +146,7 @@
             <th class="num sortable" [attr.aria-sort]="ariaSort('cost_basis')"><button type="button" class="sort-button" (click)="sortBy('cost_basis')">Invested {{ sortIcon('cost_basis') }}</button></th>
             <th class="num sortable" [attr.aria-sort]="ariaSort('market_value')"><button type="button" class="sort-button" (click)="sortBy('market_value')">Current {{ sortIcon('market_value') }}</button></th>
             <th class="num sortable" [attr.aria-sort]="ariaSort('pct_of_total')"><button type="button" class="sort-button" (click)="sortBy('pct_of_total')">% Portfolio {{ sortIcon('pct_of_total') }}</button></th>
-            <th class="num sortable" [attr.aria-sort]="ariaSort('unrealized_pnl')"><button type="button" class="sort-button" (click)="sortBy('unrealized_pnl')">G/L $ {{ sortIcon('unrealized_pnl') }}</button></th>
+            <th class="num sortable col-gl-dollars" [attr.aria-sort]="ariaSort('unrealized_pnl')"><button type="button" class="sort-button" (click)="sortBy('unrealized_pnl')">G/L $ {{ sortIcon('unrealized_pnl') }}</button></th>
             <th class="num sortable" [attr.aria-sort]="ariaSort('unrealized_pnl_pct')"><button type="button" class="sort-button" (click)="sortBy('unrealized_pnl_pct')">G/L % {{ sortIcon('unrealized_pnl_pct') }}</button></th>
             @for (snapshot of snapshotDates(); track snapshot.sync_date) {
               <th class="num snapshot-col">G/L % <small>as of {{ snapshotDateLabel(snapshot.sync_date) }}</small></th>
@@ -165,9 +165,13 @@
                 <td class="num">—</td>
                 <td class="num">{{ money(totals.cost_basis) }}</td>
                 <td class="num">{{ money(totals.market_value) }}</td>
-                <td class="num">—</td>
-                <td class="num">—</td>
-                <td class="num">—</td>
+                <td class="num">{{ percent(totals.pct_of_total) }}</td>
+                <td class="num col-gl-dollars" [ngClass]="pnlClass(totals.unrealized_pnl)">
+                  {{ money(totals.unrealized_pnl, true) }}
+                </td>
+                <td class="num" [class]="pnlClass(totals.unrealized_pnl_pct)">
+                  {{ percent(totals.unrealized_pnl_pct, true) }}
+                </td>
                 @for (snapshot of snapshotDates(); track snapshot.sync_date) {
                   <td class="num snapshot-col">—</td>
                 }
@@ -186,7 +190,7 @@
                 <td class="num">{{ money(row.cost_basis) }}</td>
                 <td class="num">{{ money(row.market_value) }}</td>
                 <td class="num">{{ percent(row.pct_of_total) }}</td>
-                <td class="num" [class]="pnlClass(row.unrealized_pnl)">{{ money(row.unrealized_pnl, true) }}</td>
+                <td class="num col-gl-dollars" [ngClass]="pnlClass(row.unrealized_pnl)">{{ money(row.unrealized_pnl, true) }}</td>
                 <td class="num" [class]="pnlClass(row.unrealized_pnl_pct)">
                   {{ percent(row.unrealized_pnl_pct, true) }}
                   @if (row.trend.alert) {

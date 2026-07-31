@@ -31,10 +31,11 @@ describe('format-display helpers', () => {
   });
 
   describe('formatQuantity', () => {
-    it('keeps integers plain and pads fractions to three decimals', () => {
+    it('keeps integers plain and pads fractions to two decimals', () => {
       expect(formatQuantity(null)).toBe('—');
       expect(formatQuantity(10)).toBe('10');
-      expect(formatQuantity(1.5)).toBe('1.500');
+      expect(formatQuantity(1.5)).toBe('1.50');
+      expect(formatQuantity(9898.841)).toBe('9898.84');
     });
   });
 
