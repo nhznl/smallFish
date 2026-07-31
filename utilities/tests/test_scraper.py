@@ -38,7 +38,7 @@ from scraper import (  # noqa: E402
     format_daily_line,
     next_working_day,
     process_symbol,
-    read_last_cached_date,
+    read_last_file_date,
     run_scrape,
     write_status_files,
     year_end,
@@ -125,35 +125,37 @@ def test_no_data_full_year_flags_check_stocks():
 
 # ---------------------------------------------------------------- incremental
 
-def test_incremental_appends_only_missing_days():
+def test_incremental_refreshes_final_file_date_and_adds_new_days():
     with tempfile.TemporaryDirectory() as t:
         cache_root = Path(t)
         _write_cache(cache_root, "INC", 2026, [("2026-01-02", 10.0, 11.0, 9.5, 10.5, 1000)])
-        assert read_last_cached_date(cache_root, "INC", 2026) == pd.Timestamp("2026-01-02")
-        # Truth includes the already-cached day (fetcher inclusive) + two new days.
+        assert read_last_file_date(cache_root, "INC", 2026) == pd.Timestamp("2026-01-02")
+        # Truth replaces the final stored date and adds two new sessions.
         store = {"INC": _fetch_frame([
-            ("2026-01-02", 10.0, 11.0, 9.5, 10.5, 1000, 0.0, 0.0),   # already cached
+            ("2026-01-02", 10.25, 11.25, 9.75, 10.75, 1100, 0.0, 0.0),
             ("2026-01-05", 10.5, 11.5, 10.0, 11.0, 2000, 0.0, 0.0),
             ("2026-01-06", 11.0, 12.0, 10.5, 11.5, 3000, 0.0, 0.0)])}
         r = process_symbol(cache_root, "INC", 2026, pd.Timestamp("2026-01-06"),
                            _store_fetcher(store))
-        assert r.status == STATUS_APPENDED and r.rows_written == 2
-        assert r.last_cached_date == "2026-01-02"
+        assert r.status == STATUS_APPENDED and r.rows_written == 3
+        assert r.last_file_date == "2026-01-02"
         text = (cache_root / "2026" / "INC.txt").read_text()
-        assert text.count("\n") == 3  # 1 original + 2 appended
+        assert text.count("\n") == 3
+        assert "01-02-2026,10.25,11.25,9.75,10.75,10.75,1100" in text
         assert "01-02-2026" in text and "01-05-2026" in text and "01-06-2026" in text
 
 
-def test_up_to_date_appends_nothing():
+def test_incremental_refreshes_same_final_file_date():
     with tempfile.TemporaryDirectory() as t:
         cache_root = Path(t)
         _write_cache(cache_root, "UTD", 2026, [("2026-06-05", 10.0, 11.0, 9.5, 10.5, 1000)])
-        before = (cache_root / "2026" / "UTD.txt").read_text()
-        # as_of is the Friday just written; next working day (Mon) > today.
+        # A same-day run replaces the final row rather than treating it as final.
         r = process_symbol(cache_root, "UTD", 2026, pd.Timestamp("2026-06-05"),
-                           _store_fetcher({"UTD": _fetch_frame([])}))
-        assert r.status == STATUS_UP_TO_DATE
-        assert (cache_root / "2026" / "UTD.txt").read_text() == before
+                           _store_fetcher({"UTD": _fetch_frame([
+                               ("2026-06-05", 11.0, 12.0, 10.5, 11.5, 1200, 0.0, 0.0)])}))
+        assert r.status == STATUS_APPENDED
+        assert "06-05-2026,11.0,12.0,10.5,11.5,11.5,1200" in (
+            cache_root / "2026" / "UTD.txt").read_text()
 
 
 # -------------------------------------------------------- incremental staleness
@@ -260,9 +262,14 @@ def test_audit_hook_fires_on_split_and_rewrites_history():
     with tempfile.TemporaryDirectory() as t:
         cache_root = Path(t)
         # Cache holds a STALE pre-split vintage for 01-02 (close 200).
-        _write_cache(cache_root, "SPLT", 2026, [("2026-01-02", 200.0, 210.0, 190.0, 200.0, 1000)])
-        # Truth (post-split adjusted): 01-02 is really 100; 01-05 carries a 2:1 split.
+        _write_cache(cache_root, "SPLT", 2026, [
+            ("2026-01-01", 200.0, 210.0, 190.0, 200.0, 1000),
+            ("2026-01-02", 200.0, 210.0, 190.0, 200.0, 1000),
+        ])
+        # The final file date is refreshed in-place; the older stale 01-01 row
+        # still requires the split-triggered whole-history repair.
         store = {"SPLT": _fetch_frame([
+            ("2026-01-01", 100.0, 105.0, 95.0, 100.0, 2000, 0.0, 0.0),
             ("2026-01-02", 100.0, 105.0, 95.0, 100.0, 2000, 0.0, 0.0),
             ("2026-01-05", 101.0, 106.0, 99.0, 102.0, 1500, 0.0, 2.0)])}
         r = process_symbol(cache_root, "SPLT", 2026, pd.Timestamp("2026-01-05"),
@@ -280,8 +287,12 @@ def test_history_rewrite_audit_log_appends_across_runs():
     with tempfile.TemporaryDirectory() as t:
         cache_root = Path(t)
         logs = cache_root / "logs"
-        _write_cache(cache_root, "SPLT", 2026, [("2026-01-02", 200.0, 210.0, 190.0, 200.0, 1000)])
+        _write_cache(cache_root, "SPLT", 2026, [
+            ("2026-01-01", 200.0, 210.0, 190.0, 200.0, 1000),
+            ("2026-01-02", 200.0, 210.0, 190.0, 200.0, 1000),
+        ])
         store = {"SPLT": _fetch_frame([
+            ("2026-01-01", 100.0, 105.0, 95.0, 100.0, 2000, 0.0, 0.0),
             ("2026-01-02", 100.0, 105.0, 95.0, 100.0, 2000, 0.0, 0.0),
             ("2026-01-05", 101.0, 106.0, 99.0, 102.0, 1500, 0.0, 2.0)])}
         r = process_symbol(cache_root, "SPLT", 2026, pd.Timestamp("2026-01-05"),
@@ -325,8 +336,12 @@ def test_audit_hook_does_not_fire_without_corporate_action():
 def test_audit_hook_can_be_disabled():
     with tempfile.TemporaryDirectory() as t:
         cache_root = Path(t)
-        _write_cache(cache_root, "SPLT", 2026, [("2026-01-02", 200.0, 210.0, 190.0, 200.0, 1000)])
+        _write_cache(cache_root, "SPLT", 2026, [
+            ("2026-01-01", 200.0, 210.0, 190.0, 200.0, 1000),
+            ("2026-01-02", 200.0, 210.0, 190.0, 200.0, 1000),
+        ])
         store = {"SPLT": _fetch_frame([
+            ("2026-01-01", 100.0, 105.0, 95.0, 100.0, 2000, 0.0, 0.0),
             ("2026-01-02", 100.0, 105.0, 95.0, 100.0, 2000, 0.0, 0.0),
             ("2026-01-05", 101.0, 106.0, 99.0, 102.0, 1500, 0.0, 2.0)])}
         r = process_symbol(cache_root, "SPLT", 2026, pd.Timestamp("2026-01-05"),
@@ -349,10 +364,14 @@ def test_split_rewrites_the_stale_adjustment_vintage():
     with tempfile.TemporaryDirectory() as t:
         cache_root = Path(t)
         # STALE pre-split vintage cached.
-        _write_cache(cache_root, "SPLT", 2026,
-                     [("2026-01-02", 200.0, 210.0, 190.0, 220.0, 1000)])
-        # Truth (post-split adjusted): 01-02 open 100 close 110; 01-05 carries the split.
+        _write_cache(cache_root, "SPLT", 2026, [
+            ("2026-01-01", 200.0, 210.0, 190.0, 220.0, 1000),
+            ("2026-01-02", 200.0, 210.0, 190.0, 220.0, 1000),
+        ])
+        # The overlapping 01-02 row is reconciled directly; the prior stale
+        # row demonstrates that the split still rewrites older history.
         store = {"SPLT": _fetch_frame([
+            ("2026-01-01", 100.0, 105.0, 95.0, 110.0, 2000, 0.0, 0.0),
             ("2026-01-02", 100.0, 105.0, 95.0, 110.0, 2000, 0.0, 0.0),
             ("2026-01-05", 101.0, 106.0, 99.0, 102.0, 1500, 0.0, 2.0)])}
         r = process_symbol(cache_root, "SPLT", 2026, pd.Timestamp("2026-01-05"),
@@ -476,9 +495,12 @@ def test_failed_audit_lands_in_pending_and_next_run_repairs():
     with tempfile.TemporaryDirectory() as t:
         cache_root = Path(t)
         logs = cache_root / "logs"
-        _write_cache(cache_root, "MIXD", 2026,
-                     [("2026-01-02", 200.0, 210.0, 190.0, 200.0, 1000)])
+        _write_cache(cache_root, "MIXD", 2026, [
+            ("2026-01-01", 200.0, 210.0, 190.0, 200.0, 1000),
+            ("2026-01-02", 200.0, 210.0, 190.0, 200.0, 1000),
+        ])
         truth = _fetch_frame([
+            ("2026-01-01", 100.0, 105.0, 95.0, 100.0, 2000, 0.0, 0.0),
             ("2026-01-02", 100.0, 105.0, 95.0, 100.0, 2000, 0.0, 0.0),
             ("2026-01-05", 101.0, 106.0, 99.0, 102.0, 1500, 0.0, 2.0)])
 

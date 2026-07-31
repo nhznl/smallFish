@@ -10,8 +10,9 @@ rewrites use identical cache formatting.
 
 Modes:
 
-- ``scrapper`` (default): per symbol, read the last cached date, compute the
-  next working day, fetch only the missing sessions and **append** them. When
+- ``scrapper`` (default): per symbol, read the final date in its price file,
+  fetch from that date through the run date, and date-upsert the result. This
+  refreshes the trailing bar on every run while adding any newer sessions. When
   no file exists for the target year, fetch the full year and write it; if the
   previous year's file stops short of Dec 31 (first run after a year rollover),
   the fetch starts at the session after that tail so the gap is appended to the
@@ -91,8 +92,8 @@ FETCH_COLUMNS = ["date", "open", "high", "low", "close", "volume", "dividends", 
 
 # Per-symbol outcome codes.
 STATUS_WROTE_FULL_YEAR = "WROTE_FULL_YEAR"  # no file existed -> wrote a fresh year file
-STATUS_APPENDED = "APPENDED"                # existing file -> appended missing sessions
-STATUS_UP_TO_DATE = "UP_TO_DATE"            # file already covers the latest session
+STATUS_APPENDED = "APPENDED"                # existing file -> refreshed trailing / added new sessions
+STATUS_UP_TO_DATE = "UP_TO_DATE"            # file begins after the requested run date
 STATUS_NO_NEW_DATA = "NO_NEW_DATA"          # incremental fetch returned nothing new
 STATUS_NO_DATA = "NO_DATA"                  # full-year fetch found nothing (delisted) -> retired
 STATUS_ERROR = "ERROR"                      # fetch/write failed -> errorStocks
@@ -130,7 +131,7 @@ class ScrapeResult:
     symbol: str
     status: str = STATUS_UP_TO_DATE
     rows_written: int = 0
-    last_cached_date: str = ""
+    last_file_date: str = ""
     fetch_start: str = ""
     fetch_end: str = ""
     audit_fired: bool = False
@@ -202,7 +203,7 @@ def build_scrape_universe(registry_path: Path, retired_path: Path) -> list[str]:
 
 # --------------------------------------------------------------- file reading
 
-def read_last_cached_date(cache_root: Path, symbol: str, year: int) -> pd.Timestamp | None:
+def read_last_file_date(cache_root: Path, symbol: str, year: int) -> pd.Timestamp | None:
     """Last trading date in the symbol's year file, or None if the file is
     absent/empty (mirrors StockWriter.getLastDateFromFile: parse the first
     comma-field of the last non-empty line)."""
@@ -251,6 +252,28 @@ def append_year_file(cache_root: Path, symbol: str, year: int, rows: pd.DataFram
         f.write(text)
 
 
+def upsert_year_file(cache_root: Path, symbol: str, year: int, rows: pd.DataFrame) -> None:
+    """Replace matching dates and add new ones in a symbol's year file.
+
+    Incremental fetches deliberately overlap the final stored date so a prior
+    intraday Yahoo bar is reconciled on the next run.  The rewrite is atomic
+    and retains every earlier row unchanged at the cache-format level.
+    """
+    path = cache_root / str(year) / f"{symbol}.txt"
+    existing = pd.read_csv(
+        path,
+        header=None,
+        names=["date", "open", "high", "low", "close", "adj_close", "volume"],
+    )
+    existing["date"] = pd.to_datetime(existing["date"], format="%m-%d-%Y")
+    existing = existing[["date", "open", "high", "low", "close", "volume"]]
+    fresh = rows[["date", "open", "high", "low", "close", "volume"]]
+    merged = (pd.concat([existing, fresh], ignore_index=True)
+              .sort_values("date")
+              .drop_duplicates(subset="date", keep="last"))
+    write_year_file(cache_root, symbol, year, merged)
+
+
 # ---------------------------------------------------------------- fetch prep
 
 def _prepare_rows(fetched: pd.DataFrame) -> pd.DataFrame:
@@ -288,8 +311,8 @@ def process_symbol(cache_root: Path, symbol: str, year: int, today: pd.Timestamp
     `fetch_fn(symbol, start, end)` returns a frame with FETCH_COLUMNS covering
     [start, end] inclusive. `today` is already capped to the run date. When
     `full_year` (history mode) or no file exists, the whole target year is
-    fetched and the file overwritten; otherwise only sessions after the last
-    cached date are appended.
+    fetched and the file overwritten; otherwise the fetch begins at the final
+    date in the price file and date-upserts its trailing overlap.
 
     An incremental fetch that returns nothing is ordinary ``NO_NEW_DATA``
     (a market holiday, or today's session not yet back-filled by the data
@@ -302,7 +325,7 @@ def process_symbol(cache_root: Path, symbol: str, year: int, today: pd.Timestamp
     result = ScrapeResult(symbol=symbol)
     capped_today = min(today.normalize(), year_end(year))
     try:
-        last_date = None if full_year else read_last_cached_date(cache_root, symbol, year)
+        last_date = None if full_year else read_last_file_date(cache_root, symbol, year)
 
         if last_date is None:
             # No file (or history mode): fetch the full target year. In
@@ -317,7 +340,7 @@ def process_symbol(cache_root: Path, symbol: str, year: int, today: pd.Timestamp
             start = pd.Timestamp(year=year, month=1, day=1)
             prev_last = None
             if not full_year:
-                prev_last = read_last_cached_date(cache_root, symbol, year - 1)
+                prev_last = read_last_file_date(cache_root, symbol, year - 1)
             if prev_last is not None:
                 gap_start = next_working_day(prev_last)
                 if gap_start < start:
@@ -336,7 +359,7 @@ def process_symbol(cache_root: Path, symbol: str, year: int, today: pd.Timestamp
                 rows = rows[(rows["date"].dt.year == year) & (rows["date"] <= capped_today)]
             if not prev_rows.empty:
                 append_year_file(cache_root, symbol, year - 1, prev_rows)
-                result.last_cached_date = _fmt(prev_last)
+                result.last_file_date = _fmt(prev_last)
                 result.rows_written += len(prev_rows)
             if rows.empty and prev_rows.empty:
                 result.status = STATUS_NO_DATA
@@ -350,19 +373,20 @@ def process_symbol(cache_root: Path, symbol: str, year: int, today: pd.Timestamp
                 result.status = STATUS_WROTE_FULL_YEAR
                 result.rows_written += len(rows)
         else:
-            result.last_cached_date = _fmt(last_date)
-            start = next_working_day(last_date)
+            result.last_file_date = _fmt(last_date)
+            start = last_date
             if start > capped_today:
                 result.status = STATUS_UP_TO_DATE
                 return result
             result.fetch_start, result.fetch_end = _fmt(start), _fmt(capped_today)
             fetched = fetch_fn(symbol, start, capped_today)
             rows = _prepare_rows(fetched)
-            # Duplicate-safety: only sessions strictly after the last cached
-            # date, within the target year, to handle fetcher edge inclusivity.
+            # The final price-file date is deliberately included so each run
+            # reconciles a possibly provisional Yahoo bar. Date-upsert below
+            # prevents duplicates while retaining older history unchanged.
             # Guard the .dt filter against an empty fetch (see full-year branch).
             if not rows.empty:
-                rows = rows[(rows["date"] > last_date) & (rows["date"].dt.year == year)
+                rows = rows[(rows["date"] >= last_date) & (rows["date"].dt.year == year)
                             & (rows["date"] <= capped_today)]
             if rows.empty:
                 gap_days = (capped_today - last_date).days
@@ -372,7 +396,7 @@ def process_symbol(cache_root: Path, symbol: str, year: int, today: pd.Timestamp
                 else:
                     result.status = STATUS_NO_NEW_DATA
                 return result
-            append_year_file(cache_root, symbol, year, rows)
+            upsert_year_file(cache_root, symbol, year, rows)
             result.status = STATUS_APPENDED
             result.rows_written = len(rows)
 
@@ -509,7 +533,7 @@ def write_status_files(logs_dir: Path, run: ScrapeRun,
             for r in fired:
                 f.write(f"{run_ts} {r.symbol} trigger={r.audit_trigger} "
                         f"outcome={r.audit_outcome or 'unknown'} "
-                        f"appended_rows={r.rows_written}\n")
+                        f"written_rows={r.rows_written}\n")
 
     # Pending history repairs: a fired audit whose history fetch failed leaves
     # the year file mixing adjustment vintages -> persist the symbol so the
@@ -530,16 +554,16 @@ def _status_message(r: ScrapeResult) -> str:
     if r.status == STATUS_WROTE_FULL_YEAR:
         m = f"wrote full year ({r.rows_written} rows, {r.fetch_start}..{r.fetch_end})"
     elif r.status == STATUS_APPENDED:
-        m = (f"appended {r.rows_written} rows (last {r.last_cached_date}, "
+        m = (f"updated {r.rows_written} rows (last file date {r.last_file_date}, "
              f"{r.fetch_start}..{r.fetch_end})")
     elif r.status == STATUS_UP_TO_DATE:
-        m = f"already up to date (last {r.last_cached_date})"
+        m = f"already up to date (last file date {r.last_file_date})"
     elif r.status == STATUS_NO_NEW_DATA:
         m = "no new data available"
     elif r.status == STATUS_NO_DATA:
         if r.stale_gap_days:
             m = (f"no data returned from API for {r.stale_gap_days}d since last "
-                 f"cached date {r.last_cached_date} (delisted) -> retired")
+                 f"file date {r.last_file_date} (delisted) -> retired")
         else:
             m = "no data returned from API (delisted) -> retired"
     elif r.status == STATUS_AUDIT_RETRY:
