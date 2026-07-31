@@ -28,7 +28,8 @@ describe('App', () => {
       'Studies',
       'Trading',
       'Retirement',
-      'Portfolios'
+      'Portfolios',
+      'Tracking'
     ]);
   });
 

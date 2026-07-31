@@ -1,0 +1,344 @@
+<header class="page-header">
+  <div>
+    <p class="page-eyebrow">Tracking</p>
+    <h1 class="page-title">Tracking and Sold Stocks</h1>
+    <p class="page-subtitle">
+      Monitor names you sold or are watching for a better re-entry, with momentum context and SPY-relative returns.
+    </p>
+  </div>
+  <div class="page-actions">
+    @if (snapshot) {
+      <div class="snapshot-chip" [class.chip-stale]="snapshot.prices_stale">
+        <span>{{ snapshot.prices_stale ? 'Prices stale' : 'Prices as of' }}</span>
+        <strong>{{ date(snapshot.as_of) }}</strong>
+        @if (snapshot.prices_stale) {
+          <small>Last expected session {{ date(snapshot.last_expected_session) }}</small>
+        } @else {
+          <small>Latest cached close</small>
+        }
+      </div>
+    }
+    <button type="button" class="btn btn-primary" (click)="openAdd()">Add stocks</button>
+  </div>
+</header>
+
+@if (error) {
+  <div class="banner banner-neg" role="alert">
+    <span class="banner-icon" aria-hidden="true">⚠</span>
+    <div><strong>Tracked stocks unavailable.</strong> {{ error }}</div>
+  </div>
+}
+
+@if (loading) {
+  <div class="table-shell skeleton-shell">
+    @for (row of [1,2,3,4,5]; track row) {
+      <div class="skeleton skeleton-row" aria-hidden="true"></div>
+    }
+    <p class="visually-hidden" role="status">Loading tracked stocks…</p>
+  </div>
+}
+
+@if (!loading && !error && !hasTrackedStocks) {
+  <div class="empty-state">
+    <span class="empty-icon" aria-hidden="true">◇</span>
+    <span class="empty-title">No tracked stocks yet</span>
+    <span class="empty-hint">Add symbols you sold or want to watch for a better re-entry.</span>
+    <button type="button" class="btn btn-primary" (click)="openAdd()">Add stocks</button>
+  </div>
+}
+
+@if (!loading && !error && hasTrackedStocks) {
+  <div class="table-toolbar">
+    <div class="filter-group" role="group" aria-label="Filter by category">
+      <span class="filter-label">Category</span>
+      <button type="button" class="btn btn-sm"
+        [class.active]="categoryFilter === 'ALL'"
+        (click)="setCategoryFilter('ALL')">
+        All
+      </button>
+      @for (category of categoryOptions; track category) {
+        <button type="button" class="btn btn-sm"
+          [class.active]="categoryFilter === category"
+          (click)="setCategoryFilter(category)">
+          {{ category }}
+        </button>
+      }
+    </div>
+    <button type="button" class="btn btn-sm"
+      [class.copy-success]="copyState === 'copied'"
+      (click)="copySymbols()"
+      [disabled]="!hasVisibleRows"
+      aria-live="polite">
+      {{ copyLabel }}
+    </button>
+  </div>
+
+  @if (!hasVisibleRows) {
+    <div class="empty-state compact-empty">
+      <span class="empty-title">No stocks in this category</span>
+      <span class="empty-hint">Try another filter or add a stock with this category.</span>
+    </div>
+  }
+
+  @if (hasVisibleRows) {
+  <div class="table-shell">
+    <table class="data-table member-table tracking-table">
+      <thead>
+        <tr>
+          <th class="col-sticky sortable" [attr.aria-sort]="ariaSort('symbol')">
+            <button type="button" class="sort-button" (click)="sortBy('symbol')">
+              Symbol<span class="sort-icon" aria-hidden="true">{{ sortIcon('symbol') }}</span>
+            </button>
+          </th>
+          <th>Category</th>
+          <th class="sortable" [attr.aria-sort]="ariaSort('coverage_initiation_date')">
+            <button type="button" class="sort-button" (click)="sortBy('coverage_initiation_date')"
+              matTooltip="The date you started tracking this symbol, typically the sale date."
+              matTooltipPosition="above">
+              Coverage initiation<span class="sort-icon" aria-hidden="true">{{ sortIcon('coverage_initiation_date') }}</span>
+            </button>
+          </th>
+          <th>Momentum signal</th>
+          <th class="num sortable" [attr.aria-sort]="ariaSort('setup_score')">
+            <button type="button" class="sort-button" (click)="sortBy('setup_score')">
+              Setup score<span class="sort-icon" aria-hidden="true">{{ sortIcon('setup_score') }}</span>
+            </button>
+          </th>
+          <th class="num">52-wk low · high</th>
+          <th class="num sortable" [attr.aria-sort]="ariaSort('coverage_vs_spy')">
+            <button type="button" class="sort-button" (click)="sortBy('coverage_vs_spy')"
+              matTooltip="Stock return since coverage initiation minus SPY over the same window, in percentage points."
+              matTooltipPosition="above">
+              Coverage vs SPY<span class="sort-icon" aria-hidden="true">{{ sortIcon('coverage_vs_spy') }}</span>
+            </button>
+          </th>
+          <th class="num sortable" [attr.aria-sort]="ariaSort('ytd_vs_spy')">
+            <button type="button" class="sort-button" (click)="sortBy('ytd_vs_spy')"
+              matTooltip="Stock YTD return minus SPY YTD, in percentage points."
+              matTooltipPosition="above">
+              YTD vs SPY<span class="sort-icon" aria-hidden="true">{{ sortIcon('ytd_vs_spy') }}</span>
+            </button>
+          </th>
+          <th class="sortable" [attr.aria-sort]="ariaSort('target_date')">
+            <button type="button" class="sort-button" (click)="sortBy('target_date')"
+              matTooltip="Planned re-entry date for Ready to Trade rows."
+              matTooltipPosition="above">
+              Target date<span class="sort-icon" aria-hidden="true">{{ sortIcon('target_date') }}</span>
+            </button>
+          </th>
+          <th class="num sortable" [attr.aria-sort]="ariaSort('target_amount')">
+            <button type="button" class="sort-button" (click)="sortBy('target_amount')"
+              matTooltip="Planned dollar amount for Ready to Trade rows."
+              matTooltipPosition="above">
+              Target amt<span class="sort-icon" aria-hidden="true">{{ sortIcon('target_amount') }}</span>
+            </button>
+          </th>
+          <th class="actions-col"><span class="visually-hidden">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows; track trackBySymbol($index, row)) {
+          <tr>
+            <td class="col-sticky symbol-cell">
+              <a [routerLink]="['/stockDetail', row.symbol]" target="_blank"
+                [matTooltip]="row.name" [matTooltipDisabled]="!row.name" matTooltipPosition="right">
+                {{ row.symbol }}
+              </a>
+              @if (!row.has_data) {
+                <span class="badge badge-warn">No data</span>
+              } @else if (row.partial_history) {
+                <span class="badge badge-warn"
+                  matTooltip="Coverage began before cached history was available; the first available close was used."
+                  matTooltipPosition="above">Partial</span>
+              }
+              @if (row.notes) {
+                <small class="row-meta">{{ row.notes }}</small>
+              }
+            </td>
+            <td>
+              <span class="badge badge-neutral category-badge"
+                [class.category-ready]="isReady(row)">{{ row.category }}</span>
+            </td>
+            <td>{{ date(row.coverage_initiation_date) }}</td>
+            <td>
+              <span [class]="setupClass(row.setup)">
+                {{ setupIcon(row.setup) }} {{ setupLabel(row.setup) }}
+              </span>
+            </td>
+            <td class="num">{{ row.setup_score ?? '—' }}</td>
+            <td class="num">
+              @if (row.fifty_two_week_low != null && row.fifty_two_week_high != null && row.range_position != null) {
+                <div class="range-cell" [matTooltip]="rangeTooltip(row)" matTooltipPosition="above">
+                  <span>{{ formatRangePrice(row.fifty_two_week_low) }}</span>
+                  <span>{{ formatRangePrice(row.fifty_two_week_high) }}</span>
+                  <span class="range-track" aria-hidden="true">
+                    <i class="range-marker" [style.left.%]="row.range_position"></i>
+                  </span>
+                </div>
+              } @else {
+                <span [matTooltip]="rangeTooltip(row)" matTooltipPosition="above">—</span>
+              }
+            </td>
+            <td class="num spread-cell" [class]="'num spread-cell ' + signClass(row.coverage_vs_spy)"
+              [matTooltip]="coverageTooltip(row)" matTooltipPosition="above">
+              {{ pp(row.coverage_vs_spy) }}
+              <small>{{ pct(row.coverage_return) }} · SPY {{ pct(row.spy_coverage_return) }}</small>
+            </td>
+            <td class="num spread-cell" [class]="'num spread-cell ' + signClass(row.ytd_vs_spy)"
+              [matTooltip]="ytdTooltip(row)" matTooltipPosition="above">
+              {{ pp(row.ytd_vs_spy) }}
+              <small>{{ pct(row.ytd_return) }} · SPY {{ pct(snapshot?.spy_ytd_return) }}</small>
+            </td>
+            <td>{{ isReady(row) ? date(row.target_date) : '—' }}</td>
+            <td class="num">{{ isReady(row) ? dollars(row.target_amount) : '—' }}</td>
+            <td class="actions-col">
+              <button type="button" class="btn btn-sm btn-ghost" (click)="openEdit(row)">
+                Edit
+              </button>
+              <button type="button" class="btn btn-sm btn-ghost"
+                [disabled]="removingSymbol === row.symbol"
+                (click)="removeRow(row.symbol)">
+                {{ removingSymbol === row.symbol ? 'Removing…' : 'Remove' }}
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+  }
+}
+
+@if (addOpen) {
+  <app-modal title="Add tracked stocks" width="min(560px, 94vw)"
+    subtitle="Coverage begins on the date you choose · returns are tracked against SPY"
+    (closed)="closeAdd()">
+    @if (addError) {
+      <div class="banner banner-neg form-banner" role="alert">{{ addError }}</div>
+    }
+    <div class="form-grid">
+      <label class="field">
+        <span class="field-label">Symbols</span>
+        <textarea class="control" rows="2" [(ngModel)]="addEntry.raw" name="symbols"
+          (blur)="parseSymbols()"
+          placeholder="NVDA AMD AVGO — commas, spaces, or newlines"></textarea>
+      </label>
+      @if (addEntry.chips.length) {
+        <div class="chip-row">
+          @for (chip of addEntry.chips; track chip.symbol) {
+            <span class="chip" [class.chip-unknown]="!chip.known">
+              <span class="chip-body">
+                <strong>{{ chip.symbol }}</strong>
+                <small>{{ chip.known ? (chip.price != null ? price(chip.price) : 'no cached price') : 'not in universe' }}</small>
+              </span>
+              <button type="button" class="chip-remove" (click)="removeChip(chip.symbol)"
+                [attr.aria-label]="'Remove ' + chip.symbol">×</button>
+            </span>
+          }
+        </div>
+      }
+      @if (addEntry.unknown.length) {
+        <p class="chip-error" role="alert">
+          {{ addEntry.unknown.length }} symbol{{ addEntry.unknown.length > 1 ? 's' : '' }} not in universe:
+          {{ addEntry.unknown.join(', ') }}
+        </p>
+      }
+      <div class="field-row">
+        <label class="field">
+          <span class="field-label">Category</span>
+          <select class="control" [(ngModel)]="addCategory" name="category" required>
+            @for (category of categoryOptions; track category) {
+              <option [value]="category">{{ category }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Coverage initiation</span>
+          <input class="control" type="date" [(ngModel)]="addCoverageDate" name="coverageDate" required>
+        </label>
+      </div>
+      @if (showAddTargets) {
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Target date <em>optional</em></span>
+            <input class="control" type="date" [(ngModel)]="addTargetDate" name="addTargetDate">
+          </label>
+          <label class="field">
+            <span class="field-label">Target amount <em>optional</em></span>
+            <input class="control" type="number" min="0" step="100"
+              [(ngModel)]="addTargetAmount" name="addTargetAmount" placeholder="5000">
+          </label>
+        </div>
+      }
+      <label class="field">
+        <span class="field-label">Notes <em>optional</em></span>
+        <textarea class="control" rows="2" [(ngModel)]="addNotes" name="notes"
+          placeholder="Optional context, e.g. sold after earnings"></textarea>
+      </label>
+    </div>
+    <ng-container modalActions>
+      <button type="button" class="btn" (click)="closeAdd()">Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="submitAdd()"
+        [disabled]="addSaving || !addEntry.valid" [attr.aria-busy]="addSaving">
+        @if (addSaving) {
+          <span class="btn-spinner" aria-hidden="true"></span>
+        }
+        {{ addSaving ? 'Adding…' : 'Add stocks' }}
+      </button>
+    </ng-container>
+  </app-modal>
+}
+
+@if (editOpen && editRow) {
+  <app-modal [title]="'Edit ' + editRow.symbol" width="min(560px, 94vw)"
+    subtitle="Update notes, category, or planned re-entry targets"
+    (closed)="closeEdit()">
+    @if (editError) {
+      <div class="banner banner-neg form-banner" role="alert">{{ editError }}</div>
+    }
+    <div class="form-grid">
+      <div class="field-row">
+        <label class="field">
+          <span class="field-label">Category</span>
+          <select class="control" [(ngModel)]="editCategory" name="editCategory" required>
+            @for (category of categoryOptions; track category) {
+              <option [value]="category">{{ category }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Coverage initiation</span>
+          <input class="control" type="date" [(ngModel)]="editCoverageDate" name="editCoverageDate" required>
+        </label>
+      </div>
+      @if (showEditTargets) {
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Target date <em>optional</em></span>
+            <input class="control" type="date" [(ngModel)]="editTargetDate" name="editTargetDate">
+          </label>
+          <label class="field">
+            <span class="field-label">Target amount <em>optional</em></span>
+            <input class="control" type="number" min="0" step="100"
+              [(ngModel)]="editTargetAmount" name="editTargetAmount" placeholder="5000">
+          </label>
+        </div>
+      }
+      <label class="field">
+        <span class="field-label">Notes <em>optional</em></span>
+        <textarea class="control" rows="3" [(ngModel)]="editNotes" name="editNotes"
+          placeholder="Context for the re-entry thesis"></textarea>
+      </label>
+    </div>
+    <ng-container modalActions>
+      <button type="button" class="btn" (click)="closeEdit()">Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="submitEdit()"
+        [disabled]="editSaving" [attr.aria-busy]="editSaving">
+        @if (editSaving) {
+          <span class="btn-spinner" aria-hidden="true"></span>
+        }
+        {{ editSaving ? 'Saving…' : 'Save changes' }}
+      </button>
+    </ng-container>
+  </app-modal>
+}

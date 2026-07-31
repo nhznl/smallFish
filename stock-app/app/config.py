@@ -265,6 +265,11 @@ def portfolio_members_csv() -> Path:
     return _under("SFP_PORTFOLIOS_MEMBERS_CSV", data_dir(), "portfolios/portfolio_members.csv")
 
 
+def tracked_stocks_csv() -> Path:
+    """User-authored sold/tracking symbols with coverage initiation dates."""
+    return _under("SFP_TRACKED_STOCKS_CSV", data_dir(), "tracking/tracked_stocks.csv")
+
+
 def premiums_dir() -> Path:
     return _under("SFP_PREMIUMS_DIR", data_dir(), "premiums")
 

@@ -23,6 +23,7 @@ from .routers import (
     studies,
     stock_info,
     stocks,
+    tracked_stocks,
     wheel_candidates,
 )
 
@@ -43,6 +44,7 @@ app.include_router(run_jobs.router)
 app.include_router(brokerages.router)
 app.include_router(premium_quotes.router)
 app.include_router(portfolios.router)
+app.include_router(tracked_stocks.router)
 app.include_router(sector_rotation.router)
 app.include_router(studies.router)
 
@@ -69,7 +71,7 @@ def capabilities_snapshot() -> dict:
 #: `/options` was here because `GET /options` was once a JSON API route too;
 #: that route is retired, so the Angular page at `/options` is now the only
 #: thing at that path and the SPA catch-all serves it unconditionally.
-SPA_ROUTE_COLLISIONS = frozenset({"/portfolios"})
+SPA_ROUTE_COLLISIONS = frozenset({"/portfolios", "/tracking-sold-stocks"})
 
 
 def _is_document_navigation(request) -> bool:

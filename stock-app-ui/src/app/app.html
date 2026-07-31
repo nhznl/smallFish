@@ -49,6 +49,9 @@
       <a routerLink="/portfolios" routerLinkActive="active" #portfoliosLink="routerLinkActive"
          [routerLinkActiveOptions]="{ exact: false }"
          [attr.aria-current]="portfoliosLink.isActive ? 'page' : null">Portfolios</a>
+      <a routerLink="/tracking-sold-stocks" routerLinkActive="active" #trackingSoldLink="routerLinkActive"
+         [routerLinkActiveOptions]="{ exact: false }"
+         [attr.aria-current]="trackingSoldLink.isActive ? 'page' : null">Tracking</a>
     </div>
   </nav>
 </header>

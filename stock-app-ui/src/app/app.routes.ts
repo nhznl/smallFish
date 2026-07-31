@@ -17,6 +17,7 @@ export const routes: Routes = [
   { path: 'options', title: 'Trading Ledger · smallFish', loadComponent: () => import('./options/options.component').then(m => m.OptionsComponent) },
   { path: 'retirement', title: 'Retirement Ledger · smallFish', loadComponent: () => import('./retirement-portfolio/retirement-portfolio.component').then(m => m.RetirementPortfolioComponent) },
   { path: 'portfolios', title: 'Portfolios · smallFish', loadComponent: () => import('./portfolios/portfolios.component').then(m => m.PortfoliosComponent) },
+  { path: 'tracking-sold-stocks', title: 'Tracking and Sold Stocks · smallFish', loadComponent: () => import('./tracking-sold-stocks/tracking-sold-stocks.component').then(m => m.TrackingSoldStocksComponent) },
   { path: 'stockDetail/:symbol', title: stockDetailTitle, loadComponent: () => import('./stock-detail/stock-detail.component').then(m => m.StockDetailComponent) },
   { path: '', redirectTo: '/momentum', pathMatch: 'full' },
   { path: '**', component: PageNotFoundComponent, title: 'Not Found · smallFish' }
