@@ -90,6 +90,23 @@ def _provider():
     return [(_account(), _positions())]
 
 
+def _lending_collateral_position():
+    """Fidelity's non-investment Computershare loan-collateral record."""
+    return {
+        "instrument": {
+            "kind": "other",
+            "symbol": "L0C990030",
+            "description": (
+                "COLLATERAL DELV TO COMPUTERSHARE TRUST CO "
+                "SECURITIES ON LOAN NOT COVERED"
+            ),
+        },
+        "units": "1",
+        "price": "500",
+        "currency": "USD",
+    }
+
+
 # --------------------------------------------------------------------------- #
 # config                                                                       #
 # --------------------------------------------------------------------------- #
@@ -192,6 +209,36 @@ def test_missing_provider_cost_basis_stays_unknown(holdings_env):
         config.holdings_trend_csv().open(encoding="utf-8")
     ))
     assert trend_rows == []
+
+
+def test_sync_excludes_fidelity_securities_lending_collateral(holdings_env):
+    positions = _positions()
+    positions["results"].append(_lending_collateral_position())
+
+    summary = importer.sync_holdings(
+        provider=lambda: [(_account(), positions)]
+    )
+
+    assert {holding["symbol"] for holding in summary["holdings"]} == {
+        "JOBY", "CLX   260918P00070000", "FDRXX",
+    }
+    assert summary["totalValue"] == pytest.approx(4521.0 - 125.0 + 179865.04)
+    assert summary["totalCostBasis"] == pytest.approx(187557.04)
+    assert summary["totalOpenPnl"] == pytest.approx(-3195.0 - 101.0)
+    assert summary["sync"]["positions_synced"] == 3
+
+    rows = list(csv.DictReader(config.snaptrade_holdings_csv().open(encoding="utf-8")))
+    assert {row["symbol"] for row in rows} == {
+        "JOBY", "CLX   260918P00070000", "FDRXX",
+    }
+
+
+def test_lending_collateral_filter_requires_other_instrument_type():
+    collateral = _lending_collateral_position()
+    assert importer.is_securities_lending_collateral(collateral)
+
+    collateral["instrument"]["kind"] = "stock"
+    assert not importer.is_securities_lending_collateral(collateral)
 
 
 def test_sync_reports_unchanged_and_removed_positions(holdings_env):

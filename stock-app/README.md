@@ -159,7 +159,9 @@ market value, and open P/L; the summary groups value by account and asset class.
 `app/brokerages/importers/snaptrade.py` normalizes rows and writes the holdings
 and option-event ledgers. Credential entry and provider verification belong to
 `tools/brokerages.py`; smallFish does not register SnapTrade users or create
-connection portals.
+connection portals. Fidelity's Computershare securities-lending collateral
+records are administrative, not holdings, and are excluded from the ledger and
+portfolio totals.
 
 Setup is one-time and depends on which kind of SnapTrade API key you have —
 the client-id prefix tells you:

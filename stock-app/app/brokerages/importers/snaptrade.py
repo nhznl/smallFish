@@ -313,11 +313,33 @@ def _normalize_position(pos: Any, ctx: dict[str, str], retrieved_at: str) -> dic
     )
 
 
+def is_securities_lending_collateral(position: Any) -> bool:
+    """Whether a Fidelity loan-collateral record is not an investment holding.
+
+    Fidelity can expose a Computershare custody entry for securities lent through
+    its Fully-Paid Lending program alongside investable positions. It represents
+    collateral for the loaned shares, not a separate asset or cost basis. Match
+    both durable phrases so unrelated provider ``OTHER`` positions, including
+    employer-plan units, retain their existing missing-basis behavior.
+    """
+    instrument = value(position, "instrument")
+    kind = text(value(instrument, "kind")).upper()
+    description = text(
+        value(instrument, "description") or value(position, "description")
+    ).upper()
+    return (
+        kind == "OTHER"
+        and "COLLATERAL DELV TO COMPUTERSHARE TRUST CO" in description
+        and "SECURITIES ON LOAN" in description
+    )
+
+
 def _normalize_account(account: Any, positions: Any, retrieved_at: str) -> list[dict[str, Any]]:
     ctx = _account_context(account)
     return [
         _normalize_position(pos, ctx, retrieved_at)
         for pos in (value(positions, "results") or [])
+        if not is_securities_lending_collateral(pos)
     ]
 
 
