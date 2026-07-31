@@ -185,7 +185,7 @@
     </div>
 
     <p class="price-note">
-      <strong>Market Price / Share</strong> is the brokerage mark from the latest sync
+      <strong>Price</strong> is the brokerage mark from the latest sync
       @if (holdings.as_of.positions) { ({{ timestamp(holdings.as_of.positions) }}) }.
     </p>
 
@@ -205,7 +205,8 @@
             <th class="sortable" [attr.aria-sort]="ariaSort('industry')"><button type="button" class="sort-button" (click)="sortBy('industry')">Industry {{ sortIcon('industry') }}</button></th>
             <th class="num sortable" [attr.aria-sort]="ariaSort('quantity')"><button type="button" class="sort-button" (click)="sortBy('quantity')">Qty {{ sortIcon('quantity') }}</button></th>
             <th class="num sortable" [attr.aria-sort]="ariaSort('cost_per_unit')"><button type="button" class="sort-button" (click)="sortBy('cost_per_unit')">Cost / Share {{ sortIcon('cost_per_unit') }}</button></th>
-            <th class="num sortable" [attr.aria-sort]="ariaSort('mark_per_unit')"><button type="button" class="sort-button" (click)="sortBy('mark_per_unit')">Market Price / Share {{ sortIcon('mark_per_unit') }}</button></th>
+            <th class="num sortable" [attr.aria-sort]="ariaSort('mark_per_unit')"><button type="button" class="sort-button" (click)="sortBy('mark_per_unit')">Price {{ sortIcon('mark_per_unit') }}</button></th>
+            <th>52W <small>range</small></th>
             <th class="num sortable" [attr.aria-sort]="ariaSort('cost_basis')"><button type="button" class="sort-button" (click)="sortBy('cost_basis')">Invested {{ sortIcon('cost_basis') }}</button></th>
             <th class="num sortable" [attr.aria-sort]="ariaSort('market_value')"><button type="button" class="sort-button" (click)="sortBy('market_value')">Current {{ sortIcon('market_value') }}</button></th>
             <th class="num sortable" [attr.aria-sort]="ariaSort('pct_of_total')"><button type="button" class="sort-button" (click)="sortBy('pct_of_total')">% Portfolio {{ sortIcon('pct_of_total') }}</button></th>
@@ -224,6 +225,7 @@
                 <td>—</td>
                 <td>—</td>
                 <td class="num">—</td>
+                <td></td>
                 <td class="num">—</td>
                 <td class="num">—</td>
                 <td class="num">{{ money(totals.cost_basis) }}</td>
@@ -243,13 +245,32 @@
             }
             @for (row of filteredHoldings(); track row.id) {
               <tr [class.declining-row]="row.trend.alert">
-                <td class="col-sticky symbol-cell"><strong>{{ row.symbol }}</strong></td>
+                <td class="col-sticky symbol-cell">
+                  @if (isUniverseSymbol(row.symbol)) {
+                    <a class="symbol-link" [routerLink]="['/stockDetail', row.symbol]" target="_blank">{{ row.symbol }}</a>
+                  } @else {
+                    <strong>{{ row.symbol }}</strong>
+                  }
+                </td>
                 <td><span class="badge badge-neutral">{{ row.category }}</span></td>
                 <td>{{ row.account }}</td>
                 <td>{{ row.industry }}</td>
                 <td class="num">{{ quantity(row.quantity) }}</td>
                 <td class="num">{{ money(row.cost_per_unit) }}</td>
                 <td class="num">{{ money(row.mark_per_unit) }}</td>
+                <td class="range-column">
+                  @if (rangeFor(row.symbol); as range) {
+                    @if (range.fiftyTwoWeekLow != null && range.fiftyTwoWeekHigh != null && range.fiftyTwoWeekPosition != null) {
+                      <div class="range-cell" [matTooltip]="rangeTooltip(range)" matTooltipPosition="above">
+                        <span>{{ rangePrice(range.fiftyTwoWeekLow) }}</span>
+                        <span>{{ rangePrice(range.fiftyTwoWeekHigh) }}</span>
+                        <span class="range-track" aria-hidden="true"><i class="range-marker" [style.left.%]="range.fiftyTwoWeekPosition"></i></span>
+                      </div>
+                    } @else {
+                      <span class="range-unavailable" [matTooltip]="rangeTooltip(range)" matTooltipPosition="above">—</span>
+                    }
+                  }
+                </td>
                 <td class="num">{{ money(row.cost_basis) }}</td>
                 <td class="num">{{ money(row.market_value) }}</td>
                 <td class="num">{{ percent(row.pct_of_total) }}</td>

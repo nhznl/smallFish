@@ -1,10 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { BrokerageService } from '../../api/brokerage.service';
+import { StockService } from '../../api/stock.service';
 import { BrokerageId, HoldingItem, HoldingsResponse } from '../../model/brokerage';
+import { StockRange } from '../../model/stock';
 import {
   formatFixedPercent,
   formatIsoTimestamp,
@@ -24,7 +27,7 @@ type SortColumn =
 @Component({
   selector: 'app-brokerage-holdings',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatTooltipModule, ModalComponent, DrawerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, MatTooltipModule, ModalComponent, DrawerComponent],
   templateUrl: './brokerage-holdings.component.html',
   styleUrl: './brokerage-holdings.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -74,13 +77,21 @@ export class BrokerageHoldingsComponent implements OnChanges {
   sortAscending = false;
 
   private requestSequence = 0;
+  private rangeRequestSequence = 0;
+  private stockRanges = new Map<string, StockRange>();
   private copyTimer?: ReturnType<typeof setTimeout>;
   private messageTimer?: ReturnType<typeof setTimeout>;
 
-  constructor(private readonly api: BrokerageService) {}
+  constructor(
+    private readonly api: BrokerageService,
+    private readonly stockService: StockService,
+  ) {}
 
   ngOnChanges(): void {
-    if (this.brokerageId) this.load();
+    if (this.brokerageId) {
+      this.load();
+      this.loadStockRanges();
+    }
   }
 
   load(): void {
@@ -103,6 +114,44 @@ export class BrokerageHoldingsComponent implements OnChanges {
         this.error = this.message_(err, 'The holdings view could not be loaded.');
       },
     });
+  }
+
+  private loadStockRanges(): void {
+    const request = ++this.rangeRequestSequence;
+    this.stockService.getStockRanges().subscribe({
+      next: ranges => {
+        if (request !== this.rangeRequestSequence) return;
+        this.stockRanges = new Map(ranges.map(range => [range.code, range]));
+      },
+      error: () => {
+        if (request === this.rangeRequestSequence) this.stockRanges = new Map();
+      },
+    });
+  }
+
+  rangeFor(symbol: string): StockRange | null {
+    return this.stockRanges.get(symbol) ?? null;
+  }
+
+  isUniverseSymbol(symbol: string): boolean {
+    return this.stockRanges.has(symbol);
+  }
+
+  rangePrice(value: number | null | undefined): string {
+    if (value == null) return '—';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1,
+    }).format(value);
+  }
+
+  rangeTooltip(range: StockRange): string {
+    if (range.fiftyTwoWeekLow == null || range.fiftyTwoWeekHigh == null
+      || range.fiftyTwoWeekPosition == null) {
+      return '52-week range unavailable: fewer than 252 usable cached daily bars.';
+    }
+    return `Cached 52-week range: ${this.rangePrice(range.fiftyTwoWeekLow)} low to `
+      + `${this.rangePrice(range.fiftyTwoWeekHigh)} high. Latest cached close is `
+      + `${range.fiftyTwoWeekPosition.toFixed(0)}% of the way from low to high.`;
   }
 
   get items(): HoldingItem[] {

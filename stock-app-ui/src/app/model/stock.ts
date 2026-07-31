@@ -3,6 +3,14 @@ import { GainLossFromDate } from "./gainLossFromDate";
 
 export type StockType = 'STOCK' | 'ETF' | 'MF';
 
+/** Cached-universe range data used to enrich portfolio tables. */
+export interface StockRange {
+  code: string;
+  fiftyTwoWeekLow: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekPosition: number | null;
+}
+
 export interface MomentumTrend {
   direction: string;
   strength: string;

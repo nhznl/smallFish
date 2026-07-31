@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { BrokerageService } from '../../api/brokerage.service';
+import { StockService } from '../../api/stock.service';
 import {
   ArchiveCreatedResponse,
   BrokerageId,
@@ -184,10 +186,22 @@ function spyApi() {
   return api;
 }
 
+function stockStub(): jasmine.SpyObj<StockService> {
+  const service = jasmine.createSpyObj<StockService>('StockService', ['getStockRanges']);
+  service.getStockRanges.and.returnValue(of([{
+    code: 'DEMO', fiftyTwoWeekLow: 40, fiftyTwoWeekHigh: 80, fiftyTwoWeekPosition: 50,
+  }]));
+  return service;
+}
+
 async function mount(api: jasmine.SpyObj<BrokerageService>, brokerageId: BrokerageId) {
   await TestBed.configureTestingModule({
     imports: [SymbolLedgerComponent],
-    providers: [{ provide: BrokerageService, useValue: api }],
+    providers: [
+      { provide: BrokerageService, useValue: api },
+      { provide: StockService, useValue: stockStub() },
+      provideRouter([]),
+    ],
   }).compileComponents();
   const fixture = TestBed.createComponent(SymbolLedgerComponent);
   fixture.componentRef.setInput('brokerageId', brokerageId);
@@ -217,6 +231,9 @@ describe('SymbolLedgerComponent', () => {
         expect(body).toContain('DEMO');
         expect(body).toContain('Active');
         expect(body).toContain('SHORT PUT');
+        expect(body).toContain('52W range');
+        expect(fixture.nativeElement.querySelector('.range-column .range-cell')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.symbol-cell a')?.textContent?.trim()).toBe('DEMO');
         expect(body).toContain('Options');
         expect(body).not.toContain('Equity + options');
         // The concepts the migration removes must not reappear in the UI.

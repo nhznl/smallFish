@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { BrokerageService } from '../../api/brokerage.service';
+import { StockService } from '../../api/stock.service';
 import { AdjustedBasisItem, AdjustedBasisResponse, BrokerageComponent } from '../../model/brokerage';
 import { BrokerageLedgerCombinedComponent } from './brokerage-ledger-combined.component';
 
@@ -65,6 +67,14 @@ function response(items: AdjustedBasisItem[]): AdjustedBasisResponse {
   };
 }
 
+function stockStub(): jasmine.SpyObj<StockService> {
+  const service = jasmine.createSpyObj<StockService>('StockService', ['getStockRanges']);
+  service.getStockRanges.and.returnValue(of([{
+    code: 'READY', fiftyTwoWeekLow: 80, fiftyTwoWeekHigh: 120, fiftyTwoWeekPosition: 65,
+  }]));
+  return service;
+}
+
 describe('BrokerageLedgerCombinedComponent', () => {
   it('uses the brokerage-neutral adjusted-basis response and counts only genuine unavailable rows', async () => {
     const api = jasmine.createSpyObj<BrokerageService>('BrokerageService', ['getOptionAdjustedBasis']);
@@ -87,7 +97,11 @@ describe('BrokerageLedgerCombinedComponent', () => {
     ])));
     await TestBed.configureTestingModule({
       imports: [BrokerageLedgerCombinedComponent],
-      providers: [{ provide: BrokerageService, useValue: api }],
+      providers: [
+        { provide: BrokerageService, useValue: api },
+        { provide: StockService, useValue: stockStub() },
+        provideRouter([]),
+      ],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(BrokerageLedgerCombinedComponent);
@@ -111,12 +125,16 @@ describe('BrokerageLedgerCombinedComponent', () => {
       fixture.nativeElement.querySelectorAll('.combined-table th') as NodeListOf<HTMLElement>
     ).map(header => header.textContent?.replace(/\s+/g, ' ').trim());
     expect(headers).not.toContain('Equity P/L / Share');
+    expect(headers).toContain('Price');
+    expect(headers).toContain('52W range');
     expect(headers).toContain('Adjusted Basis / Share (Cost Price − Option P/L) / Share Qty');
+    expect(fixture.nativeElement.querySelector('.range-column .range-cell')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.symbol-identity a')?.textContent?.trim()).toBe('READY');
 
     (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.component-detail-row > td')?.getAttribute('colspan'))
-      .toBe('11');
+      .toBe('12');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('OPTION_ACTIVITY_HISTORY');
   });
 
@@ -131,7 +149,11 @@ describe('BrokerageLedgerCombinedComponent', () => {
     ])));
     await TestBed.configureTestingModule({
       imports: [BrokerageLedgerCombinedComponent],
-      providers: [{ provide: BrokerageService, useValue: api }],
+      providers: [
+        { provide: BrokerageService, useValue: api },
+        { provide: StockService, useValue: stockStub() },
+        provideRouter([]),
+      ],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(BrokerageLedgerCombinedComponent);
@@ -148,7 +170,11 @@ describe('BrokerageLedgerCombinedComponent', () => {
     api.getOptionAdjustedBasis.and.returnValue(throwError(() => ({ error: { detail: 'Adjusted basis unavailable.' } })));
     await TestBed.configureTestingModule({
       imports: [BrokerageLedgerCombinedComponent],
-      providers: [{ provide: BrokerageService, useValue: api }],
+      providers: [
+        { provide: BrokerageService, useValue: api },
+        { provide: StockService, useValue: stockStub() },
+        provideRouter([]),
+      ],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(BrokerageLedgerCombinedComponent);

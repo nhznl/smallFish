@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 
 import { BrokerageService } from '../../api/brokerage.service';
+import { StockService } from '../../api/stock.service';
 import { BrokerageId, HoldingItem, HoldingsResponse } from '../../model/brokerage';
 import { BrokerageHoldingsComponent } from './brokerage-holdings.component';
 
@@ -134,10 +136,22 @@ function stub(): jasmine.SpyObj<BrokerageService> {
   ]);
 }
 
+function stockStub(): jasmine.SpyObj<StockService> {
+  const service = jasmine.createSpyObj<StockService>('StockService', ['getStockRanges']);
+  service.getStockRanges.and.returnValue(of([{
+    code: 'DEMO', fiftyTwoWeekLow: 50, fiftyTwoWeekHigh: 100, fiftyTwoWeekPosition: 80,
+  }]));
+  return service;
+}
+
 async function mount(api: jasmine.SpyObj<BrokerageService>, brokerageId: BrokerageId) {
   await TestBed.configureTestingModule({
     imports: [BrokerageHoldingsComponent],
-    providers: [{ provide: BrokerageService, useValue: api }],
+    providers: [
+      { provide: BrokerageService, useValue: api },
+      { provide: StockService, useValue: stockStub() },
+      provideRouter([]),
+    ],
   }).compileComponents();
   const fixture = TestBed.createComponent(BrokerageHoldingsComponent);
   fixture.componentRef.setInput('brokerageId', brokerageId);
@@ -167,6 +181,13 @@ describe('BrokerageHoldingsComponent', () => {
         expect(text).toContain('Copy Symbols');
         expect(text).toContain('G/L % as of Jul 27, 2026');
         expect(text).toContain('Edit');
+        expect(text).toContain('Price');
+        expect(text).not.toContain('Market Price / Share');
+        expect(fixture.nativeElement.querySelector('.range-column .range-cell')).toBeTruthy();
+        const linkedSymbols = Array.from(
+          fixture.nativeElement.querySelectorAll('.symbol-cell a') as NodeListOf<HTMLAnchorElement>
+        ).map(link => link.textContent?.trim());
+        expect(linkedSymbols).toEqual(['DEMO']);
         // The label comes from the response, never from the brokerage id.
         expect(text).not.toContain('SNAPTRADE');
 

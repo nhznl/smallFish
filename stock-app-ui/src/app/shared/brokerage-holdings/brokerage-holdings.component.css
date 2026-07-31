@@ -123,7 +123,7 @@
   border-color: rgb(180 83 9 / .25);
 }
 .holdings-table-shell { max-height: 68vh; }
-.holdings-table { min-width: 1580px; }
+.holdings-table { min-width: 1700px; }
 .holdings-table .col-sticky { left: 0; }
 .holdings-table td.col-sticky { background: var(--surface-card); }
 .holdings-table .totals-row td.col-sticky { background: var(--surface-sunken); }
@@ -132,6 +132,8 @@
   white-space: nowrap;
 }
 .symbol-cell { font-family: var(--font-mono); }
+.symbol-link { color: var(--primary); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.range-column { min-width: 112px; }
 .sort-button { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; text-transform: inherit; letter-spacing: inherit; white-space: nowrap; cursor: pointer; }
 .sort-button:hover { color: var(--primary); }
 .snapshot-col small { display: block; color: var(--text-faint); font-weight: 600; text-transform: none; letter-spacing: 0; }

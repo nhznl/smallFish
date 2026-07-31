@@ -1,12 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
-import { catchError, tap, shareReplay, finalize } from 'rxjs/operators';
+import { catchError, tap, shareReplay, finalize, map } from 'rxjs/operators';
 import { StockInfo } from '../model/stock-info';
 import { WheelCandidate } from '../model/wheel-candidate';
 import { CollectionScopeRequest, OptionQuoteSnapshot } from '../model/option-quotes';
 import { SectorRotationSnapshot } from '../model/sector-rotation';
-import { MomentumStock, StockAnalysis } from '../model/stock';
+import { MomentumStock, StockAnalysis, StockRange } from '../model/stock';
 import {
   ChainsJobResult,
   EarningsScanResult,
@@ -23,6 +23,7 @@ export class StockService {
   private momentumStocksUrl = `${this.apiBaseUrl}/momentumStocks`;
   private readonly stockInfoCache = new Map<string, StockInfo>();
   private readonly stockInfoRequests = new Map<string, Observable<StockInfo>>();
+  private stockRanges$?: Observable<StockRange[]>;
 
 
   /** Fetch the focused cached-analysis payload used by Stock Detail. */
@@ -91,6 +92,19 @@ export class StockService {
     // Let this error reach the scanner so a failed API call is not presented
     // as a legitimate empty candidate set.
     return this.http.get<MomentumStock[]>(this.momentumStocksUrl);
+  }
+
+  /** Cached 52-week range data for symbols in the configured stock universe. */
+  getStockRanges(): Observable<StockRange[]> {
+    if (!this.stockRanges$) {
+      this.stockRanges$ = this.http.get<{ stocks: StockRange[] }>(
+        `${this.stockUrl}/ranges`
+      ).pipe(
+        map(response => response.stocks),
+        shareReplay({ bufferSize: 1, refCount: false }),
+      );
+    }
+    return this.stockRanges$;
   }
 
   /**

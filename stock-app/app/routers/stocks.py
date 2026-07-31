@@ -7,7 +7,8 @@ from fastapi.responses import JSONResponse
 
 from ..cache import cache
 from ..events_read import read_upcoming_earnings
-from ..serializers import momentum_stock_dict, stock_detail_dict, trade_data_dict
+from ..serializers import (momentum_stock_dict, stock_detail_dict,
+                           stock_range_dict, trade_data_dict)
 
 router = APIRouter()
 
@@ -17,6 +18,13 @@ def get_stocks() -> JSONResponse:
     # Emit a deterministic symbol order so the default view is stable.
     ordered = sorted(cache.stocks(), key=lambda s: s.code)
     return JSONResponse(content=trade_data_dict(ordered))
+
+
+@router.get("/stocks/ranges")
+def get_stock_ranges() -> JSONResponse:
+    """Cached 52-week ranges for every symbol in the configured universe."""
+    ordered = sorted(cache.stocks(), key=lambda s: s.code)
+    return JSONResponse(content={"stocks": [stock_range_dict(stock) for stock in ordered]})
 
 
 @router.get("/stocks/{symbol}/analysis")

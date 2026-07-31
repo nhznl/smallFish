@@ -60,6 +60,11 @@ def _fifty_two_week_range_dict(s: Stock) -> dict[str, float | None]:
     }
 
 
+def stock_range_dict(s: Stock) -> dict[str, str | float | None]:
+    """The compact cached-universe range contract for linked portfolio rows."""
+    return {"code": s.code, **_fifty_two_week_range_dict(s)}
+
+
 def _stock_detail_daily_dict(d: Daily) -> dict:
     return {
         "tradeDate": market_date_iso(d.date),

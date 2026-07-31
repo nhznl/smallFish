@@ -135,6 +135,7 @@
                   <th scope="col">Strategy</th>
                 }
                 <th scope="col" class="num">Market price</th>
+                <th scope="col">52W <small>range</small></th>
                 @if (state === 'active') {
                   <th scope="col" class="num sortable" [attr.aria-sort]="ariaSort('dte')">
                     <button type="button" class="sort-button" (click)="sortBy('dte')"
@@ -168,7 +169,11 @@
                   [class.risk-itm]="state === 'active' && row.strike_risk === 'ITM'"
                   [class.risk-near]="state === 'active' && row.strike_risk === 'NEAR_STRIKE'">
                   <td class="sticky-symbol symbol-cell">
-                    <strong>{{ row.symbol }}</strong>
+                    @if (isUniverseSymbol(row.symbol)) {
+                      <a class="symbol-link" [routerLink]="['/stockDetail', row.symbol]" target="_blank">{{ row.symbol }}</a>
+                    } @else {
+                      <strong>{{ row.symbol }}</strong>
+                    }
                     <small>{{ row.exposure === 'EQUITY_AND_OPTIONS' ? 'Equity + options'
                       : row.exposure === 'EQUITY' ? 'Equity' : 'Options' }}</small>
                     @if (strikeRiskLabel(row.strike_risk); as riskLabel) {
@@ -184,6 +189,19 @@
                     <td class="strategy-cell">{{ row.strategy || '—' }}</td>
                   }
                   <td class="num">{{ price(row.underlying_price) }}</td>
+                  <td class="range-column">
+                    @if (rangeFor(row.symbol); as range) {
+                      @if (range.fiftyTwoWeekLow != null && range.fiftyTwoWeekHigh != null && range.fiftyTwoWeekPosition != null) {
+                        <div class="range-cell" [matTooltip]="rangeTooltip(range)" matTooltipPosition="above">
+                          <span>{{ rangePrice(range.fiftyTwoWeekLow) }}</span>
+                          <span>{{ rangePrice(range.fiftyTwoWeekHigh) }}</span>
+                          <span class="range-track" aria-hidden="true"><i class="range-marker" [style.left.%]="range.fiftyTwoWeekPosition"></i></span>
+                        </div>
+                      } @else {
+                        <span class="range-unavailable" [matTooltip]="rangeTooltip(range)" matTooltipPosition="above">—</span>
+                      }
+                    }
+                  </td>
                   @if (state === 'active') {
                     <td class="num"
                       [matTooltip]="row.nearest_expiry ? ('Expires ' + row.nearest_expiry) : ''"

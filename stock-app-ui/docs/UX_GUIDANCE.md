@@ -225,6 +225,10 @@ other textual state.
   is missing, the same dialog accepts either total cost basis or cost per
   share/unit. Treat that value as account-scoped app metadata that survives
   sync, and stop using it if the provider later supplies basis.
+- The three brokerage tables place the cached-universe 52-week range band
+  immediately after Price. Symbols in that universe link to Stock Detail in a
+  new tab; provider-only symbols, such as Fidelity plan funds, leave both the
+  range and symbol link absent rather than implying stock-universe coverage.
 - Options uses the shared Symbol Ledger on both brokerage pages. It includes
   only option-capable symbols, derives Active or Closed lifecycle from
   immutable broker facts (Active and Closed tabs only — no combined All view),

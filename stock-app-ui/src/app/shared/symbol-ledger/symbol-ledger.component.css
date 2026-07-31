@@ -92,7 +92,7 @@
 .band-legend-strike .band-legend-dot { background: var(--neg); }
 .band-legend-breakeven .band-legend-dot { background: var(--breakeven-dot); }
 
-.ledger-table { min-width: 1380px; }
+.ledger-table { min-width: 1500px; }
 .ledger-table th.num, .ledger-table td.num,
 .component-table th.num, .component-table td.num {
   text-align: right;
@@ -117,6 +117,8 @@
   outline-offset: 1px;
 }
 .symbol-cell strong { font-family: var(--font-mono); }
+.symbol-link { color: var(--primary); font-family: var(--font-mono); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.range-column { min-width: 112px; }
 .strategy-cell {
   white-space: nowrap;
   font-size: var(--text-sm);

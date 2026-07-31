@@ -84,7 +84,8 @@
           <thead>
             <tr>
               <th class="col-sticky" rowspan="2">Symbol</th>
-              <th class="num" rowspan="2">Current Price / Share</th>
+              <th class="num" rowspan="2">Price</th>
+              <th rowspan="2">52W <small>range</small></th>
               <th class="column-group" colspan="5">Share Position</th>
               <th class="column-group" colspan="2">Options</th>
               <th class="column-group" colspan="2">Combined</th>
@@ -112,11 +113,28 @@
                     [attr.aria-expanded]="expandedSymbol === row.symbol"
                     [attr.aria-controls]="'combined-detail-' + row.symbol">
                     <span class="expand-cue" aria-hidden="true">{{ expandedSymbol === row.symbol ? '−' : '+' }}</span>
-                    <strong>{{ row.symbol }}</strong>
                   </button>
+                  @if (isUniverseSymbol(row.symbol)) {
+                    <a class="symbol-link" [routerLink]="['/stockDetail', row.symbol]" target="_blank">{{ row.symbol }}</a>
+                  } @else {
+                    <strong>{{ row.symbol }}</strong>
+                  }
                   <small>{{ row.accounts.join(' · ') || 'Account unavailable' }}</small>
                 </td>
                 <td class="num">{{ money(currentPricePerShare(row)) }}</td>
+                <td class="range-column">
+                  @if (rangeFor(row.symbol); as range) {
+                    @if (range.fiftyTwoWeekLow != null && range.fiftyTwoWeekHigh != null && range.fiftyTwoWeekPosition != null) {
+                      <div class="range-cell" [matTooltip]="rangeTooltip(range)" matTooltipPosition="above">
+                        <span>{{ rangePrice(range.fiftyTwoWeekLow) }}</span>
+                        <span>{{ rangePrice(range.fiftyTwoWeekHigh) }}</span>
+                        <span class="range-track" aria-hidden="true"><i class="range-marker" [style.left.%]="range.fiftyTwoWeekPosition"></i></span>
+                      </div>
+                    } @else {
+                      <span class="range-unavailable" [matTooltip]="rangeTooltip(range)" matTooltipPosition="above">—</span>
+                    }
+                  }
+                </td>
                 <td class="num share-block-start">{{ quantity(row.share_quantity) }}</td>
                 <td class="num">{{ money(row.equity_cost_per_share) }}</td>
                 <td class="num">{{ money(row.equity_cost) }}</td>
@@ -140,7 +158,7 @@
               </tr>
               @if (expandedSymbol === row.symbol) {
                 <tr class="component-detail-row" [id]="'combined-detail-' + row.symbol">
-                  <td colspan="11">
+                  <td colspan="12">
                     <div class="component-detail-heading">
                       <div>
                         <strong>{{ row.symbol }} components</strong>

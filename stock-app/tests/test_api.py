@@ -32,6 +32,17 @@ def test_stocks_collection_uses_the_focused_analysis_contract(env_fixtures):
     assert {stock["code"] for stock in data["stocks"]} == {"AAA", "TESTA", "TESTB"}
 
 
+def test_stock_ranges_cover_only_the_cached_universe(env_fixtures):
+    r = client.get("/stocks/ranges")
+    assert r.status_code == 200
+    data = r.json()
+    assert set(data) == {"stocks"}
+    assert {stock["code"] for stock in data["stocks"]} == {"AAA", "TESTA", "TESTB"}
+    assert set(data["stocks"][0]) == {
+        "code", "fiftyTwoWeekLow", "fiftyTwoWeekHigh", "fiftyTwoWeekPosition",
+    }
+
+
 def test_stock_analysis_contract_and_edge_cases(env_fixtures):
     r = client.get("/stocks/AAA/analysis")
     assert r.status_code == 200
