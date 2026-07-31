@@ -145,22 +145,37 @@ etf_seed:
 # personal holdings and options underlyings in that local file.
 manual_pins:
   ACHR: {type: STOCK, notes: "Archer Aviation (Russell 2000, not R1000)"}
+  ALLO: {type: STOCK, notes: "Allogene Therapeutics (cell therapy; micro-cap, outside configured index universe)"}
   AP:   {type: STOCK, notes: "Ampco-Pittsburgh (micro-cap, no major index)"}
+  ARGX: {type: STOCK, notes: "argenx SE ADR (Belgium-domiciled, outside configured index universe)"}
   BE:   {type: STOCK, notes: "Bloom Energy (outside configured index universe)"}
+  BEAM: {type: STOCK, notes: "Beam Therapeutics (gene editing; outside configured index universe)"}
   BHP:  {type: STOCK, notes: "BHP Group ADR (ASX-listed, not a US index)"}
+  BNTX: {type: STOCK, notes: "BioNTech SE ADR (Germany-domiciled, outside configured index universe)"}
+  CLLS: {type: STOCK, notes: "Cellectis (gene editing; micro-cap, outside configured index universe)"}
+  CRBU: {type: STOCK, notes: "Caribou Biosciences (gene editing; micro-cap, outside configured index universe)"}
   CRSP: {type: STOCK, notes: "CRISPR Therapeutics (Russell 2000, not R1000)"}
   DCO:  {type: STOCK, notes: "Ducommun, aerospace & defense (outside configured index universe)"}
+  DTIL: {type: STOCK, notes: "Precision BioSciences (gene editing; micro-cap, outside configured index universe)"}
+  EDIT: {type: STOCK, notes: "Editas Medicine (gene editing; micro-cap, outside configured index universe)"}
+  GMAB: {type: STOCK, notes: "Genmab A/S ADR (Denmark-domiciled, outside configured index universe)"}
   "ESU26.CME": {type: STOCK, notes: "CME E-mini S&P 500 Sep 2026 (/ESU6 underlier; Yahoo ESU26.CME)"}
+  IPSC: {type: STOCK, notes: "Century Therapeutics (cell therapy; micro-cap, outside configured index universe)"}
   JD:   {type: STOCK, notes: "JD.com ADR (China-domiciled, not a US index)"}
   JOBY: {type: STOCK, notes: "Joby Aviation (Russell 2000, not R1000)"}
   KE:   {type: STOCK, notes: "Kimball Electronics, EMS manufacturing (outside configured index universe)"}
+  MGX:  {type: STOCK, notes: "Metagenomi Therapeutics (gene editing; micro-cap, outside configured index universe)"}
   MNRO: {type: STOCK, notes: "Monro (dropped from S&P 600 Jun 2026)"}
   NNBR: {type: STOCK, notes: "NN Inc, precision components (micro-cap, outside configured index universe)"}
+  NTLA: {type: STOCK, notes: "Intellia Therapeutics (gene editing; outside configured index universe)"}
+  NVAX: {type: STOCK, notes: "Novavax (outside configured index universe)"}
   OKLO: {type: STOCK, notes: "Oklo (Russell 2000, not R1000)"}
   PKOH: {type: STOCK, notes: "Park-Ohio Holdings, specialty machinery (outside configured index universe)"}
+  PRME: {type: STOCK, notes: "Prime Medicine (gene editing; micro-cap, outside configured index universe)"}
   RCAT: {type: STOCK, notes: "Red Cat Holdings (micro-cap, not R1000)"}
   RGTI: {type: STOCK, notes: "Rigetti Computing (Russell 2000, not R1000)"}
   RR:   {type: STOCK, notes: "Richtech Robotics (micro-cap, not R1000)"}
+  SANA: {type: STOCK, notes: "Sana Biotechnology (cell therapy; micro-cap, outside configured index universe)"}
   SHLS: {type: STOCK, notes: "Shoals Technologies (outside configured index universe)"}
   SPX:  {type: STOCK, notes: "S&P 500 cash index (Yahoo ^SPX; options underlier)"}
   SSII: {type: STOCK, notes: "SS Innovations Intl (OTC; self-retires if no data)"}
