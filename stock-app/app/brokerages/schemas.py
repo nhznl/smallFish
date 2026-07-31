@@ -51,6 +51,19 @@ class HoldingsMetadataPatchRequest(BaseModel):
         default=None, json_schema_extra={"type": ["number", "string", "null"]})
 
 
+class HoldingsSettingsPatchRequest(BaseModel):
+    """PATCH /api/brokerages/{id}/holdings/settings."""
+
+    model_config = ConfigDict(extra="allow")
+
+    total_contributions: Any = Field(
+        default=None, json_schema_extra={"type": ["number", "string", "null"]})
+    year_beginning_balance: Any = Field(
+        default=None, json_schema_extra={"type": ["number", "string", "null"]})
+    baseline_year: Any = Field(
+        default=None, json_schema_extra={"type": ["integer", "string", "null"]})
+
+
 class ArchiveCreateRequest(BaseModel):
     """POST /api/brokerages/{id}/symbols/{symbol}/archives."""
 

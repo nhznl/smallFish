@@ -141,6 +141,17 @@ export interface HoldingItem extends BrokerageComponent {
   gain_loss_snapshots: Record<string, number>;
 }
 
+export interface HoldingsPerformanceBaselines {
+  total_contributions: number | null;
+  year_beginning_balance: number | null;
+  baseline_year: number | null;
+  contributions_gain_loss: number | null;
+  contributions_return_pct: number | null;
+  ytd_gain_loss: number | null;
+  ytd_return_pct: number | null;
+  updated_at: string | null;
+}
+
 export interface HoldingsSummary {
   holding_count: number;
   account_count: number;
@@ -148,6 +159,7 @@ export interface HoldingsSummary {
   total_market_value: number | null;
   total_unrealized_pnl: number | null;
   total_unrealized_pnl_pct: number | null;
+  performance_baselines: HoldingsPerformanceBaselines;
   gain_loss_snapshots: GainLossSnapshotDate[];
   pnl_completeness: PnlCompleteness;
 }
@@ -159,6 +171,13 @@ export interface HoldingsMetadataResponse {
   schema_version: number;
   brokerage_id: BrokerageId;
   metadata: Record<string, string>;
+}
+
+export interface HoldingsSettingsResponse {
+  schema_name: string;
+  schema_version: number;
+  brokerage_id: BrokerageId;
+  settings: HoldingsPerformanceBaselines;
 }
 
 export interface GainLossSnapshotResponse {

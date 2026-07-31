@@ -42,6 +42,9 @@ class BrokerageRegistration:
     #: columns keyed the same way, to their own file, so the common projection
     #: reads it through the identity table instead of branching.
     holdings_trend_path: Callable[[], Path] = config.holdings_trend_csv
+    #: Ledger-level contribution and year-start baselines for alternate return
+    #: views on the shared Holdings page.
+    holdings_settings_path: Callable[[], Path] = config.holdings_settings_csv
     #: Common resource name -> the provider command that satisfies it. One
     #: command may serve several resources; the sync runner calls it once.
     sync_commands: dict[str, Callable[[], dict]] = field(default_factory=dict)
@@ -55,6 +58,7 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
                   factory: Callable[..., ArtifactAdapter],
                   holdings_metadata_path: Callable[[], Path],
                   holdings_trend_path: Callable[[], Path],
+                  holdings_settings_path: Callable[[], Path],
                   sync_commands: dict[str, Callable[[], dict]],
                   activity_path: Callable[[], Path],
                   capabilities: BrokerageCapabilities | None = None,
@@ -68,6 +72,7 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
         factory=factory,
         holdings_metadata_path=holdings_metadata_path,
         holdings_trend_path=holdings_trend_path,
+        holdings_settings_path=holdings_settings_path,
         sync_commands=sync_commands,
         activity_path=activity_path,
     )
@@ -90,6 +95,7 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         portfolio_role="TRADING", adapter="TASTYTRADE", factory=TastytradeAdapter,
         holdings_metadata_path=config.trading_holdings_enrichment_csv,
         holdings_trend_path=config.trading_holdings_trend_csv,
+        holdings_settings_path=config.trading_holdings_settings_csv,
         activity_path=config.options_activity_csv,
         sync_commands={
             "HOLDINGS": _tastytrade_sync,
@@ -104,6 +110,7 @@ REGISTRY: dict[str, BrokerageRegistration] = {
         portfolio_role="RETIREMENT", adapter="SNAPTRADE", factory=SnapTradeAdapter,
         holdings_metadata_path=config.holdings_enrichment_csv,
         holdings_trend_path=config.holdings_trend_csv,
+        holdings_settings_path=config.holdings_settings_csv,
         activity_path=config.retirement_option_events_csv,
         sync_commands={
             "HOLDINGS": snaptrade_importer.sync_holdings,

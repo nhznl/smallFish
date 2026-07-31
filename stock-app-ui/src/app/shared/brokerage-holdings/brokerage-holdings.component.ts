@@ -13,6 +13,7 @@ import {
   pnlToneClass,
 } from '../format-display';
 import { ModalComponent } from '../ui/modal.component';
+import { DrawerComponent } from '../ui/drawer.component';
 
 /** Columns a user can sort by; the rest are display-only. */
 type SortColumn =
@@ -23,7 +24,7 @@ type SortColumn =
 @Component({
   selector: 'app-brokerage-holdings',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatTooltipModule, ModalComponent],
+  imports: [CommonModule, FormsModule, MatTooltipModule, ModalComponent, DrawerComponent],
   templateUrl: './brokerage-holdings.component.html',
   styleUrl: './brokerage-holdings.component.css',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -37,6 +38,8 @@ export class BrokerageHoldingsComponent implements OnChanges {
   loading = false;
   snapshotting = false;
   saving = false;
+  savingBaselines = false;
+  baselinesDrawerOpen = false;
   error = '';
   message = '';
   editError = '';
@@ -57,6 +60,16 @@ export class BrokerageHoldingsComponent implements OnChanges {
     costBasis: number | null;
     costPerUnit: number | null;
   } | null = null;
+  baselines: {
+    totalContributions: number | null;
+    yearBeginningBalance: number | null;
+    baselineYear: number | null;
+  } = {
+    totalContributions: null,
+    yearBeginningBalance: null,
+    baselineYear: null,
+  };
+  baselinesError = '';
   sortColumn: SortColumn = 'market_value';
   sortAscending = false;
 
@@ -78,6 +91,7 @@ export class BrokerageHoldingsComponent implements OnChanges {
       next: data => {
         if (request !== this.requestSequence) return;
         this.data = data;
+        this.syncBaselinesForm(data);
         this.countChange.emit(data.items.length);
         this.loading = false;
       },
@@ -220,6 +234,95 @@ export class BrokerageHoldingsComponent implements OnChanges {
         this.error = this.message_(err, 'The G/L snapshot could not be saved.');
       },
     });
+  }
+
+  saveBaselines(): void {
+    const totalContributions = this.validCost(this.baselines.totalContributions);
+    const yearBeginningBalance = this.validCost(this.baselines.yearBeginningBalance);
+    if (totalContributions == null && yearBeginningBalance == null) {
+      this.baselinesError = 'Enter at least one baseline amount.';
+      return;
+    }
+    this.savingBaselines = true;
+    this.baselinesError = '';
+    this.api.updateHoldingsSettings(this.brokerageId, {
+      total_contributions: totalContributions,
+      year_beginning_balance: yearBeginningBalance,
+      baseline_year: yearBeginningBalance == null
+        ? null
+        : (this.baselines.baselineYear ?? this.currentYear()),
+    }).subscribe({
+      next: () => {
+        this.savingBaselines = false;
+        this.baselinesDrawerOpen = false;
+        this.flash('Performance baselines saved.');
+        this.load();
+      },
+      error: err => {
+        this.savingBaselines = false;
+        this.baselinesError = this.message_(
+          err, 'The performance baselines could not be saved.',
+        );
+      },
+    });
+  }
+
+  openBaselinesDrawer(): void {
+    if (this.data) this.syncBaselinesForm(this.data);
+    this.baselinesError = '';
+    this.baselinesDrawerOpen = true;
+  }
+
+  closeBaselinesDrawer(): void {
+    this.baselinesDrawerOpen = false;
+    if (this.data) this.syncBaselinesForm(this.data);
+    this.baselinesError = '';
+  }
+
+  clearBaselines(): void {
+    this.baselines = {
+      totalContributions: null,
+      yearBeginningBalance: null,
+      baselineYear: this.currentYear(),
+    };
+    this.savingBaselines = true;
+    this.baselinesError = '';
+    this.api.updateHoldingsSettings(this.brokerageId, {
+      total_contributions: null,
+      year_beginning_balance: null,
+      baseline_year: null,
+    }).subscribe({
+      next: () => {
+        this.savingBaselines = false;
+        this.flash('Performance baselines cleared.');
+        this.load();
+      },
+      error: err => {
+        this.savingBaselines = false;
+        this.baselinesError = this.message_(
+          err, 'The performance baselines could not be cleared.',
+        );
+      },
+    });
+  }
+
+  baselineYearLabel(): string {
+    return String(
+      this.data?.summary.performance_baselines.baseline_year ?? this.currentYear()
+    );
+  }
+
+  currentYear(): number {
+    return new Date().getFullYear();
+  }
+
+  private syncBaselinesForm(data: HoldingsResponse): void {
+    const baselines = data.summary.performance_baselines;
+    this.baselines = {
+      totalContributions: baselines.total_contributions,
+      yearBeginningBalance: baselines.year_beginning_balance,
+      baselineYear: baselines.baseline_year ?? this.currentYear(),
+    };
   }
 
   copySymbols(): void {

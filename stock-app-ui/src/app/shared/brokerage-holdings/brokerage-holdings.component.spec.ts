@@ -106,6 +106,16 @@ function response(
       total_market_value: 1200,
       total_unrealized_pnl: -100,
       total_unrealized_pnl_pct: -7.69,
+      performance_baselines: {
+        total_contributions: null,
+        year_beginning_balance: null,
+        baseline_year: null,
+        contributions_gain_loss: null,
+        contributions_return_pct: null,
+        ytd_gain_loss: null,
+        ytd_return_pct: null,
+        updated_at: null,
+      },
       gain_loss_snapshots: [{
         sync_date: '2026-07-27', retrieved_at: '2026-07-27T16:00:00Z',
         captured_at: '2026-07-27T17:00:00Z',
@@ -120,6 +130,7 @@ function response(
 function stub(): jasmine.SpyObj<BrokerageService> {
   return jasmine.createSpyObj<BrokerageService>('BrokerageService', [
     'getHoldings', 'captureGainLossSnapshot', 'updateHoldingsMetadata',
+    'updateHoldingsSettings',
   ]);
 }
 
@@ -194,7 +205,7 @@ describe('BrokerageHoldingsComponent', () => {
     const fixture = await mount(api, 'tastytrade');
 
     const text = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
-    expect(text).toContain('−7.69%');    // Return card
+    expect(text).toContain('−7.69%');    // filtered totals row
     expect(text).toContain('75.00%');    // % Portfolio, first row
   });
 

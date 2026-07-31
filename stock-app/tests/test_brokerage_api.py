@@ -130,6 +130,51 @@ def test_holdings_are_open_equity_with_editable_classifications(adapter_env,
     assert body["summary"]["total_unrealized_pnl"] == pytest.approx(1000)
 
 
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_holdings_expose_empty_performance_baselines(adapter_env, brokerage_id):
+    write_covered_put(brokerage_id)
+    body = _get(brokerage_id, "holdings")
+    baselines = body["summary"]["performance_baselines"]
+    assert set(baselines) == {
+        "total_contributions", "year_beginning_balance", "baseline_year",
+        "contributions_gain_loss", "contributions_return_pct",
+        "ytd_gain_loss", "ytd_return_pct", "updated_at",
+    }
+    assert baselines["total_contributions"] is None
+    assert baselines["contributions_gain_loss"] is None
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_holdings_settings_compute_alternate_returns(adapter_env, brokerage_id):
+    write_covered_put(brokerage_id)
+    entry = registry.REGISTRY[brokerage_id]
+    settings_path = entry.holdings_settings_path()
+    if settings_path.is_file():
+        settings_path.unlink()
+
+    saved = client.patch(
+        f"/api/brokerages/{brokerage_id}/holdings/settings",
+        json={
+            "total_contributions": 10000,
+            "year_beginning_balance": 11500,
+            "baseline_year": 2026,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["schema_name"] == "smallfish.brokerage-holdings-settings"
+
+    body = _get(brokerage_id, "holdings")
+    baselines = body["summary"]["performance_baselines"]
+    assert baselines["total_contributions"] == pytest.approx(10000)
+    assert baselines["year_beginning_balance"] == pytest.approx(11500)
+    assert baselines["baseline_year"] == 2026
+    assert baselines["contributions_gain_loss"] == pytest.approx(2000)
+    assert baselines["contributions_return_pct"] == pytest.approx(20)
+    assert baselines["ytd_gain_loss"] == pytest.approx(500)
+    assert baselines["ytd_return_pct"] == pytest.approx(500 / 11500 * 100)
+    assert baselines["updated_at"]
+
+
 def test_fidelity_holdings_keep_missing_cost_basis_unknown(adapter_env):
     _write_snaptrade(holdings=[{
         "asset_class": "OTHER", "symbol": "PLAN", "quantity": "10",

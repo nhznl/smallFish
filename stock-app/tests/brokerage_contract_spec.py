@@ -157,6 +157,7 @@ NEW_ROUTES = (
     ("PUT", "/api/brokerages/{brokerage_id}/activity/manual/{event_id}"),
     ("DELETE", "/api/brokerages/{brokerage_id}/activity/manual/{event_id}"),
     ("GET", "/api/brokerages/{brokerage_id}/holdings"),
+    ("PATCH", "/api/brokerages/{brokerage_id}/holdings/settings"),
     ("PATCH", "/api/brokerages/{brokerage_id}/holdings/{symbol}/metadata"),
     ("POST", "/api/brokerages/{brokerage_id}/holdings/gain-loss-snapshots"),
     ("GET", "/api/brokerages/{brokerage_id}/options"),

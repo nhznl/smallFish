@@ -10,6 +10,7 @@ import {
   GainLossSnapshotResponse,
   HoldingsMetadataResponse,
   HoldingsResponse,
+  HoldingsSettingsResponse,
   LedgerEventsResponse,
   OptionsResponse,
   SymbolLedgerDetailResponse,
@@ -54,6 +55,21 @@ export class BrokerageService {
   ): Observable<HoldingsMetadataResponse> {
     return this.http.patch<HoldingsMetadataResponse>(
       `${this.base(brokerageId)}/holdings/${encodeSymbolPath(symbol)}/metadata`,
+      body
+    );
+  }
+
+  /** Edit ledger-level contribution and year-start performance baselines. */
+  updateHoldingsSettings(
+    brokerageId: BrokerageId,
+    body: {
+      total_contributions?: number | null;
+      year_beginning_balance?: number | null;
+      baseline_year?: number | null;
+    }
+  ): Observable<HoldingsSettingsResponse> {
+    return this.http.patch<HoldingsSettingsResponse>(
+      `${this.base(brokerageId)}/holdings/settings`,
       body
     );
   }

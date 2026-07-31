@@ -1,4 +1,7 @@
-:host { display: block; }
+:host {
+  display: block;
+  --breakeven-dot: #eab308;
+}
 
 .symbol-ledger { min-width: 0; }
 .symbol-ledger .panel-heading small { display: block; margin-top: 4px; color: var(--text-secondary); }
@@ -87,7 +90,7 @@
 }
 .band-legend-spot .band-legend-dot { background: var(--pos); }
 .band-legend-strike .band-legend-dot { background: var(--neg); }
-.band-legend-breakeven .band-legend-dot { background: var(--warn); }
+.band-legend-breakeven .band-legend-dot { background: var(--breakeven-dot); }
 
 .ledger-table { min-width: 1380px; }
 .ledger-table th.num, .ledger-table td.num,
@@ -195,7 +198,7 @@
   margin-left: -5px;
 }
 .breakeven-marker.role-strike { background: var(--neg); }
-.breakeven-marker.role-breakeven { background: var(--warn); }
+.breakeven-marker.role-breakeven { background: var(--breakeven-dot); }
 
 /* An unproven symbol is marked on the row edge as well as by its badge, so the
    state survives greyscale and does not depend on noticing a colour. */

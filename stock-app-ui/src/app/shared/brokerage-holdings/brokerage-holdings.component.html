@@ -48,29 +48,92 @@
       </div>
     }
 
-    <div class="stat-strip holdings-stats">
-      <div class="stat-card">
-        <span class="stat-label">Total invested</span>
-        <span class="stat-value">{{ money(holdings.summary.total_cost_basis) }}</span>
+    <div class="holdings-baseline-section">
+      <div class="holdings-baseline-header">
+        <button type="button" class="baselines-link btn btn-ghost btn-sm"
+          (click)="openBaselinesDrawer()">
+          Performance baselines
+        </button>
+      </div>
+      <div class="stat-strip holdings-baseline-stats" aria-label="Baseline returns">
+      <div class="stat-card stat-card-baselines">
+        <span class="stat-label">Baseline amounts</span>
+        <dl class="baseline-rows">
+          <div class="baseline-row">
+            <dt>Contributions From Inception</dt>
+            <dd>
+              <strong class="baseline-amount">{{ money(holdings.summary.performance_baselines.total_contributions) }}</strong>
+            </dd>
+          </div>
+          <div class="baseline-row">
+            <dt>Jan 1 {{ baselineYearLabel() }}</dt>
+            <dd>
+              <strong class="baseline-amount">{{ money(holdings.summary.performance_baselines.year_beginning_balance) }}</strong>
+            </dd>
+          </div>
+        </dl>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Current value</span>
+        <span class="stat-label">Current amount</span>
         <span class="stat-value">{{ money(holdings.summary.total_market_value) }}</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Gain / loss</span>
-        <span class="stat-value" [class]="pnlClass(holdings.summary.total_unrealized_pnl)">{{ money(holdings.summary.total_unrealized_pnl, true) }}</span>
+        <span class="stat-label">Current vs Contributions</span>
+        <span class="stat-value" [class]="pnlClass(holdings.summary.performance_baselines.contributions_gain_loss)">
+          {{ money(holdings.summary.performance_baselines.contributions_gain_loss, true) }}
+        </span>
+        <span class="stat-delta" [class]="pnlClass(holdings.summary.performance_baselines.contributions_return_pct)">
+          {{ percent(holdings.summary.performance_baselines.contributions_return_pct, true) }}
+        </span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Return</span>
-        <span class="stat-value" [class]="pnlClass(holdings.summary.total_unrealized_pnl_pct)">{{ percent(holdings.summary.total_unrealized_pnl_pct, true) }}</span>
+        <span class="stat-label">Current v/s YTD ({{ baselineYearLabel() }})</span>
+        <span class="stat-value" [class]="pnlClass(holdings.summary.performance_baselines.ytd_gain_loss)">
+          {{ money(holdings.summary.performance_baselines.ytd_gain_loss, true) }}
+        </span>
+        <span class="stat-delta" [class]="pnlClass(holdings.summary.performance_baselines.ytd_return_pct)">
+          {{ percent(holdings.summary.performance_baselines.ytd_return_pct, true) }}
+        </span>
       </div>
-      <div class="stat-card">
-        <span class="stat-label">Holdings</span>
-        <span class="stat-value">{{ holdings.summary.holding_count }}</span>
-        <span class="stat-delta">Open symbols</span>
       </div>
     </div>
+
+    @if (baselinesDrawerOpen) {
+      <app-drawer ariaLabel="Performance baselines" (closed)="closeBaselinesDrawer()"
+        [width]="'min(480px, 94vw)'">
+        <div drawerHeader class="baselines-drawer-heading">
+          <p class="section-kicker">Performance baselines</p>
+          <h2 class="baselines-drawer-title">Contribution and year-start returns</h2>
+          <p>Enter ledger-level amounts to compare current value against total contributions and the balance at the start of the year.</p>
+        </div>
+        @if (baselinesError) {
+          <div class="banner banner-warn" role="alert">{{ baselinesError }}</div>
+        }
+        <div class="baselines-form baselines-drawer-form">
+          <label>
+            <span>Total contributions</span>
+            <input type="number" min="0" step="0.01" [(ngModel)]="baselines.totalContributions"
+              placeholder="Pre-tax, employer, post-tax, rollovers">
+          </label>
+          <label>
+            <span>Beginning balance ({{ baselines.baselineYear || currentYear() }})</span>
+            <input type="number" min="0" step="0.01" [(ngModel)]="baselines.yearBeginningBalance"
+              placeholder="Portfolio value on Jan 1">
+          </label>
+        </div>
+        <ng-container drawerFooter>
+          <button type="button" class="btn btn-ghost" (click)="clearBaselines()"
+            [disabled]="savingBaselines">Clear</button>
+          <button type="button" class="btn" (click)="closeBaselinesDrawer()"
+            [disabled]="savingBaselines">Cancel</button>
+          <button type="button" class="btn btn-primary" (click)="saveBaselines()"
+            [attr.aria-busy]="savingBaselines" [disabled]="savingBaselines">
+            @if (savingBaselines) { <span class="btn-spinner" aria-hidden="true"></span> }
+            {{ savingBaselines ? 'Saving…' : 'Save baselines' }}
+          </button>
+        </ng-container>
+      </app-drawer>
+    }
 
     <div class="filter-toolbar holdings-filters" aria-label="Holdings filters">
       @if (categories().length > 1) {

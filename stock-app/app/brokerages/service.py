@@ -85,6 +85,7 @@ def brokerage_holdings(brokerage_id: str, *,
     return holdings.build(
         snapshot, metadata_path=entry.holdings_metadata_path(),
         trend_path=entry.holdings_trend_path(),
+        settings_path=entry.holdings_settings_path(),
         account_id=account_id,
     )
 
@@ -498,6 +499,97 @@ def capture_gain_loss_snapshot(brokerage_id: str) -> dict[str, Any]:
         )
     except holdings.SnapshotUnavailable as exc:
         raise BrokerageRequestError(exc.code, str(exc), 409) from exc
+
+
+def update_holdings_settings(brokerage_id: str,
+                             payload: dict[str, Any]) -> dict[str, Any]:
+    """Edit ledger-level performance baselines used on the Holdings page."""
+    _snapshot(brokerage_id)
+    entry = registry.registration(brokerage_id)
+    allowed = {"total_contributions", "year_beginning_balance", "baseline_year"}
+    unknown = set(payload) - allowed
+    if unknown:
+        raise BrokerageRequestError(
+            "UNSUPPORTED_FIELD",
+            f"Cannot update {', '.join(sorted(unknown))}.", 422,
+        )
+    if not payload:
+        raise BrokerageRequestError(
+            "NOTHING_TO_UPDATE",
+            "Send total contributions and/or a year-start balance.", 422,
+        )
+
+    updates: dict[str, str] = {}
+    current_year = str(datetime.now(timezone.utc).date().year)
+
+    if "total_contributions" in payload:
+        value = payload["total_contributions"]
+        if value in (None, ""):
+            updates["total_contributions"] = ""
+        else:
+            updates["total_contributions"] = _serialized_amount(
+                value, "INVALID_CONTRIBUTIONS",
+                "Total contributions must be zero or greater.",
+            )
+
+    if "year_beginning_balance" in payload:
+        value = payload["year_beginning_balance"]
+        if value in (None, ""):
+            updates["year_beginning_balance"] = ""
+            updates["baseline_year"] = ""
+        else:
+            updates["year_beginning_balance"] = _serialized_amount(
+                value, "INVALID_YEAR_BALANCE",
+                "Beginning balance must be zero or greater.",
+            )
+            raw_year = payload.get("baseline_year")
+            if raw_year in (None, ""):
+                updates["baseline_year"] = current_year
+            else:
+                updates["baseline_year"] = _serialized_year(raw_year)
+
+    if "baseline_year" in payload and "year_beginning_balance" not in payload:
+        value = payload["baseline_year"]
+        if value in (None, ""):
+            updates["baseline_year"] = ""
+        else:
+            updates["baseline_year"] = _serialized_year(value)
+
+    row = holdings.write_settings(entry.holdings_settings_path(), updates)
+    return {
+        "schema_name": "smallfish.brokerage-holdings-settings",
+        "schema_version": envelope.SCHEMA_VERSION,
+        "brokerage_id": brokerage_id,
+        "settings": holdings._performance_baselines(
+            market_value=None, settings=row,
+        ),
+    }
+
+
+def _serialized_amount(value: Any, code: str, message: str) -> str:
+    if isinstance(value, bool):
+        raise BrokerageRequestError(code, message, 422)
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise BrokerageRequestError(code, message, 422) from exc
+    if not parsed.is_finite() or parsed < 0:
+        raise BrokerageRequestError(code, message, 422)
+    return format(parsed.normalize(), "f") if parsed else "0"
+
+
+def _serialized_year(value: Any) -> str:
+    try:
+        year = int(str(value).strip())
+    except (TypeError, ValueError) as exc:
+        raise BrokerageRequestError(
+            "INVALID_BASELINE_YEAR", "Baseline year must be a four-digit year.", 422,
+        ) from exc
+    if year < 1900 or year > 9999:
+        raise BrokerageRequestError(
+            "INVALID_BASELINE_YEAR", "Baseline year must be a four-digit year.", 422,
+        )
+    return str(year)
 
 
 # ------------------------------------------------ manual reconciliation ---

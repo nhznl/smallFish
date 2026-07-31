@@ -134,6 +134,15 @@ def trading_holdings_enrichment_csv() -> Path:
     )
 
 
+def trading_holdings_settings_csv() -> Path:
+    """Per-ledger performance baselines for the Trading holdings view."""
+    return _under(
+        "SFP_TRADING_HOLDINGS_SETTINGS",
+        data_dir(),
+        "ledger_trading/holdings_settings.csv",
+    )
+
+
 def options_greeks_csv() -> Path:
     """Latest timestamped Tastytrade Greeks for current option positions."""
     return _under("SFP_OPTIONS_GREEKS", data_dir(), "ledger_trading/options_greeks.csv")
@@ -169,6 +178,13 @@ def holdings_enrichment_csv() -> Path:
     trade-group metadata."""
     return _under(
         "SFP_HOLDINGS_ENRICHMENT", data_dir(), "ledger_retirement/holdings_enrichment.csv"
+    )
+
+
+def holdings_settings_csv() -> Path:
+    """Per-ledger performance baselines for the Retirement holdings view."""
+    return _under(
+        "SFP_HOLDINGS_SETTINGS", data_dir(), "ledger_retirement/holdings_settings.csv"
     )
 
 

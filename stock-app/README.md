@@ -218,6 +218,12 @@ the common `ledger_symbols/holdings_gain_loss_snapshots.csv` artifact, retained
 for the three newest distinct sync dates per brokerage; a fourth date removes the
 oldest one. Holdings absent on an older date display `—` rather than zero.
 
+The holdings page also supports ledger-level **performance baselines**: total
+contributions and a year-start balance. Edit them with
+`PATCH /api/brokerages/{brokerage_id}/holdings/settings`; values are stored in
+each ledger's `holdings_settings.csv` and used to compute alternate gain/loss
+and return percentages against current market value.
+
 ### Symbol Ledger
 
 Options are one durable ledger per symbol. Active and Closed are derived from

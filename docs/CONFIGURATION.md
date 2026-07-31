@@ -91,10 +91,12 @@ specific artifact.
 | `SFP_OPTIONS_ACTIVITY` | `$SFP_DATA_DIR/ledger_trading/options_activity.csv` |
 | `SFP_TASTYTRADE_POSITIONS` | `$SFP_DATA_DIR/ledger_trading/positions.csv` |
 | `SFP_TRADING_HOLDINGS_ENRICHMENT` | `$SFP_DATA_DIR/ledger_trading/holdings_enrichment.csv` |
+| `SFP_TRADING_HOLDINGS_SETTINGS` | `$SFP_DATA_DIR/ledger_trading/holdings_settings.csv` |
 | `SFP_TRADING_HOLDINGS_TREND` | `$SFP_DATA_DIR/ledger_trading/holdings_trend.csv` |
 | `SFP_OPTIONS_GREEKS` | `$SFP_DATA_DIR/ledger_trading/options_greeks.csv` |
 | `SFP_OPTIONS_BETAS` | `$SFP_DATA_DIR/ledger_trading/options_betas.csv` |
 | `SFP_SNAPTRADE_HOLDINGS` | `$SFP_DATA_DIR/ledger_retirement/positions.csv` |
+| `SFP_HOLDINGS_SETTINGS` | `$SFP_DATA_DIR/ledger_retirement/holdings_settings.csv` |
 | `SFP_RETIREMENT_OPTION_EVENTS` | `$SFP_DATA_DIR/ledger_retirement/options_activity.csv` |
 | `SFP_SYMBOL_LEDGER_METADATA` | `$SFP_DATA_DIR/ledger_symbols/symbol_ledger_metadata.csv` |
 | `SFP_SYMBOL_LEDGER_ARCHIVES` | `$SFP_DATA_DIR/ledger_symbols/symbol_ledger_archives.csv` |

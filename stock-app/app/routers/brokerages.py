@@ -60,6 +60,18 @@ def get_option_adjusted_basis(brokerage_id: str,
         raise _fail(exc) from exc
 
 
+@router.patch("/{brokerage_id}/holdings/settings")
+def patch_holdings_settings(
+        brokerage_id: str,
+        request: schemas.HoldingsSettingsPatchRequest | None = None) -> dict:
+    try:
+        return service.update_holdings_settings(
+            brokerage_id, schemas.request_payload(request)
+        )
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
 @router.patch("/{brokerage_id}/holdings/{symbol:path}/metadata")
 def patch_holdings_metadata(
         brokerage_id: str, symbol: str,

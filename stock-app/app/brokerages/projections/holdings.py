@@ -36,6 +36,9 @@ METADATA_HEADERS = (
     "cost_basis_override", "cost_per_unit_override", "cost_basis_mode",
     "updated_at",
 )
+SETTINGS_HEADERS = (
+    "total_contributions", "year_beginning_balance", "baseline_year", "updated_at",
+)
 TAG_FIELDS = ("category", "industry", "note")
 BASIS_FIELDS = (
     "cost_basis_override", "cost_per_unit_override", "cost_basis_mode",
@@ -44,6 +47,7 @@ UNCLASSIFIED = "UNCLASSIFIED"
 
 ZERO = Decimal("0")
 _metadata_lock = threading.RLock()
+_settings_lock = threading.RLock()
 
 
 def read_metadata(path: Path) -> dict[tuple[str, str], dict[str, str]]:
@@ -70,6 +74,65 @@ def _metadata_decimal(value: Any) -> Decimal | None:
     except (InvalidOperation, ValueError):
         return None
     return parsed if parsed.is_finite() and parsed >= ZERO else None
+
+
+def read_settings(path: Path) -> dict[str, Any]:
+    """Ledger-level contribution and year-start baselines for alternate returns."""
+    empty = {field: "" for field in SETTINGS_HEADERS}
+    if not path.is_file():
+        return empty
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return empty
+    row = rows[0]
+    return {field: str(row.get(field, "")).strip() for field in SETTINGS_HEADERS}
+
+
+def _performance_baselines(*, market_value: Decimal | None,
+                           settings: dict[str, str]) -> dict[str, Any]:
+    contributions = _metadata_decimal(settings.get("total_contributions"))
+    year_balance = _metadata_decimal(settings.get("year_beginning_balance"))
+    baseline_year_raw = settings.get("baseline_year", "")
+    baseline_year = (
+        int(baseline_year_raw)
+        if baseline_year_raw.isdigit() and len(baseline_year_raw) == 4
+        else None
+    )
+    contributions_gain = (
+        market_value - contributions
+        if market_value is not None and contributions is not None else None
+    )
+    ytd_gain = (
+        market_value - year_balance
+        if market_value is not None and year_balance is not None else None
+    )
+    return {
+        "total_contributions": _number(contributions),
+        "year_beginning_balance": _number(year_balance),
+        "baseline_year": baseline_year,
+        "contributions_gain_loss": _number(contributions_gain),
+        "contributions_return_pct": (
+            None if contributions_gain is None or not contributions
+            else float(contributions_gain / contributions * 100)
+        ),
+        "ytd_gain_loss": _number(ytd_gain),
+        "ytd_return_pct": (
+            None if ytd_gain is None or not year_balance
+            else float(ytd_gain / year_balance * 100)
+        ),
+        "updated_at": settings.get("updated_at") or None,
+    }
+
+
+def write_settings(path: Path, updates: dict[str, str]) -> dict[str, str]:
+    """Create or update ledger-level performance baselines."""
+    with _settings_lock:
+        current = read_settings(path)
+        now = datetime.now(timezone.utc).isoformat()
+        row = {**current, **updates, "updated_at": now}
+        options_activity._atomic_write(path, list(SETTINGS_HEADERS), [row])
+    return row
 
 
 def _effective_cost(component: Any,
@@ -131,8 +194,10 @@ def held_equity(snapshot: BrokerageSnapshot, *,
 def build(snapshot: BrokerageSnapshot, *,
           metadata_path: Path,
           trend_path: Path,
+          settings_path: Path,
           account_id: str | None = None) -> dict[str, Any]:
     metadata = read_metadata(metadata_path)
+    settings = read_settings(settings_path)
     trend = trend_state.read(trend_path)
     equity = held_equity(snapshot, account_id=account_id)
     equity.sort(key=lambda row: (row.symbol, row.account))
@@ -245,6 +310,9 @@ def build(snapshot: BrokerageSnapshot, *,
         "total_unrealized_pnl_pct": (
             None if total_gain is None or not total_cost_exact
             else float(Decimal(str(total_gain)) / total_cost_exact * 100)
+        ),
+        "performance_baselines": _performance_baselines(
+            market_value=total_value_exact, settings=settings,
         ),
         "gain_loss_snapshots": snapshot_catalog(snapshot_rows),
         "total_account_value": _number(
