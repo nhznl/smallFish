@@ -13,6 +13,7 @@ provider delivered the events.
 from __future__ import annotations
 
 import uuid
+from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -95,9 +96,15 @@ def _symbols(brokerage_id, **params):
     return response.json()
 
 
+def _symbol_path(symbol: str) -> str:
+    """Match the Angular client: encode every path character, including ``/``."""
+    return quote(symbol, safe="")
+
+
 def _symbol(brokerage_id, symbol="ABC", **params):
     response = client.get(
-        f"/api/brokerages/{brokerage_id}/symbols/{symbol}", params=params
+        f"/api/brokerages/{brokerage_id}/symbols/{_symbol_path(symbol)}",
+        params=params,
     )
     assert response.status_code == 200, response.text
     return response.json()["symbol"]
@@ -114,7 +121,8 @@ def _archive(brokerage_id, symbol="ABC", *, version=None, request_id=None,
         "note": note,
     }
     return client.post(
-        f"/api/brokerages/{brokerage_id}/symbols/{symbol}/archives", json=payload
+        f"/api/brokerages/{brokerage_id}/symbols/{_symbol_path(symbol)}/archives",
+        json=payload,
     )
 
 
@@ -198,6 +206,52 @@ def test_a_symbol_with_a_dot_survives_url_encoding(adapter_env):
     assert _symbol("tastytrade", "BRK.B")["symbol"] == "BRK.B"
     # Lookup is case-insensitive; the ledger is keyed by the normalized symbol.
     assert _symbol("tastytrade", "brk.b")["symbol"] == "BRK.B"
+
+
+def test_a_futures_root_with_a_slash_survives_url_encoding(adapter_env):
+    """``/ESU6`` encodes as ``%2FESU6``; a plain ``{symbol}`` route 404s."""
+    contract = "./ESU6 E1DN6 260821P07320000"
+    _write_tastytrade(
+        positions=[{
+            "instrument_type": "Future Option",
+            "contract_symbol": contract,
+            "underlying_symbol": "/ESU6",
+            "quantity": "2",
+            "direction": "Short",
+            "signed_quantity": "-2",
+            "multiplier": "50",
+            "mark_price": "9.75",
+            "average_open_price": "10",
+            "option_type": "PUT",
+            "expiry": "2026-08-21",
+            "strike": "7320",
+        }],
+        activity=[{
+            "id": "tastytrade:TRADING:esu6-1",
+            "source_transaction_id": "esu6-1",
+            "executed_at": "2026-07-01T16:00:00+00:00",
+            "transaction_date": "2026-07-01",
+            "transaction_type": "Trade",
+            "transaction_sub_type": "Sell to Open",
+            "instrument_type": "Future Option",
+            "contract_symbol": contract,
+            "underlying_symbol": "/ESU6",
+            "action": "Sell to Open",
+            "quantity": "2",
+            "position_delta": "-2",
+            "net_value": "975",
+            "option_type": "PUT",
+            "expiry": "2026-08-21",
+            "strike": "7320",
+        }],
+    )
+    ledger = _symbol("tastytrade", "/ESU6")
+    assert ledger["symbol"] == "/ESU6"
+    events = client.get(
+        f"/api/brokerages/tastytrade/symbols/{_symbol_path('/ESU6')}/events"
+    )
+    assert events.status_code == 200, events.text
+    assert events.json()["total_event_count"] == 1
 
 
 def test_an_unknown_symbol_is_a_safe_404(adapter_env):
@@ -316,6 +370,52 @@ def test_options_exposure_filter_excludes_equity_only_ledgers(adapter_env,
     assert options["summary"]["symbol_count"] == 1
     assert options["summary"]["active_count"] == 1
     assert options["summary"]["closed_count"] == 0
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_options_active_excludes_symbols_whose_options_are_fully_closed(
+    adapter_env, brokerage_id
+):
+    """Open shares after a closed option cycle stay Active, but not on Options Active."""
+    if brokerage_id == "tastytrade":
+        _write_tastytrade(
+            positions=[{
+                "instrument_type": "Equity", "contract_symbol": "ABC",
+                "underlying_symbol": "ABC", "quantity": "100", "direction": "Long",
+                "signed_quantity": "100", "multiplier": "1", "mark_price": "120",
+                "average_open_price": "110",
+            }],
+            activity=[
+                _tastytrade_event("1"),
+                _tastytrade_event("2", action="Buy to Close", delta="1",
+                                  net_value="-450", on="2026-07-15"),
+            ],
+        )
+    else:
+        _write_snaptrade(
+            holdings=[{
+                "asset_class": "STOCK", "symbol": "ABC", "quantity": "100",
+                "price": "120", "average_purchase_price": "110",
+                "cost_basis": "11000", "market_value": "12000",
+            }],
+            events=[
+                _snaptrade_event("a1"),
+                _snaptrade_event("a2", action="BUY_TO_CLOSE", units="1",
+                                 net_value="-450", on="2026-07-15"),
+            ],
+        )
+
+    ledger = _symbol(brokerage_id)
+    assert ledger["state"] == "ACTIVE"
+    assert ledger["exposure"] == "EQUITY_AND_OPTIONS"
+
+    active_options = _symbols(brokerage_id, state="active", exposure="options")
+    assert active_options["items"] == []
+    assert active_options["summary"]["active_count"] == 0
+
+    all_options = _symbols(brokerage_id, state="all", exposure="options")
+    assert [row["symbol"] for row in all_options["items"]] == ["ABC"]
+    assert all_options["summary"]["active_count"] == 0
 
 
 # ------------------------------------------------------------ cross-year ---
@@ -999,3 +1099,41 @@ def _manual_equity_row():
         "underlying_symbol": "ABC", "action": "Manual Adjustment",
         "quantity": "100", "position_delta": "100", "net_value": "-1300",
     }
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_symbol_ledger_exposes_nearest_open_contract_risk(
+    adapter_env, brokerage_id, monkeypatch
+):
+    """Covered short put: equity mark is spot; DTE and band are additive fields."""
+    from datetime import date
+
+    from app.brokerages.projections import open_contract_risk as risk_mod
+    from app.brokerages.projections import symbol_ledger as ledger_mod
+
+    write_covered_put(brokerage_id)
+    real_build = risk_mod.build_open_contract_risk
+
+    def _frozen(*, components, symbol, **kwargs):
+        return real_build(
+            components, symbol=symbol, as_of=date(2026, 7, 30),
+            cached_close=lambda _symbol: None, **{
+                k: v for k, v in kwargs.items() if k not in {"as_of", "cached_close"}
+            },
+        )
+
+    monkeypatch.setattr(ledger_mod.open_contract_risk, "build_open_contract_risk",
+                        lambda components, symbol: _frozen(
+                            components=components, symbol=symbol
+                        ))
+
+    item = _symbol(brokerage_id)
+    assert item["underlying_price"] == pytest.approx(120.0)
+    assert item["underlying_price_source"] == "EQUITY_MARK"
+    assert item["dte"] == 22
+    assert item["nearest_expiry"] == "2026-08-21"
+    assert item["strike_risk"] == "NONE"
+    assert item["breakeven"]["kind"] == "SHORT_PUT"
+    assert [point["value"] for point in item["breakeven"]["points"]] == [
+        pytest.approx(44.0), pytest.approx(50.0), pytest.approx(120.0),
+    ]

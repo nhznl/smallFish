@@ -33,6 +33,8 @@ function holding(overrides: Partial<HoldingItem> = {}): HoldingItem {
     net_cash_flow: -1000,
     mark_per_unit: 90,
     mark_observed_at: '2026-07-28T16:00:00Z',
+    open_price_per_unit: 100,
+    multiplier: 1,
     open_market_value: 900,
     realized_pnl: null,
     total_pnl: -100,
@@ -146,6 +148,8 @@ describe('BrokerageHoldingsComponent', () => {
         expect(text).toContain('All categories');
         expect(text).toContain('All accounts');
         expect(text).toContain('Declining only (1)');
+        expect(text).toContain('adverse move past the holdings trend threshold');
+        expect(fixture.nativeElement.querySelector('.risk-legend')).toBeTruthy();
         expect(text).toContain('Snapshot G/L %');
         expect(text).toContain('Copy Symbols');
         expect(text).toContain('G/L % as of Jul 27, 2026');

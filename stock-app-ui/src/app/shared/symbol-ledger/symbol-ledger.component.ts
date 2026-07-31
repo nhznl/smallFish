@@ -6,12 +6,14 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { BrokerageService } from '../../api/brokerage.service';
 import {
   ArchiveCreatedResponse,
+  BreakevenBand,
+  BreakevenKind,
   BrokerageComponent,
   BrokerageId,
   LedgerEvent,
   LedgerEventsResponse,
-  LedgerState,
   PnlCompleteness,
+  StrikeRisk,
   SymbolLedgerDetail,
   SymbolLedgerListResponse,
   SymbolLedgerSummary,
@@ -19,7 +21,11 @@ import {
 import { ModalComponent } from '../ui/modal.component';
 import { pnlToneClass } from '../format-display';
 
-type StateFilter = 'active' | 'closed' | 'all';
+type StateFilter = 'active' | 'closed';
+type SortColumn = 'symbol' | 'dte' | 'total_pnl';
+
+const ACTIVE_COLUMN_COUNT = 13;
+const CLOSED_COLUMN_COUNT = 10;
 
 /**
  * One durable row per underlying symbol — the replacement for Trade Groups.
@@ -50,6 +56,8 @@ export class SymbolLedgerComponent implements OnChanges {
   error = '';
   state: StateFilter = 'active';
   search = '';
+  sortColumn: SortColumn = 'symbol';
+  sortAscending = true;
 
   expandedSymbol = '';
   detail: SymbolLedgerDetail | null = null;
@@ -73,7 +81,7 @@ export class SymbolLedgerComponent implements OnChanges {
   archiveConflict = false;
   statusMessage = '';
 
-  noteDraft = '';
+  noteEditor: { symbol: string; notes: string; original: string } | null = null;
   noteSaving = false;
   noteMessage = '';
 
@@ -116,6 +124,10 @@ export class SymbolLedgerComponent implements OnChanges {
   setState(state: StateFilter): void {
     if (this.state === state) return;
     this.state = state;
+    if (state === 'closed' && this.sortColumn === 'dte') {
+      this.sortColumn = 'symbol';
+      this.sortAscending = true;
+    }
     this.collapse();
     this.load();
   }
@@ -130,7 +142,6 @@ export class SymbolLedgerComponent implements OnChanges {
     this.expandedSymbol = symbol;
     this.detail = null;
     this.detailError = '';
-    this.noteMessage = '';
     this.clearHistory();
     this.loadDetail(symbol);
   }
@@ -143,7 +154,6 @@ export class SymbolLedgerComponent implements OnChanges {
       next: body => {
         if (request !== this.detailSequence) return;
         this.detail = body.symbol;
-        this.noteDraft = body.symbol.notes;
         this.detailLoading = false;
         this.loadCurrentEventHistory();
       },
@@ -159,34 +169,49 @@ export class SymbolLedgerComponent implements OnChanges {
     this.expandedSymbol = '';
     this.detail = null;
     this.detailError = '';
-    this.noteMessage = '';
     this.detailSequence++;
     this.clearHistory();
   }
 
+  openNoteEditor(row: SymbolLedgerSummary): void {
+    this.noteEditor = {
+      symbol: row.symbol,
+      notes: row.notes,
+      original: row.notes,
+    };
+    this.noteMessage = '';
+  }
+
+  closeNoteEditor(): void {
+    if (this.noteSaving) return;
+    this.noteEditor = null;
+    this.noteMessage = '';
+  }
+
   saveNote(): void {
-    if (!this.detail || this.noteSaving) return;
-    const symbol = this.detail.symbol;
+    if (!this.noteEditor || this.noteSaving || !this.noteDirty) return;
+    const { symbol, notes } = this.noteEditor;
     this.noteSaving = true;
     this.noteMessage = '';
-    this.api.updateSymbolNotes(this.brokerageId, symbol, this.noteDraft).subscribe({
+    this.api.updateSymbolNotes(this.brokerageId, symbol, notes).subscribe({
       next: body => {
-        this.detail = body.symbol;
-        this.noteDraft = body.symbol.notes;
         this.noteSaving = false;
-        this.noteMessage = 'Note saved.';
+        this.noteEditor = null;
+        this.noteMessage = '';
         const row = this.data?.items.find(item => item.symbol === symbol);
         if (row) row.notes = body.symbol.notes;
+        if (this.detail?.symbol === symbol) this.detail = body.symbol;
+        this.statusMessage = `Note saved for ${symbol}.`;
       },
       error: err => {
         this.noteSaving = false;
-        this.noteMessage = this.message(err);
+        this.noteMessage = this.message(err, 'The note could not be saved.');
       },
     });
   }
 
   get noteDirty(): boolean {
-    return !!this.detail && this.noteDraft !== this.detail.notes;
+    return !!this.noteEditor && this.noteEditor.notes !== this.noteEditor.original;
   }
 
   // ------------------------------------------------------------- history ---
@@ -360,7 +385,6 @@ export class SymbolLedgerComponent implements OnChanges {
     this.archiveConflict = false;
     this.statusMessage = `${created.symbol.symbol} completed history archived.`;
     this.detail = created.symbol;
-    this.noteDraft = created.symbol.notes;
     this.clearArchiveHistory();
     this.loadCurrentEventHistory();
     const row = this.data?.items.find(item => item.symbol === created.symbol.symbol);
@@ -388,12 +412,45 @@ export class SymbolLedgerComponent implements OnChanges {
   rows(): SymbolLedgerSummary[] {
     const items = this.optionItems();
     const term = this.search.trim().toUpperCase();
-    if (!term) return items;
-    return items.filter(row =>
+    const filtered = !term ? items : items.filter(row =>
       row.symbol.includes(term)
       || row.notes.toUpperCase().includes(term)
       || row.accounts.some(account => account.toUpperCase().includes(term))
     );
+    return [...filtered].sort((left, right) => {
+      if (this.sortColumn === 'symbol') {
+        return this.sortAscending
+          ? left.symbol.localeCompare(right.symbol)
+          : right.symbol.localeCompare(left.symbol);
+      }
+      const a = this.sortColumn === 'dte' ? left.dte : left.current_period.total_pnl;
+      const b = this.sortColumn === 'dte' ? right.dte : right.current_period.total_pnl;
+      const av = typeof a === 'number' ? a : Number.NEGATIVE_INFINITY;
+      const bv = typeof b === 'number' ? b : Number.NEGATIVE_INFINITY;
+      return this.sortAscending ? av - bv : bv - av;
+    });
+  }
+
+  sortBy(column: SortColumn): void {
+    if (this.sortColumn === column) this.sortAscending = !this.sortAscending;
+    else {
+      this.sortColumn = column;
+      this.sortAscending = column === 'symbol' || column === 'dte';
+    }
+  }
+
+  ariaSort(column: SortColumn): 'ascending' | 'descending' | 'none' {
+    if (this.sortColumn !== column) return 'none';
+    return this.sortAscending ? 'ascending' : 'descending';
+  }
+
+  sortIcon(column: SortColumn): string {
+    if (this.sortColumn !== column) return '';
+    return this.sortAscending ? '▲' : '▼';
+  }
+
+  columnCount(): number {
+    return this.state === 'active' ? ACTIVE_COLUMN_COUNT : CLOSED_COLUMN_COUNT;
   }
 
   /** `—` for anything unavailable. A missing value is never rendered as zero. */
@@ -406,6 +463,13 @@ export class SymbolLedgerComponent implements OnChanges {
     return `${sign}$${formatted}`;
   }
 
+  price(value: number | null | undefined): string {
+    if (value === null || value === undefined) return '—';
+    return `$${value.toLocaleString(undefined, {
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    })}`;
+  }
+
   number(value: number | null | undefined): string {
     if (value === null || value === undefined) return '—';
     return value.toLocaleString();
@@ -413,6 +477,46 @@ export class SymbolLedgerComponent implements OnChanges {
 
   pnlClass(value: number | null | undefined): string {
     return pnlToneClass(value);
+  }
+
+  strikeRiskLabel(risk: StrikeRisk): string {
+    if (risk === 'ITM') return 'ITM';
+    if (risk === 'NEAR_STRIKE') return 'Near strike';
+    return '';
+  }
+
+  strikeRiskBadgeClass(risk: StrikeRisk): string {
+    if (risk === 'ITM') return 'badge badge-neg';
+    if (risk === 'NEAR_STRIKE') return 'badge badge-warn';
+    return '';
+  }
+
+  breakevenCaption(kind: BreakevenKind | null | undefined): string {
+    if (kind === 'SHORT_CALL') return 'spot · strike · BE';
+    if (kind === 'SHORT_PUT') return 'BE · strike · spot';
+    if (kind === 'SHORT_STRANGLE') return 'put BE · spot · call BE';
+    return '';
+  }
+
+  breakevenValues(band: BreakevenBand | null | undefined): string {
+    if (!band?.points?.length) return '—';
+    return band.points.map(point => this.price(point.value)).join(' · ');
+  }
+
+  breakevenTrack(band: BreakevenBand | null | undefined): {
+    markers: { role: string; pct: number }[];
+  } | null {
+    if (!band?.points?.length) return null;
+    const values = band.points.map(point => point.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = max - min || 1;
+    return {
+      markers: band.points.map(point => ({
+        role: point.role.toLowerCase(),
+        pct: ((point.value - min) / span) * 100,
+      })),
+    };
   }
 
   completenessLabel(value: PnlCompleteness): string {
@@ -425,10 +529,6 @@ export class SymbolLedgerComponent implements OnChanges {
     if (value === 'COMPLETE') return 'badge badge-pos';
     if (value === 'INDICATIVE') return 'badge badge-info';
     return 'badge badge-warn';
-  }
-
-  stateClass(state: LedgerState): string {
-    return state === 'ACTIVE' ? 'badge badge-primary' : 'badge badge-neutral';
   }
 
   componentLabel(row: BrokerageComponent): string {
@@ -483,6 +583,10 @@ export class SymbolLedgerComponent implements OnChanges {
       return String((detail as { message: unknown }).message);
     }
     if (typeof detail === 'string') return detail;
+    const status = this.statusCode(err);
+    const code = this.errorCode(err);
+    if (status != null && code) return `${fallback} (${status} ${code})`;
+    if (status != null) return `${fallback} (${status})`;
     return fallback;
   }
 }

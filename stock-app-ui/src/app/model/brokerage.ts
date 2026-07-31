@@ -85,6 +85,8 @@ export interface BrokerageComponent {
   net_cash_flow: number | null;
   mark_per_unit: number | null;
   mark_observed_at: string | null;
+  open_price_per_unit: number | null;
+  multiplier: number | null;
   open_market_value: number | null;
   realized_pnl: number | null;
   total_pnl: number | null;
@@ -236,6 +238,21 @@ export interface LedgerPeriod {
   realized_pnl: number | null;
 }
 
+export type UnderlyingPriceSource = 'EQUITY_MARK' | 'CACHED_CLOSE';
+export type StrikeRisk = 'ITM' | 'NEAR_STRIKE' | 'NONE' | 'UNKNOWN';
+export type BreakevenKind = 'SHORT_CALL' | 'SHORT_PUT' | 'SHORT_STRANGLE';
+export type BreakevenPointRole = 'SPOT' | 'STRIKE' | 'BREAKEVEN';
+
+export interface BreakevenPoint {
+  role: BreakevenPointRole;
+  value: number;
+}
+
+export interface BreakevenBand {
+  kind: BreakevenKind;
+  points: BreakevenPoint[];
+}
+
 export interface SymbolLedgerSummary {
   symbol: string;
   state: LedgerState;
@@ -249,6 +266,13 @@ export interface SymbolLedgerSummary {
   lifetime_pnl: number | null;
   notes: string;
   warnings: string[];
+  underlying_price: number | null;
+  underlying_price_source: UnderlyingPriceSource | null;
+  dte: number | null;
+  nearest_expiry: string | null;
+  breakeven: BreakevenBand | null;
+  strike_risk: StrikeRisk;
+  strategy: string | null;
 }
 
 export interface ArchiveSummary {

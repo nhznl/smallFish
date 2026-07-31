@@ -38,6 +38,20 @@ function summary(overrides: Partial<SymbolLedgerSummary> = {}): SymbolLedgerSumm
     lifetime_pnl: 1425,
     notes: '',
     warnings: [],
+    underlying_price: 52.4,
+    underlying_price_source: 'EQUITY_MARK',
+    dte: 22,
+    nearest_expiry: '2026-08-21',
+    breakeven: {
+      kind: 'SHORT_PUT',
+      points: [
+        { role: 'BREAKEVEN', value: 44 },
+        { role: 'STRIKE', value: 50 },
+        { role: 'SPOT', value: 52.4 },
+      ],
+    },
+    strike_risk: 'NONE',
+    strategy: 'SHORT PUT',
     ...overrides,
   };
 }
@@ -94,7 +108,8 @@ function detailResponse(
         side: 'SHORT', option_type: 'PUT', state: 'OPEN', quantity: -1, strike: 50,
         expiry: '2026-08-21', contract_key: 'DEMO 260821P00050000',
         cash_in: 600, cash_out: 0, net_cash_flow: 600, mark_per_unit: 0.75,
-        mark_observed_at: '2026-07-28T16:00:00Z', open_market_value: -75,
+        mark_observed_at: '2026-07-28T16:00:00Z', open_price_per_unit: 6,
+        multiplier: 100, open_market_value: -75,
         realized_pnl: null, total_pnl: 525, pnl_completeness: 'INDICATIVE',
         cash_flow_basis: 'BROKER_ACTIVITY', open_leg_count: 1, event_count: 1,
         missing: [],
@@ -200,6 +215,7 @@ describe('SymbolLedgerComponent', () => {
         expect(body).toContain('Symbol Ledger');
         expect(body).toContain('DEMO');
         expect(body).toContain('Active');
+        expect(body).toContain('SHORT PUT');
         expect(body).toContain('Equity + options');
         // The concepts the migration removes must not reappear in the UI.
         expect(body).not.toContain('Trade Groups');
@@ -363,21 +379,99 @@ describe('SymbolLedgerComponent', () => {
     expect(text(fixture)).toContain('No symbol matches your search');
   });
 
-  it('saves a note and leaves every other field derived', async () => {
+  it('hides DTE and Breakeven on the Closed tab', async () => {
+    const api = spyApi();
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0], [
+      summary({ symbol: 'FLAT', state: 'CLOSED', dte: null, breakeven: null, strike_risk: 'NONE' }),
+    ])));
+    const fixture = await mount(api, 'tastytrade');
+    expect(text(fixture)).toContain('DTE');
+    expect(text(fixture)).toContain('Breakeven');
+
+    fixture.componentInstance.setState('closed');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const body = text(fixture);
+    expect(body).not.toContain('DTE');
+    expect(body).not.toContain('Breakeven');
+    expect(body).not.toContain('Strategy');
+    expect(body).not.toContain('within 5% of strike');
+    expect(fixture.nativeElement.querySelector('.risk-legend')).toBeNull();
+  });
+
+  it('sorts by DTE and current period P/L', async () => {
+    const api = spyApi();
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0], [
+      summary({
+        symbol: 'AAA', dte: 30,
+        current_period: { ...summary().current_period, total_pnl: -200 },
+      }),
+      summary({
+        symbol: 'BBB', dte: 7,
+        current_period: { ...summary().current_period, total_pnl: 500 },
+      }),
+      summary({
+        symbol: 'CCC', dte: 14,
+        current_period: { ...summary().current_period, total_pnl: -900 },
+      }),
+    ])));
+    const fixture = await mount(api, 'tastytrade');
+    const component = fixture.componentInstance;
+
+    expect(component.rows().map(row => row.symbol)).toEqual(['AAA', 'BBB', 'CCC']);
+
+    component.sortBy('total_pnl');
+    fixture.detectChanges();
+    expect(component.rows().map(row => row.symbol)).toEqual(['BBB', 'AAA', 'CCC']);
+    expect(component.ariaSort('total_pnl')).toBe('descending');
+
+    component.sortBy('dte');
+    fixture.detectChanges();
+    expect(component.rows().map(row => row.symbol)).toEqual(['BBB', 'CCC', 'AAA']);
+    expect(text(fixture)).toContain('DTE');
+    expect(text(fixture)).toContain('Market price');
+    expect(text(fixture)).toContain('Breakeven');
+  });
+
+  it('marks ITM and near-strike rows with badge and row class', async () => {
+    const api = spyApi();
+    api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0], [
+      summary({ symbol: 'ITM1', strike_risk: 'ITM' }),
+      summary({ symbol: 'NEAR1', strike_risk: 'NEAR_STRIKE' }),
+    ])));
+    const fixture = await mount(api, 'tastytrade');
+    const body = text(fixture);
+    expect(body).toContain('ITM');
+    expect(body).toContain('Near strike');
+    expect(body).toContain('within 5% of strike');
+    expect(body).toContain('Spot');
+    expect(body).toContain('Strike');
+    expect(body).toContain('Breakeven');
+    expect(fixture.nativeElement.querySelector('.risk-legend')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.band-legend')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.risk-itm')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.risk-near')).toBeTruthy();
+    expect(fixture.componentInstance.breakevenValues(summary().breakeven))
+      .toContain('$44.00');
+  });
+
+  it('saves a note from the Edit column modal', async () => {
     const api = spyApi();
     api.listSymbols.and.returnValue(of(listResponse(BROKERAGES[0])));
-    api.getSymbol.and.returnValue(of(detailResponse(BROKERAGES[0])));
     api.updateSymbolNotes.and.returnValue(of(
       detailResponse(BROKERAGES[0], { notes: 'watch assignment history' })
     ));
     const fixture = await mount(api, 'tastytrade');
 
-    (fixture.nativeElement.querySelector('.expand-button') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('.edit-note-button') as HTMLButtonElement).click();
     fixture.detectChanges();
 
     const component = fixture.componentInstance;
+    expect(component.noteEditor?.symbol).toBe('DEMO');
     expect(component.noteDirty).toBeFalse();
-    component.noteDraft = 'watch assignment history';
+    component.noteEditor!.notes = 'watch assignment history';
     expect(component.noteDirty).toBeTrue();
 
     component.saveNote();
@@ -386,8 +480,8 @@ describe('SymbolLedgerComponent', () => {
     expect(api.updateSymbolNotes).toHaveBeenCalledWith(
       'tastytrade', 'DEMO', 'watch assignment history'
     );
-    expect(text(fixture)).toContain('Note saved.');
-    // The list row picks up the saved note without a second round trip.
+    expect(component.noteEditor).toBeNull();
+    expect(text(fixture)).toContain('Note saved for DEMO.');
     expect(component.data!.items[0].notes).toBe('watch assignment history');
   });
 

@@ -27,6 +27,29 @@
 .toolbar-actions { display: flex; gap: 8px; }
 .copy-success { color: var(--pos); border-color: var(--pos); }
 .price-note { margin: -4px 0 0; color: var(--text-secondary); font-size: var(--text-xs); }
+.risk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+.risk-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.risk-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+}
+.risk-legend-declining .risk-legend-swatch {
+  background: var(--warn-soft);
+  border-color: rgb(180 83 9 / .25);
+}
 .holdings-table-shell { max-height: 68vh; }
 .holdings-table { min-width: 1540px; }
 .holdings-table .col-sticky { left: 0; }

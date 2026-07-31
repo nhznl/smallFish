@@ -117,6 +117,12 @@
     </p>
 
     @if (items.length && filteredHoldings().length) {
+      <div class="risk-legend" aria-label="Holdings row legend">
+        <span class="risk-legend-item risk-legend-declining">
+          <span class="risk-legend-swatch" aria-hidden="true"></span>
+          Declining — adverse move past the holdings trend threshold
+        </span>
+      </div>
       <div class="table-shell holdings-table-shell">
         <table class="data-table holdings-table">
           <thead><tr>

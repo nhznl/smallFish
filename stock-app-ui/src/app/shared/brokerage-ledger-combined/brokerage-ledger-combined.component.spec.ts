@@ -17,6 +17,7 @@ function component(overrides: Partial<BrokerageComponent>): BrokerageComponent {
     symbol: 'DEMO', side: 'LONG', option_type: null, state: 'OPEN', quantity: 100,
     strike: null, expiry: null, contract_key: null, cash_in: 0, cash_out: -11_100,
     net_cash_flow: -11_100, mark_per_unit: 120, mark_observed_at: '2026-07-28T16:00:00Z',
+    open_price_per_unit: 111, multiplier: 1,
     open_market_value: 12_000, realized_pnl: null, total_pnl: 900,
     pnl_completeness: 'INDICATIVE', cash_flow_basis: 'POSITION_COST_BASIS',
     open_leg_count: 1, event_count: 0, provenance: PROVENANCE, missing: [],

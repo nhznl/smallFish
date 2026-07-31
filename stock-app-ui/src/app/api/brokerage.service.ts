@@ -46,7 +46,7 @@ export class BrokerageService {
     body: { category?: string; industry?: string; note?: string }
   ): Observable<HoldingsMetadataResponse> {
     return this.http.patch<HoldingsMetadataResponse>(
-      `${this.base(brokerageId)}/holdings/${encodeURIComponent(symbol)}/metadata`,
+      `${this.base(brokerageId)}/holdings/${encodeSymbolPath(symbol)}/metadata`,
       body
     );
   }
@@ -139,7 +139,7 @@ export class BrokerageService {
   }
 
   private symbolUrl(brokerageId: BrokerageId, symbol: string): string {
-    return `${this.base(brokerageId)}/symbols/${encodeURIComponent(symbol)}`;
+    return `${this.base(brokerageId)}/symbols/${encodeSymbolPath(symbol)}`;
   }
 
   /** Omit an unset parameter entirely rather than sending an empty value. */
@@ -150,4 +150,17 @@ export class BrokerageService {
     }
     return params;
   }
+}
+
+/**
+ * Encode a ledger symbol for a URL path segment.
+ *
+ * ``encodeURIComponent("/ESU6")`` becomes ``%2FESU6``. Some browsers and
+ * intermediaries reject or mishandle ``%2F`` in the path, which made futures
+ * roots fail to load even though the API accepts them. Keeping ``/`` as a path
+ * separator yields ``.../symbols//ESU6``, which FastAPI ``{symbol:path}``
+ * resolves back to ``/ESU6``.
+ */
+export function encodeSymbolPath(symbol: string): string {
+  return String(symbol ?? '').split('/').map(encodeURIComponent).join('/');
 }

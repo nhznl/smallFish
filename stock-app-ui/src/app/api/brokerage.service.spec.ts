@@ -83,6 +83,22 @@ describe('BrokerageService', () => {
     request.flush({});
   });
 
+  it('keeps a leading slash in the path for futures roots', () => {
+    service.getSymbol('tastytrade', '/ESU6').subscribe();
+    const request = http.expectOne(
+      `${base}/api/brokerages/tastytrade/symbols//ESU6`
+    );
+    expect(request.request.method).toBe('GET');
+    request.flush({});
+
+    service.getSymbolEvents('tastytrade', '/ESU6', { period: 'current' }).subscribe();
+    const events = http.expectOne(
+      `${base}/api/brokerages/tastytrade/symbols//ESU6/events?period=current`
+    );
+    expect(events.request.method).toBe('GET');
+    events.flush({});
+  });
+
   it('patches only notes on a symbol', () => {
     service.updateSymbolNotes('fidelity', 'ABC', 'watch assignment').subscribe();
     const request = http.expectOne(`${base}/api/brokerages/fidelity/symbols/ABC`);

@@ -85,8 +85,6 @@
             [attr.aria-selected]="state === 'active'" (click)="setState('active')">Active</button>
           <button type="button" class="tab" role="tab" [class.active]="state === 'closed'"
             [attr.aria-selected]="state === 'closed'" (click)="setState('closed')">Closed</button>
-          <button type="button" class="tab" role="tab" [class.active]="state === 'all'"
-            [attr.aria-selected]="state === 'all'" (click)="setState('all')">All</button>
         </div>
         <label>
           <span>Search</span>
@@ -96,43 +94,120 @@
       </div>
 
       @if (rows().length) {
+        @if (state === 'active') {
+          <div class="table-legends">
+            <div class="risk-legend" aria-label="Strike risk legend">
+              <span class="risk-legend-item risk-legend-near">
+                <span class="risk-legend-swatch" aria-hidden="true"></span>
+                Near strike — within 5% of strike
+              </span>
+              <span class="risk-legend-item risk-legend-itm">
+                <span class="risk-legend-swatch" aria-hidden="true"></span>
+                ITM — closest open short is in the money
+              </span>
+            </div>
+            <div class="risk-legend band-legend" aria-label="Breakeven band legend">
+              <span class="risk-legend-item band-legend-spot">
+                <span class="band-legend-dot" aria-hidden="true"></span>
+                Spot
+              </span>
+              <span class="risk-legend-item band-legend-strike">
+                <span class="band-legend-dot" aria-hidden="true"></span>
+                Strike
+              </span>
+              <span class="risk-legend-item band-legend-breakeven">
+                <span class="band-legend-dot" aria-hidden="true"></span>
+                Breakeven
+              </span>
+            </div>
+          </div>
+        }
         <div class="table-shell">
           <table class="data-table ledger-table">
             <thead>
               <tr>
-                <th scope="col" class="sticky-symbol">Symbol</th>
-                <th scope="col">State</th>
+                <th scope="col" class="sticky-symbol sortable" [attr.aria-sort]="ariaSort('symbol')">
+                  <button type="button" class="sort-button" (click)="sortBy('symbol')">
+                    Symbol {{ sortIcon('symbol') }}
+                  </button>
+                </th>
+                @if (state === 'active') {
+                  <th scope="col">Strategy</th>
+                }
+                <th scope="col" class="num">Market price</th>
+                @if (state === 'active') {
+                  <th scope="col" class="num sortable" [attr.aria-sort]="ariaSort('dte')">
+                    <button type="button" class="sort-button" (click)="sortBy('dte')"
+                      matTooltip="Days to the nearest open option expiry"
+                      matTooltipPosition="above">
+                      DTE {{ sortIcon('dte') }}
+                    </button>
+                  </th>
+                  <th scope="col">Breakeven</th>
+                }
                 <th scope="col">Accounts</th>
                 <th scope="col" class="num">Events</th>
                 <th scope="col" class="num">Net cash</th>
                 <th scope="col" class="num">Open value</th>
-                <th scope="col" class="num"
-                  matTooltip="Net cash plus the signed value of anything still open"
-                  matTooltipPosition="above">Current period P/L</th>
+                <th scope="col" class="num sortable" [attr.aria-sort]="ariaSort('total_pnl')">
+                  <button type="button" class="sort-button" (click)="sortBy('total_pnl')"
+                    matTooltip="Net cash plus the signed value of anything still open"
+                    matTooltipPosition="above">
+                    Current period P/L {{ sortIcon('total_pnl') }}
+                  </button>
+                </th>
                 <th scope="col" class="num">Lifetime P/L</th>
-                <th scope="col">Notes</th>
                 <th scope="col"><span class="visually-hidden">Details</span></th>
+                <th scope="col">Edit</th>
               </tr>
             </thead>
             <tbody>
               @for (row of rows(); track row.symbol) {
                 <tr [class.needs-review]="row.warnings.length"
-                  [class.closed-row]="row.state === 'CLOSED'">
+                  [class.closed-row]="row.state === 'CLOSED'"
+                  [class.risk-itm]="state === 'active' && row.strike_risk === 'ITM'"
+                  [class.risk-near]="state === 'active' && row.strike_risk === 'NEAR_STRIKE'">
                   <td class="sticky-symbol symbol-cell">
                     <strong>{{ row.symbol }}</strong>
                     <small>{{ row.exposure === 'EQUITY_AND_OPTIONS' ? 'Equity + options'
                       : row.exposure === 'EQUITY' ? 'Equity' : 'Options' }}</small>
-                  </td>
-                  <td>
-                    <span [class]="stateClass(row.state)">
-                      {{ row.state === 'ACTIVE' ? 'Active' : 'Closed' }}
-                    </span>
+                    @if (strikeRiskLabel(row.strike_risk); as riskLabel) {
+                      <small [class]="strikeRiskBadgeClass(row.strike_risk)">{{ riskLabel }}</small>
+                    }
                     @if (row.reconciliation_status === 'UNRECONCILED') {
-                      <span class="badge badge-warn"
+                      <small class="badge badge-warn"
                         matTooltip="Imported activity does not match the broker position yet."
-                        matTooltipPosition="above">Unreconciled</span>
+                        matTooltipPosition="above">Unreconciled</small>
                     }
                   </td>
+                  @if (state === 'active') {
+                    <td class="strategy-cell">{{ row.strategy || '—' }}</td>
+                  }
+                  <td class="num">{{ price(row.underlying_price) }}</td>
+                  @if (state === 'active') {
+                    <td class="num"
+                      [matTooltip]="row.nearest_expiry ? ('Expires ' + row.nearest_expiry) : ''"
+                      matTooltipPosition="above">
+                      {{ number(row.dte) }}
+                    </td>
+                    <td class="breakeven-cell">
+                      @if (row.breakeven; as band) {
+                        <span class="breakeven-values">{{ breakevenValues(band) }}</span>
+                        <small>{{ breakevenCaption(band.kind) }}</small>
+                        @if (breakevenTrack(band); as track) {
+                          <span class="breakeven-track" aria-hidden="true">
+                            @for (marker of track.markers; track $index) {
+                              <span class="breakeven-marker"
+                                [class]="'role-' + marker.role"
+                                [style.left.%]="marker.pct"></span>
+                            }
+                          </span>
+                        }
+                      } @else {
+                        —
+                      }
+                    </td>
+                  }
                   <td class="accounts-cell">{{ row.accounts.join(', ') || '—' }}</td>
                   <td class="num">{{ row.current_period.event_count }}</td>
                   <td [class]="'num ' + pnlClass(row.current_period.net_cash_flow)">
@@ -154,9 +229,6 @@
                         {{ row.archived_period_count === 1 ? 'period' : 'periods' }}</small>
                     }
                   </td>
-                  <td class="notes-cell" [matTooltip]="row.notes || ''" matTooltipPosition="above">
-                    {{ row.notes || '—' }}
-                  </td>
                   <td>
                     <button type="button" class="btn btn-ghost btn-sm expand-button"
                       [attr.aria-expanded]="expandedSymbol === row.symbol"
@@ -165,11 +237,20 @@
                       {{ expandedSymbol === row.symbol ? 'Hide' : 'Details' }}
                     </button>
                   </td>
+                  <td>
+                    <button type="button" class="btn btn-ghost btn-sm edit-note-button"
+                      [attr.aria-label]="(row.notes ? 'Edit' : 'Add') + ' note for ' + row.symbol"
+                      [matTooltip]="row.notes || 'Add a note'"
+                      matTooltipPosition="above"
+                      (click)="openNoteEditor(row)">
+                      Edit
+                    </button>
+                  </td>
                 </tr>
 
                 @if (row.warnings.length) {
                   <tr class="warning-row">
-                    <td [attr.colspan]="10">
+                    <td [attr.colspan]="columnCount()">
                       @for (warning of row.warnings; track warning) {
                         <span class="banner banner-warn inline-warning">{{ warning }}</span>
                       }
@@ -179,7 +260,7 @@
 
                 @if (expandedSymbol === row.symbol) {
                   <tr class="detail-row">
-                    <td [attr.colspan]="10">
+                    <td [attr.colspan]="columnCount()">
                       @if (detailLoading) {
                         <div class="skeleton skeleton-table" aria-busy="true"
                           aria-label="Loading symbol details"></div>
@@ -209,23 +290,8 @@
                               <div><dt>Lifetime P/L</dt>
                                 <dd [class]="pnlClass(symbol.lifetime_pnl)">{{ money(symbol.lifetime_pnl, true) }}</dd></div>
                               <div><dt>All imported events</dt><dd>{{ symbol.event_count_total }}</dd></div>
+                              <div><dt>Note</dt><dd class="detail-note-value">{{ symbol.notes || '—' }}</dd></div>
                             </dl>
-                          </div>
-                          <div class="detail-block detail-notes">
-                            <h4>Notes</h4>
-                            <textarea [(ngModel)]="noteDraft" rows="3"
-                              [attr.aria-label]="'Notes for ' + symbol.symbol"
-                              placeholder="Your notes about this symbol"></textarea>
-                            <div class="note-actions">
-                              <button type="button" class="btn btn-primary btn-sm"
-                                [disabled]="!noteDirty || noteSaving" [attr.aria-busy]="noteSaving"
-                                (click)="saveNote()">
-                                {{ noteSaving ? 'Saving…' : 'Save note' }}
-                              </button>
-                              @if (noteMessage) {
-                                <span class="note-message" role="status">{{ noteMessage }}</span>
-                              }
-                            </div>
                           </div>
                         </div>
 
@@ -431,14 +497,12 @@
         </div>
       } @else {
         <div class="empty-state">
-          <h3>No {{ state === 'all' ? '' : state }} option symbols</h3>
+          <h3>No {{ state }} option symbols</h3>
           <p>
             @if (state === 'active') {
-              Nothing currently has open exposure at {{ ledger.brokerage.label }}.
-            } @else if (state === 'closed') {
-              No symbol is confidently flat yet.
+              Nothing currently has an open option position at {{ ledger.brokerage.label }}.
             } @else {
-              Sync {{ ledger.brokerage.label }} to import positions and activity.
+              No symbol is confidently flat yet.
             }
           </p>
         </div>
@@ -446,6 +510,27 @@
     }
   </div>
 </section>
+
+@if (noteEditor; as editor) {
+  <app-modal [title]="(editor.original ? 'Edit' : 'Add') + ' note for ' + editor.symbol"
+    width="min(420px, 92vw)" (closed)="closeNoteEditor()">
+    <label class="modal-label" [attr.for]="'symbol-note-' + editor.symbol">Note</label>
+    <textarea class="modal-input modal-note" rows="4"
+      [id]="'symbol-note-' + editor.symbol"
+      [(ngModel)]="editor.notes"
+      placeholder="Your notes about this symbol"></textarea>
+    @if (noteMessage) {
+      <div class="banner banner-warn" role="alert">{{ noteMessage }}</div>
+    }
+    <ng-container modalActions>
+      <button type="button" class="btn" [disabled]="noteSaving" (click)="closeNoteEditor()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="!noteDirty || noteSaving"
+        [attr.aria-busy]="noteSaving" (click)="saveNote()">
+        {{ noteSaving ? 'Saving…' : 'Save note' }}
+      </button>
+    </ng-container>
+  </app-modal>
+}
 
 @if (archiveConfirmation; as archive) {
   <app-modal title="Archive completed history" width="min(500px, 94vw)"

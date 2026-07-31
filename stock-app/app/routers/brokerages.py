@@ -60,7 +60,7 @@ def get_option_adjusted_basis(brokerage_id: str,
         raise _fail(exc) from exc
 
 
-@router.patch("/{brokerage_id}/holdings/{symbol}/metadata")
+@router.patch("/{brokerage_id}/holdings/{symbol:path}/metadata")
 def patch_holdings_metadata(
         brokerage_id: str, symbol: str,
         request: schemas.HoldingsMetadataPatchRequest | None = None) -> dict:
@@ -139,27 +139,10 @@ def get_symbols(brokerage_id: str,
         raise _fail(exc) from exc
 
 
-@router.get("/{brokerage_id}/symbols/{symbol}")
-def get_symbol(brokerage_id: str, symbol: str,
-               account_id: str | None = Query(default=None)) -> dict:
-    try:
-        return service.get_symbol(brokerage_id, symbol, account_id=account_id)
-    except service.BrokerageRequestError as exc:
-        raise _fail(exc) from exc
-
-
-@router.patch("/{brokerage_id}/symbols/{symbol}")
-def patch_symbol(brokerage_id: str, symbol: str,
-                 request: schemas.SymbolPatchRequest | None = None) -> dict:
-    try:
-        return service.update_symbol(
-            brokerage_id, symbol, schemas.request_payload(request)
-        )
-    except service.BrokerageRequestError as exc:
-        raise _fail(exc) from exc
-
-
-@router.get("/{brokerage_id}/symbols/{symbol}/events")
+# ``{symbol:path}`` accepts futures roots like ``/ESU6`` (URL-encoded as
+# ``%2FESU6``). Nested routes must be declared before the bare symbol routes so
+# a path converter does not swallow ``/events`` or ``/archives``.
+@router.get("/{brokerage_id}/symbols/{symbol:path}/events")
 def get_symbol_events(brokerage_id: str, symbol: str,
                       period: str = Query(default="current"),
                       cursor: str | None = Query(default=None),
@@ -172,15 +155,7 @@ def get_symbol_events(brokerage_id: str, symbol: str,
         raise _fail(exc) from exc
 
 
-@router.get("/{brokerage_id}/symbols/{symbol}/archives")
-def get_symbol_archives(brokerage_id: str, symbol: str) -> dict:
-    try:
-        return service.list_archives(brokerage_id, symbol)
-    except service.BrokerageRequestError as exc:
-        raise _fail(exc) from exc
-
-
-@router.get("/{brokerage_id}/symbols/{symbol}/archives/{archive_id}")
+@router.get("/{brokerage_id}/symbols/{symbol:path}/archives/{archive_id}")
 def get_symbol_archive(brokerage_id: str, symbol: str, archive_id: str) -> dict:
     try:
         return service.get_archive(brokerage_id, symbol, archive_id)
@@ -188,7 +163,15 @@ def get_symbol_archive(brokerage_id: str, symbol: str, archive_id: str) -> dict:
         raise _fail(exc) from exc
 
 
-@router.post("/{brokerage_id}/symbols/{symbol}/archives", status_code=201)
+@router.get("/{brokerage_id}/symbols/{symbol:path}/archives")
+def get_symbol_archives(brokerage_id: str, symbol: str) -> dict:
+    try:
+        return service.list_archives(brokerage_id, symbol)
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/{brokerage_id}/symbols/{symbol:path}/archives", status_code=201)
 def post_symbol_archive(brokerage_id: str, symbol: str, response: Response,
                         request: schemas.ArchiveCreateRequest | None = None) -> dict:
     """Seal the completed current period.
@@ -204,3 +187,23 @@ def post_symbol_archive(brokerage_id: str, symbol: str, response: Response,
         raise _fail(exc) from exc
     response.status_code = status_code
     return body
+
+
+@router.get("/{brokerage_id}/symbols/{symbol:path}")
+def get_symbol(brokerage_id: str, symbol: str,
+               account_id: str | None = Query(default=None)) -> dict:
+    try:
+        return service.get_symbol(brokerage_id, symbol, account_id=account_id)
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.patch("/{brokerage_id}/symbols/{symbol:path}")
+def patch_symbol(brokerage_id: str, symbol: str,
+                 request: schemas.SymbolPatchRequest | None = None) -> dict:
+    try:
+        return service.update_symbol(
+            brokerage_id, symbol, schemas.request_payload(request)
+        )
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc

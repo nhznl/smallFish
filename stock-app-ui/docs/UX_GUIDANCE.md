@@ -218,13 +218,22 @@ other textual state.
   columns, snapshot columns, and deliberate modal editing for classification
   and notes.
 - Options uses the shared Symbol Ledger on both brokerage pages. It includes
-  only option-capable symbols, derives Active or Closed lifecycle state from
-  immutable broker facts, and keeps imported events read-only. Show current
+  only option-capable symbols, derives Active or Closed lifecycle from
+  immutable broker facts (Active and Closed tabs only — no combined All view),
+  and keeps imported events read-only. Show current
   events directly and archived periods one at a time on demand; retain
-  account-aware option and equity components as reconciliation context. Notes are the only editable
-  ledger metadata. Show the `Needs review` summary only when one or more rows
+  account-aware option and equity components as reconciliation context. Notes are
+  edited from the trailing Edit column via a focused modal; they are the only
+  editable ledger metadata. Show the `Needs review` summary only when one or more rows
   need review. Do not expose Trade Groups, manual lifecycle status, event
-  reassignment, or broker-risk tables in this surface.
+  reassignment, or broker-risk tables in this surface. Active rows show the
+  underlying market price, DTE to the nearest open expiry (sortable), and a
+  short-option breakeven band for that nearest expiry. The Active filter lists
+  only symbols that still have at least one open option contract — shares left
+  after every option is flat belong on Holdings, not Options Active. Mark
+  nearest open shorts that are ITM in red and those within 5% of strike in
+  yellow, with a matching badge so color is never the only signal. Current
+  period P/L is sortable so accounts deepest in the red can be surfaced first.
 - Option-Adjusted Basis includes only symbols with open long-equity positions
   and option activity that affects their basis. Keep completed option cycles
   while the shares remain open, and combine same-symbol components across
