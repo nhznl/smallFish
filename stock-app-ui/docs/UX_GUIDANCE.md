@@ -216,7 +216,10 @@ other textual state.
   Category or Account selector only when that field has more than one choice;
   always retain search, Declining only, Snapshot G/L %, Copy Symbols, sortable
   columns, snapshot columns, and deliberate modal editing for classification
-  and notes. Label the trailing action column **Edit**. When provider cost basis
+  and notes. Keep a top Total row that sums Invested and Current for the
+  currently filtered rows (Category, Account, search, and Declining). Fail
+  closed to an em dash when any filtered row lacks cost basis. Label the
+  trailing action column **Edit**. When provider cost basis
   is missing, the same dialog accepts either total cost basis or cost per
   share/unit. Treat that value as account-scoped app metadata that survives
   sync, and stop using it if the provider later supplies basis.

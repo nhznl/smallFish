@@ -115,6 +115,20 @@ export class BrokerageHoldingsComponent implements OnChanges {
     });
   }
 
+  /** Invested / Current totals for the currently filtered rows. Fail closed. */
+  filteredTotals(): { cost_basis: number | null; market_value: number | null } {
+    const rows = this.filteredHoldings();
+    return {
+      cost_basis: this.sumExact(rows.map(row => row.cost_basis)),
+      market_value: this.sumExact(rows.map(row => row.market_value)),
+    };
+  }
+
+  private sumExact(values: Array<number | null>): number | null {
+    if (values.some(value => value == null)) return null;
+    return values.reduce((total: number, value) => total + (value as number), 0);
+  }
+
   categories(): string[] {
     return [...new Set(this.items.map(row => row.category).filter(Boolean))].sort();
   }

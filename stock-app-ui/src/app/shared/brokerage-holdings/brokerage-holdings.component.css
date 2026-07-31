@@ -54,6 +54,7 @@
 .holdings-table { min-width: 1540px; }
 .holdings-table .col-sticky { left: 0; }
 .holdings-table td.col-sticky { background: var(--surface-card); }
+.holdings-table .totals-row td.col-sticky { background: var(--surface-sunken); }
 .symbol-cell { font-family: var(--font-mono); }
 .sort-button { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; text-transform: inherit; letter-spacing: inherit; white-space: nowrap; cursor: pointer; }
 .sort-button:hover { color: var(--primary); }

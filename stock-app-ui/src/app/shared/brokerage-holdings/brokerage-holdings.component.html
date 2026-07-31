@@ -154,6 +154,26 @@
             <th>Edit</th>
           </tr></thead>
           <tbody>
+            @if (filteredTotals(); as totals) {
+              <tr class="totals-row">
+                <td class="col-sticky symbol-cell"><strong>Total</strong></td>
+                <td>—</td>
+                <td>—</td>
+                <td>—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">{{ money(totals.cost_basis) }}</td>
+                <td class="num">{{ money(totals.market_value) }}</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                @for (snapshot of snapshotDates(); track snapshot.sync_date) {
+                  <td class="num snapshot-col">—</td>
+                }
+                <td></td>
+              </tr>
+            }
             @for (row of filteredHoldings(); track row.id) {
               <tr [class.declining-row]="row.trend.alert">
                 <td class="col-sticky symbol-cell"><strong>{{ row.symbol }}</strong></td>
