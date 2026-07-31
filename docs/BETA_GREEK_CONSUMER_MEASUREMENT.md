@@ -47,7 +47,7 @@ retirement headers in
 [`call_coverage.py`](../stock-app/app/brokerages/call_coverage.py) classifies open short
 calls so held-option market sync knows which legs to fetch. That is **selection
 for materialization**, not consumption of Greek or beta **values**. Symbol
-Ledger / Option-Adjusted Basis projections do not read IV, beta, or Greek
+Ledger / Equity+Option-Adjusted Basis projections do not read IV, beta, or Greek
 scalars. Combined-ledger UI may show `as_of.market` timestamps only.
 
 ## Layer A / B / C

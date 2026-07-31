@@ -45,7 +45,18 @@ export class BrokerageHoldingsComponent implements OnChanges {
   account = '';
   decliningOnly = false;
   copySuccess = false;
-  editing: { symbol: string; category: string; industry: string; note: string } | null = null;
+  editing: {
+    symbol: string;
+    accountId: string;
+    quantity: number;
+    category: string;
+    industry: string;
+    note: string;
+    basisEditable: boolean;
+    basisMode: 'TOTAL' | 'PER_UNIT' | null;
+    costBasis: number | null;
+    costPerUnit: number | null;
+  } | null = null;
   sortColumn: SortColumn = 'market_value';
   sortAscending = false;
 
@@ -189,9 +200,15 @@ export class BrokerageHoldingsComponent implements OnChanges {
   openEditor(row: HoldingItem): void {
     this.editing = {
       symbol: row.symbol,
+      accountId: row.account_id,
+      quantity: row.quantity,
       category: row.category === 'UNCLASSIFIED' ? '' : row.category,
       industry: row.industry === 'UNCLASSIFIED' ? '' : row.industry,
       note: row.note,
+      basisEditable: row.cost_basis_source !== 'BROKER',
+      basisMode: row.cost_basis_override_mode,
+      costBasis: row.cost_basis,
+      costPerUnit: row.cost_per_unit,
     };
     this.editError = '';
   }
@@ -203,10 +220,26 @@ export class BrokerageHoldingsComponent implements OnChanges {
 
   saveEnrichment(): void {
     if (!this.editing) return;
-    const { symbol, category, industry, note } = this.editing;
+    const {
+      symbol, accountId, category, industry, note, basisEditable, basisMode,
+      costBasis, costPerUnit,
+    } = this.editing;
+    const payload: {
+      category: string;
+      industry: string;
+      note: string;
+      account_id?: string;
+      cost_basis?: number | null;
+      cost_per_unit?: number | null;
+    } = { category, industry, note };
+    if (basisEditable) {
+      payload.account_id = accountId;
+      payload.cost_basis = basisMode === 'TOTAL' ? costBasis : null;
+      payload.cost_per_unit = basisMode === 'PER_UNIT' ? costPerUnit : null;
+    }
     this.saving = true;
     this.editError = '';
-    this.api.updateHoldingsMetadata(this.brokerageId, symbol, { category, industry, note })
+    this.api.updateHoldingsMetadata(this.brokerageId, symbol, payload)
       .subscribe({
         next: () => {
           this.saving = false;
@@ -215,9 +248,41 @@ export class BrokerageHoldingsComponent implements OnChanges {
         },
         error: err => {
           this.saving = false;
-          this.editError = this.message_(err, 'The holding note could not be saved.');
+          this.editError = this.message_(err, 'The holding changes could not be saved.');
         },
       });
+  }
+
+  updateCostBasis(value: number | null): void {
+    if (!this.editing) return;
+    this.editing.costBasis = this.validCost(value);
+    this.editing.basisMode = this.editing.costBasis == null ? null : 'TOTAL';
+    this.editing.costPerUnit = (
+      this.editing.costBasis == null || !this.editing.quantity
+        ? null : this.editing.costBasis / this.editing.quantity
+    );
+  }
+
+  updateCostPerUnit(value: number | null): void {
+    if (!this.editing) return;
+    this.editing.costPerUnit = this.validCost(value);
+    this.editing.basisMode = this.editing.costPerUnit == null ? null : 'PER_UNIT';
+    this.editing.costBasis = (
+      this.editing.costPerUnit == null
+        ? null : this.editing.costPerUnit * this.editing.quantity
+    );
+  }
+
+  clearCostBasis(): void {
+    if (!this.editing) return;
+    this.editing.costBasis = null;
+    this.editing.costPerUnit = null;
+    this.editing.basisMode = null;
+  }
+
+  private validCost(value: number | null): number | null {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0
+      ? value : null;
   }
 
   snapshotDateLabel(value: string): string {

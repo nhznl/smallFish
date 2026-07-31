@@ -61,7 +61,8 @@ export class BrokerageLedgerCombinedComponent implements OnChanges {
         if (request !== this.requestSequence) return;
         this.data = null;
         this.loading = false;
-        this.error = err?.error?.detail ?? 'The option-adjusted basis view could not be loaded.';
+        this.error = err?.error?.detail
+          ?? 'The Equity+Option-Adjusted Basis view could not be loaded.';
       },
     });
   }

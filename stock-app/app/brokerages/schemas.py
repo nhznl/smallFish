@@ -43,6 +43,12 @@ class HoldingsMetadataPatchRequest(BaseModel):
         default=None, json_schema_extra={"type": ["string", "null"]})
     note: Any = Field(
         default=None, json_schema_extra={"type": ["string", "null"]})
+    account_id: Any = Field(
+        default=None, json_schema_extra={"type": ["string", "null"]})
+    cost_basis: Any = Field(
+        default=None, json_schema_extra={"type": ["number", "string", "null"]})
+    cost_per_unit: Any = Field(
+        default=None, json_schema_extra={"type": ["number", "string", "null"]})
 
 
 class ArchiveCreateRequest(BaseModel):

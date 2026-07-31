@@ -130,6 +130,8 @@ export interface HoldingItem extends BrokerageComponent {
   metadata_updated_at: string | null;
   cost_basis: number | null;
   cost_per_unit: number | null;
+  cost_basis_source: 'BROKER' | 'USER_OVERRIDE' | null;
+  cost_basis_override_mode: 'TOTAL' | 'PER_UNIT' | null;
   market_value: number | null;
   unrealized_pnl: number | null;
   unrealized_pnl_pct: number | null;

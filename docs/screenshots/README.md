@@ -36,7 +36,7 @@ Light theme, the application's only theme.
 | `options-ledger-unconfigured.png` | `/options` | 1440×1100 | Trading Ledger Holdings tab with nothing imported yet — the normal optional empty state. |
 | `retirement-unconfigured.png` | `/retirement` | 1440×1100 | Retirement Ledger Holdings tab in the same empty state. |
 | `options-ledger-connected.png` | `/options` → Options | 1440×1400 | Trading Symbol Ledger with three synthetic Active underlyings (XLE, XLF, XLK), Demo Trading account, indicative period P/L. |
-| `options-basis-connected.png` | `/options` → Option-Adjusted Basis | 1440×1400 | Trading Option-Adjusted Basis with the same three synthetic underlyings: share economics, option P/L, and live option-adjusted basis per share. |
+| `options-basis-connected.png` | `/options` → Equity+Option-Adjusted Basis | 1440×1400 | Trading Equity+Option-Adjusted Basis with the same three synthetic underlyings: combined equity and option P/L, plus live option-adjusted basis per share. |
 | `retirement-ledger-connected.png` | `/retirement` | 1440×1300 | Retirement Holdings with four synthetic ETF lots, Demo Retirement Account, editable classifications. |
 | `retirement-options-connected.png` | `/retirement` → Options | 1440×1400 | Retirement Symbol Ledger with synthetic covered-call underlyings (VTI, XLV). |
 | `momentum-scanner-mobile.png` | `/momentum` | 420×900 | The most table-dense screen at a narrow width. |
@@ -45,9 +45,9 @@ Both Wheel screens are included because they communicate different things: the
 scan output, and the methodology behind it.
 
 Trading and Retirement share three tabs — Holdings, Options (Symbol Ledger), and
-Option-Adjusted Basis. The connected set shows all three on the Trading ledger;
+Equity+Option-Adjusted Basis. The connected set shows all three on the Trading ledger;
 retirement connected frames show Holdings and the Symbol Ledger.
-Option-Adjusted Basis is documented in
+Equity+Option-Adjusted Basis is documented in
 [`../../stock-app-ui/docs/UX_GUIDANCE.md`](../../stock-app-ui/docs/UX_GUIDANCE.md).
 
 ## Capture procedure
@@ -80,7 +80,7 @@ Option-Adjusted Basis is documented in
    `SFP_DATA_DIR` (never the maintainer's real ledgers). Use invented account
    names (`Demo Trading`, `Demo Retirement Account`), starter-universe ETFs, and
    notes that say the rows are synthetic. Serve that data root on a separate port
-   so the live checkout is untouched. Click the Options or Option-Adjusted Basis
+   so the live checkout is untouched. Click the Options or Equity+Option-Adjusted Basis
    tab (and Holdings where needed) before capturing — those tabs are not URL routes
    of their own.
 

@@ -27,15 +27,15 @@ function summary(overrides: Partial<SymbolLedgerSummary> = {}): SymbolLedgerSumm
     reconciliation_status: 'RECONCILED',
     pnl_completeness: 'INDICATIVE',
     accounts: ['Main'],
-    exposure: 'EQUITY_AND_OPTIONS',
+    exposure: 'OPTIONS',
     current_period: {
       period_version: 'v1:abc', started_at: '2026-01-15T15:30:00Z', event_count: 6,
       first_event_at: '2026-01-15T15:30:00Z', last_event_at: '2026-07-28T15:30:00Z',
-      net_cash_flow: -10_500, open_market_value: 11_925, total_pnl: 1425, realized_pnl: null,
+      net_cash_flow: 600, open_market_value: -75, total_pnl: 525, realized_pnl: null,
     },
     archived_period_count: 0,
     archived_pnl: 0,
-    lifetime_pnl: 1425,
+    lifetime_pnl: 525,
     notes: '',
     warnings: [],
     underlying_price: 52.4,
@@ -76,7 +76,8 @@ function listResponse(
     },
     summary: {
       symbol_count: items.length, active_count: 1, closed_count: 0,
-      needs_review_count: items.filter(row => row.warnings.length).length, lifetime_pnl: 1425,
+      needs_review_count: items.filter(row => row.warnings.length).length,
+      lifetime_pnl: 525,
     },
     items,
     warnings: [],
@@ -216,7 +217,8 @@ describe('SymbolLedgerComponent', () => {
         expect(body).toContain('DEMO');
         expect(body).toContain('Active');
         expect(body).toContain('SHORT PUT');
-        expect(body).toContain('Equity + options');
+        expect(body).toContain('Options');
+        expect(body).not.toContain('Equity + options');
         // The concepts the migration removes must not reappear in the UI.
         expect(body).not.toContain('Trade Groups');
         expect(body).not.toContain('Group Name');
@@ -225,11 +227,11 @@ describe('SymbolLedgerComponent', () => {
         expect(body.toLowerCase()).not.toContain('snaptrade');
       });
 
-      it('shows option symbols and option symbols with equity, but not equity-only holdings', async () => {
+      it('shows option symbols but not equity-only holdings', async () => {
         const api = spyApi();
         api.listSymbols.and.returnValue(of(listResponse(brokerage, [
           summary({ symbol: 'OPTION_ONLY', exposure: 'OPTIONS' }),
-          summary({ symbol: 'OPTION_WITH_EQUITY', exposure: 'EQUITY_AND_OPTIONS' }),
+          summary({ symbol: 'OPTION_WITH_EQUITY', exposure: 'OPTIONS' }),
           summary({ symbol: 'EQUITY_ONLY', exposure: 'EQUITY' }),
         ])));
         const fixture = await mount(api, brokerage.id);
@@ -266,7 +268,7 @@ describe('SymbolLedgerComponent', () => {
         fixture.detectChanges();
 
         const body = text(fixture);
-        expect(api.getSymbol).toHaveBeenCalledWith(brokerage.id, 'DEMO');
+        expect(api.getSymbol).toHaveBeenCalledWith(brokerage.id, 'DEMO', 'options');
         expect(body).toContain('Positions and contracts');
         expect(body).toContain('Short put');
         expect(body).toContain('Main');

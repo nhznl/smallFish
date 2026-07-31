@@ -59,7 +59,7 @@ they never persist credentials or brokerage data.
 
 ## Tastytrade
 
-Adds the Trading ledger (Holdings, Symbol Ledger, Option-Adjusted Basis),
+Adds the Trading ledger (Holdings, Symbol Ledger, Equity+Option-Adjusted Basis),
 DXLink quotes, exact-contract Greeks, and market-metric beta.
 
 ### What smallFish reads
@@ -179,15 +179,17 @@ Trading (`/options`) and Retirement (`/retirement`) share one three-tab shell:
 
 | Tab | What it shows |
 |---|---|
-| **Holdings** | Open equity positions with editable category, industry, and note metadata. Options are excluded. |
-| **Options** | The Symbol Ledger: one durable record per underlying, derived Active/Closed lifecycle, immutable event history, and optional archived-period detail. |
-| **Option-Adjusted Basis** | Combined equity and option economics for symbols that still hold long shares and have option activity affecting their basis. |
+| **Holdings** | Open equity positions with an Edit dialog for category, industry, note, and any missing cost basis. Options are excluded. |
+| **Options** | The Symbol Ledger: one durable record per underlying, derived Active/Closed lifecycle, option-only positions and P/L, immutable event history, and optional archived-period detail. |
+| **Equity+Option-Adjusted Basis** | Combined equity and option P/L for each symbol that still holds long shares, plus the basis adjusted by its option history. |
 
 Some employer-plan holdings arrive without provider cost basis. Those rows show
 an em dash for cost and gain/loss values, and affected portfolio totals remain
-unavailable rather than silently treating the missing basis as zero. Captured
-gain/loss comparisons are also withheld for those rows because their percentage
-cannot be established without basis.
+unavailable rather than silently treating the missing basis as zero. The
+Holdings Edit dialog accepts either total cost basis or cost per share/unit for
+such a row. This account-scoped value is stored as app-owned metadata and
+survives brokerage sync; broker-supplied basis takes precedence if it later
+appears. Captured gain/loss comparisons are withheld until a basis is known.
 
 Trade groups and the former portfolio-risk dashboard are retired. Sync
 materializes provider artifacts (positions, activity, marks, Greeks, beta).
@@ -198,6 +200,12 @@ IV / `as_of.market` where projected), not Symbol Ledger arithmetic and not a
 separate risk UI. The owner confirmed on 2026-07-30 that there are no external
 consumers and chose to retain this materialization for now. Measurement:
 [`BETA_GREEK_CONSUMER_MEASUREMENT.md`](BETA_GREEK_CONSUMER_MEASUREMENT.md).
+
+The Symbol Ledger's `exposure=options` projection scopes current, archived, and
+lifetime P/L to option components. Equity positions may still supply underlying
+price, coverage, and reconciliation context internally, but their rows and P/L
+are excluded from the Options tab. The unscoped API retains the combined-ledger
+view for compatibility.
 
 ## Materialized market inputs
 

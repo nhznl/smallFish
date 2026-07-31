@@ -203,7 +203,7 @@ RETIRED_LEGACY_ROUTES = (
     ("POST", "/brokerage-ledgers/{portfolio}/holdings/gain-loss-snapshots"),
     # The grouped Options/Trading and Retirement projections and every trade-
     # group route: no Angular consumer, and their accounting now lives in the
-    # common Options, Option-Adjusted Basis, and Symbol Ledger resources.
+    # common Options, Equity+Option-Adjusted Basis, and Symbol Ledger resources.
     ("GET", "/options"),
     ("GET", "/options/activity"),
     ("POST", "/options/groups"),

@@ -20,7 +20,7 @@ the work:
 - Momentum is the reference for scan/filter/results workflows. Strategy and
   Wheel show how that language extends to other research tools. Options and
   Retirement are the reference for the shared Holdings, Symbol Ledger, and
-  Option-Adjusted Basis views.
+  Equity+Option-Adjusted Basis views.
 
 Code is authoritative when this document and the implementation differ. Fix
 the documentation as part of any intentional convention change.
@@ -210,19 +210,24 @@ other textual state.
 ### Ledgers and portfolio risk
 
 - Trading and Retirement expose the same three brokerage tabs in the same
-  order: Holdings, Options, and Option-Adjusted Basis. Holdings contain equity
+  order: Holdings, Options, and Equity+Option-Adjusted Basis. Holdings contain equity
   information only; Options contain option information only.
 - Holdings uses one shared, chart-free table on both brokerage pages. Show the
   Category or Account selector only when that field has more than one choice;
   always retain search, Declining only, Snapshot G/L %, Copy Symbols, sortable
   columns, snapshot columns, and deliberate modal editing for classification
-  and notes.
+  and notes. Label the trailing action column **Edit**. When provider cost basis
+  is missing, the same dialog accepts either total cost basis or cost per
+  share/unit. Treat that value as account-scoped app metadata that survives
+  sync, and stop using it if the provider later supplies basis.
 - Options uses the shared Symbol Ledger on both brokerage pages. It includes
   only option-capable symbols, derives Active or Closed lifecycle from
   immutable broker facts (Active and Closed tabs only — no combined All view),
   and keeps imported events read-only. Show current
   events directly and archived periods one at a time on demand; retain
-  account-aware option and equity components as reconciliation context. Notes are
+  account-aware option components in Positions and contracts. Equity facts may
+  support reconciliation and underlying-risk context behind the projection, but
+  share rows and equity P/L never appear in or contribute to the Options view. Notes are
   edited from the trailing Edit column via a focused modal; they are the only
   editable ledger metadata. Show the `Needs review` summary only when one or more rows
   need review. Do not expose Trade Groups, manual lifecycle status, event
@@ -234,7 +239,7 @@ other textual state.
   nearest open shorts that are ITM in red and those within 5% of strike in
   yellow, with a matching badge so color is never the only signal. Current
   period P/L is sortable so accounts deepest in the red can be surfaced first.
-- Option-Adjusted Basis includes only symbols with open long-equity positions
+- Equity+Option-Adjusted Basis includes only symbols with open long-equity positions
   and option activity that affects their basis. Keep completed option cycles
   while the shares remain open, and combine same-symbol components across
   accounts within the brokerage; do not show redundant Exposure or State controls.

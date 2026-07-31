@@ -1,6 +1,6 @@
-<section class="combined-ledger" aria-label="Option-adjusted basis">
+<section class="combined-ledger" aria-label="Equity+Option-Adjusted Basis">
   @if (loading) {
-    <div class="combined-loading" aria-busy="true" aria-label="Loading option-adjusted basis">
+    <div class="combined-loading" aria-busy="true" aria-label="Loading Equity+Option-Adjusted Basis">
       <div class="skeleton skeleton-stat"></div>
       <div class="skeleton skeleton-stat"></div>
       <div class="skeleton skeleton-stat"></div>
@@ -9,7 +9,7 @@
   } @else if (error) {
     <div class="empty-state combined-error" role="alert">
       <span class="badge badge-neg">Unavailable</span>
-      <h3>Option-adjusted basis could not load</h3>
+      <h3>Equity+Option-Adjusted Basis could not load</h3>
       <p>{{ error }}</p>
       <button type="button" class="btn" (click)="load()">Try again</button>
     </div>
@@ -17,8 +17,8 @@
     <div class="combined-heading">
       <div>
         <p class="section-kicker">Open equity + option history</p>
-        <h2>{{ ledger.brokerage.label }} option-adjusted basis</h2>
-        <p>Open long-share positions are included when option activity affects their basis, even after the option position closes.</p>
+        <h2>{{ ledger.brokerage.label }} Equity+Option-Adjusted Basis</h2>
+        <p>Combined P/L includes both the open equity position and its option history for each symbol.</p>
       </div>
       <span class="snapshot-chip">
         <span>{{ ledger.brokerage.institution }} positions</span>
@@ -37,7 +37,7 @@
     }
 
     @if (basisWarnings().length) {
-      <div class="warning-list" aria-label="Option-adjusted basis warnings">
+      <div class="warning-list" aria-label="Equity+Option-Adjusted Basis warnings">
         @for (warning of basisWarnings(); track warning.code + ':' + warning.symbol + ':' + warning.component_id) {
           <div class="banner banner-warn">
             <strong>{{ warning.symbol || ledger.brokerage.label }}</strong>
@@ -67,7 +67,7 @@
       }
     </div>
 
-    <div class="filter-toolbar" aria-label="Option-adjusted basis filters">
+    <div class="filter-toolbar" aria-label="Equity+Option-Adjusted Basis filters">
       <label>
         <span>Search</span>
         <input [(ngModel)]="search" type="search" placeholder="Symbol or account">

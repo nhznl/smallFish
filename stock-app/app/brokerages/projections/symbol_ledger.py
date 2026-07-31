@@ -306,15 +306,60 @@ class SymbolLedger:
         )
         self.archive_summaries = self._verified_archives()
 
-    def _verified_archives(self) -> list[dict[str, Any]]:
+    def _view_components(self, *, options_only: bool) -> list[Component]:
+        if not options_only:
+            return self.components
+        return [row for row in self.components if row.instrument == "OPTION"]
+
+    def _verified_archives(
+        self, *, components: list[Component] | None = None
+    ) -> list[dict[str, Any]]:
         summaries = []
         previous: tuple[str, str] | None = None
         for boundary in self.archives:
             summaries.append(verify_archive(
-                boundary, self.components, self.all_events, previous=previous
+                boundary, self.components if components is None else components,
+                self.all_events, previous=previous,
             ))
             previous = boundary.order_key
         return summaries
+
+    def _view(self, *, options_only: bool) -> dict[str, Any]:
+        """Accounting fields for either the whole ledger or its Options view.
+
+        The Options tab is an accounting scope, not merely a symbol filter.
+        Equity may still inform contract risk, but its cash, market value, and
+        P/L must not enter the option-period totals.
+        """
+        components = self._view_components(options_only=options_only)
+        state, completeness, warnings = _lifecycle(components)
+        reconciliation_status, _reasons = _reconciliation(components)
+        current_period = _period_block(
+            components, self.all_events, after=self.boundary, through=None,
+            is_current=True, version=self.period_version,
+        )
+        archives = self._verified_archives(components=components)
+        archived_values = [summary["realized_pnl"] for summary in archives]
+        archived_pnl = (
+            None if any(value is None for value in archived_values)
+            else float(sum(archived_values))
+        )
+        current_pnl = current_period["total_pnl"]
+        lifetime_pnl = (
+            None if current_pnl is None or archived_pnl is None
+            else current_pnl + archived_pnl
+        )
+        return {
+            "components": components,
+            "state": state,
+            "pnl_completeness": completeness,
+            "warnings": warnings,
+            "reconciliation_status": reconciliation_status,
+            "current_period": current_period,
+            "archives": archives,
+            "archived_pnl": archived_pnl,
+            "lifetime_pnl": lifetime_pnl,
+        }
 
     @property
     def archived_pnl(self) -> float | None:
@@ -354,33 +399,36 @@ class SymbolLedger:
             blockers.append("PERIOD_INCOMPLETE")
         return blockers
 
-    def summary(self) -> dict[str, Any]:
+    def summary(self, *, options_only: bool = False) -> dict[str, Any]:
+        view = self._view(options_only=options_only)
+        components = view["components"]
         risk = open_contract_risk.build_open_contract_risk(
             self.components, symbol=self.symbol,
         )
         return {
             "symbol": self.symbol,
-            "state": self.state,
-            "reconciliation_status": self.reconciliation_status,
-            "pnl_completeness": self.pnl_completeness,
-            "accounts": sorted({row.account for row in self.components}),
-            "exposure": _exposure(self.components),
-            "current_period": self.current_period,
-            "archived_period_count": len(self.archive_summaries),
-            "archived_pnl": self.archived_pnl,
-            "lifetime_pnl": self.lifetime_pnl,
+            "state": view["state"],
+            "reconciliation_status": view["reconciliation_status"],
+            "pnl_completeness": view["pnl_completeness"],
+            "accounts": sorted({row.account for row in components}),
+            "exposure": "OPTIONS" if options_only else _exposure(components),
+            "current_period": view["current_period"],
+            "archived_period_count": len(view["archives"]),
+            "archived_pnl": view["archived_pnl"],
+            "lifetime_pnl": view["lifetime_pnl"],
             "notes": self.notes,
-            "warnings": list(self.warnings),
+            "warnings": list(view["warnings"]),
             **risk,
         }
 
-    def detail(self) -> dict[str, Any]:
+    def detail(self, *, options_only: bool = False) -> dict[str, Any]:
+        view = self._view(options_only=options_only)
         return {
-            **self.summary(),
+            **self.summary(options_only=options_only),
             "reset_eligible": self.reset_eligible,
             "reset_blockers": self.reset_blockers(),
-            "components": [row.serialize() for row in self.components],
-            "archives": self.archive_summaries,
+            "components": [row.serialize() for row in view["components"]],
+            "archives": view["archives"],
             "event_count_total": len(self.all_events),
         }
 
@@ -421,49 +469,57 @@ def list_response(snapshot: BrokerageSnapshot, ledgers: list[SymbolLedger], *,
     wanted_exposure = str(exposure or "all").strip().lower()
     if wanted_exposure not in {"all", "options"}:
         wanted_exposure = "all"
+    options_only = wanted_exposure == "options"
     eligible = [
-        ledger for ledger in ledgers
-        if wanted_exposure != "options" or _exposure(ledger.components) != "EQUITY"
+        (ledger, ledger.summary(options_only=options_only)) for ledger in ledgers
+        if not options_only or _exposure(ledger.components) != "EQUITY"
     ]
     selected = [
-        ledger for ledger in eligible
-        if wanted == "all" or ledger.state == wanted.upper()
+        (ledger, summary) for ledger, summary in eligible
+        if wanted == "all" or summary["state"] == wanted.upper()
     ]
     # Options Active is about open contracts. Shares still held after every
     # option has closed must not keep the symbol on that tab.
     if wanted == "active" and wanted_exposure == "options":
         selected = [
-            ledger for ledger in selected if _has_open_options(ledger.components)
+            (ledger, summary) for ledger, summary in selected
+            if _has_open_options(ledger.components)
         ]
-    lifetime = [ledger.lifetime_pnl for ledger in selected]
+    lifetime = [summary["lifetime_pnl"] for _ledger, summary in selected]
     if wanted_exposure == "options":
         active_count = sum(
-            1 for row in eligible
-            if row.state == "ACTIVE" and _has_open_options(row.components)
+            1 for row, summary in eligible
+            if summary["state"] == "ACTIVE" and _has_open_options(row.components)
         )
     else:
-        active_count = sum(1 for row in eligible if row.state == "ACTIVE")
+        active_count = sum(
+            1 for _row, summary in eligible if summary["state"] == "ACTIVE"
+        )
     summary = {
         "symbol_count": len(selected),
         "active_count": active_count,
-        "closed_count": sum(1 for row in eligible if row.state == "CLOSED"),
-        "needs_review_count": sum(1 for row in eligible if row.warnings),
+        "closed_count": sum(
+            1 for _row, summary in eligible if summary["state"] == "CLOSED"
+        ),
+        "needs_review_count": sum(
+            1 for _row, summary in eligible if summary["warnings"]
+        ),
         "lifetime_pnl": (
             None if any(value is None for value in lifetime) else sum(lifetime)
         ),
     }
     completeness = envelope.worst_completeness(
-        ledger.pnl_completeness for ledger in selected
+        summary["pnl_completeness"] for _ledger, summary in selected
     )
     return envelope.build(
         schema_name=LIST_SCHEMA_NAME, snapshot=snapshot,
         coverage_status=completeness, summary=summary,
-        items=[ledger.summary() for ledger in selected],
+        items=[summary for _ledger, summary in selected],
         warnings=[
             {
                 "code": "SYMBOL_NEEDS_REVIEW", "scope": "SYMBOL",
                 "symbol": ledger.symbol, "component_id": None, "message": reason,
             }
-            for ledger in selected for reason in ledger.warnings
+            for ledger, summary in selected for reason in summary["warnings"]
         ],
     )

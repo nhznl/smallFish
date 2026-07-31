@@ -1,9 +1,9 @@
 """Holdings: current equity positions, one contract for every brokerage.
 
 Options are excluded — they have their own resource. Category, industry, and
-note are app-owned metadata merged onto immutable broker facts; the metadata
-file is chosen by the registry, so this projection never learns which brokerage
-it is rendering.
+note and missing-cost-basis overrides are app-owned metadata merged onto
+immutable broker facts; the metadata file is chosen by the registry, so this
+projection never learns which brokerage it is rendering.
 
 "Current" is load-bearing. The component projection deliberately builds an
 equity component for a share lot that has already been sold, because the Symbol
@@ -18,7 +18,7 @@ from __future__ import annotations
 import csv
 import threading
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -30,24 +30,70 @@ from . import envelope
 from .numbers import number as _number
 
 SCHEMA_NAME = "smallfish.brokerage-holdings"
-METADATA_HEADERS = ("symbol", "category", "industry", "note", "updated_at")
+METADATA_HEADERS = (
+    "symbol", "account_id", "category", "industry", "note",
+    "cost_basis_override", "cost_per_unit_override", "cost_basis_mode",
+    "updated_at",
+)
+TAG_FIELDS = ("category", "industry", "note")
+BASIS_FIELDS = (
+    "cost_basis_override", "cost_per_unit_override", "cost_basis_mode",
+)
 UNCLASSIFIED = "UNCLASSIFIED"
 
 ZERO = Decimal("0")
 _metadata_lock = threading.RLock()
 
 
-def read_metadata(path: Path) -> dict[str, dict[str, str]]:
+def read_metadata(path: Path) -> dict[tuple[str, str], dict[str, str]]:
     if not path.is_file():
         return {}
     with path.open("r", newline="", encoding="utf-8") as handle:
         return {
-            str(row.get("symbol", "")).strip().upper(): {
+            (
+                str(row.get("symbol", "")).strip().upper(),
+                str(row.get("account_id", "")).strip(),
+            ): {
                 field: str(row.get(field, "")).strip() for field in METADATA_HEADERS
             }
             for row in csv.DictReader(handle)
             if str(row.get("symbol", "")).strip()
         }
+
+
+def _metadata_decimal(value: Any) -> Decimal | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    return parsed if parsed.is_finite() and parsed >= ZERO else None
+
+
+def _effective_cost(component: Any,
+                    metadata: dict[tuple[str, str], dict[str, str]]) -> tuple[
+                        Decimal | None, str | None, str | None, str | None
+                    ]:
+    """Cost, source, override mode, and override timestamp for one holding."""
+    broker_cost = (
+        None if component.net_cash_flow is None else -component.net_cash_flow
+    )
+    if broker_cost is not None:
+        return broker_cost, "BROKER", None, None
+
+    scoped = metadata.get((component.symbol, component.account_id), {})
+    mode = scoped.get("cost_basis_mode", "")
+    total = _metadata_decimal(scoped.get("cost_basis_override"))
+    per_unit = _metadata_decimal(scoped.get("cost_per_unit_override"))
+    if mode == "TOTAL" and total is not None:
+        return total, "USER_OVERRIDE", mode, scoped.get("updated_at") or None
+    if mode == "PER_UNIT" and per_unit is not None:
+        return (
+            per_unit * component.quantity, "USER_OVERRIDE", mode,
+            scoped.get("updated_at") or None,
+        )
+    return None, None, None, None
 
 
 def account_value(snapshot: BrokerageSnapshot, *,
@@ -90,13 +136,16 @@ def build(snapshot: BrokerageSnapshot, *,
     equity = held_equity(snapshot, account_id=account_id)
     equity.sort(key=lambda row: (row.symbol, row.account))
     snapshot_rows = read_snapshots(snapshot.descriptor.id)
-    captured = snapshots_by_holding(snapshot_rows)
+    override_times = {
+        (account_id, symbol): row.get("updated_at", "")
+        for (symbol, account_id), row in metadata.items()
+        if account_id and row.get("cost_basis_mode") in {"TOTAL", "PER_UNIT"}
+    }
+    captured = snapshots_by_holding(snapshot_rows, not_before=override_times)
 
     market_values = [component.open_market_value for component in equity]
-    costs = [
-        None if component.net_cash_flow is None else -component.net_cash_flow
-        for component in equity
-    ]
+    effective_costs = [_effective_cost(component, metadata) for component in equity]
+    costs = [cost for cost, _source, _mode, _updated_at in effective_costs]
     #: One unmarked holding makes the portfolio total unknown, and a share of an
     #: unknown total is not a number we may invent. The column blanks rather
     #: than quietly rebasing every row on a partial denominator.
@@ -109,25 +158,56 @@ def build(snapshot: BrokerageSnapshot, *,
     )
 
     items: list[dict[str, Any]] = []
-    for component in equity:
-        tags = metadata.get(component.symbol, {})
-        cost = None if component.net_cash_flow is None else -component.net_cash_flow
+    for component, effective in zip(equity, effective_costs, strict=True):
+        tags = metadata.get((component.symbol, ""), {})
+        cost, cost_source, override_mode, override_updated_at = effective
         value = component.open_market_value
         gain = (
             value - cost if value is not None and cost is not None else None
         )
         gain_pct = None if gain is None or not cost else float(gain / cost * 100)
+        missing = list(component.missing)
+        if cost_source == "USER_OVERRIDE":
+            missing = [
+                reason for reason in missing
+                if reason != component_projection.EQUITY_COST_BASIS
+            ]
+        item_completeness = component.pnl_completeness
+        if cost_source == "USER_OVERRIDE":
+            item_completeness = (
+                "UNAVAILABLE" if value is None or missing else "INDICATIVE"
+            )
+        serialized = component.serialize()
+        if cost_source == "USER_OVERRIDE":
+            serialized.update({
+                "cash_in": 0.0,
+                "cash_out": _number(-cost),
+                "net_cash_flow": _number(-cost),
+                "open_price_per_unit": (
+                    None if component.quantity == 0
+                    else float(cost / component.quantity)
+                ),
+                "total_pnl": _number(gain),
+                "pnl_completeness": item_completeness,
+                "cash_flow_basis": "USER_COST_BASIS",
+                "missing": missing,
+            })
         items.append({
-            **component.serialize(),
+            **serialized,
             "category": (tags.get("category") or "").upper() or UNCLASSIFIED,
             "industry": (tags.get("industry") or "").upper() or UNCLASSIFIED,
             "note": tags.get("note", ""),
-            "metadata_updated_at": tags.get("updated_at") or None,
+            "metadata_updated_at": max(
+                filter(None, (tags.get("updated_at"), override_updated_at)),
+                default=None,
+            ),
             "cost_basis": _number(cost),
             "cost_per_unit": (
                 None if cost is None or component.quantity == 0
                 else float(cost / component.quantity)
             ),
+            "cost_basis_source": cost_source,
+            "cost_basis_override_mode": override_mode,
             "market_value": _number(value),
             "unrealized_pnl": _number(gain),
             "unrealized_pnl_pct": gain_pct,
@@ -151,7 +231,7 @@ def build(snapshot: BrokerageSnapshot, *,
         else total_value - total_cost
     )
     completeness = envelope.worst_completeness(
-        component.pnl_completeness for component in equity
+        item["pnl_completeness"] for item in items
     )
     summary = {
         "holding_count": len(items),
@@ -172,7 +252,14 @@ def build(snapshot: BrokerageSnapshot, *,
     return envelope.build(
         schema_name=SCHEMA_NAME, snapshot=snapshot,
         coverage_status=completeness, summary=summary, items=items,
-        warnings=envelope.component_warnings(equity),
+        warnings=[
+            {
+                "code": reason, "scope": "COMPONENT",
+                "symbol": item["symbol"], "component_id": item["id"],
+                "message": reason.replace("_", " ").capitalize() + ".",
+            }
+            for item in items for reason in item["missing"]
+        ],
     )
 
 
@@ -184,24 +271,47 @@ class SnapshotUnavailable(RuntimeError):
         self.code = code
 
 
-def write_metadata(path: Path, symbol: str,
-                   updates: dict[str, str]) -> dict[str, str]:
-    """Create or update one symbol's classification.
+def write_metadata(path: Path, symbol: str, updates: dict[str, str], *,
+                   account_id: str | None = None) -> dict[str, str]:
+    """Create or update symbol metadata and an account-specific basis override.
 
     Broker rows are immutable; this rewrites only the app-owned file, so a
     resync never destroys the user's work and an edit never rewrites history.
     """
     with _metadata_lock:
         rows = read_metadata(path)
-        row = rows.get(symbol) or {field: "" for field in METADATA_HEADERS}
-        row["symbol"] = symbol
-        row.update(updates)
-        row["updated_at"] = datetime.now(timezone.utc).isoformat()
-        rows[symbol] = row
+        now = datetime.now(timezone.utc).isoformat()
+        shared_key = (symbol, "")
+        shared = rows.get(shared_key) or {
+            field: "" for field in METADATA_HEADERS
+        }
+        shared.update({field: updates[field] for field in TAG_FIELDS if field in updates})
+        shared.update({"symbol": symbol, "account_id": "", "updated_at": now})
+        if any(field in updates for field in TAG_FIELDS):
+            rows[shared_key] = shared
+
+        scoped: dict[str, str] = {}
+        if any(field in updates for field in BASIS_FIELDS):
+            scoped_key = (symbol, account_id or "")
+            scoped = rows.get(scoped_key) or {
+                field: "" for field in METADATA_HEADERS
+            }
+            scoped.update({field: updates[field] for field in BASIS_FIELDS})
+            scoped.update({
+                "symbol": symbol, "account_id": account_id or "", "updated_at": now,
+            })
+            rows[scoped_key] = scoped
         options_activity._atomic_write(
             path, list(METADATA_HEADERS), [rows[key] for key in sorted(rows)]
         )
-    return dict(row)
+    result = dict(shared)
+    if scoped:
+        result.update({
+            "account_id": scoped.get("account_id", ""),
+            **{field: scoped.get(field, "") for field in BASIS_FIELDS},
+            "updated_at": scoped.get("updated_at", ""),
+        })
+    return result
 
 
 # ------------------------------------------------- user-captured G/L history ---
@@ -227,7 +337,10 @@ def read_snapshots(brokerage_id: str) -> list[dict[str, str]]:
         ]
 
 
-def snapshots_by_holding(rows: list[dict[str, str]]) -> dict[tuple[str, str], dict[str, float]]:
+def snapshots_by_holding(
+    rows: list[dict[str, str]], *,
+    not_before: dict[tuple[str, str], str] | None = None,
+) -> dict[tuple[str, str], dict[str, float]]:
     """``(account, symbol) -> {sync date: captured percentage}``.
 
     A percentage that will not parse is dropped rather than shown as zero: the
@@ -235,11 +348,15 @@ def snapshots_by_holding(rows: list[dict[str, str]]) -> dict[tuple[str, str], di
     """
     captured: dict[tuple[str, str], dict[str, float]] = {}
     for row in rows:
+        identity = (row["account_id"], row["symbol"])
+        threshold = (not_before or {}).get(identity, "")
+        if threshold and row.get("captured_at", "") < threshold:
+            continue
         try:
             pct = float(row["gain_loss_pct"])
         except (TypeError, ValueError):
             continue
-        captured.setdefault((row["account_id"], row["symbol"]), {})[
+        captured.setdefault(identity, {})[
             row["sync_date"]
         ] = pct
     return captured
@@ -273,8 +390,8 @@ def _sync_date(retrieved_at: str) -> str:
         ) from exc
 
 
-def capture_snapshot(snapshot: BrokerageSnapshot, *,
-                     brokerage_id: str) -> dict[str, Any]:
+def capture_snapshot(snapshot: BrokerageSnapshot, *, brokerage_id: str,
+                     metadata_path: Path) -> dict[str, Any]:
     """Record every current holding's gain/loss percentage under its sync date.
 
     Capturing again for the same sync date replaces that date's complete
@@ -291,6 +408,7 @@ def capture_snapshot(snapshot: BrokerageSnapshot, *,
     )
     sync_date = _sync_date(retrieved_at)
     captured_at = datetime.now(timezone.utc).isoformat()
+    metadata = read_metadata(metadata_path)
 
     with _metadata_lock:
         path = config.symbol_ledger_gain_loss_snapshots_csv()
@@ -311,7 +429,7 @@ def capture_snapshot(snapshot: BrokerageSnapshot, *,
         ]
         captured = 0
         for component in equity:
-            cost = None if component.net_cash_flow is None else -component.net_cash_flow
+            cost, _source, _mode, _updated_at = _effective_cost(component, metadata)
             if cost in (None, ZERO) or component.open_market_value is None:
                 # A holding with no cost or no mark has no defensible
                 # percentage; omitting it beats recording a zero.

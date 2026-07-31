@@ -150,7 +150,7 @@ export class SymbolLedgerComponent implements OnChanges {
     this.detailLoading = true;
     this.detailError = '';
     const request = ++this.detailSequence;
-    this.api.getSymbol(this.brokerageId, symbol).subscribe({
+    this.api.getSymbol(this.brokerageId, symbol, 'options').subscribe({
       next: body => {
         if (request !== this.detailSequence) return;
         this.detail = body.symbol;
@@ -200,7 +200,9 @@ export class SymbolLedgerComponent implements OnChanges {
         this.noteMessage = '';
         const row = this.data?.items.find(item => item.symbol === symbol);
         if (row) row.notes = body.symbol.notes;
-        if (this.detail?.symbol === symbol) this.detail = body.symbol;
+        if (this.detail?.symbol === symbol) {
+          this.detail = { ...this.detail, notes: body.symbol.notes };
+        }
         this.statusMessage = `Note saved for ${symbol}.`;
       },
       error: err => {

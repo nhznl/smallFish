@@ -164,6 +164,65 @@ def test_fidelity_holdings_keep_missing_cost_basis_unknown(adapter_env):
         warning["code"] for warning in body["warnings"]
     }
 
+    saved = client.patch(
+        "/api/brokerages/fidelity/holdings/PLAN/metadata",
+        json={"account_id": "acct-1", "cost_per_unit": 25},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["metadata"]["cost_basis_mode"] == "PER_UNIT"
+
+    overridden = _get("fidelity", "holdings")
+    holding = overridden["items"][0]
+    assert holding["cost_basis"] == pytest.approx(250)
+    assert holding["cost_per_unit"] == pytest.approx(25)
+    assert holding["cost_basis_source"] == "USER_OVERRIDE"
+    assert holding["cost_basis_override_mode"] == "PER_UNIT"
+    assert holding["cash_flow_basis"] == "USER_COST_BASIS"
+    assert holding["unrealized_pnl"] == pytest.approx(0)
+    assert holding["pnl_completeness"] == "INDICATIVE"
+    assert holding["gain_loss_snapshots"] == {}
+    assert overridden["summary"]["total_cost_basis"] == pytest.approx(250)
+    assert overridden["summary"]["total_unrealized_pnl"] == pytest.approx(0)
+    assert component_projection.EQUITY_COST_BASIS not in {
+        warning["code"] for warning in overridden["warnings"]
+    }
+
+    # A brokerage sync rewrites only immutable position artifacts. The
+    # account-specific per-unit basis remains in effect afterward and follows
+    # the newly reported quantity.
+    _write_snaptrade(holdings=[{
+        "asset_class": "OTHER", "symbol": "PLAN", "quantity": "12",
+        "price": "25", "average_purchase_price": "", "cost_basis": "",
+        "market_value": "300", "open_pnl": "", "open_pnl_pct": "",
+    }])
+    after_sync = _get("fidelity", "holdings")["items"][0]
+    assert after_sync["cost_basis"] == pytest.approx(300)
+    assert after_sync["cost_per_unit"] == pytest.approx(25)
+    assert after_sync["cost_basis_source"] == "USER_OVERRIDE"
+
+    # If a later sync finally supplies broker basis, immutable provider facts
+    # take precedence without deleting the user's fallback metadata.
+    _write_snaptrade(holdings=[{
+        "asset_class": "OTHER", "symbol": "PLAN", "quantity": "12",
+        "price": "25", "average_purchase_price": "27.5", "cost_basis": "330",
+        "market_value": "300", "open_pnl": "-30", "open_pnl_pct": "-9.09",
+    }])
+    broker_basis = _get("fidelity", "holdings")["items"][0]
+    assert broker_basis["cost_basis"] == pytest.approx(330)
+    assert broker_basis["cost_per_unit"] == pytest.approx(27.5)
+    assert broker_basis["cost_basis_source"] == "BROKER"
+    assert broker_basis["cost_basis_override_mode"] is None
+
+
+def test_manual_cost_basis_cannot_replace_broker_basis(adapter_env):
+    write_covered_put("fidelity")
+    response = client.patch(
+        "/api/brokerages/fidelity/holdings/ABC/metadata",
+        json={"account_id": "acct-1", "cost_basis": 1},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "COST_BASIS_AVAILABLE"
+
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
 def test_holdings_merge_each_brokerages_own_metadata_store(adapter_env, brokerage_id):

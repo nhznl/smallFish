@@ -191,9 +191,12 @@ def post_symbol_archive(brokerage_id: str, symbol: str, response: Response,
 
 @router.get("/{brokerage_id}/symbols/{symbol:path}")
 def get_symbol(brokerage_id: str, symbol: str,
-               account_id: str | None = Query(default=None)) -> dict:
+               account_id: str | None = Query(default=None),
+               exposure: str = Query(default="all")) -> dict:
     try:
-        return service.get_symbol(brokerage_id, symbol, account_id=account_id)
+        return service.get_symbol(
+            brokerage_id, symbol, account_id=account_id, exposure=exposure
+        )
     except service.BrokerageRequestError as exc:
         raise _fail(exc) from exc
 

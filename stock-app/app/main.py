@@ -1,7 +1,7 @@
 """Native FastAPI backend for smallFish.
 
 Runs on :8000 and owns the complete Angular-facing surface, including the
-brokerage-agnostic Holdings, Options, Option-Adjusted Basis, and Symbol Ledger
+brokerage-agnostic Holdings, Options, Equity+Option-Adjusted Basis, and Symbol Ledger
 resources under ``/api/brokerages``. CORS allows local Angular development and
 the configured static-app origin.
 """

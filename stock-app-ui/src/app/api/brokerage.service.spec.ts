@@ -75,11 +75,12 @@ describe('BrokerageService', () => {
   });
 
   it('encodes a symbol that contains a dot', () => {
-    service.getSymbol('fidelity', 'BRK.B').subscribe();
+    service.getSymbol('fidelity', 'BRK.B', 'options').subscribe();
     const request = http.expectOne(
       req => req.url === `${base}/api/brokerages/fidelity/symbols/BRK.B`
     );
     expect(request.request.method).toBe('GET');
+    expect(request.request.params.get('exposure')).toBe('options');
     request.flush({});
   });
 

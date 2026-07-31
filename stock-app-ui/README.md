@@ -2,7 +2,7 @@
 
 Angular 22 single-page application for the smallFish FastAPI backend. It
 visualizes stock analysis, research studies, wheel candidates, and the shared
-brokerage ledgers (Holdings, Symbol Ledger, and Option-Adjusted Basis).
+brokerage ledgers (Holdings, Symbol Ledger, and Equity+Option-Adjusted Basis).
 
 ## Setup and run
 
@@ -58,7 +58,7 @@ it unconditionally. A new route colliding with an API path must be added to
 | `/studies/:studyId` | Study Detail | Evidence, methodology, variations, provenance, and optional candidate scan. |
 | `/wheel` | Wheel | Wheel candidates, probability context, and archived option quotes. |
 | `/wheelExplainer` | Wheel Explainer | Wheel methodology and field definitions. |
-| `/options` | Trading Ledger | Shared brokerage shell for Tastytrade: Holdings, Options (Symbol Ledger), and Option-Adjusted Basis. |
+| `/options` | Trading Ledger | Shared brokerage shell for Tastytrade: Holdings, Options (Symbol Ledger), and Equity+Option-Adjusted Basis. |
 | `/retirement` | Retirement Ledger | Same three tabs for SnapTrade/Fidelity retirement holdings and option history. |
 | `/portfolios` | Portfolios | Named symbol lists with returns, sector exposure, and SPY comparison. |
 | `/stockDetail/:symbol` | Stock Detail | Company and momentum snapshot, weekly-close chart, and slope heatmap. |
@@ -82,7 +82,7 @@ principal endpoints are:
 - `GET /wheelCandidates?horizon=37` for wheel candidates.
 - `GET /stocks/{symbol}/info` for live company information.
 - `GET`/`POST` `/api/brokerages/{id}/*` for Holdings, Symbol Ledger, and
-  Option-Adjusted Basis, including brokerage-scoped manual reconciliation.
+  Equity+Option-Adjusted Basis, including brokerage-scoped manual reconciliation.
 
 ## Studies
 
@@ -94,13 +94,15 @@ snapshot in the reusable sortable table without changing the study verdict.
 
 Trading and Retirement are thin route shells over the same three tabs:
 
-1. **Holdings** — open equity positions with editable category/industry/note
-   metadata, snapshot G/L comparison columns, and declining-trend state.
+1. **Holdings** — open equity positions with an Edit dialog for
+   category/industry/note and any missing cost basis, snapshot G/L comparison
+   columns, and declining-trend state. Manual basis is account-scoped and
+   persists across brokerage sync; broker basis takes precedence.
 2. **Options** — the shared Symbol Ledger: one durable record per underlying
    with derived Active/Closed lifecycle, immutable event history, optional
    archived-period detail, and deliberate archive confirmation.
-3. **Option-Adjusted Basis** — combined equity and option economics for symbols
-   that still hold long shares and have option activity affecting their basis.
+3. **Equity+Option-Adjusted Basis** — combined equity and option P/L for symbols
+   that still hold long shares, plus the basis adjusted by option history.
 
 Trade groups, event reassignment, and the former portfolio-risk dashboard are
 not part of the UI.

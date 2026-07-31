@@ -151,7 +151,7 @@
                 <th scope="col" class="num">Open value</th>
                 <th scope="col" class="num sortable" [attr.aria-sort]="ariaSort('total_pnl')">
                   <button type="button" class="sort-button" (click)="sortBy('total_pnl')"
-                    matTooltip="Net cash plus the signed value of anything still open"
+                    matTooltip="Option net cash plus the signed value of open option contracts; shares are excluded"
                     matTooltipPosition="above">
                     Current period P/L {{ sortIcon('total_pnl') }}
                   </button>

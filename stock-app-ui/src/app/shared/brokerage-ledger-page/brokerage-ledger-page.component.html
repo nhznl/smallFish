@@ -3,7 +3,7 @@
     <div>
       <p class="page-eyebrow">Brokerage ledger</p>
       <h1 class="page-title">{{ title }}</h1>
-      <p class="page-subtitle">Equity holdings, symbol-level option history, and option-adjusted basis.</p>
+      <p class="page-subtitle">Equity holdings, symbol-level option history, and combined equity-plus-option P/L.</p>
     </div>
     <div class="page-actions">
       <button type="button" class="btn btn-primary" (click)="sync()"
@@ -26,7 +26,7 @@
     <button type="button" class="tab" role="tab" [class.active]="tab === 'options'"
       [attr.aria-selected]="tab === 'options'" (click)="tab = 'options'">Options</button>
     <button type="button" class="tab" role="tab" [class.active]="tab === 'basis'"
-      [attr.aria-selected]="tab === 'basis'" (click)="tab = 'basis'">Option-Adjusted Basis</button>
+      [attr.aria-selected]="tab === 'basis'" (click)="tab = 'basis'">Equity+Option-Adjusted Basis</button>
   </div>
 
   @if (tab === 'holdings') {

@@ -43,7 +43,14 @@ export class BrokerageService {
   updateHoldingsMetadata(
     brokerageId: BrokerageId,
     symbol: string,
-    body: { category?: string; industry?: string; note?: string }
+    body: {
+      category?: string;
+      industry?: string;
+      note?: string;
+      account_id?: string;
+      cost_basis?: number | null;
+      cost_per_unit?: number | null;
+    }
   ): Observable<HoldingsMetadataResponse> {
     return this.http.patch<HoldingsMetadataResponse>(
       `${this.base(brokerageId)}/holdings/${encodeSymbolPath(symbol)}/metadata`,
@@ -95,8 +102,14 @@ export class BrokerageService {
     });
   }
 
-  getSymbol(brokerageId: BrokerageId, symbol: string): Observable<SymbolLedgerDetailResponse> {
-    return this.http.get<SymbolLedgerDetailResponse>(this.symbolUrl(brokerageId, symbol));
+  getSymbol(
+    brokerageId: BrokerageId,
+    symbol: string,
+    exposure?: 'options' | 'all'
+  ): Observable<SymbolLedgerDetailResponse> {
+    return this.http.get<SymbolLedgerDetailResponse>(this.symbolUrl(brokerageId, symbol), {
+      params: this.params({ exposure }),
+    });
   }
 
   updateSymbolNotes(

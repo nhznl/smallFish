@@ -288,6 +288,34 @@ def test_an_open_position_makes_the_symbol_active(adapter_env, brokerage_id):
 
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_options_scope_excludes_equity_components_and_pnl(adapter_env,
+                                                          brokerage_id):
+    """The Options tab is option accounting, not a combined portfolio view."""
+    write_covered_put(brokerage_id)
+
+    listed = _symbols(brokerage_id, state="active", exposure="options")
+    summary = listed["items"][0]
+    assert summary["exposure"] == "OPTIONS"
+    assert summary["current_period"]["net_cash_flow"] == pytest.approx(600)
+    assert summary["current_period"]["open_market_value"] == pytest.approx(-75)
+    assert summary["current_period"]["total_pnl"] == pytest.approx(525)
+    assert summary["lifetime_pnl"] == pytest.approx(525)
+    assert listed["summary"]["lifetime_pnl"] == pytest.approx(525)
+
+    detail = _symbol(brokerage_id, exposure="options")
+    assert {row["instrument"] for row in detail["components"]} == {"OPTION"}
+    assert detail["current_period"]["total_pnl"] == pytest.approx(525)
+
+    # The additive scope does not change the combined-ledger contract for
+    # callers that do not request the Options projection.
+    combined = _symbol(brokerage_id)
+    assert {row["instrument"] for row in combined["components"]} == {
+        "EQUITY", "OPTION",
+    }
+    assert combined["current_period"]["total_pnl"] == pytest.approx(1525)
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
 def test_unprovable_flatness_stays_active_and_says_why(adapter_env, brokerage_id):
     """The delayed-close window: the position left the feed but its closing
     event has not posted. Presenting this as a completed archive is exactly the

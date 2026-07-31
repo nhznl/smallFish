@@ -54,6 +54,8 @@ function holding(overrides: Partial<HoldingItem> = {}): HoldingItem {
     metadata_updated_at: '2026-07-28T00:00:00Z',
     cost_basis: 1000,
     cost_per_unit: 100,
+    cost_basis_source: 'BROKER',
+    cost_basis_override_mode: null,
     market_value: 900,
     unrealized_pnl: -100,
     unrealized_pnl_pct: -10,
@@ -153,6 +155,7 @@ describe('BrokerageHoldingsComponent', () => {
         expect(text).toContain('Snapshot G/L %');
         expect(text).toContain('Copy Symbols');
         expect(text).toContain('G/L % as of Jul 27, 2026');
+        expect(text).toContain('Edit');
         // The label comes from the response, never from the brokerage id.
         expect(text).not.toContain('SNAPTRADE');
 
@@ -167,7 +170,7 @@ describe('BrokerageHoldingsComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
-        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Classify DEMO');
+        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Edit DEMO');
         expect((fixture.nativeElement.querySelector('.modal-note') as HTMLTextAreaElement).value)
           .toBe(LONG_NOTE);
       });
@@ -200,6 +203,7 @@ describe('BrokerageHoldingsComponent', () => {
     const body = response(BROKERAGES[1], [holding({
       cost_basis: null, cost_per_unit: null, unrealized_pnl: null,
       unrealized_pnl_pct: null, gain_loss_snapshots: {},
+      cost_basis_source: null, cost_basis_override_mode: null,
     })]);
     body.summary.total_cost_basis = null;
     body.summary.total_unrealized_pnl = null;
@@ -214,6 +218,19 @@ describe('BrokerageHoldingsComponent', () => {
       fixture.nativeElement.querySelectorAll('tbody td.num') as NodeListOf<HTMLElement>
     ).map(cell => cell.textContent?.trim());
     expect(cells).toContain('—');
+
+    (fixture.nativeElement.querySelector('.note-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const basisInput = fixture.nativeElement.querySelector(
+      '.basis-inputs input[placeholder="Per-share cost"]'
+    ) as HTMLInputElement;
+    basisInput.value = '25';
+    basisInput.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editing?.costPerUnit).toBe(25);
+    expect(fixture.componentInstance.editing?.costBasis).toBe(250);
   });
 
   it('captures a snapshot through the common client and reloads', async () => {
@@ -259,6 +276,37 @@ describe('BrokerageHoldingsComponent', () => {
     expect(api.updateHoldingsMetadata).toHaveBeenCalledWith(
       'tastytrade', 'DEMO',
       { category: 'VALUE', industry: 'SOFTWARE', note: LONG_NOTE }
+    );
+  });
+
+  it('saves an account-specific missing cost basis from either linked input', async () => {
+    const api = stub();
+    const missing = holding({
+      cost_basis: null, cost_per_unit: null, unrealized_pnl: null,
+      unrealized_pnl_pct: null, cost_basis_source: null,
+      cost_basis_override_mode: null,
+    });
+    api.getHoldings.and.returnValue(of(response(BROKERAGES[1], [missing])));
+    api.updateHoldingsMetadata.and.returnValue(of({
+      schema_name: 'smallfish.brokerage-holdings-metadata', schema_version: 1,
+      brokerage_id: 'fidelity' as BrokerageId,
+      metadata: {
+        symbol: 'DEMO', account_id: 'acct-1', cost_per_unit_override: '25',
+        cost_basis_mode: 'PER_UNIT',
+      },
+    }));
+    const fixture = await mount(api, 'fidelity');
+
+    (fixture.nativeElement.querySelector('.note-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    fixture.componentInstance.updateCostPerUnit(25);
+    fixture.componentInstance.saveEnrichment();
+
+    expect(api.updateHoldingsMetadata).toHaveBeenCalledWith(
+      'fidelity', 'DEMO', {
+        category: 'GROWTH', industry: 'SOFTWARE', note: LONG_NOTE,
+        account_id: 'acct-1', cost_basis: null, cost_per_unit: 25,
+      }
     );
   });
 

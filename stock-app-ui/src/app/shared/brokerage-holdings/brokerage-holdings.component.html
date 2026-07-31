@@ -151,7 +151,7 @@
             @for (snapshot of snapshotDates(); track snapshot.sync_date) {
               <th class="num snapshot-col">G/L % <small>as of {{ snapshotDateLabel(snapshot.sync_date) }}</small></th>
             }
-            <th>Note</th>
+            <th>Edit</th>
           </tr></thead>
           <tbody>
             @for (row of filteredHoldings(); track row.id) {
@@ -180,7 +180,7 @@
                 }
                 <td class="note-cell">
                   <button type="button" class="note-button" (click)="openEditor(row)"
-                    [matTooltip]="row.note || 'Add note or classification'" matTooltipPosition="above">
+                    [matTooltip]="row.note || 'Edit classification, note, or missing cost basis'" matTooltipPosition="above">
                     {{ row.note || '＋ Add' }}
                   </button>
                 </td>
@@ -206,7 +206,7 @@
 </section>
 
 @if (editing) {
-  <app-modal [title]="'Classify ' + editing.symbol" width="min(420px, 92vw)"
+  <app-modal [title]="'Edit ' + editing.symbol" width="min(480px, 92vw)"
     subtitle="Saved separately from imported brokerage facts." (closed)="closeEditor()">
     <label class="modal-label">Category</label>
     <input class="modal-input" [(ngModel)]="editing.category" list="holding-category-options" placeholder="e.g. GROWTH">
@@ -221,6 +221,33 @@
     <label class="modal-label">Note</label>
     <textarea class="modal-input modal-note" rows="4" [(ngModel)]="editing.note"
       placeholder="Why you hold it, exit criteria, research links…"></textarea>
+    <div class="basis-editor">
+      <div class="basis-editor-heading">
+        <strong>Cost basis</strong>
+        @if (editing.basisMode) {
+          <button type="button" class="btn btn-sm" (click)="clearCostBasis()">Clear manual basis</button>
+        }
+      </div>
+      @if (editing.basisEditable) {
+        <p>Enter either total cost basis or cost per share. The other value is calculated from the current quantity. This manual basis is stored separately and survives brokerage sync.</p>
+        <div class="basis-inputs">
+          <label>
+            <span class="modal-label">Cost basis</span>
+            <input class="modal-input" type="number" min="0" step="0.01"
+              [ngModel]="editing.costBasis" (ngModelChange)="updateCostBasis($event)"
+              placeholder="Total invested">
+          </label>
+          <label>
+            <span class="modal-label">Cost / Share</span>
+            <input class="modal-input" type="number" min="0" step="0.0001"
+              [ngModel]="editing.costPerUnit" (ngModelChange)="updateCostPerUnit($event)"
+              placeholder="Per-share cost">
+          </label>
+        </div>
+      } @else {
+        <p>The brokerage supplied this holding's cost basis, so no manual override is used.</p>
+      }
+    </div>
     @if (editError) { <div class="banner banner-neg" role="alert">{{ editError }}</div> }
     <ng-container modalActions>
       <button type="button" class="btn" (click)="closeEditor()" [disabled]="saving">Cancel</button>

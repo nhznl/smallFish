@@ -8,14 +8,14 @@ router, projection, or component.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from . import activity_manual, registry, store, sync
 from .activity_store import ActivityValidationError
 from .contracts import BrokerageSnapshot
-from .projections import (envelope, events, holdings, option_adjusted_basis,
-                          options, symbol_ledger)
+from .projections import (components as component_projection, envelope, events,
+                          holdings, option_adjusted_basis, options, symbol_ledger)
 
 CATALOG_SCHEMA_NAME = "smallfish.brokerage-catalog"
 MAX_NOTE_LENGTH = 2000
@@ -140,8 +140,11 @@ def list_symbols(brokerage_id: str, *, state: str = "active", exposure: str = "a
 
 
 def get_symbol(brokerage_id: str, symbol: str, *,
-               account_id: str | None = None) -> dict[str, Any]:
+               account_id: str | None = None,
+               exposure: str = "all") -> dict[str, Any]:
     snapshot, ledger = _one_ledger(brokerage_id, symbol, account_id=account_id)
+    options_only = str(exposure or "all").strip().lower() == "options"
+    detail = ledger.detail(options_only=options_only)
     return {
         "schema_name": symbol_ledger.DETAIL_SCHEMA_NAME,
         "schema_version": envelope.SCHEMA_VERSION,
@@ -149,15 +152,15 @@ def get_symbol(brokerage_id: str, symbol: str, *,
         "availability": envelope.availability_block(snapshot),
         "as_of": envelope.as_of_block(snapshot),
         "coverage": envelope.coverage_block(
-            snapshot, status=ledger.pnl_completeness
+            snapshot, status=detail["pnl_completeness"]
         ),
-        "symbol": ledger.detail(),
+        "symbol": detail,
         "warnings": [
             {
                 "code": "SYMBOL_NEEDS_REVIEW", "scope": "SYMBOL",
                 "symbol": ledger.symbol, "component_id": None, "message": reason,
             }
-            for reason in ledger.warnings
+            for reason in detail["warnings"]
         ],
     }
 
@@ -382,8 +385,8 @@ def _blocker_message(code: str, symbol: str) -> str:
 
 def update_holdings_metadata(brokerage_id: str, symbol: str,
                              payload: dict[str, Any]) -> dict[str, Any]:
-    """Edit a holding's classification. Broker facts stay immutable."""
-    _facts, entry = _snapshot(brokerage_id)
+    """Edit app-owned holding metadata. Broker facts stay immutable."""
+    facts, entry = _snapshot(brokerage_id)
     normalized = str(symbol or "").strip().upper()
     if not normalized:
         raise BrokerageRequestError("INVALID_SYMBOL", "A symbol is required.", 422)
@@ -397,7 +400,73 @@ def update_holdings_metadata(brokerage_id: str, symbol: str,
                 )
             value = (value or "").strip()
             updates[field] = value if field == "note" else value.upper()
-    unknown = set(payload) - {"category", "industry", "note"}
+    basis_fields = {"cost_basis", "cost_per_unit"}
+    basis_requested = bool(set(payload) & basis_fields)
+    account_id: str | None = None
+    if basis_requested:
+        raw_account_id = payload.get("account_id")
+        if not isinstance(raw_account_id, str) or not raw_account_id.strip():
+            raise BrokerageRequestError(
+                "ACCOUNT_REQUIRED",
+                "An account is required to save a holding cost basis.", 422,
+            )
+        account_id = raw_account_id.strip()
+        component = next(
+            (
+                row for row in holdings.held_equity(facts)
+                if row.symbol == normalized and row.account_id == account_id
+            ),
+            None,
+        )
+        if component is None:
+            raise BrokerageRequestError(
+                "UNKNOWN_HOLDING", "That account does not hold this symbol.", 404
+            )
+        supplied = [
+            (field, payload[field]) for field in basis_fields
+            if field in payload and payload[field] not in (None, "")
+        ]
+        if len(supplied) > 1:
+            raise BrokerageRequestError(
+                "AMBIGUOUS_COST_BASIS",
+                "Send either total cost basis or cost per share, not both.", 422,
+            )
+        if supplied and component_projection.EQUITY_COST_BASIS not in component.missing:
+            raise BrokerageRequestError(
+                "COST_BASIS_AVAILABLE",
+                "The brokerage already supplies cost basis for this holding.", 409,
+            )
+        updates.update({
+            "cost_basis_override": "",
+            "cost_per_unit_override": "",
+            "cost_basis_mode": "",
+        })
+        if supplied:
+            field, raw_value = supplied[0]
+            if isinstance(raw_value, bool):
+                raise BrokerageRequestError(
+                    "INVALID_COST_BASIS", "Cost basis must be zero or greater.", 422
+                )
+            try:
+                value = Decimal(str(raw_value))
+            except (InvalidOperation, ValueError) as exc:
+                raise BrokerageRequestError(
+                    "INVALID_COST_BASIS", "Cost basis must be zero or greater.", 422
+                ) from exc
+            if not value.is_finite() or value < 0:
+                raise BrokerageRequestError(
+                    "INVALID_COST_BASIS", "Cost basis must be zero or greater.", 422
+                )
+            serialized = format(value.normalize(), "f") if value else "0"
+            if field == "cost_basis":
+                updates["cost_basis_override"] = serialized
+                updates["cost_basis_mode"] = "TOTAL"
+            else:
+                updates["cost_per_unit_override"] = serialized
+                updates["cost_basis_mode"] = "PER_UNIT"
+
+    allowed = {"category", "industry", "note", "account_id", *basis_fields}
+    unknown = set(payload) - allowed
     if unknown:
         raise BrokerageRequestError(
             "UNSUPPORTED_FIELD",
@@ -405,10 +474,12 @@ def update_holdings_metadata(brokerage_id: str, symbol: str,
         )
     if not updates:
         raise BrokerageRequestError(
-            "NOTHING_TO_UPDATE", "Send a category, industry, or note.", 422
+            "NOTHING_TO_UPDATE",
+            "Send a category, industry, note, or missing cost basis.", 422,
         )
     row = holdings.write_metadata(
-        entry.holdings_metadata_path(), normalized, updates
+        entry.holdings_metadata_path(), normalized, updates,
+        account_id=account_id,
     )
     return {
         "schema_name": "smallfish.brokerage-holdings-metadata",
@@ -421,7 +492,10 @@ def update_holdings_metadata(brokerage_id: str, symbol: str,
 def capture_gain_loss_snapshot(brokerage_id: str) -> dict[str, Any]:
     snapshot, entry = _snapshot(brokerage_id)
     try:
-        return holdings.capture_snapshot(snapshot, brokerage_id=entry.descriptor.id)
+        return holdings.capture_snapshot(
+            snapshot, brokerage_id=entry.descriptor.id,
+            metadata_path=entry.holdings_metadata_path(),
+        )
     except holdings.SnapshotUnavailable as exc:
         raise BrokerageRequestError(exc.code, str(exc), 409) from exc
 
