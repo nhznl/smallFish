@@ -116,6 +116,17 @@ def _decimal(item: Any, default: Decimal = Decimal("0")) -> Decimal:
     return result if result.is_finite() else default
 
 
+def _optional_decimal(item: Any) -> Decimal | None:
+    """Parse a provider number without turning an absent fact into zero."""
+    if item in (None, ""):
+        return None
+    try:
+        result = Decimal(str(item))
+    except (InvalidOperation, ValueError):
+        return None
+    return result if result.is_finite() else None
+
+
 def _num(item: Decimal) -> str:
     """Serialize a Decimal without scientific notation or trailing exponent."""
     return format(item.normalize(), "f") if item else "0"
@@ -242,18 +253,22 @@ def _base_row(ctx: dict[str, str], retrieved_at: str) -> dict[str, Any]:
 
 
 def _finalize(row: dict[str, Any], quantity: Decimal, price: Decimal,
-              avg_price: Decimal, market_value: Decimal,
-              cost_basis: Decimal, open_pnl: Decimal | None) -> dict[str, Any]:
-    if open_pnl is None:
+              avg_price: Decimal | None, market_value: Decimal,
+              cost_basis: Decimal | None,
+              open_pnl: Decimal | None) -> dict[str, Any]:
+    if open_pnl is None and cost_basis is not None:
         open_pnl = market_value - cost_basis
-    pnl_pct = (open_pnl / cost_basis * Decimal("100")) if cost_basis else Decimal("0")
+    pnl_pct = (
+        open_pnl / cost_basis * Decimal("100")
+        if open_pnl is not None and cost_basis else None
+    )
     row["quantity"] = _num(quantity)
     row["price"] = _num(price)
-    row["average_purchase_price"] = _num(avg_price)
+    row["average_purchase_price"] = "" if avg_price is None else _num(avg_price)
     row["market_value"] = _num(market_value)
-    row["cost_basis"] = _num(cost_basis)
-    row["open_pnl"] = _num(open_pnl)
-    row["open_pnl_pct"] = _num(pnl_pct)
+    row["cost_basis"] = "" if cost_basis is None else _num(cost_basis)
+    row["open_pnl"] = "" if open_pnl is None else _num(open_pnl)
+    row["open_pnl_pct"] = "" if pnl_pct is None else _num(pnl_pct)
     return row
 
 
@@ -261,14 +276,14 @@ def _normalize_position(pos: Any, ctx: dict[str, str], retrieved_at: str) -> dic
     """Normalize one ``get_all_account_positions`` row.
 
     ``price`` is quoted per share, while ``cost_basis`` is per *unit* (per
-    contract for options), so the multiplier applies to price only — verified
-    against broker-reported totals.
+    contract for options), so the multiplier applies to price only. A missing
+    provider cost basis stays blank; it is not a zero-dollar investment.
     """
     instrument = value(pos, "instrument")
     kind = text(value(instrument, "kind")).lower()
     quantity = _decimal(value(pos, "units"))
     price = _decimal(value(pos, "price"))
-    unit_cost = _decimal(value(pos, "cost_basis"))
+    unit_cost = _optional_decimal(value(pos, "cost_basis"))
 
     row = _base_row(ctx, retrieved_at)
     row["symbol"] = text(value(instrument, "symbol"))
@@ -293,7 +308,7 @@ def _normalize_position(pos: Any, ctx: dict[str, str], retrieved_at: str) -> dic
     return _finalize(
         row, quantity, price, avg_price=unit_cost,
         market_value=market_value,
-        cost_basis=quantity * unit_cost,
+        cost_basis=None if unit_cost is None else quantity * unit_cost,
         open_pnl=None,
     )
 
@@ -311,6 +326,10 @@ def _normalize_account(account: Any, positions: Any, retrieved_at: str) -> list[
 # --------------------------------------------------------------------------- #
 
 def _typed_holding(row: dict[str, Any]) -> dict[str, Any]:
+    def optional_float(field: str) -> float | None:
+        value = _optional_decimal(row.get(field))
+        return None if value is None else float(value)
+
     return {
         "accountId": row.get("account_id", ""),
         "accountName": row.get("account_name", ""),
@@ -324,18 +343,20 @@ def _typed_holding(row: dict[str, Any]) -> dict[str, Any]:
         "expiry": row.get("expiry", ""),
         "quantity": float(_decimal(row.get("quantity"))),
         "price": float(_decimal(row.get("price"))),
-        "costBasis": float(_decimal(row.get("cost_basis"))),
+        "costBasis": optional_float("cost_basis"),
         "marketValue": float(_decimal(row.get("market_value"))),
-        "openPnl": float(_decimal(row.get("open_pnl"))),
-        "openPnlPct": float(_decimal(row.get("open_pnl_pct"))),
+        "openPnl": optional_float("open_pnl"),
+        "openPnlPct": optional_float("open_pnl_pct"),
     }
 
 
 def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     holdings = [_typed_holding(row) for row in rows]
     total_value = sum(_decimal(row.get("market_value")) for row in rows)
-    total_cost = sum(_decimal(row.get("cost_basis")) for row in rows)
-    total_pnl = total_value - total_cost
+    costs = [_optional_decimal(row.get("cost_basis")) for row in rows]
+    pnls = [_optional_decimal(row.get("open_pnl")) for row in rows]
+    total_cost = None if any(value is None for value in costs) else sum(costs, Decimal("0"))
+    total_pnl = None if any(value is None for value in pnls) else sum(pnls, Decimal("0"))
 
     by_account: dict[str, dict[str, Any]] = {}
     by_asset_class: dict[str, dict[str, Any]] = {}
@@ -373,11 +394,13 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "holdings": holdings,
         "totalValue": float(total_value),
-        "totalCostBasis": float(total_cost),
-        "totalOpenPnl": float(total_pnl),
+        "totalCostBasis": None if total_cost is None else float(total_cost),
+        "totalOpenPnl": None if total_pnl is None else float(total_pnl),
         "totalOpenPnlPct": float(
             total_pnl / total_cost * Decimal("100")
-        ) if total_cost else 0.0,
+        ) if total_pnl is not None and total_cost else (
+            0.0 if total_cost == 0 else None
+        ),
         "byAccount": _finalize_group(by_account),
         "byAssetClass": _finalize_group(by_asset_class),
         "retrievedAt": retrieved_at,
@@ -442,7 +465,9 @@ def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[
                 gain_loss_pct=_decimal(row.get("open_pnl_pct")),
             )
             for row in ledger_rows
-            if row.get("asset_class") != "OPTION" and text(row.get("symbol"))
+            if row.get("asset_class") != "OPTION"
+            and text(row.get("symbol"))
+            and _optional_decimal(row.get("open_pnl_pct")) is not None
         ],
         path=config.holdings_trend_csv(), now=now,
     )

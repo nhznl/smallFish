@@ -187,8 +187,8 @@ Either way, verify the link, then sync through the common API or dashboard:
 ledger from the current SnapTrade snapshot. The legacy `/retirement/holdings/*` and
 `/retirement/enrichment/{symbol}` routes are retired in favour of the common
 brokerage surface. Note: some employer-plan funds (e.g. 401(k)
-units) come back without a broker cost basis, so their open P/L equals market
-value.
+units) come back without a broker cost basis. Their cost, open P/L, and return
+stay unavailable; smallFish never treats an omitted basis as zero.
 
 The retirement UI reads `GET /api/brokerages/fidelity/holdings`, which merges the
 ledger with `data/ledger_retirement/holdings_enrichment.csv` — an editable

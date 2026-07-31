@@ -156,6 +156,44 @@ def test_sync_writes_ledger_and_summary(holdings_env):
     assert all(r["imported_at"] for r in rows)
 
 
+def test_missing_provider_cost_basis_stays_unknown(holdings_env):
+    """Employer-plan units omit basis; absence must never become zero."""
+    positions = {
+        "results": [{
+            "instrument": {
+                "kind": "other", "symbol": "PLAN", "description": "Plan unit",
+            },
+            "units": "10", "price": "25", "currency": "USD",
+        }],
+    }
+
+    summary = importer.sync_holdings(
+        provider=lambda: [(_account(), positions)]
+    )
+
+    holding = summary["holdings"][0]
+    assert holding["costBasis"] is None
+    assert holding["openPnl"] is None
+    assert holding["openPnlPct"] is None
+    assert summary["totalValue"] == pytest.approx(250)
+    assert summary["totalCostBasis"] is None
+    assert summary["totalOpenPnl"] is None
+    assert summary["totalOpenPnlPct"] is None
+
+    row = next(csv.DictReader(
+        config.snaptrade_holdings_csv().open(encoding="utf-8")
+    ))
+    assert row["average_purchase_price"] == ""
+    assert row["cost_basis"] == ""
+    assert row["open_pnl"] == ""
+    assert row["open_pnl_pct"] == ""
+
+    trend_rows = list(csv.DictReader(
+        config.holdings_trend_csv().open(encoding="utf-8")
+    ))
+    assert trend_rows == []
+
+
 def test_sync_reports_unchanged_and_removed_positions(holdings_env):
     importer.sync_holdings(provider=_provider)
     unchanged = importer.sync_holdings(provider=_provider)

@@ -130,6 +130,41 @@ def test_holdings_are_open_equity_with_editable_classifications(adapter_env,
     assert body["summary"]["total_unrealized_pnl"] == pytest.approx(1000)
 
 
+def test_fidelity_holdings_keep_missing_cost_basis_unknown(adapter_env):
+    _write_snaptrade(holdings=[{
+        "asset_class": "OTHER", "symbol": "PLAN", "quantity": "10",
+        "price": "25", "average_purchase_price": "", "cost_basis": "",
+        "market_value": "250", "open_pnl": "", "open_pnl_pct": "",
+    }])
+    options_activity._atomic_write(
+        config.symbol_ledger_gain_loss_snapshots_csv(),
+        holdings_projection.SNAPSHOT_HEADERS,
+        [{
+            "brokerage_id": "fidelity", "sync_date": "2026-07-27",
+            "retrieved_at": "2026-07-27T20:00:00Z",
+            "captured_at": "2026-07-27T20:05:00Z",
+            "account_id": "acct-1", "account": "BrokerageLink",
+            "symbol": "PLAN", "gain_loss_pct": "0",
+        }],
+    )
+
+    body = _get("fidelity", "holdings")
+    holding = body["items"][0]
+    assert holding["cost_basis"] is None
+    assert holding["cost_per_unit"] is None
+    assert holding["unrealized_pnl"] is None
+    assert holding["unrealized_pnl_pct"] is None
+    assert holding["gain_loss_snapshots"] == {}
+    assert holding["pnl_completeness"] == "UNAVAILABLE"
+    assert body["summary"]["total_cost_basis"] is None
+    assert body["summary"]["total_unrealized_pnl"] is None
+    assert body["summary"]["total_unrealized_pnl_pct"] is None
+    assert component_projection.EQUITY_COST_BASIS in holding["missing"]
+    assert component_projection.EQUITY_COST_BASIS in {
+        warning["code"] for warning in body["warnings"]
+    }
+
+
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
 def test_holdings_merge_each_brokerages_own_metadata_store(adapter_env, brokerage_id):
     """Classifications are per-brokerage and never leak between them."""

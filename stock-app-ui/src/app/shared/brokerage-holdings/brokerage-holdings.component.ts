@@ -121,6 +121,10 @@ export class BrokerageHoldingsComponent implements OnChanges {
     return this.items.filter(row => row.trend.alert).length;
   }
 
+  missingCostBasisCount(): number {
+    return this.items.filter(row => row.cost_basis == null).length;
+  }
+
   /** The retained capture dates, one comparison column each. */
   snapshotDates(): { sync_date: string }[] {
     return this.data?.summary.gain_loss_snapshots ?? [];

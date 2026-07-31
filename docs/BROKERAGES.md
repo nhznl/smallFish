@@ -183,6 +183,12 @@ Trading (`/options`) and Retirement (`/retirement`) share one three-tab shell:
 | **Options** | The Symbol Ledger: one durable record per underlying, derived Active/Closed lifecycle, immutable event history, and optional archived-period detail. |
 | **Option-Adjusted Basis** | Combined equity and option economics for symbols that still hold long shares and have option activity affecting their basis. |
 
+Some employer-plan holdings arrive without provider cost basis. Those rows show
+an em dash for cost and gain/loss values, and affected portfolio totals remain
+unavailable rather than silently treating the missing basis as zero. Captured
+gain/loss comparisons are also withheld for those rows because their percentage
+cannot be established without basis.
+
 Trade groups and the former portfolio-risk dashboard are retired. Sync
 materializes provider artifacts (positions, activity, marks, Greeks, beta).
 Symbol Ledger and related projections read positions and activity for P/L and

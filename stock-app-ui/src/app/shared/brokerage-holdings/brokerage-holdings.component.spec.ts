@@ -197,12 +197,19 @@ describe('BrokerageHoldingsComponent', () => {
 
   it('renders a missing value as an em dash rather than zero', async () => {
     const api = stub();
-    api.getHoldings.and.returnValue(of(response(BROKERAGES[0], [holding({
-      mark_per_unit: null, market_value: null, unrealized_pnl: null,
-      unrealized_pnl_pct: null, pct_of_total: null,
-    })])));
-    const fixture = await mount(api, 'tastytrade');
+    const body = response(BROKERAGES[1], [holding({
+      cost_basis: null, cost_per_unit: null, unrealized_pnl: null,
+      unrealized_pnl_pct: null, gain_loss_snapshots: {},
+    })]);
+    body.summary.total_cost_basis = null;
+    body.summary.total_unrealized_pnl = null;
+    body.summary.total_unrealized_pnl_pct = null;
+    api.getHoldings.and.returnValue(of(body));
+    const fixture = await mount(api, 'fidelity');
 
+    const text = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
+    expect(text).toContain('Cost basis unavailable.');
+    expect(text).toContain('did not supply cost basis for 1 holding');
     const cells = Array.from(
       fixture.nativeElement.querySelectorAll('tbody td.num') as NodeListOf<HTMLElement>
     ).map(cell => cell.textContent?.trim());

@@ -141,7 +141,7 @@ def build(snapshot: BrokerageSnapshot, *,
             ),
             "gain_loss_snapshots": captured.get(
                 (component.account_id, component.symbol), {}
-            ),
+            ) if gain_pct is not None else {},
         })
 
     total_value = _number(total_value_exact)

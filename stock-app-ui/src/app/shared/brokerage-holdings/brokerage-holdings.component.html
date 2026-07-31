@@ -37,6 +37,16 @@
         <span>{{ holdings.availability.reasons.join(' ') }}</span>
       </div>
     }
+    @if (missingCostBasisCount(); as missingBasis) {
+      <div class="banner banner-warn" role="status">
+        <strong>Cost basis unavailable.</strong>
+        <span>
+          The broker did not supply cost basis for {{ missingBasis }}
+          {{ missingBasis === 1 ? 'holding' : 'holdings' }}. Invested and gain/loss
+          values remain unavailable instead of being treated as zero.
+        </span>
+      </div>
+    }
 
     <div class="stat-strip holdings-stats">
       <div class="stat-card">

@@ -162,7 +162,8 @@ rollback; production sync no longer mutates them.
 Observations are timestamped, and their timestamps matter: an option component whose
 mark-observation time is unavailable is labelled *indicative* rather than
 reported as realized P/L. Missing marks fail closed instead of showing a partial
-total.
+total. Missing provider cost basis likewise remains null through the artifact,
+API, and UI; it is never converted to zero or used to manufacture gain/loss.
 
 ## Research Studies
 
