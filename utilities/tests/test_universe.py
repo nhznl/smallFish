@@ -80,6 +80,8 @@ def test_defaults_load_without_a_local_overlay():
     # universe.local.yaml, and the ETF seed drives the starter-data bootstrap.
     settings = U._load_settings()
     assert settings["etf_seed"]["SPY"]
+    for dividend_or_midcap_etf in ("NOBL", "VIG", "VO"):
+        assert dividend_or_midcap_etf in settings["etf_seed"], dividend_or_midcap_etf
     for sector_etf in ("XLF", "XLE", "XLK", "XLV", "XLI",
                        "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC"):
         assert sector_etf in settings["etf_seed"], sector_etf
