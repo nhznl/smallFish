@@ -58,6 +58,8 @@ class Component:
     net_cash_flow: Decimal | None
     mark_per_unit: Decimal | None
     mark_observed_at: str | None
+    open_price_per_unit: Decimal | None
+    multiplier: Decimal
     open_market_value: Decimal | None
     realized_pnl: Decimal | None
     total_pnl: Decimal | None
@@ -91,6 +93,8 @@ class Component:
             "net_cash_flow": _number(self.net_cash_flow),
             "mark_per_unit": _number(self.mark_per_unit),
             "mark_observed_at": self.mark_observed_at,
+            "open_price_per_unit": _number(self.open_price_per_unit),
+            "multiplier": _number(self.multiplier),
             "open_market_value": _number(self.open_market_value),
             "realized_pnl": _number(self.realized_pnl),
             "total_pnl": _number(self.total_pnl),
@@ -178,7 +182,8 @@ def _component(*, brokerage_id: str, position: PositionFact | None,
                events: list[ActivityFact], instrument: str, symbol: str,
                account_id: str, account: str, contract_key: str | None,
                option_type: str | None, strike: Decimal | None,
-               expiry: str | None, missing_mark_code: str,
+               expiry: str | None, multiplier: Decimal,
+               missing_mark_code: str,
                cost_basis_fallback: bool) -> Component:
     position_quantity = position.signed_quantity if position else ZERO
     has_position = position is not None and position_quantity != 0
@@ -258,6 +263,9 @@ def _component(*, brokerage_id: str, position: PositionFact | None,
     )
     provenance = _provenance(position=position, events=events)
     identity = contract_key or symbol
+    resolved_multiplier = multiplier if multiplier != 0 else Decimal(
+        "100" if instrument == "OPTION" else "1"
+    )
     return Component(
         id=f"{brokerage_id}:{account_id}:{instrument}:{identity}",
         account_id=account_id, account=account, instrument=instrument,
@@ -269,6 +277,10 @@ def _component(*, brokerage_id: str, position: PositionFact | None,
         mark_observed_at=(
             provenance["mark_observed_at"] or provenance["mark_retrieved_at"]
         ),
+        open_price_per_unit=(
+            position.open_price_per_unit if position else None
+        ),
+        multiplier=resolved_multiplier,
         open_market_value=market_value,
         realized_pnl=total_pnl if state == "FLAT" else None,
         total_pnl=total_pnl, pnl_completeness=completeness,
@@ -326,6 +338,14 @@ def build(snapshot: BrokerageSnapshot) -> list[Component]:
             position.symbol if position
             else next((fact.symbol for fact in events), identity)
         )
+        default_multiplier = Decimal("100" if instrument == "OPTION" else "1")
+        multiplier = (
+            position.multiplier if position is not None
+            else (
+                sample_contract.multiplier if sample_contract is not None
+                else default_multiplier
+            )
+        )
         components.append(_component(
             brokerage_id=brokerage_id, position=position, events=events,
             instrument=instrument, symbol=symbol, account_id=account_id,
@@ -334,6 +354,7 @@ def build(snapshot: BrokerageSnapshot) -> list[Component]:
             option_type=sample_contract.option_type if sample_contract else None,
             strike=sample_contract.strike if sample_contract else None,
             expiry=sample_contract.expiry if sample_contract else None,
+            multiplier=multiplier,
             missing_mark_code=(
                 CURRENT_OPTION_MARK if instrument == "OPTION" else CURRENT_EQUITY_MARK
             ),

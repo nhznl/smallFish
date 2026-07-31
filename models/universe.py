@@ -40,7 +40,9 @@ def normalize_symbol(symbol: object) -> str:
         return ""
     if not all(character.isalnum() or character == "-" for character in normalized):
         return ""
-    return normalized if len(normalized) <= 8 else ""
+    # 12 covers futures roots like ESU26-CME (from ESU26.CME); equity tickers
+    # stay well under this.
+    return normalized if len(normalized) <= 12 else ""
 
 
 def parse_bool(value: object) -> bool:

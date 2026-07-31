@@ -150,6 +150,7 @@ manual_pins:
   BHP:  {type: STOCK, notes: "BHP Group ADR (ASX-listed, not a US index)"}
   CRSP: {type: STOCK, notes: "CRISPR Therapeutics (Russell 2000, not R1000)"}
   DCO:  {type: STOCK, notes: "Ducommun, aerospace & defense (outside configured index universe)"}
+  "ESU26.CME": {type: STOCK, notes: "CME E-mini S&P 500 Sep 2026 (/ESU6 underlier; Yahoo ESU26.CME)"}
   JD:   {type: STOCK, notes: "JD.com ADR (China-domiciled, not a US index)"}
   JOBY: {type: STOCK, notes: "Joby Aviation (Russell 2000, not R1000)"}
   KE:   {type: STOCK, notes: "Kimball Electronics, EMS manufacturing (outside configured index universe)"}
@@ -161,6 +162,7 @@ manual_pins:
   RGTI: {type: STOCK, notes: "Rigetti Computing (Russell 2000, not R1000)"}
   RR:   {type: STOCK, notes: "Richtech Robotics (micro-cap, not R1000)"}
   SHLS: {type: STOCK, notes: "Shoals Technologies (outside configured index universe)"}
+  SPX:  {type: STOCK, notes: "S&P 500 cash index (Yahoo ^SPX; options underlier)"}
   SSII: {type: STOCK, notes: "SS Innovations Intl (OTC; self-retires if no data)"}
   SYPR: {type: STOCK, notes: "Sypris Solutions, auto parts & electronics (micro-cap, outside configured index universe)"}
   TPCS: {type: STOCK, notes: "TechPrecision, metal fabrication (micro-cap, outside configured index universe)"}

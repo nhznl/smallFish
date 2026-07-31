@@ -358,9 +358,14 @@ def repairable_symbols_from_dry_run(audit_log: Path) -> set[str]:
 
 def make_yfinance_fetcher(pause_seconds: float):
     import yfinance as yf
+    # Keep in sync with utilities.scraper.YAHOO_SYMBOL_ALIASES.
+    aliases = {
+        "SPX": "^SPX",
+        "ESU26-CME": "ESU26.CME",
+    }
 
     def fetch(symbol: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
-        ticker = yf.Ticker(symbol)
+        ticker = yf.Ticker(aliases.get(symbol, symbol))
         # auto_adjust pinned explicitly -- the whole point of this audit is
         # a single consistent adjustment vintage (see module docstring).
         df = ticker.history(start=start.strftime("%Y-%m-%d"),

@@ -10,7 +10,8 @@ def test_normalize_symbol():
     assert u.normalize_symbol("  aapl ") == "AAPL"
     assert u.normalize_symbol("-") == ""
     assert u.normalize_symbol("foo bar") == ""
-    assert u.normalize_symbol("TOOLONGSYM") == ""
+    assert u.normalize_symbol("ESU26.CME") == "ESU26-CME"
+    assert u.normalize_symbol("TOOLONGSYMBOL") == ""
 
 
 def test_load_registry(fixtures_dir):

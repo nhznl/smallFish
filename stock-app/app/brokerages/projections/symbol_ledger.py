@@ -28,6 +28,7 @@ from ..contracts import (UNCONFIRMED_PROVIDER_LIFECYCLE, ActivityFact,
 from ..store import ArchiveBoundary, event_set_hash, period_version
 from . import components as component_projection
 from . import envelope
+from . import open_contract_risk
 from .components import Component, resolve_position_deltas
 from .numbers import number as _number
 
@@ -216,6 +217,13 @@ def _exposure(components: list[Component]) -> str:
     return "EQUITY_AND_OPTIONS"
 
 
+def _has_open_options(components: list[Component]) -> bool:
+    return any(
+        component.instrument == "OPTION" and component.state == "OPEN"
+        for component in components
+    )
+
+
 # -------------------------------------------------------------- archives ---
 
 def verify_archive(boundary: ArchiveBoundary, components: list[Component],
@@ -347,6 +355,9 @@ class SymbolLedger:
         return blockers
 
     def summary(self) -> dict[str, Any]:
+        risk = open_contract_risk.build_open_contract_risk(
+            self.components, symbol=self.symbol,
+        )
         return {
             "symbol": self.symbol,
             "state": self.state,
@@ -360,6 +371,7 @@ class SymbolLedger:
             "lifetime_pnl": self.lifetime_pnl,
             "notes": self.notes,
             "warnings": list(self.warnings),
+            **risk,
         }
 
     def detail(self) -> dict[str, Any]:
@@ -417,10 +429,23 @@ def list_response(snapshot: BrokerageSnapshot, ledgers: list[SymbolLedger], *,
         ledger for ledger in eligible
         if wanted == "all" or ledger.state == wanted.upper()
     ]
+    # Options Active is about open contracts. Shares still held after every
+    # option has closed must not keep the symbol on that tab.
+    if wanted == "active" and wanted_exposure == "options":
+        selected = [
+            ledger for ledger in selected if _has_open_options(ledger.components)
+        ]
     lifetime = [ledger.lifetime_pnl for ledger in selected]
+    if wanted_exposure == "options":
+        active_count = sum(
+            1 for row in eligible
+            if row.state == "ACTIVE" and _has_open_options(row.components)
+        )
+    else:
+        active_count = sum(1 for row in eligible if row.state == "ACTIVE")
     summary = {
         "symbol_count": len(selected),
-        "active_count": sum(1 for row in eligible if row.state == "ACTIVE"),
+        "active_count": active_count,
         "closed_count": sum(1 for row in eligible if row.state == "CLOSED"),
         "needs_review_count": sum(1 for row in eligible if row.warnings),
         "lifetime_pnl": (

@@ -553,6 +553,13 @@ def _status_message(r: ScrapeResult) -> str:
 
 # ------------------------------------------------------------------ yfinance
 
+# Cache / universe symbols that Yahoo serves under a different ticker.
+YAHOO_SYMBOL_ALIASES = {
+    "SPX": "^SPX",
+    "ESU26-CME": "ESU26.CME",
+}
+
+
 def make_yfinance_fetcher(delay: float):
     """Builds the real fetch(symbol, start, end) -> FETCH_COLUMNS frame. Pins
     auto_adjust=True (one consistent adjustment vintage), sleeps `delay` seconds
@@ -563,7 +570,8 @@ def make_yfinance_fetcher(delay: float):
     import yfinance as yf
 
     def fetch(symbol: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
-        ticker = yf.Ticker(symbol)
+        yahoo_symbol = YAHOO_SYMBOL_ALIASES.get(symbol, symbol)
+        ticker = yf.Ticker(yahoo_symbol)
         df = ticker.history(start=start.strftime("%Y-%m-%d"),
                             end=(end + timedelta(days=1)).strftime("%Y-%m-%d"),
                             auto_adjust=True)
@@ -646,7 +654,13 @@ def run_from_args(strategy: dict, args: argparse.Namespace) -> ScrapeRun:
 
     # Build the symbol list per mode.
     if args.symbols:
-        symbols = [s.upper() for s in args.symbols]
+        from models.universe import normalize_symbol
+        symbols = []
+        for raw in args.symbols:
+            sym = normalize_symbol(raw)
+            if not sym:
+                raise SystemExit(f"Invalid symbol for scrape: {raw!r}")
+            symbols.append(sym)
     elif args.mode == "retry":
         error_file = logs_dir / "errorStocks.txt"
         if not error_file.exists():
