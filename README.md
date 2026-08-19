@@ -13,6 +13,8 @@ screening strategies, and — optionally — tracking your own brokerage positio
 **Status:** works, actively used, single-user. There is no authentication layer;
 run it on your own machine. See [`docs/SUPPORT_MATRIX.md`](docs/SUPPORT_MATRIX.md).
 
+[▶ Watch the smallFish product overview (6 minutes)](docs/media/smallfish-product-overview.mp4)
+
 ![The Momentum Scanner ranking starter-data candidates by setup score](docs/screenshots/momentum-scanner.png)
 ![Momentum details](docs/screenshots/momentum-scanner-inspect.png)
 
