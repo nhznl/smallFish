@@ -14,6 +14,7 @@ screening strategies, and — optionally — tracking your own brokerage positio
 run it on your own machine. See [`docs/SUPPORT_MATRIX.md`](docs/SUPPORT_MATRIX.md).
 
 ![The Momentum Scanner ranking starter-data candidates by setup score](docs/screenshots/momentum-scanner.png)
+![Momentum details](docs/screenshots/momentum-scanner-inspect.png)
 
 ## What it does
 
