@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -84,6 +85,27 @@ def test_study_scan_snapshot_is_unavailable_until_a_successful_scan(tmp_path, mo
     _studies_dir(tmp_path, monkeypatch)
     assert client.get("/api/studies/pre-earnings-momentum/scan").status_code == 503
     assert client.get("/api/studies/sector-relative-leadership/scan").status_code == 409
+
+
+def test_scan_snapshot_preserves_an_empty_earnings_window_for_the_ui(tmp_path, monkeypatch):
+    studies_dir = _studies_dir(tmp_path, monkeypatch)
+    monkeypatch.setenv("SFP_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(studies.studies_read.cache, "stocks", lambda: [])
+    monkeypatch.setattr(studies.studies_read, "market_today", lambda: date(2026, 8, 20))
+    scan_dir = tmp_path / "scans/pre_earnings_momentum"
+    scan_dir.mkdir(parents=True)
+    (scan_dir / "2026-08-20.json").write_text(json.dumps({
+        "event_window_start": "2026-09-03",
+        "event_window_end": "2026-09-24",
+        "events_in_window": 0,
+    }), encoding="utf-8")
+
+    snapshot = studies.studies_read.materialize_scan_snapshot("pre-earnings-momentum")
+
+    assert snapshot["eventWindow"] == {
+        "start": "2026-09-03", "end": "2026-09-24", "eventCount": 0}
+    assert json.loads((studies_dir / "pre-earnings-momentum/scans/latest.json").read_text(
+        encoding="utf-8"))["eventWindow"] == snapshot["eventWindow"]
 
 
 def test_study_scan_uses_the_allowlisted_dispatch_and_materializes_snapshot(tmp_path, monkeypatch):

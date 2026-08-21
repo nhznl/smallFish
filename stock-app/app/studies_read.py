@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from models.study import StudyValidationError, validate_catalog, validate_study_record
 
 from . import config
+from .events_read import market_today
 from .cache import cache
 from .path_security import UnsafePathError, contained_path
 from .serializers import strategy_stock_dict
@@ -134,6 +135,28 @@ def get_scan_snapshot(study_id: str) -> dict[str, Any]:
     return _read_json(_catalog_root() / study_id / "scans/latest.json", f"scan snapshot for {study_id!r}")
 
 
+def _scan_event_window(as_of: date) -> dict[str, Any] | None:
+    """Read optional selection-window diagnostics written by the scan runtime.
+
+    The backend remains an artifact consumer: the scan owns its rules and
+    writes this small summary beside its report. Older snapshots simply lack
+    this context and retain the generic empty-state message.
+    """
+    summary_path = (config.data_dir() / "scans" / "pre_earnings_momentum"
+                    / f"{as_of.isoformat()}.json")
+    try:
+        summary = _read_json(summary_path, "current scan summary")
+        start = summary["event_window_start"]
+        end = summary["event_window_end"]
+        count = summary["events_in_window"]
+    except (KeyError, StudyArtifactError):
+        return None
+    if (not isinstance(start, str) or not isinstance(end, str)
+            or not isinstance(count, int) or count < 0):
+        return None
+    return {"start": start, "end": end, "eventCount": count}
+
+
 def materialize_scan_snapshot(study_id: str) -> dict[str, Any]:
     """Archive the current allowlisted pre-earnings scan after it succeeds."""
     if study_id != "pre-earnings-momentum":
@@ -141,5 +164,8 @@ def materialize_scan_snapshot(study_id: str) -> dict[str, Any]:
     rows = [strategy_stock_dict(stock) for stock in cache.stocks() if stock.strategy_report is not None]
     rows.sort(key=lambda row: row["strategyReport"]["scoreTotal"], reverse=True)
     snapshot = {"schemaName": "pre-earnings-candidates-v1", "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"), "candidates": rows}
+    event_window = _scan_event_window(market_today())
+    if event_window is not None:
+        snapshot["eventWindow"] = event_window
     _atomic_json_write(_catalog_root() / study_id / "scans/latest.json", snapshot)
     return snapshot

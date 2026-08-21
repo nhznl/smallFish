@@ -162,6 +162,13 @@ def run_scan(root: Path, strategy: dict, as_of: str, lookback_days: int = 90) ->
     events = pd.read_csv(
         _strategy_data_root(root, strategy) / "events.csv",
         parse_dates=["event_date"], keep_default_na=False)
+    min_weeks = int(strategy.get("event_min_weeks", 0))
+    max_weeks = int(strategy.get("event_max_weeks", 8))
+    event_window_start = as_of_ts + pd.Timedelta(weeks=min_weeks)
+    event_window_end = as_of_ts + pd.Timedelta(weeks=max_weeks)
+    events_in_window = int(len(events[
+        events["event_date"].between(event_window_start, event_window_end)
+    ]))
     events, consistency_fields = _apply_date_consistency(
         events, strategy, as_of_ts, _strategy_data_root(root, strategy))
 
@@ -190,6 +197,9 @@ def run_scan(root: Path, strategy: dict, as_of: str, lookback_days: int = 90) ->
         return ScanResult(
             report=pd.DataFrame(),
             snapshot={"as_of": as_of, "candidates": 0,
+                      "event_window_start": event_window_start.strftime("%Y-%m-%d"),
+                      "event_window_end": event_window_end.strftime("%Y-%m-%d"),
+                      "events_in_window": events_in_window,
                       "price_contract_quarantined": len(quarantined),
                       "price_contract_quarantined_symbols": sorted(quarantined),
                       "price_contract_quarantine_issues": quarantined},
@@ -241,6 +251,9 @@ def run_scan(root: Path, strategy: dict, as_of: str, lookback_days: int = 90) ->
 
     snapshot = {
         "as_of": as_of,
+        "event_window_start": event_window_start.strftime("%Y-%m-%d"),
+        "event_window_end": event_window_end.strftime("%Y-%m-%d"),
+        "events_in_window": events_in_window,
         **consistency_fields,
         "candidates": int(len(report)),
         "stale_excluded": int(len(stale_excluded_symbols)),

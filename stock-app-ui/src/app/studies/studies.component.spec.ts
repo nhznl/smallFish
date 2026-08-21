@@ -177,6 +177,64 @@ describe('StudiesComponent', () => {
     expect(text()).not.toContain('demo-study-v1 thesis');
   });
 
+  it('explains an empty scan caused by no earnings events in its selection window', () => {
+    studiesService.getStudy.and.returnValue(of(study('demo-study', {
+      variations: [variation('demo-study-v1', {
+        scan: {
+          executionSupported: true,
+          scanType: 'pre-earnings-current-candidates',
+          resultSchema: 'pre-earnings-candidates-v1',
+          eligibilityExplanation: 'Applies current rules.',
+          warning: 'Study warning.',
+          latestSnapshot: null,
+        },
+      })],
+    })));
+    studiesService.getScan.and.returnValue(of({
+      schemaName: 'pre-earnings-candidates-v1',
+      generatedAt: '2026-08-20T00:00:00Z',
+      candidates: [],
+      eventWindow: { start: '2026-09-03', end: '2026-09-24', eventCount: 0 },
+    }));
+
+    mount();
+
+    expect(text()).toContain('There are no upcoming earnings events from Sep 3, 2026 through Sep 24, 2026');
+    expect(text()).toContain('so there are no candidate stocks');
+    expect(text()).not.toContain('Run the scan to produce the latest candidate snapshot.');
+  });
+
+  it('hides a prior empty result while a new scan is in progress', () => {
+    const scanRun$ = new Subject<{ status: 'ok' }>();
+    studiesService.getStudy.and.returnValue(of(study('demo-study', {
+      variations: [variation('demo-study-v1', {
+        scan: {
+          executionSupported: true,
+          scanType: 'pre-earnings-current-candidates',
+          resultSchema: 'pre-earnings-candidates-v1',
+          eligibilityExplanation: 'Applies current rules.',
+          warning: 'Study warning.',
+          latestSnapshot: null,
+        },
+      })],
+    })));
+    studiesService.getScan.and.returnValue(of({
+      schemaName: 'pre-earnings-candidates-v1',
+      generatedAt: '2026-08-20T00:00:00Z',
+      candidates: [],
+      eventWindow: { start: '2026-09-03', end: '2026-09-24', eventCount: 0 },
+    }));
+    studiesService.runScan.and.returnValue(scanRun$.asObservable());
+
+    mount();
+    fixture.componentInstance.runScan();
+    fixture.detectChanges();
+
+    expect(text()).toContain('Scanning current candidates…');
+    expect(text()).not.toContain('There are no upcoming earnings events from');
+    expect(text()).not.toContain('Snapshot:');
+  });
+
   it('ignores a slower study response from a previous route param', () => {
     const demoStudy$ = new Subject<StudyDetail>();
     const otherStudy$ = new Subject<StudyDetail>();

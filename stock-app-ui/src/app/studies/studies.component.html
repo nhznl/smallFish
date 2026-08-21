@@ -49,14 +49,18 @@
         <div class="banner banner-warn study-warning" role="note">{{ variation.scan?.warning }}</div>
       }
       @if (variation.scan?.executionSupported) {
-        <section class="panel scan-panel"><div class="panel-heading"><div><h2>Current candidate scan</h2>@if (scanGeneratedAt) {
+        <section class="panel scan-panel"><div class="panel-heading"><div><h2>Current candidate scan</h2>@if (scanGeneratedAt && !scanRunning) {
         <small>Snapshot: {{ scanGeneratedAt | date:'medium' }}</small>
       }</div><button type="button" class="btn btn-primary" [disabled]="scanRunning" [attr.aria-busy]="scanRunning" (click)="runScan()">@if (scanRunning) {
       <span class="btn-spinner"></span>
       }{{ scanRunning ? 'Running scan' : 'Run scan' }}</button></div><div class="panel-body"><p>Current candidates apply the studied selection rules. They do not change this variation’s historical evidence.</p>@if (scanMessage) {
       <p class="scan-message" [class.banner]="scanStatus === 'error'" [class.banner-neg]="scanStatus === 'error'" [attr.role]="scanStatus === 'error' ? 'alert' : 'status'">{{ scanMessage }}</p>
-      }@if (scanCandidates.length) {
+      }@if (scanRunning) {
+      <p class="scan-empty" role="status">Scanning current candidates…</p>
+    } @else if (scanCandidates.length) {
       <app-strategy-stocks [candidates]="scanCandidates"></app-strategy-stocks>
+    } @else if (scanEventWindow?.eventCount === 0) {
+      <p class="scan-empty">There are no upcoming earnings events from {{ scanEventWindow?.start | date:'mediumDate' }} through {{ scanEventWindow?.end | date:'mediumDate' }}, the required two-to-five-week scan window, so there are no candidate stocks.</p>
     } @else {
       <p class="scan-empty">Run the scan to produce the latest candidate snapshot.</p>
     }</div></section>

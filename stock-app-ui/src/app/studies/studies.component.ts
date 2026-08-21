@@ -36,6 +36,7 @@ export class StudiesComponent implements OnInit {
   scanMessage = '';
   scanCandidates: StrategyStock[] = [];
   scanGeneratedAt = '';
+  scanEventWindow: { start: string; end: string; eventCount: number } | null = null;
 
   ngOnInit(): void {
     // Catalog once, then switchMap on studyId so a slower getStudy/getScan for A
@@ -77,6 +78,7 @@ export class StudiesComponent implements OnInit {
     this.error = '';
     this.scanCandidates = [];
     this.scanGeneratedAt = '';
+    this.scanEventWindow = null;
     this.scanStatus = 'idle';
     this.scanMessage = '';
 
@@ -108,10 +110,12 @@ export class StudiesComponent implements OnInit {
       tap(snapshot => {
         this.scanCandidates = snapshot.candidates;
         this.scanGeneratedAt = snapshot.generatedAt;
+        this.scanEventWindow = snapshot.eventWindow ?? null;
       }),
       catchError(() => {
         this.scanCandidates = [];
         this.scanGeneratedAt = '';
+        this.scanEventWindow = null;
         return EMPTY;
       }),
     );
@@ -135,10 +139,9 @@ export class StudiesComponent implements OnInit {
     this.studiesService.runScan(studyId).subscribe({
       next: result => {
         if (this.study?.id !== studyId) return;
-        this.scanRunning = false;
         this.scanStatus = result.status === 'ok' ? 'ok' : 'error';
         this.scanMessage = result.status === 'ok'
-          ? 'Scan complete with a current upcoming-earnings calendar.'
+          ? 'Loading current candidate results…'
           : `Scan not run: ${result.message || result.output || 'see server logs'}`;
         if (result.status === 'ok') {
           this.studiesService.getScan(studyId).subscribe({
@@ -146,13 +149,20 @@ export class StudiesComponent implements OnInit {
               if (this.study?.id !== studyId) return;
               this.scanCandidates = snapshot.candidates;
               this.scanGeneratedAt = snapshot.generatedAt;
+              this.scanEventWindow = snapshot.eventWindow ?? null;
+              this.scanRunning = false;
+              this.scanMessage = 'Scan complete with a current upcoming-earnings calendar.';
             },
             error: () => {
               if (this.study?.id !== studyId) return;
               this.scanCandidates = [];
               this.scanGeneratedAt = '';
+              this.scanEventWindow = null;
+              this.scanRunning = false;
             },
           });
+        } else {
+          this.scanRunning = false;
         }
       },
       error: () => {

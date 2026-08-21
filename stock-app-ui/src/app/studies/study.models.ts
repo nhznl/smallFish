@@ -107,4 +107,9 @@ export interface StudyScanSnapshot {
   schemaName: 'pre-earnings-candidates-v1';
   generatedAt: string;
   candidates: StrategyStock[];
+  eventWindow?: {
+    start: string;
+    end: string;
+    eventCount: number;
+  };
 }

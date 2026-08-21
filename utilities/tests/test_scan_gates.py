@@ -121,6 +121,25 @@ def test_symbol_within_tolerance_is_kept(monkeypatch):
         assert result.snapshot["stale_excluded"] == 0
 
 
+def test_scan_snapshot_records_the_earnings_selection_window(monkeypatch):
+    with tempfile.TemporaryDirectory() as t:
+        tmp = Path(t)
+        strategy = _setup(tmp, ["FRESHA"])
+        strategy["event_min_weeks"] = 2
+        strategy["event_max_weeks"] = 5
+        (tmp / "data" / "events.csv").write_text(
+            "ticker,event_date,event_type\nFRESHA,2026-08-28,earnings\n",
+            encoding="utf-8")
+        monkeypatch.setattr(scan, "_scan_universe_symbols", lambda *a, **k: ["FRESHA"])
+        monkeypatch.setattr(scan, "_load_sector_map", lambda s: {})
+
+        result = scan.run_scan(tmp, strategy, as_of=AS_OF)
+
+        assert result.snapshot["event_window_start"] == "2026-07-31"
+        assert result.snapshot["event_window_end"] == "2026-08-21"
+        assert result.snapshot["events_in_window"] == 0
+
+
 def test_unknown_regime_fails_closed(monkeypatch):
     with tempfile.TemporaryDirectory() as t:
         tmp = Path(t)
