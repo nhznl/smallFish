@@ -6,12 +6,12 @@ and a null direction. The UI renders these values as not evaluated.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from .. import config
 from ..cache import cache
-from ..readers import read_latest_wheel_report
+from ..readers import read_latest_wheel_report, read_latest_wheel_rv_detail
 
 router = APIRouter()
 
@@ -54,3 +54,15 @@ def get_wheel_candidates(horizon: int | None = None) -> JSONResponse:
     return JSONResponse(content=[
         _candidate(w, by_code, cache.stock_type(w.get("symbol"))) for w in rows
     ])
+
+
+@router.get("/wheelCandidates/{symbol}/rv-detail")
+def get_wheel_rv_detail(symbol: str) -> JSONResponse:
+    """Return the dated RV readings used by the latest Wheel RV percentile."""
+    detail = read_latest_wheel_rv_detail(config.wheel_dir(), symbol)
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail="RV-percentile detail is unavailable; run Wheel to create a current report.",
+        )
+    return JSONResponse(content=detail)

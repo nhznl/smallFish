@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import datetime as _dt
+import json
 from pathlib import Path
 
 from models.strategy_report import parse_strategy_report
@@ -362,3 +363,24 @@ def read_latest_wheel_report(wheel_dir: Path, today: str | None = None) -> list[
     if latest is None:
         return []
     return read_wheel_report_rows(latest)
+
+
+def read_latest_wheel_rv_detail(wheel_dir: Path, symbol: str,
+                                today: str | None = None) -> dict | None:
+    """Read a symbol's RV-percentile evidence from the report's sidecar.
+
+    The detail is materialized by the utilities runtime with the Wheel report;
+    the FastAPI runtime never reads price files or imports utility code.
+    """
+    latest = _latest_dated_csv(wheel_dir, today=today)
+    if latest is None:
+        return None
+    sidecar = latest.with_suffix(".rv-details.json")
+    if not sidecar.is_file():
+        return None
+    try:
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    detail = (payload.get("symbols", {}) or {}).get(symbol.strip().upper())
+    return detail if isinstance(detail, dict) else None

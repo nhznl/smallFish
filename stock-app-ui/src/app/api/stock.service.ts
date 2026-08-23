@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
 import { catchError, tap, shareReplay, finalize, map } from 'rxjs/operators';
 import { StockInfo } from '../model/stock-info';
-import { WheelCandidate } from '../model/wheel-candidate';
+import { RvPercentileDetail, WheelCandidate } from '../model/wheel-candidate';
 import { CollectionScopeRequest, OptionQuoteSnapshot } from '../model/option-quotes';
 import { SectorRotationSnapshot } from '../model/sector-rotation';
 import { MomentumStock, StockAnalysis, StockRange } from '../model/stock';
@@ -118,6 +118,17 @@ export class StockService {
       : `${this.apiBaseUrl}/wheelCandidates`;
     // Propagate transport errors so the Wheel view can distinguish failed from empty.
     return this.http.get<WheelCandidate[]>(url);
+  }
+
+  /** Exact daily RV observations behind a symbol's latest Wheel RV percentile. */
+  getWheelRvDetail(symbol: string): Observable<RvPercentileDetail> {
+    const normalizedSymbol = symbol?.trim().toUpperCase();
+    if (!normalizedSymbol) {
+      return throwError(() => new Error('Stock symbol is required'));
+    }
+    return this.http.get<RvPercentileDetail>(
+      `${this.apiBaseUrl}/wheelCandidates/${encodeURIComponent(normalizedSymbol)}/rv-detail`
+    );
   }
 
   /**

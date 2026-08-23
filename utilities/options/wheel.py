@@ -39,7 +39,7 @@ import hashlib
 import json
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from datetime import timedelta, timezone
 from pathlib import Path
@@ -186,6 +186,33 @@ def rv_percentile(rv_series: np.ndarray, lookback: int = 252,
         return None
     window = vals[-lookback:]
     return float(np.mean(window <= vals[-1]))
+
+
+def rv_percentile_detail(dates: pd.Series, rv_series: np.ndarray, *,
+                         window_sessions: int, lookback: int = 252,
+                         min_lookback: int = 60) -> dict | None:
+    """Return the exact dated RV observations used by ``rv_percentile``.
+
+    The sidecar is deliberately an artifact, rather than an API-time price
+    calculation: the UI can explain the same snapshot it is displaying without
+    making the FastAPI runtime depend on ``utilities`` or the raw price cache.
+    """
+    values = np.asarray(rv_series, dtype="float64")
+    valid = ~np.isnan(values)
+    if len(values) == 0 or not valid[-1] or int(valid.sum()) < min_lookback:
+        return None
+    dated = [
+        {"date": pd.Timestamp(date).strftime("%Y-%m-%d"), "rv": float(value)}
+        for date, value in zip(dates[valid], values[valid])
+    ][-lookback:]
+    current = dated[-1]["rv"]
+    return {
+        "rv_window_sessions": window_sessions,
+        "lookback_sessions": len(dated),
+        "current_rv": current,
+        "percentile": float(np.mean(np.asarray([item["rv"] for item in dated]) <= current)),
+        "observations": dated,
+    }
 
 
 def band_metrics(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
@@ -427,6 +454,7 @@ class WheelResult:
     exclusions: pd.DataFrame
     warnings: list[str]
     snapshot: dict
+    rv_details: dict[str, dict] = field(default_factory=dict)
 
 
 def _symbol_context(df: pd.DataFrame, wheel_cfg: dict, as_of: str,
@@ -577,6 +605,7 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
     columns = report_columns(cushions)
     rows: list[dict] = []
     exclusions: list[dict] = []
+    rv_details: dict[str, dict] = {}
 
     for symbol in sorted(symbols):
         df, price_issues = read_prices_validated(cache_root, symbol, years)
@@ -639,6 +668,17 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
         clean_closes = clean["close"].to_numpy(dtype="float64")
         clean_highs = clean["high"].to_numpy(dtype="float64")
         clean_lows = clean["low"].to_numpy(dtype="float64")
+
+        detail = rv_percentile_detail(
+            clean["date"],
+            rolling_rv_used(clean_closes, clean_highs, clean_lows, window=21),
+            window_sessions=21,
+            lookback=int(wheel_cfg.get("rv_percentile_lookback", 252)),
+            min_lookback=int(wheel_cfg.get("rv_percentile_min_lookback", 60)),
+        )
+        if detail is not None:
+            detail["price_as_of"] = ctx["price_as_of"]
+            rv_details[symbol] = detail
 
         for dte in horizons:
             n_sessions = sessions_for_dte(dte)
@@ -713,7 +753,7 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
         "underlying_max_stale_sessions": max_stale,
         "source_hashes": source_hashes,
     }
-    return WheelResult(report=report, exclusions=exclusions_df,
+    return WheelResult(report=report, exclusions=exclusions_df, rv_details=rv_details,
                        warnings=warnings, snapshot=snapshot)
 
 
@@ -749,8 +789,11 @@ def main(argv: list[str] | None = None) -> int:
     wheel_dir.mkdir(parents=True, exist_ok=True)
     exclusions_dir.mkdir(parents=True, exist_ok=True)
     report_path = wheel_dir / f"{args.as_of}.csv"
+    rv_details_path = wheel_dir / f"{args.as_of}.rv-details.json"
     exclusions_path = exclusions_dir / f"{args.as_of}.csv"
     result.report.to_csv(report_path, index=False)
+    rv_details_path.write_text(json.dumps({"symbols": result.rv_details}, separators=(",", ":")),
+                               encoding="utf-8")
     result.exclusions.to_csv(exclusions_path, index=False)
 
     # Creation-only run archive. The dated CSVs above remain compatibility views;
@@ -760,8 +803,11 @@ def main(argv: list[str] | None = None) -> int:
     run_dir = wheel_dir / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     archived_report = run_dir / "wheel.csv"
+    archived_rv_details = run_dir / "rv-details.json"
     archived_exclusions = run_dir / "exclusions.csv"
     result.report.to_csv(archived_report, index=False)
+    archived_rv_details.write_text(json.dumps({"symbols": result.rv_details}, separators=(",", ":")),
+                                  encoding="utf-8")
     result.exclusions.to_csv(archived_exclusions, index=False)
     manifest_path = write_manifest(
         archived_report,
@@ -776,10 +822,12 @@ def main(argv: list[str] | None = None) -> int:
             "snapshot": result.snapshot,
             "warnings": result.warnings,
             "exclusions_sha256": sha256_file(archived_exclusions),
+            "rv_details_sha256": sha256_file(archived_rv_details),
             "compatibility_report": str(report_path),
         },
     )
     print(f"Wrote {result.snapshot['rows']} rows to {report_path}")
+    print(f"Wrote RV-percentile details to {rv_details_path}")
     print(f"Wrote {result.snapshot['exclusions']} exclusions to {exclusions_path}")
     print(f"Archived immutable wheel run {run_id} with manifest {manifest_path}")
     return 0

@@ -186,3 +186,4 @@ manual_pins:
   TPCS: {type: STOCK, notes: "TechPrecision, metal fabrication (micro-cap, outside configured index universe)"}
   XMTR: {type: STOCK, notes: "Xometry, on-demand manufacturing marketplace (outside configured index universe)"}
   ISSC: {type: STOCK, notes: "INNOVATIVE SOLTNS & SUPP INC"}
+  KSPI: {type: STOCK, notes: "Kaspi"}

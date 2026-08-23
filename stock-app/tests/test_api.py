@@ -176,6 +176,28 @@ def test_wheel_candidates_horizon_filter(env_fixtures):
     assert data[0]["wheel"]["horizonDte"] == 37
 
 
+def test_wheel_rv_detail_returns_the_percentile_evidence(env_fixtures):
+    r = client.get("/wheelCandidates/a/rv-detail")
+    assert r.status_code == 200
+    assert r.json() == {
+        "rv_window_sessions": 21,
+        "lookback_sessions": 3,
+        "current_rv": 0.12,
+        "percentile": 2 / 3,
+        "price_as_of": "2026-07-16",
+        "observations": [
+            {"date": "2026-07-14", "rv": 0.08},
+            {"date": "2026-07-15", "rv": 0.12},
+            {"date": "2026-07-16", "rv": 0.12},
+        ],
+    }
+
+
+def test_wheel_rv_detail_requires_a_current_sidecar(env_fixtures):
+    r = client.get("/wheelCandidates/bbb/rv-detail")
+    assert r.status_code == 404
+
+
 def test_retired_options_routes_are_not_registered(env_fixtures, tmp_path, monkeypatch):
     """The grouped Options/Trading and Retirement projections, and every
     trade-group route including their former 410 tombstones, are fully

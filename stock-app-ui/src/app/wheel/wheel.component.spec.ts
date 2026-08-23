@@ -56,10 +56,23 @@ describe('WheelComponent', () => {
   beforeEach(async () => {
     stockService = jasmine.createSpyObj<StockService>('StockService', [
       'getWheelCandidates',
+      'getWheelRvDetail',
       'runWheel',
       'runChains',
     ]);
     stockService.getWheelCandidates.and.returnValue(of([candidate('DEMO')]));
+    stockService.getWheelRvDetail.and.returnValue(of({
+      rv_window_sessions: 21,
+      lookback_sessions: 3,
+      current_rv: 0.12,
+      percentile: 2 / 3,
+      price_as_of: '2026-07-28',
+      observations: [
+        { date: '2026-07-24', rv: 0.08 },
+        { date: '2026-07-25', rv: 0.12 },
+        { date: '2026-07-28', rv: 0.12 },
+      ],
+    }));
     stockService.runWheel.and.returnValue(of({ status: 'ok', durationMs: 1200 }));
     stockService.runChains.and.returnValue(of({ status: 'ok', durationMs: 800 }));
 
@@ -83,6 +96,17 @@ describe('WheelComponent', () => {
     mount();
     expect(text()).toContain('No wheel candidates');
     expect(text()).not.toContain('Could not load wheel candidates');
+  });
+
+  it('opens the RV evidence drawer from the clickable percentile', () => {
+    mount();
+    (fixture.nativeElement.querySelector('.rv-detail-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(stockService.getWheelRvDetail).toHaveBeenCalledWith('DEMO');
+    expect(fixture.componentInstance.rvDetailSymbol).toBe('DEMO');
+    expect(fixture.componentInstance.rvDetail?.current_rv).toBe(0.12);
+    expect(fixture.componentInstance.rvObservationsAtOrBelowCurrent()).toBe(3);
   });
 
   it('shows a transport error instead of the empty-state when the load fails', () => {

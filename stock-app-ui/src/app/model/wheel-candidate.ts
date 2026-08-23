@@ -126,3 +126,13 @@ export interface WheelCandidate {
   trendAvailable: boolean;
   trendDirection?: string;   // BULLISH | BEARISH | SIDEWAYS | NEUTRAL, or null
 }
+
+/** The exact dated inputs used to calculate a Wheel row's RV percentile. */
+export interface RvPercentileDetail {
+  rv_window_sessions: number;
+  lookback_sessions: number;
+  current_rv: number;
+  percentile: number;
+  price_as_of: string;
+  observations: Array<{ date: string; rv: number }>;
+}

@@ -13,9 +13,10 @@ import { FormsModule } from '@angular/forms';
 import { StockService } from '../api/stock.service';
 import { SymbolFilterService } from '../services/symbol-filter.service';
 import { Subscription } from 'rxjs';
-import { WheelCandidate } from '../model/wheel-candidate';
+import { RvPercentileDetail, WheelCandidate } from '../model/wheel-candidate';
 import { OptionQuotesTabComponent } from './option-quotes-tab.component';
 import { WheelCandidatesViewModel } from './wheel-candidates.view-model';
+import { DrawerComponent } from '../shared/ui/drawer.component';
 
 @Component({
   selector: 'app-wheel',
@@ -32,7 +33,8 @@ import { WheelCandidatesViewModel } from './wheel-candidates.view-model';
     MatSortModule,
     MatTooltipModule,
     FormsModule,
-    OptionQuotesTabComponent
+    OptionQuotesTabComponent,
+    DrawerComponent,
   ],
   templateUrl: './wheel.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -59,6 +61,7 @@ export class WheelComponent implements OnInit, OnDestroy {
   private symbolFilterService = inject(SymbolFilterService);
   private filterSub?: Subscription;
   private loadSub?: Subscription;
+  private rvDetailSub?: Subscription;
 
   readonly candidatesVm = new WheelCandidatesViewModel();
 
@@ -129,6 +132,10 @@ export class WheelComponent implements OnInit, OnDestroy {
   chainsMessageAt: Date | null = null;
   activeTab: 'scan' | 'quotes' = 'scan';
   quoteArchiveRefreshToken = 0;
+  rvDetailSymbol = '';
+  rvDetail?: RvPercentileDetail;
+  rvDetailLoading = false;
+  rvDetailError = '';
 
   // Collection scoping. ON by default so the button collects what the controls
   // above it describe; turn it off to run the full configured sweep. Scope is
@@ -181,6 +188,47 @@ export class WheelComponent implements OnInit, OnDestroy {
       this.dataSource.sort = this.sort;
       this.dataSource.sortingDataAccessor = (item, property) => this.sortingAccessor(item, property);
     }
+  }
+
+  openRvDetail(candidate: WheelCandidate): void {
+    const symbol = candidate.wheel.symbol;
+    if (!symbol || candidate.wheel.rvPercentile252 == null) {
+      return;
+    }
+    this.rvDetailSub?.unsubscribe();
+    this.rvDetailSymbol = symbol;
+    this.rvDetail = undefined;
+    this.rvDetailError = '';
+    this.rvDetailLoading = true;
+    this.rvDetailSub = this.stockService.getWheelRvDetail(symbol).subscribe({
+      next: detail => {
+        this.rvDetail = detail;
+        this.rvDetailLoading = false;
+      },
+      error: () => {
+        this.rvDetailError = 'RV-percentile detail is unavailable for this report. Run Wheel to create a current report.';
+        this.rvDetailLoading = false;
+      },
+    });
+  }
+
+  closeRvDetail(): void {
+    this.rvDetailSub?.unsubscribe();
+    this.rvDetailSymbol = '';
+    this.rvDetail = undefined;
+    this.rvDetailLoading = false;
+    this.rvDetailError = '';
+  }
+
+  rvObservationsNewestFirst(): Array<{ date: string; rv: number }> {
+    return this.rvDetail ? [...this.rvDetail.observations].reverse() : [];
+  }
+
+  rvObservationsAtOrBelowCurrent(): number {
+    if (!this.rvDetail) {
+      return 0;
+    }
+    return this.rvDetail.observations.filter(item => item.rv <= this.rvDetail!.current_rv).length;
   }
 
   // ── Cushion-aware accessors (which of the 4 cushion columns to display) ──
@@ -473,5 +521,6 @@ export class WheelComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.filterSub?.unsubscribe();
     this.loadSub?.unsubscribe();
+    this.rvDetailSub?.unsubscribe();
   }
 }
