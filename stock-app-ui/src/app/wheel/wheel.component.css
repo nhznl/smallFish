@@ -278,7 +278,19 @@
   background: var(--surface-sunken);
   color: var(--text-secondary);
   font-size: var(--text-sm);
-  white-space: nowrap;
+  /* Keep the dense table readable when a column has a descriptive label. */
+  max-width: 104px;
+  line-height: 1.2;
+  white-space: normal;
+}
+
+.wheel-table th .mat-sort-header-container,
+.wheel-table th .mat-sort-header-content {
+  white-space: normal;
+}
+
+.wheel-table th .mat-sort-header-content {
+  overflow-wrap: anywhere;
 }
 
 .wheel-table th:hover {
@@ -298,6 +310,7 @@
 
 /* Grouped header band over the cushion-dependent Put/Call pairs. */
 .group-header-row th {
+  max-width: none;
   padding-top: 7px;
   padding-bottom: 7px;
   border-bottom: 1px solid var(--border);
@@ -350,15 +363,17 @@
   padding: 3px 0;
   border: 0;
   background: none;
-  color: inherit;
+  color: var(--primary);
   font: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 
-.rv-detail-button:hover .rv-value {
-  color: var(--primary);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.rv-detail-button:hover {
+  color: var(--primary-hover);
+  text-decoration-style: solid;
 }
 
 .rv-detail-button:focus-visible {

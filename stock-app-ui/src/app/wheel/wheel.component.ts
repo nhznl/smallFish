@@ -100,6 +100,7 @@ export class WheelComponent implements OnInit, OnDestroy {
     'lastClose',
     'rvPercentile252',
     'sigmaMovePct',
+    'atr14Pct',
     'putExpiryItm',
     'putTouch',
     'callExpiryItm',
@@ -494,6 +495,7 @@ export class WheelComponent implements OnInit, OnDestroy {
       case 'lastClose': return w?.lastClose ?? -Infinity;
       case 'rvPercentile252': return w?.rvPercentile252 ?? -Infinity;
       case 'sigmaMovePct': return w?.sigmaMovePct ?? -Infinity;
+      case 'atr14Pct': return w?.atr14Pct ?? -Infinity;
       case 'putExpiryItm': return this.putItm(item) ?? -Infinity;
       case 'putTouch': return this.putTouchVal(item) ?? -Infinity;
       case 'callExpiryItm': return this.callItm(item) ?? -Infinity;

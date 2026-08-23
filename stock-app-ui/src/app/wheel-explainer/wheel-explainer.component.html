@@ -94,9 +94,21 @@ a percentile, not a "vol rank".</li>
 <li><strong>1σ move</strong> = <code>spot × rv_daily × √N</code> (N = exchange sessions in the horizon,
 <code>N = round(DTE × 252/365)</code>). Labelled a <em>historical-vol, normal-model approximation</em> —
 <strong>not a 68% guarantee</strong>.</li>
-<li><strong>ATR14%</strong> is a range heuristic only — ATR is not a standard deviation, so it is never used
-as an expected move.</li>
+<li><strong>ATR14%</strong> is the latest 14-session Average True Range expressed as a percentage of the
+latest close: <code>ATR14 ÷ spot</code>. For each day, <strong>True Range</strong> is the greatest of
+<code>high − low</code>, <code>|high − previous close|</code>, and <code>|low − previous close|</code>.
+The app applies Wilder smoothing to those daily ranges, seeded with the first 14-session average. This makes
+ATR14% a recent daily range-and-gap heuristic, not a standard deviation or an expected move.</li>
 </ul>
+<p>
+  <strong>Example — $90 stock:</strong> a selected-horizon <strong>1σ move of 12%</strong> is about
+  <strong>$10.80</strong>, giving a rough terminal range of <strong>$79.20 to $100.80</strong> under the
+  historical-volatility normal-model approximation. An <strong>ATR14% of 4%</strong> is about
+  <strong>$3.60</strong>: the recent typical one-session true-range scale, including gaps. It does not mean
+  the stock is expected to move exactly $3.60 tomorrow, and it should not be multiplied into a horizon forecast.
+  The 1σ figure is horizon-scaled from realized-volatility estimates; ATR14% is a backward-looking daily
+  range heuristic.
+</p>
 </section>
 
 <section>
@@ -141,6 +153,7 @@ which is expected, not an error.</li>
     <tr><td>Last close</td><td>●</td><td>Latest close (dollars), as of <code>price_as_of</code>.</td></tr>
     <tr><td>RV %ile (rv_percentile_252)</td><td>●</td><td>21-day RV as a percentile of its trailing-year values. Select the table value to inspect the current RV and every dated RV observation used in that calculation.</td></tr>
     <tr><td>1σ move (sigma_move_pct / _dollars)</td><td>●</td><td>Expected 1σ move as % of spot (and dollars in the CSV).</td></tr>
+    <tr><td>ATR14% (atr14_pct)</td><td>●</td><td>14-session Average True Range as a % of last close; a daily range-and-gap heuristic, not an expected move.</td></tr>
     <tr><td>Put ITM / Call ITM (put/call_expiry_itm @ cushion)</td><td>●</td><td>Historical expiry-ITM (terminal-close) frequency at the selected OTM cushion. Fraction → shown %.</td></tr>
     <tr><td>Put Touch / Call Touch (put/call_touch @ cushion)</td><td>●</td><td>Historical touch frequency (min low / max high) at the selected cushion. Fraction → shown %.</td></tr>
     <tr><td>Min cushion ≤20% ITM (min_cushion_20pct_itm)</td><td>●</td><td>Smallest tested cushion whose put expiry-ITM ≤ 20%; <code>&gt;10%</code> if none. A display string — nothing is "safe".</td></tr>
@@ -152,7 +165,6 @@ which is expected, not an error.</li>
     <tr><td>Trend (trend_direction)</td><td>●</td><td>BULLISH / BEARISH / SIDEWAYS / NEUTRAL, or "—" when unavailable. Drives the hide toggle.</td></tr>
     <tr><td>5d / 31d range (high/low/width%/close-pos)</td><td></td><td>Recent price range over ~1 week and ~1.5 months, band width %, and where the close sits in the band.</td></tr>
     <tr><td>RV7 / RV21 / RV37 (cc / park / used)</td><td></td><td>Both estimators and the used max, per window (daily σ). Horizon→window mapping: 7→RV7, 14/30/37→RV21, 45→RV37.</td></tr>
-    <tr><td>ATR14% (atr14_pct)</td><td></td><td>Range heuristic only — never an expected move.</td></tr>
     <tr><td>swing_low_20 / dist_sma50_pct / bb_lower</td><td></td><td>20-day swing low, distance to SMA50, lower Bollinger — downside-structure context.</td></tr>
     <tr><td>worst / p10 min-close % (worst_min_close_pct / p10_min_close_pct)</td><td></td><td>Worst and 10th-percentile lowest close over the window vs entry — historical drawdown context.</td></tr>
     <tr><td>data_quality / quality_reasons</td><td>●</td><td>Underlying price state: OK, STALE, UNKNOWN, or INVALID, plus stable reason codes. Only OK rows are shown by default or can enter the live chain shortlist.</td></tr>

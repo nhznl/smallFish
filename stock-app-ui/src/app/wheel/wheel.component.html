@@ -165,7 +165,7 @@
           >
           <!-- Grouped header band over the cushion-dependent columns. -->
           <ng-container matColumnDef="groupLead">
-            <th mat-header-cell *matHeaderCellDef [attr.colspan]="5" class="group-blank"></th>
+            <th mat-header-cell *matHeaderCellDef [attr.colspan]="6" class="group-blank"></th>
           </ng-container>
           <ng-container matColumnDef="groupPut">
             <th mat-header-cell *matHeaderCellDef [attr.colspan]="2" class="group-band group-put">Put @ {{ cushion }}%</th>
@@ -216,6 +216,13 @@
             <td mat-cell *matCellDef="let c"
               matTooltip="1σ move — historical-vol, normal-model approximation. Not a 68% guarantee." matTooltipPosition="above">
               {{ c.wheel.sigmaMovePct != null ? ((c.wheel.sigmaMovePct * 100) | number:'1.1-1') + '%' : '—' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="atr14Pct">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>ATR14%</th>
+            <td mat-cell *matCellDef="let c"
+              matTooltip="14-session Average True Range divided by the latest close. A daily range/gap heuristic, not an expected move." matTooltipPosition="above">
+              {{ c.wheel.atr14Pct != null ? ((c.wheel.atr14Pct * 100) | number:'1.1-1') + '%' : '—' }}
             </td>
           </ng-container>
           <ng-container matColumnDef="putExpiryItm">

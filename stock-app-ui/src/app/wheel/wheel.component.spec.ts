@@ -33,6 +33,7 @@ function candidate(symbol: string): WheelCandidate {
       priceAsOf: '2026-07-28',
       lastClose: 50,
       rvPercentile252: 80,
+      atr14Pct: 0.04,
       sampleCount: 1001,
       dataQuality: 'OK',
       rvWindowSessions: 21,
@@ -107,6 +108,14 @@ describe('WheelComponent', () => {
     expect(fixture.componentInstance.rvDetailSymbol).toBe('DEMO');
     expect(fixture.componentInstance.rvDetail?.current_rv).toBe(0.12);
     expect(fixture.componentInstance.rvObservationsAtOrBelowCurrent()).toBe(3);
+  });
+
+  it('places ATR14% immediately after the 1σ move', () => {
+    mount();
+    const columns = fixture.componentInstance.displayedColumns;
+    expect(columns.indexOf('atr14Pct')).toBe(columns.indexOf('sigmaMovePct') + 1);
+    expect(text()).toContain('ATR14%');
+    expect(text()).toContain('4.0%');
   });
 
   it('keeps only rows whose overlapping sample count exceeds the configured minimum', () => {
