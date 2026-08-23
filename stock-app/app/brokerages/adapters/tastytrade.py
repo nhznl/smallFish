@@ -14,8 +14,9 @@ from ..contracts import (MISSING_MARK, MISSING_MARKET_VALUE,
                          MISSING_NET_CASH_FLOW, MISSING_OPEN_CASH_FLOW,
                          MISSING_POSITION_DELTA, AccountRef, ActivityFact,
                          MarketObservation, PositionFact)
+from ..symbols import cache_symbol
 from .base import (ArtifactAdapter, contract_key, normalized_action,
-                   normalized_symbol, option_contract, optional_decimal, text)
+                   option_contract, optional_decimal, text)
 
 #: Tastytrade lifecycle shapes are all observed in the imported ledger, so none
 #: of them carry an unconfirmed-lifecycle reason.
@@ -91,7 +92,7 @@ class TastytradeAdapter(ArtifactAdapter):
             else:
                 market_value = quantity * mark * multiplier
 
-            symbol = normalized_symbol(
+            symbol = cache_symbol(
                 row.get("underlying_symbol") or row.get("contract_symbol")
             )
             facts.append(PositionFact(
@@ -136,7 +137,7 @@ class TastytradeAdapter(ArtifactAdapter):
             if net_cash is None:
                 missing.append(MISSING_NET_CASH_FLOW)
 
-            symbol = normalized_symbol(row.get("underlying_symbol"))
+            symbol = cache_symbol(row.get("underlying_symbol"))
             is_option = instrument == "OPTION" or bool(text(row.get("option_type")))
             account = text(row.get("account")) or "TRADING"
             facts.append(ActivityFact(
@@ -174,7 +175,7 @@ class TastytradeAdapter(ArtifactAdapter):
         ):
             observations.append(MarketObservation(
                 brokerage_id=self.brokerage_id,
-                symbol=normalized_symbol(
+                symbol=cache_symbol(
                     contract_key(row.get("contract_key")).split(maxsplit=1)[0]
                 ),
                 contract=option_contract(row.get("contract_symbol")),
@@ -190,7 +191,7 @@ class TastytradeAdapter(ArtifactAdapter):
         ):
             observations.append(MarketObservation(
                 brokerage_id=self.brokerage_id,
-                symbol=normalized_symbol(row.get("symbol")),
+                symbol=cache_symbol(row.get("symbol")),
                 beta=optional_decimal(row.get("beta")),
                 observed_at=text(row.get("beta_updated_at")) or None,
                 provenance=self.provenance(

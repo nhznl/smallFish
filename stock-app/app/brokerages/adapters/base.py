@@ -24,6 +24,7 @@ from ..contracts import (ACTIONS, PROVIDER_BOUNDARY_UNKNOWN,
                          BrokerageDescriptor, BrokerageSnapshot,
                          MarketObservation, OptionContract, PositionFact,
                          Provenance)
+from ..symbols import cache_symbol
 
 DEFAULT_OPTION_MULTIPLIER = Decimal("100")
 
@@ -92,7 +93,7 @@ def option_contract(occ_symbol: str, *, underlying: str = "",
     resolved_type = normalized_symbol(option_type) or parsed_type or None
     return OptionContract(
         occ_symbol=key,
-        underlying=normalized_symbol(underlying) or key.split(maxsplit=1)[0],
+        underlying=cache_symbol(underlying) or key.split(maxsplit=1)[0],
         option_type=resolved_type if resolved_type in {"CALL", "PUT"} else None,
         strike=optional_decimal(strike) or optional_decimal(parsed_strike),
         expiry=text(expiry).strip() or parsed_expiry or None,

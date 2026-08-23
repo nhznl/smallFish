@@ -1,9 +1,11 @@
 """In-memory stock cache backed by the shared universe registry.
 
 Loads every live registry symbol into a ``Stock`` (prior + current year price
-bars plus the yearly slope history), computes its trend, drops penny stocks,
-then merges the latest strategy report onto matching stocks (creating penny
-placeholders for report-only tickers). Reloadable; built lazily on first access.
+bars plus the yearly slope history), computes its trend, keeps sub-$6 symbols
+available for brokerage-cache lookup, and excludes them from scanner-oriented
+collections. It then merges the latest strategy report onto matching stocks
+(creating penny placeholders for report-only tickers). Reloadable; built lazily
+on first access.
 
 Registry symbols are sorted before loading, and ``/stocks`` also explicitly
 sorts its response, so output order is deterministic across restarts.
@@ -181,6 +183,7 @@ class Cache:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._stocks: dict[str, Stock] | None = None
+        self._universe_stocks: dict[str, Stock] | None = None
         self._sectors: dict[str, str] = {}
         self._types: dict[str, str] = {}
         self._slopes: dict[str, dict[int, dict]] = {}
@@ -220,12 +223,17 @@ class Cache:
         companies = _company_rows(registry, retired)
         sectors = {symbol.upper(): sector for symbol, sector, _type in companies if sector}
         stock_types = {symbol.upper(): stock_type for symbol, _sector, stock_type in companies}
-        stocks: dict[str, Stock] = {}
+        universe_stocks: dict[str, Stock] = {}
         for symbol, _sector, stock_type in companies:
             detail = read_historical(cache_root, symbol, current_year(), stock_type)
-            if detail.is_penny():
-                continue
-            stocks[symbol] = detail
+            universe_stocks[symbol] = detail
+
+        # Penny stocks remain available to a brokerage holder's cached-range
+        # lookup and Stock Detail, but stay out of scanner-oriented collections.
+        stocks = {
+            symbol: stock for symbol, stock in universe_stocks.items()
+            if not stock.is_penny()
+        }
 
         reports = read_latest_strategy_report(config.reports_dir())
         for row in reports:
@@ -245,7 +253,8 @@ class Cache:
         # stock uses the same benchmark and expected price date. SPY's latest
         # cached session is the preferred reference; the modal stock date is a
         # deterministic fallback when SPY is unavailable.
-        benchmark = stocks.get("SPY")
+        analysis_stocks = {**universe_stocks, **stocks}
+        benchmark = analysis_stocks.get("SPY")
         if benchmark is None or not benchmark.dailies:
             candidate = read_historical(
                 cache_root, "SPY", current_year(), stock_types.get("SPY", TYPE_STOCK))
@@ -254,16 +263,17 @@ class Cache:
         if reference_date is None:
             observed_dates = [
                 stock.last_trade.date
-                for stock in stocks.values()
+                for stock in analysis_stocks.values()
                 if stock.dailies and stock.last_trade and stock.last_trade.close > 0
             ]
             if observed_dates:
                 modal_date = Counter(value.date() for value in observed_dates).most_common(1)[0][0]
                 reference_date = datetime.combine(modal_date, datetime.min.time())
-        for stock in stocks.values():
+        for stock in analysis_stocks.values():
             stock.apply_scanner_context(benchmark, reference_date)
         self._sectors = sectors
         self._types = stock_types
+        self._universe_stocks = universe_stocks
         return stocks
 
     def stocks(self) -> list[Stock]:
@@ -274,7 +284,21 @@ class Cache:
     def by_code(self) -> dict[str, Stock]:
         if self._stocks is None:
             self.reload()
-        return {s.code.upper(): s for s in self._stocks.values() if s.code}
+        return {
+            s.code.upper(): s
+            for s in (*self._universe_stocks.values(), *self._stocks.values())
+            if s.code
+        }
+
+    def range_stocks(self) -> list[Stock]:
+        """Stocks eligible for cached-range lookup, including priced penny symbols."""
+        if self._stocks is None:
+            self.reload()
+        penny_with_prices = {
+            symbol: stock for symbol, stock in self._universe_stocks.items()
+            if stock.is_penny() and stock.dailies
+        }
+        return list({**self._stocks, **penny_with_prices}.values())
 
     def sector(self, symbol: str | None) -> str:
         if self._stocks is None:

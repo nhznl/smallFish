@@ -58,3 +58,36 @@ def test_cache_does_not_reintroduce_retired_symbol_from_stale_report(
     )
 
     assert Cache()._build() == {}
+
+
+def test_cache_keeps_penny_universe_symbols_for_holdings_lookup(tmp_path, monkeypatch):
+    registry_path = tmp_path / "universe.csv"
+    retired_path = tmp_path / "retired_symbols.csv"
+    registry_path.write_text(
+        "symbol,name,type,memberships,source,pinned,last_seen,sector\n"
+        "NORMAL,Normal,STOCK,,manual,false,2026-08-23,\n"
+        "PENNY,Penny,STOCK,,manual,false,2026-08-23,\n",
+        encoding="utf-8",
+    )
+    retired_path.write_text("symbol,last_seen,reason\n", encoding="utf-8")
+    monkeypatch.setattr(cache_module.config, "price_cache_root", lambda: tmp_path)
+    monkeypatch.setattr(cache_module.config, "universe_csv", lambda: registry_path)
+    monkeypatch.setattr(cache_module.config, "retired_symbols_csv", lambda: retired_path)
+    monkeypatch.setattr(cache_module.config, "reports_dir", lambda: tmp_path)
+    monkeypatch.setattr(cache_module, "read_latest_strategy_report", lambda _path: [])
+
+    def fake_read_historical(_root, symbol, _year, stock_type="STOCK"):
+        stock = Stock.build(symbol, [], stock_type=stock_type)
+        stock.is_penny = lambda: symbol == "PENNY"
+        stock.dailies = [object()] if symbol == "PENNY" else []
+        return stock
+
+    monkeypatch.setattr(cache_module, "read_historical", fake_read_historical)
+
+    cache = Cache()
+    stocks = cache._build()
+    cache._stocks = stocks
+    assert set(stocks) == {"NORMAL"}
+    assert set(cache._universe_stocks) == {"NORMAL", "PENNY"}
+    assert set(cache.by_code()) == {"NORMAL", "PENNY"}
+    assert {stock.code for stock in cache.range_stocks()} == {"NORMAL", "PENNY"}

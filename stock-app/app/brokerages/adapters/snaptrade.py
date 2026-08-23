@@ -22,6 +22,7 @@ from ..contracts import (MISSING_MARK, MISSING_MARKET_VALUE,
                          MarketObservation, PositionFact)
 from ..importers import held_option_market_data
 from ..importers import snaptrade as snaptrade_importer
+from ..symbols import cache_symbol
 from .base import (DEFAULT_OPTION_MULTIPLIER, ArtifactAdapter, contract_key,
                    normalized_action, normalized_symbol, option_contract,
                    optional_decimal, text)
@@ -93,7 +94,7 @@ class SnapTradeAdapter(ArtifactAdapter):
                 missing.append(MISSING_MARKET_VALUE)
 
             contract_symbol = text(row.get("symbol"))
-            symbol = normalized_symbol(
+            symbol = cache_symbol(
                 row.get("underlying_symbol") if instrument == "OPTION"
                 else row.get("symbol")
             )
@@ -136,7 +137,7 @@ class SnapTradeAdapter(ArtifactAdapter):
 
             account_id = text(row.get("account_id")) or text(row.get("account"))
             account_label = text(row.get("account")) or account_id
-            symbol = normalized_symbol(row.get("underlying_symbol"))
+            symbol = cache_symbol(row.get("underlying_symbol"))
             facts.append(ActivityFact(
                 brokerage_id=self.brokerage_id,
                 provider_event_id=text(row.get("id")),
@@ -172,7 +173,7 @@ class SnapTradeAdapter(ArtifactAdapter):
         ):
             observations.append(MarketObservation(
                 brokerage_id=self.brokerage_id,
-                symbol=normalized_symbol(
+                symbol=cache_symbol(
                     contract_key(row.get("contract_key")).split(maxsplit=1)[0]
                 ),
                 contract=option_contract(row.get("contract_symbol")),
@@ -189,7 +190,7 @@ class SnapTradeAdapter(ArtifactAdapter):
         ):
             observations.append(MarketObservation(
                 brokerage_id=self.brokerage_id,
-                symbol=normalized_symbol(row.get("symbol")),
+                symbol=cache_symbol(row.get("symbol")),
                 beta=optional_decimal(row.get("beta")),
                 observed_at=text(row.get("beta_updated_at")) or None,
                 provenance=self.provenance(

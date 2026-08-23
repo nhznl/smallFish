@@ -196,16 +196,16 @@ def test_closing_one_contract_does_not_complete_the_symbol(adapter_env,
     assert ledger["current_period"]["realized_pnl"] is None
 
 
-def test_a_symbol_with_a_dot_survives_url_encoding(adapter_env):
+def test_a_brokerage_symbol_with_a_dot_maps_to_the_cache_convention(adapter_env):
     _write_tastytrade(positions=[{
         "instrument_type": "Equity", "contract_symbol": "BRK.B",
         "underlying_symbol": "BRK.B", "quantity": "10", "direction": "Long",
         "signed_quantity": "10", "multiplier": "1", "mark_price": "480",
         "average_open_price": "400",
     }])
-    assert _symbol("tastytrade", "BRK.B")["symbol"] == "BRK.B"
-    # Lookup is case-insensitive; the ledger is keyed by the normalized symbol.
-    assert _symbol("tastytrade", "brk.b")["symbol"] == "BRK.B"
+    assert _symbol("tastytrade", "BRK-B")["symbol"] == "BRK-B"
+    # The adapter translates provider punctuation to the cache convention.
+    assert _symbol("tastytrade", "brk-b")["symbol"] == "BRK-B"
 
 
 def test_a_futures_root_with_a_slash_survives_url_encoding(adapter_env):

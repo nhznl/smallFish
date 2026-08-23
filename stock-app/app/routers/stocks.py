@@ -23,7 +23,7 @@ def get_stocks() -> JSONResponse:
 @router.get("/stocks/ranges")
 def get_stock_ranges() -> JSONResponse:
     """Cached 52-week ranges for every symbol in the configured universe."""
-    ordered = sorted(cache.stocks(), key=lambda s: s.code)
+    ordered = sorted(cache.range_stocks(), key=lambda s: s.code)
     return JSONResponse(content={"stocks": [stock_range_dict(stock) for stock in ordered]})
 
 

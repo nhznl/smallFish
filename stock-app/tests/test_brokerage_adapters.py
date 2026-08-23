@@ -256,6 +256,27 @@ def test_positions_normalize_to_identical_canonical_facts(adapter_env, brokerage
 
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_positions_translate_brokerage_spelling_to_price_cache_symbol(
+        adapter_env, brokerage_id):
+    if brokerage_id == "tastytrade":
+        _write_tastytrade(positions=[{
+            "instrument_type": "Equity", "contract_symbol": "BRKB",
+            "underlying_symbol": "BRKB", "quantity": "1", "direction": "Long",
+            "signed_quantity": "1", "multiplier": "1", "mark_price": "500",
+            "average_open_price": "400",
+        }])
+    else:
+        _write_snaptrade(holdings=[{
+            "asset_class": "STOCK", "symbol": "BRKB", "quantity": "1",
+            "price": "500", "average_purchase_price": "400",
+            "cost_basis": "400", "market_value": "500",
+        }])
+
+    [position] = registry.resolve(brokerage_id).positions()
+    assert position.symbol == "BRK-B"
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
 def test_activity_normalizes_to_identical_canonical_facts(adapter_env, brokerage_id):
     write_covered_put(brokerage_id)
     facts = registry.resolve(brokerage_id).activity()

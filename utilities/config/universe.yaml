@@ -129,6 +129,7 @@ etf_seed:
   VDC: "Broad Consumer Staples"
   VHT: "Broad Healthcare"
   VPU : "Broad Utilities"
+  WAGN : "Pabrai Funds"
 
 
 # Manual pins. symbol: {type, notes}; every entry is pinned=true and survives
