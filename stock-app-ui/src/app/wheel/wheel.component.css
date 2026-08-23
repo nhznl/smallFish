@@ -218,7 +218,22 @@
   font-size: var(--text-sm);
 }
 
+.sample-input {
+  box-sizing: border-box;
+  height: 34px;
+  width: 92px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 .symbol-input:focus-visible,
+.sample-input:focus-visible,
 .control-select:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 1px;

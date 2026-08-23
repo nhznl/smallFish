@@ -114,6 +114,11 @@
           }
         </select>
       </label>
+      <label class="control" matTooltip="Keep rows whose primary overlapping-window sample count is greater than this value. The disjoint count remains a diagnostic." matTooltipPosition="above">
+        <span class="control-label">Samples &gt;</span>
+        <input class="sample-input" type="number" min="0" step="1"
+          [(ngModel)]="minSamples" (ngModelChange)="applyFilters()" aria-label="Minimum overlapping samples">
+      </label>
       <label class="check-filter">
         <input type="checkbox" [(ngModel)]="hideBearish" (ngModelChange)="applyFilters()">
         Hide bearish

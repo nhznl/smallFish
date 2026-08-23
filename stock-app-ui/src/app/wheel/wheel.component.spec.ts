@@ -33,7 +33,7 @@ function candidate(symbol: string): WheelCandidate {
       priceAsOf: '2026-07-28',
       lastClose: 50,
       rvPercentile252: 80,
-      sampleCount: 20,
+      sampleCount: 1001,
       dataQuality: 'OK',
       rvWindowSessions: 21,
     },
@@ -107,6 +107,19 @@ describe('WheelComponent', () => {
     expect(fixture.componentInstance.rvDetailSymbol).toBe('DEMO');
     expect(fixture.componentInstance.rvDetail?.current_rv).toBe(0.12);
     expect(fixture.componentInstance.rvObservationsAtOrBelowCurrent()).toBe(3);
+  });
+
+  it('keeps only rows whose overlapping sample count exceeds the configured minimum', () => {
+    const lowSample = candidate('LOW');
+    lowSample.wheel.sampleCount = 1000;
+    stockService.getWheelCandidates.and.returnValue(of([candidate('DEMO'), lowSample]));
+    mount();
+
+    expect(fixture.componentInstance.dataSource.data.map(row => row.wheel.symbol)).toEqual(['DEMO']);
+
+    fixture.componentInstance.minSamples = 0;
+    fixture.componentInstance.applyFilters();
+    expect(fixture.componentInstance.dataSource.data.map(row => row.wheel.symbol)).toEqual(['DEMO', 'LOW']);
   });
 
   it('shows a transport error instead of the empty-state when the load fails', () => {

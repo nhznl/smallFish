@@ -88,6 +88,7 @@ export class WheelComponent implements OnInit, OnDestroy {
   hideBearish = true;                 // default-ON; hides ONLY trendDirection === 'BEARISH'
   showUnavailable = false;            // default-OFF; live chain eligibility requires quality OK
   etfsOnly = false;
+  minSamples = 1000;                  // primary overlapping-window evidence threshold
   symbolFilter = '';
 
   // Curated, decision-relevant subset of the versioned wheel columns.
@@ -176,6 +177,9 @@ export class WheelComponent implements OnInit, OnDestroy {
         return false;
       }
       if (this.etfsOnly && c.type !== 'ETF') {
+        return false;
+      }
+      if ((c.wheel?.sampleCount ?? 0) <= this.minSamples) {
         return false;
       }
       return true;
