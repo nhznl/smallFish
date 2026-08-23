@@ -324,10 +324,6 @@
   text-decoration: underline;
 }
 
-.score-cell {
-  font-weight: 700;
-}
-
 /* RV percentile is the primary sort column — give it a visual encoding. */
 .rv-cell {
   min-width: 108px;
@@ -463,12 +459,6 @@
 .trend-bearish { color: var(--neg); font-weight: 600; }
 .trend-sideways,
 .trend-neutral { color: var(--text-secondary); }
-
-/* Swing-scan signal bands (same palette as the Strategy tab) */
-.band-super-high { color: var(--pos); font-weight: 700; }
-.band-high { color: var(--pos); font-weight: 600; }
-.band-medium { color: var(--warn); }
-.band-low { color: var(--text-secondary); }
 
 .empty-state {
   margin-top: 14px;

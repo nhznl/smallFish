@@ -28,9 +28,7 @@
         <h3 id="sec-1-what-good-for-wheeling-decomposes-into">1. What "good for wheeling" decomposes into</h3>
         <ul>
           <li><strong>Am I OK owning this at the strike?</strong> — the trend/structure classification.
-          The swing scan's <em>Swing Score</em> is shown only as <strong>context</strong>; it ranks an earnings
-          run-up setup, it is <em>not</em> an ownership-quality score. A missing score means
-          <strong>not evaluated</strong>, never "failed".</li>
+          Wheel does not treat a momentum score as an ownership-quality score.</li>
           <li><strong>Is underlying realized volatility elevated relative to itself?</strong> — RV and its 252-day
         percentile. A high percentile is only context; the separate quote collection records actual contract quotes.</li>
         <li><strong>How often did price historically finish beyond a comparable hypothetical strike?</strong> — the
@@ -118,9 +116,7 @@ as an expected move.</li>
     Several fields are legitimately absent and render as <strong>"—"</strong>, never 0 or "failed":
   </p>
   <ul>
-    <li><strong>Swing Score / Band / Sector</strong> — "swing scan context". Null = <em>not evaluated</em>
-  (the symbol wasn't in the latest swing scan), not a failing score.</li>
-  <li><strong>Trend</strong> — symbols with insufficient history have no trend result; the field is "—",
+<li><strong>Trend</strong> — symbols with insufficient history have no trend result; the field is "—",
 which is expected, not an error.</li>
 <li><strong>Days to Event / RV %ile</strong> — may be blank when the underlying data isn't available.</li>
 </ul>
@@ -149,9 +145,6 @@ which is expected, not an error.</li>
     <tr><td>Avg $Vol 20d (avg_dollar_volume_20)</td><td>●</td><td>20-day average dollar volume of the underlying. This is not option liquidity; collected contracts receive separate open-interest and spread checks.</td></tr>
     <tr><td>Days to Event (days_to_event)</td><td>●</td><td>Calendar days to the next known earnings date; blank → "—".</td></tr>
     <tr><td>Earnings (earnings_window_state)</td><td>●</td><td>Tri-state per §5.</td></tr>
-    <tr><td>Swing Score (score_total)</td><td>●</td><td>Swing scan context only. Null = not evaluated.</td></tr>
-    <tr><td>Band (signal_band)</td><td>●</td><td>Swing scan band (Super High / High / Medium / Low). Context only.</td></tr>
-    <tr><td>Sector</td><td>●</td><td>Swing scan sector. Context only.</td></tr>
     <tr><td>Trend (trend_direction)</td><td>●</td><td>BULLISH / BEARISH / SIDEWAYS / NEUTRAL, or "—" when unavailable. Drives the hide toggle.</td></tr>
     <tr><td>5d / 31d range (high/low/width%/close-pos)</td><td></td><td>Recent price range over ~1 week and ~1.5 months, band width %, and where the close sits in the band.</td></tr>
     <tr><td>RV7 / RV21 / RV37 (cc / park / used)</td><td></td><td>Both estimators and the used max, per window (daily σ). Horizon→window mapping: 7→RV7, 14/30/37→RV21, 45→RV37.</td></tr>

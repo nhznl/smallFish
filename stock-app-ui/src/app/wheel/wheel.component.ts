@@ -109,9 +109,6 @@ export class WheelComponent implements OnInit, OnDestroy {
     'avgDollarVolume20',
     'daysToEvent',
     'earningsWindowState',
-    'scoreTotal',
-    'signalBand',
-    'sector',
     'trendDirection'
   ];
 
@@ -337,13 +334,6 @@ export class WheelComponent implements OnInit, OnDestroy {
     return 'trend-' + c.trendDirection.toLowerCase();
   }
 
-  bandClass(band: string | undefined): string {
-    if (!band) {
-      return '';
-    }
-    return 'band-' + band.toLowerCase().replace(/\s+/g, '-');
-  }
-
   qualityBadgeClass(state: string | undefined): string {
     if (state === 'OK') return 'badge-pos';
     if (!state || state === 'UNKNOWN') return 'badge-neutral';
@@ -510,9 +500,6 @@ export class WheelComponent implements OnInit, OnDestroy {
       case 'avgDollarVolume20': return w?.avgDollarVolume20 ?? -Infinity;
       case 'daysToEvent': return w?.daysToEvent ?? Infinity;
       case 'earningsWindowState': return w?.earningsWindowState ?? '';
-      case 'scoreTotal': return w?.scoreTotal ?? -Infinity;
-      case 'signalBand': return w?.signalBand ?? '';
-      case 'sector': return w?.sector ?? '';
       case 'trendDirection': return item.trendDirection ?? '';
       default: return '';
     }
