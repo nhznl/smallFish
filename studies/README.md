@@ -123,8 +123,15 @@ studies/
     ├── study_v1.py             frozen legacy-nine study
     └── study_v2.py             frozen full-period exploration
 └── rsi_supertrend/
-    └── rsi_supertrend_study_spec.md   frozen protocol and agent handoff
+    ├── rsi_supertrend_study_spec.md   frozen protocol (do not edit)
+    ├── source.pine                    pasted executable Pine source
+    ├── config/study.yaml              frozen parameters and cohorts
+    ├── pine.py / emulator.py / study.py
+    └── README.md                      operational runner notes
 ```
+
+The RSI/SuperTrend package is implemented. The 2022–2025 holdout has not been
+authorized and must not be run from this stage.
 
 Studies share the `utilities/.venv` environment and may import `models/` and
 `utilities/`. Nothing in `stock-app/` may import them.

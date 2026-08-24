@@ -33,6 +33,7 @@
 #                     (rotation/relative-strength proxy, not measured fund flow)
 #   sector-rotation-study - frozen legacy-nine forward-leadership study
 #   sector-rotation-study-v2 - exploratory legacy-nine full-period estimate
+#   rsi-supertrend-study - frozen RSI/SuperTrend Pine replication (holdout not authorized)
 #   backtest [earnings]       - strategy walk-forward backtest
 #   event-backtest [earnings] - strategy event-study backtest
 #   earnings-history - fetch historical earnings dates (requires yfinance)
@@ -224,6 +225,9 @@ case "$1" in
   sector-rotation-study-v2)
     cd "$ROOT" && "$UTILITIES_PYTHON" -m studies.sector_rotation.study_v2 "${@:2}"
     ;;
+  rsi-supertrend-study)
+    cd "$ROOT" && "$UTILITIES_PYTHON" -m studies.rsi_supertrend.study "${@:2}"
+    ;;
   backtest)
     run_strategy_action backtest "${@:2}"
     ;;
@@ -234,7 +238,7 @@ case "$1" in
     cd "$ROOT" && "$UTILITIES_PYTHON" -m utilities.fetch_earnings_history "${@:2}"
     ;;
   *)
-    echo "Usage: $0 {doctor|bootstrap-data|server|build-ui|studies|fetch|ensure-events|scan|wheel|chains|verify-premiums|universe|scrape|scrape-history|scrape-retry|sector-rotation|sector-rotation-study|sector-rotation-study-v2|backtest|event-backtest|earnings-history}"
+    echo "Usage: $0 {doctor|bootstrap-data|server|build-ui|studies|fetch|ensure-events|scan|wheel|chains|verify-premiums|universe|scrape|scrape-history|scrape-retry|sector-rotation|sector-rotation-study|sector-rotation-study-v2|rsi-supertrend-study|backtest|event-backtest|earnings-history}"
     exit 1
     ;;
 esac

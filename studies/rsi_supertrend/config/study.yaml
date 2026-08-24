@@ -1,0 +1,33 @@
+# Frozen RSI/SuperTrend Pine replication. Protocol:
+# studies/rsi_supertrend/rsi_supertrend_study_spec.md, frozen 2026-08-23
+# before any 2022-2025 strategy result was observed.
+schema_name: smallfish.rsi-supertrend-study
+schema_version: 1
+study_id: rsi-supertrend-pine-v1
+protocol_status: FROZEN
+pine_sha256: 0f8c034bb89d0524213495ba2bd52a17958dcf3a3a023635dd0b34f7be340130
+
+primary_universe: [SPY, XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY, QQQ, DIA, IWM, MDY]
+rsi_length: 10
+signal_length: 10
+trigger_level: 50.0
+target_cross_count: 2
+atr_period: 10
+st_factor: 2.5
+initial_capital: 10000.0
+qty_percent_of_equity: 100.0
+commission: 0.0
+slippage: 0.0
+calculate_divergence: false
+development_start: '1999-01-01'
+development_end: '2021-12-31'
+holdout_start: '2022-01-01'
+holdout_end: '2025-12-31'
+exclude_year: 2026
+
+inference:
+  bootstrap_draws: 10000
+  block_length_sessions: 63
+  random_seed: 20260823
+  confidence_level: 0.95
+  minimum_benchmark_sessions: 756
