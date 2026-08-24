@@ -178,6 +178,7 @@ _WHEEL_FIELDS: dict[str, tuple[str, str]] = {
     "rv37_cc": ("rv37Cc", "d"),
     "rv37_park": ("rv37Park", "d"),
     "rv37_used": ("rv37Used", "d"),
+    "rv_rank_252": ("rvRank252", "d"),
     "rv_percentile_252": ("rvPercentile252", "d"),
     "atr14_pct": ("atr14Pct", "d"),
     "avg_dollar_volume_20": ("avgDollarVolume20", "d"),
@@ -321,7 +322,12 @@ def read_wheel_report_rows(csv_path: Path) -> list[dict]:
         except StopIteration:
             return out
         idx = {h.strip(): i for i, h in enumerate(headers)}
-        legacy_schema = "schema_version" not in idx
+        missing_columns = [column for column in WHEEL_COLUMNS if column not in idx]
+        if missing_columns:
+            raise ValueError(
+                "wheel report does not match the current schema; "
+                f"missing columns: {', '.join(missing_columns)}"
+            )
 
         def cell(cols: list[str], name: str) -> str | None:
             i = idx.get(name)
@@ -343,11 +349,8 @@ def read_wheel_report_rows(csv_path: Path) -> list[dict]:
                     row[json_field] = _wheel_optional_int(raw)
                 else:  # "d"
                     row[json_field] = _wheel_dbl(raw)
-            if legacy_schema:
-                row["schemaVersion"] = 1
-                row["runMode"] = RUN_MODE_CURRENT_CONTEXT_ONLY
             version = row["schemaVersion"]
-            if version not in {1, WHEEL_SCHEMA_VERSION}:
+            if version != WHEEL_SCHEMA_VERSION:
                 raise ValueError(f"unsupported wheel schema version: {version}")
             if not row["runMode"]:
                 row["runMode"] = RUN_MODE_CURRENT_CONTEXT_ONLY
@@ -367,7 +370,7 @@ def read_latest_wheel_report(wheel_dir: Path, today: str | None = None) -> list[
 
 def read_latest_wheel_rv_detail(wheel_dir: Path, symbol: str,
                                 today: str | None = None) -> dict | None:
-    """Read a symbol's RV-percentile evidence from the report's sidecar.
+    """Read a symbol's RV rank/percentile evidence from the report's sidecar.
 
     The detail is materialized by the utilities runtime with the Wheel report;
     the FastAPI runtime never reads price files or imports utility code.
@@ -383,4 +386,7 @@ def read_latest_wheel_rv_detail(wheel_dir: Path, symbol: str,
     except (OSError, json.JSONDecodeError):
         return None
     detail = (payload.get("symbols", {}) or {}).get(symbol.strip().upper())
+    if not isinstance(detail, dict):
+        return None
+
     return detail if isinstance(detail, dict) else None

@@ -27,7 +27,11 @@ from models.premium import PREMIUM_SCHEMA_NAME, PREMIUM_SCHEMA_VERSION
 from utilities.options.exchange_calendar import nyse_sessions
 from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
 from utilities.options.market_quotes import QuoteBatch
-from utilities.options.wheel import EVENT_NONE_IN_RANGE, EVENT_UNKNOWN_STALE
+from utilities.options.wheel import (
+    EVENT_NONE_IN_RANGE,
+    EVENT_UNKNOWN_STALE,
+    WHEEL_SCHEMA_VERSION,
+)
 from utilities.options.chains import (
     CONTRACT_INVALID,
     CONTRACT_OK,
@@ -133,7 +137,7 @@ def _wheel_frame(specs: list[dict], horizons=(7, 37)) -> pd.DataFrame:
     for s in specs:
         for dte in horizons:
             rows.append({
-                "schema_version": 2,
+                "schema_version": WHEEL_SCHEMA_VERSION,
                 "run_mode": "CURRENT_CONTEXT_ONLY",
                 "symbol": s["symbol"],
                 "price_as_of": s.get("price_as_of", "2026-07-16"),

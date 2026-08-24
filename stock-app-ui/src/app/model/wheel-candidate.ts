@@ -46,6 +46,7 @@ export interface WheelReportRow {
   rv37Cc?: number;
   rv37Park?: number;
   rv37Used?: number;
+  rvRank252?: number;         // current RV's normalized position in trailing low/high RV range
   rvPercentile252?: number;   // nullable
   atr14Pct?: number;
   avgDollarVolume20?: number;
@@ -127,12 +128,15 @@ export interface WheelCandidate {
   trendDirection?: string;   // BULLISH | BEARISH | SIDEWAYS | NEUTRAL, or null
 }
 
-/** The exact dated inputs used to calculate a Wheel row's RV percentile. */
+/** The exact dated inputs used to calculate a Wheel row's RV percentile and rank. */
 export interface RvPercentileDetail {
   rv_window_sessions: number;
   lookback_sessions: number;
   current_rv: number;
   percentile: number;
+  rank: number | null;
+  low_rv: number;
+  high_rv: number;
   price_as_of: string;
   observations: Array<{ date: string; rv: number }>;
 }

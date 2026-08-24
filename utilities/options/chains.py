@@ -55,6 +55,7 @@ from pathlib import Path
 import pandas as pd
 
 from models.premium import PREMIUM_SCHEMA_NAME, PREMIUM_SCHEMA_VERSION
+from models.wheel import WHEEL_SCHEMA_VERSION
 from utilities.manifest import sha256_file
 from utilities.options.market_quotes import (
     QuoteBatch,
@@ -62,7 +63,6 @@ from utilities.options.market_quotes import (
 )
 from utilities.options.wheel import (
     RUN_MODE_CURRENT_CONTEXT_ONLY,
-    WHEEL_SCHEMA_VERSION,
     latest_report_path,
     load_events_meta,
 )

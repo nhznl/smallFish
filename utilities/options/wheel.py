@@ -188,6 +188,28 @@ def rv_percentile(rv_series: np.ndarray, lookback: int = 252,
     return float(np.mean(window <= vals[-1]))
 
 
+def rv_rank(rv_series: np.ndarray, lookback: int = 252,
+            min_lookback: int = 60) -> float | None:
+    """Current RV's normalized position between its trailing low and high.
+
+    ``(current - low) / (high - low)`` uses the same valid trailing RV values
+    as ``rv_percentile``. A flat range has no denominator, so it is reported
+    as unavailable rather than inventing a rank.
+    """
+    rv_series = np.asarray(rv_series, dtype="float64")
+    if len(rv_series) == 0 or np.isnan(rv_series[-1]):
+        return None
+    vals = rv_series[~np.isnan(rv_series)]
+    if len(vals) < min_lookback:
+        return None
+    window = vals[-lookback:]
+    low = float(np.min(window))
+    high = float(np.max(window))
+    if high <= low:
+        return None
+    return float((window[-1] - low) / (high - low))
+
+
 def rv_percentile_detail(dates: pd.Series, rv_series: np.ndarray, *,
                          window_sessions: int, lookback: int = 252,
                          min_lookback: int = 60) -> dict | None:
@@ -206,11 +228,17 @@ def rv_percentile_detail(dates: pd.Series, rv_series: np.ndarray, *,
         for date, value in zip(dates[valid], values[valid])
     ][-lookback:]
     current = dated[-1]["rv"]
+    observations = np.asarray([item["rv"] for item in dated])
+    low = float(np.min(observations))
+    high = float(np.max(observations))
     return {
         "rv_window_sessions": window_sessions,
         "lookback_sessions": len(dated),
         "current_rv": current,
-        "percentile": float(np.mean(np.asarray([item["rv"] for item in dated]) <= current)),
+        "percentile": float(np.mean(observations <= current)),
+        "rank": None if high <= low else float((current - low) / (high - low)),
+        "low_rv": low,
+        "high_rv": high,
         "observations": dated,
     }
 
@@ -484,10 +512,18 @@ def _symbol_context(df: pd.DataFrame, wheel_cfg: dict, as_of: str,
         ctx[f"rv{w}_park"] = park
         ctx[f"rv{w}_used"] = rv_used(cc, park)
 
+    rv21_series = rolling_rv_used(closes, highs, lows, window=21)
+    rv_lookback = int(wheel_cfg.get("rv_percentile_lookback", 252))
+    rv_min_lookback = int(wheel_cfg.get("rv_percentile_min_lookback", 60))
+    ctx["rv_rank_252"] = rv_rank(
+        rv21_series,
+        lookback=rv_lookback,
+        min_lookback=rv_min_lookback,
+    )
     ctx["rv_percentile_252"] = rv_percentile(
-        rolling_rv_used(closes, highs, lows, window=21),
-        lookback=int(wheel_cfg.get("rv_percentile_lookback", 252)),
-        min_lookback=int(wheel_cfg.get("rv_percentile_min_lookback", 60)),
+        rv21_series,
+        lookback=rv_lookback,
+        min_lookback=rv_min_lookback,
     )
 
     atr = compute_atr(df.reset_index(drop=True), 14)

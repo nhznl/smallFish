@@ -80,10 +80,6 @@ export class WheelComponent implements OnInit, OnDestroy {
     return this.candidatesVm.loadError();
   }
 
-  get currentRunMode(): string {
-    return this.candidatesVm.runMode();
-  }
-
   // Filters / selectors
   readonly horizons: number[] = [7, 14, 30, 37, 45];
   horizon = 37;                       // default per requirements section 5
@@ -106,6 +102,7 @@ export class WheelComponent implements OnInit, OnDestroy {
     'symbol',
     'horizonDte',
     'lastClose',
+    'rvRank252',
     'rvPercentile252',
     'sigmaMovePct',
     'atr14Pct',
@@ -192,7 +189,7 @@ export class WheelComponent implements OnInit, OnDestroy {
 
   openRvDetail(candidate: WheelCandidate): void {
     const symbol = candidate.wheel.symbol;
-    if (!symbol || candidate.wheel.rvPercentile252 == null) {
+    if (!symbol || (candidate.wheel.rvPercentile252 == null && candidate.wheel.rvRank252 == null)) {
       return;
     }
     this.rvDetailSub?.unsubscribe();
@@ -206,7 +203,7 @@ export class WheelComponent implements OnInit, OnDestroy {
         this.rvDetailLoading = false;
       },
       error: () => {
-        this.rvDetailError = 'RV-percentile detail is unavailable for this report. Compute Options Stats to create a current report.';
+        this.rvDetailError = 'RV rank and percentile detail are unavailable for this report. Compute Options Stats to create a current report.';
         this.rvDetailLoading = false;
       },
     });
@@ -412,14 +409,14 @@ export class WheelComponent implements OnInit, OnDestroy {
   runWheel(): void {
     this.wheelRunning = true;
     this.wheelStatus = 'idle';
-    this.wheelMessage = 'Running wheel scan… this can take a few minutes.';
+    this.wheelMessage = 'Computing options stats… this can take a few minutes.';
     this.wheelMessageAt = new Date();
     this.stockService.runWheel().subscribe(res => {
       this.wheelRunning = false;
       if (res && res.status === 'ok') {
         this.wheelStatus = res.warning ? 'warning' : 'ok';
         const secs = res.durationMs ? Math.round(res.durationMs / 1000) : null;
-        const completion = `Wheel scan complete${secs != null ? ' in ' + secs + 's' : ''}.`;
+        const completion = `Options stats computation complete${secs != null ? ' in ' + secs + 's' : ''}.`;
         this.wheelMessage = res.warning
           ? `${completion} ${res.warning}`
           : `${completion} Reloading candidates…`;
@@ -427,7 +424,7 @@ export class WheelComponent implements OnInit, OnDestroy {
         this.load();
       } else {
         this.wheelStatus = 'error';
-        this.wheelMessage = '✗ Wheel scan failed: ' + (res?.message || res?.output || 'see server logs') + '.';
+        this.wheelMessage = '✗ Options stats computation failed: ' + (res?.message || res?.output || 'see server logs') + '.';
         this.wheelMessageAt = new Date();
       }
     });
@@ -500,6 +497,7 @@ export class WheelComponent implements OnInit, OnDestroy {
       case 'symbol': return w?.symbol ?? '';
       case 'horizonDte': return w?.horizonDte ?? 0;
       case 'lastClose': return w?.lastClose ?? -Infinity;
+      case 'rvRank252': return w?.rvRank252 ?? -Infinity;
       case 'rvPercentile252': return w?.rvPercentile252 ?? -Infinity;
       case 'sigmaMovePct': return w?.sigmaMovePct ?? -Infinity;
       case 'atr14Pct': return w?.atr14Pct ?? -Infinity;

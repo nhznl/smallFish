@@ -34,6 +34,7 @@ function candidate(symbol: string): WheelCandidate {
       horizonSessions: 26,
       priceAsOf: '2026-07-28',
       lastClose: 50,
+      rvRank252: 0.5,
       rvPercentile252: 80,
       atr14Pct: 0.04,
       sampleCount: 1001,
@@ -78,6 +79,9 @@ describe('WheelComponent', () => {
       lookback_sessions: 3,
       current_rv: 0.12,
       percentile: 2 / 3,
+      rank: 1,
+      low_rv: 0.08,
+      high_rv: 0.12,
       price_as_of: '2026-07-28',
       observations: [
         { date: '2026-07-24', rv: 0.08 },
@@ -121,6 +125,8 @@ describe('WheelComponent', () => {
     expect(fixture.componentInstance.rvDetailSymbol).toBe('DEMO');
     expect(fixture.componentInstance.rvDetail?.current_rv).toBe(0.12);
     expect(fixture.componentInstance.rvObservationsAtOrBelowCurrent()).toBe(3);
+    expect(text()).toContain('Trailing low RV');
+    expect(text()).toContain('RV Rank');
   });
 
   it('places ATR14% immediately after the 1σ move', () => {
@@ -129,6 +135,14 @@ describe('WheelComponent', () => {
     expect(columns.indexOf('atr14Pct')).toBe(columns.indexOf('sigmaMovePct') + 1);
     expect(text()).toContain('ATR14%');
     expect(text()).toContain('4.0%');
+  });
+
+  it('places RV Rank immediately before the clickable RV percentile', () => {
+    mount();
+    const columns = fixture.componentInstance.displayedColumns;
+    expect(columns.indexOf('rvRank252')).toBe(columns.indexOf('rvPercentile252') - 1);
+    expect(text()).toContain('RV Rank');
+    expect(text()).toContain('50%');
   });
 
   it('keeps only rows whose overlapping sample count exceeds the configured minimum', () => {
@@ -201,7 +215,7 @@ describe('WheelComponent', () => {
     expect(fixture.componentInstance.jobStatusClass(
       fixture.componentInstance.wheelStatus
     )).toBe('job-error');
-    expect(text()).toContain('Wheel scan failed');
+    expect(text()).toContain('Options stats computation failed');
     expect(text()).toContain('DEMO');
   });
 

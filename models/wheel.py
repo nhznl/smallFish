@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 DEFAULT_CUSHIONS_PCT = [2.5, 5, 7.5, 10]
-WHEEL_SCHEMA_VERSION = 2
+WHEEL_SCHEMA_VERSION = 3
 RUN_MODE_CURRENT_CONTEXT_ONLY = "CURRENT_CONTEXT_ONLY"
 
 
@@ -40,6 +40,7 @@ def report_columns(cushions_pct: list[float] = DEFAULT_CUSHIONS_PCT) -> list[str
         "rv37_cc",
         "rv37_park",
         "rv37_used",
+        "rv_rank_252",
         "rv_percentile_252",
         "atr14_pct",
         "avg_dollar_volume_20",

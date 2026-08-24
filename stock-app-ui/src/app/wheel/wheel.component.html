@@ -32,16 +32,6 @@
   </div>
 
   @if (activeTab === 'scan') {
-    @if (currentRunMode === 'CURRENT_CONTEXT_ONLY') {
-      <div class="banner banner-warn context-warning">
-        <span aria-hidden="true">&#9888;</span>
-        <div>
-          <strong>Current-context analysis:</strong> price calculations are as-of the report date,
-          but universe and event context use the available current snapshots. This run is not
-          point-in-time validation evidence.
-        </div>
-      </div>
-    }
     <div class="job-bar">
       <div class="job">
         <button type="button" class="btn btn-primary"
@@ -170,7 +160,7 @@
           >
           <!-- Grouped header band over the cushion-dependent columns. -->
           <ng-container matColumnDef="groupLead">
-            <th mat-header-cell *matHeaderCellDef [attr.colspan]="6" class="group-blank"></th>
+            <th mat-header-cell *matHeaderCellDef [attr.colspan]="7" class="group-blank"></th>
           </ng-container>
           <ng-container matColumnDef="groupPut">
             <th mat-header-cell *matHeaderCellDef [attr.colspan]="2" class="group-band group-put">Put @ {{ cushion }}%</th>
@@ -207,9 +197,20 @@
                   [attr.aria-label]="'Show ' + c.wheel.symbol + ' RV percentile detail'"
                   matTooltip="Show the current 21-session realized volatility and every dated RV observation used in this percentile." matTooltipPosition="above">
                   <span class="rv-value">{{ (c.wheel.rvPercentile252 * 100) | number:'1.0-0' }}%</span>
-                  <span class="meter" aria-hidden="true">
-                    <span [style.width.%]="c.wheel.rvPercentile252 * 100"></span>
-                  </span>
+                </button>
+              } @else {
+                <span>—</span>
+              }
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="rvRank252">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>RV Rank</th>
+            <td mat-cell *matCellDef="let c" class="rv-cell">
+              @if (c.wheel.rvRank252 != null) {
+                <button type="button" class="rv-detail-button" (click)="openRvDetail(c)"
+                  [attr.aria-label]="'Show ' + c.wheel.symbol + ' RV rank detail'"
+                  matTooltip="Current 21-session RV's position between its trailing 252-session low and high RV. Show the dated readings and exact inputs." matTooltipPosition="above">
+                  <span class="rv-value">{{ (c.wheel.rvRank252 * 100) | number:'1.0-0' }}%</span>
                 </button>
               } @else {
                 <span>—</span>
@@ -350,9 +351,9 @@
   }
 
   @if (rvDetailSymbol) {
-    <app-drawer [ariaLabel]="rvDetailSymbol + ' realized-volatility percentile detail'" (closed)="closeRvDetail()">
+    <app-drawer [ariaLabel]="rvDetailSymbol + ' realized-volatility rank and percentile detail'" (closed)="closeRvDetail()">
       <div drawerHeader>
-        <p class="page-eyebrow">RV percentile evidence</p>
+        <p class="page-eyebrow">RV rank and percentile evidence</p>
         <h2>{{ rvDetailSymbol }}</h2>
       </div>
 
@@ -363,11 +364,14 @@
       } @else if (rvDetail; as detail) {
         <p class="rv-detail-intro">
           Each observation is a <strong>{{ detail.rv_window_sessions }}-session realized-volatility</strong>
-          reading. The percentile compares the current reading with the {{ detail.lookback_sessions }} dated
-          observations below.
+          reading. RV Rank places the current reading between the trailing low and high; RV %ile compares it
+          with the {{ detail.lookback_sessions }} dated observations below.
         </p>
         <div class="rv-detail-summary">
           <div><span>Current RV</span><strong>{{ detail.current_rv * 100 | number:'1.1-1' }}%</strong></div>
+          <div><span>Trailing low RV</span><strong>{{ detail.low_rv * 100 | number:'1.1-1' }}%</strong></div>
+          <div><span>Trailing high RV</span><strong>{{ detail.high_rv * 100 | number:'1.1-1' }}%</strong></div>
+          <div><span>RV Rank</span><strong>{{ detail.rank != null ? ((detail.rank * 100 | number:'1.0-0') + '%') : '—' }}</strong></div>
           <div><span>RV %ile</span><strong>{{ detail.percentile * 100 | number:'1.0-0' }}%</strong></div>
           <div><span>Calculation</span><strong>{{ rvObservationsAtOrBelowCurrent() }} / {{ detail.lookback_sessions }} at or below</strong></div>
           <div><span>Price as of</span><strong>{{ detail.price_as_of }}</strong></div>

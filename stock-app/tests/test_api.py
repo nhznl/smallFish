@@ -184,6 +184,9 @@ def test_wheel_rv_detail_returns_the_percentile_evidence(env_fixtures):
         "lookback_sessions": 3,
         "current_rv": 0.12,
         "percentile": 2 / 3,
+        "rank": 1.0,
+        "low_rv": 0.08,
+        "high_rv": 0.12,
         "price_as_of": "2026-07-16",
         "observations": [
             {"date": "2026-07-14", "rv": 0.08},

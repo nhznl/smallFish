@@ -1,7 +1,7 @@
 import pytest
 
 from app import readers
-from models.wheel import WHEEL_COLUMNS
+from models.wheel import WHEEL_COLUMNS, WHEEL_SCHEMA_VERSION
 
 
 def test_strategy_report_full_row(fixtures_dir):
@@ -51,7 +51,7 @@ def test_wheel_report_row_shape(fixtures_dir):
     assert len(rows) == 2
     a = rows[0]
     assert len(a) == len(WHEEL_COLUMNS)       # full versioned contract
-    assert a["schemaVersion"] == 1            # deliberate legacy translation
+    assert a["schemaVersion"] == WHEEL_SCHEMA_VERSION
     assert a["runMode"] == "CURRENT_CONTEXT_ONLY"
     assert a["nonoverlapSampleCount"] is None
     assert a["symbol"] == "A"
@@ -85,7 +85,25 @@ def test_latest_dated_csv_respects_today(fixtures_dir, tmp_path):
 
 def test_wheel_reader_rejects_unsupported_future_schema(tmp_path):
     path = tmp_path / "future.csv"
-    path.write_text("schema_version,run_mode,symbol\n999,CURRENT_CONTEXT_ONLY,X\n")
+    row = {column: "" for column in WHEEL_COLUMNS}
+    row.update({"schema_version": "999", "run_mode": "CURRENT_CONTEXT_ONLY", "symbol": "X"})
+    path.write_text(
+        ",".join(WHEEL_COLUMNS) + "\n" +
+        ",".join(row[column] for column in WHEEL_COLUMNS) + "\n"
+    )
+
+    with pytest.raises(ValueError, match="unsupported wheel schema version"):
+        readers.read_wheel_report_rows(path)
+
+
+def test_wheel_reader_rejects_previous_schema(tmp_path):
+    path = tmp_path / "previous.csv"
+    row = {column: "" for column in WHEEL_COLUMNS}
+    row.update({"schema_version": "2", "run_mode": "CURRENT_CONTEXT_ONLY", "symbol": "X"})
+    path.write_text(
+        ",".join(WHEEL_COLUMNS) + "\n" +
+        ",".join(row[column] for column in WHEEL_COLUMNS) + "\n"
+    )
 
     with pytest.raises(ValueError, match="unsupported wheel schema version"):
         readers.read_wheel_report_rows(path)

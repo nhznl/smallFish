@@ -50,6 +50,7 @@ from utilities.options.wheel import (
     price_quality,
     rolling_rv_used,
     run_wheel,
+    rv_rank,
     rv_percentile,
     rv_used,
     sessions_for_dte,
@@ -312,6 +313,16 @@ def test_rv_percentile_constructed_series():
     assert rv_percentile(np.linspace(0.01, 0.02, 30), min_lookback=60) is None
     # NaN current value -> None
     assert rv_percentile(np.array([0.01] * 100 + [np.nan])) is None
+
+
+def test_rv_rank_constructed_series():
+    # Current 5 lies halfway between the trailing low 1 and high 9.
+    series = np.array(list(range(1, 10)) + [5], dtype="float64")
+    assert _approx(rv_rank(series, lookback=252, min_lookback=10), 0.5)
+
+    # A flat RV range has no high-low denominator.
+    assert rv_rank(np.array([0.02] * 100), min_lookback=60) is None
+    assert rv_rank(np.linspace(0.01, 0.02, 30), min_lookback=60) is None
 
 
 def test_rolling_rv_used_last_value_matches_point_estimators():
