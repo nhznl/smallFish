@@ -33,6 +33,7 @@ export interface PortfolioSummary {
   spy_inception_return: number | null;
   /** Percentage points of out/under-performance since the creation date. */
   inception_vs_spy: number | null;
+  inception_vs_spy_snapshots: Record<string, number>;
   ytd_return: number | null;
   spy_ytd_return: number | null;
   ytd_vs_spy: number | null;
@@ -62,7 +63,13 @@ export interface PortfolioMember {
 }
 
 export interface PortfolioListResponse extends PortfolioSnapshot {
+  inception_vs_spy_snapshots: InceptionVsSpySnapshotDate[];
   portfolios: PortfolioSummary[];
+}
+
+export interface InceptionVsSpySnapshotDate {
+  snapshot_date: string;
+  captured_at: string;
 }
 
 export interface PortfolioDetailResponse extends PortfolioSnapshot {

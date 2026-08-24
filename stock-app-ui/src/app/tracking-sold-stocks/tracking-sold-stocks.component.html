@@ -18,6 +18,13 @@
         }
       </div>
     }
+    <button type="button" class="btn btn-sm" (click)="captureCoverageVsSpySnapshot()"
+      [attr.aria-busy]="snapshotting" [disabled]="snapshotting || !hasTrackedStocks"
+      matTooltip="Save the current Coverage vs SPY values for this cached-close date; up to three dates are retained."
+      matTooltipPosition="above">
+      @if (snapshotting) { <span class="btn-spinner" aria-hidden="true"></span> }
+      {{ snapshotting ? 'Saving…' : 'Snapshot Coverage vs SPY' }}
+    </button>
     <button type="button" class="btn btn-primary" (click)="openAdd()">Add stocks</button>
   </div>
 </header>
@@ -112,6 +119,9 @@
               Coverage vs SPY<span class="sort-icon" aria-hidden="true">{{ sortIcon('coverage_vs_spy') }}</span>
             </button>
           </th>
+          @for (snapshot of coverageSnapshotDates(); track snapshot.snapshot_date) {
+            <th class="num">Coverage vs SPY<br><small>as of {{ date(snapshot.snapshot_date) }}</small></th>
+          }
           <th class="num sortable" [attr.aria-sort]="ariaSort('ytd_vs_spy')">
             <button type="button" class="sort-button" (click)="sortBy('ytd_vs_spy')"
               matTooltip="Stock YTD return minus SPY YTD, in percentage points."
@@ -184,6 +194,12 @@
               {{ pp(row.coverage_vs_spy) }}
               <small>{{ pct(row.coverage_return) }} · SPY {{ pct(row.spy_coverage_return) }}</small>
             </td>
+            @for (snapshot of coverageSnapshotDates(); track snapshot.snapshot_date) {
+              <td class="num spread-cell"
+                [class]="'num spread-cell ' + signClass(row.coverage_vs_spy_snapshots[snapshot.snapshot_date])">
+                {{ pp(row.coverage_vs_spy_snapshots[snapshot.snapshot_date]) }}
+              </td>
+            }
             <td class="num spread-cell" [class]="'num spread-cell ' + signClass(row.ytd_vs_spy)"
               [matTooltip]="ytdTooltip(row)" matTooltipPosition="above">
               {{ pp(row.ytd_vs_spy) }}

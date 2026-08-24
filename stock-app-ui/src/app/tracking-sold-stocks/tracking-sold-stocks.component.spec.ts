@@ -47,14 +47,19 @@ describe('TrackingSoldStocksComponent', () => {
                 coverage_return: 8,
                 spy_coverage_return: 5,
                 coverage_vs_spy: 3,
+                coverage_vs_spy_snapshots: { '2026-07-22': 2.5 },
                 ytd_return: 10,
                 ytd_vs_spy: 5
+              }],
+              coverage_vs_spy_snapshots: [{
+                snapshot_date: '2026-07-22', captured_at: '2026-07-22T16:00:00+00:00'
               }]
             }),
             lookupSymbols: () => of({ as_of: '2026-07-23', known: [], unknown: [] }),
             add: () => of({ stocks: [] }),
             update: () => of({ stocks: [] }),
-            remove: () => of({ stocks: [] })
+            remove: () => of({ stocks: [] }),
+            captureCoverageVsSpySnapshot: () => of({ stocks: [] })
           }
         }
       ]
@@ -69,5 +74,6 @@ describe('TrackingSoldStocksComponent', () => {
     expect(text).toContain('AAA');
     expect(text).toContain('Copy symbols');
     expect(text).toContain('Coverage vs SPY');
+    expect(text).toContain('Snapshot Coverage vs SPY');
   });
 });

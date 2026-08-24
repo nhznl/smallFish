@@ -43,12 +43,19 @@ export interface TrackedStockRow {
   coverage_return: number | null;
   spy_coverage_return: number | null;
   coverage_vs_spy: number | null;
+  coverage_vs_spy_snapshots: Record<string, number>;
   ytd_return: number | null;
   ytd_vs_spy: number | null;
 }
 
 export interface TrackedStockListResponse extends TrackedStockSnapshot {
+  coverage_vs_spy_snapshots: CoverageVsSpySnapshotDate[];
   stocks: TrackedStockRow[];
+}
+
+export interface CoverageVsSpySnapshotDate {
+  snapshot_date: string;
+  captured_at: string;
 }
 
 export interface SymbolLookupResponse {

@@ -32,6 +32,15 @@ def get_portfolio_sectors() -> dict:
     return {"sectors": portfolios.sectors()}
 
 
+@router.post("/portfolios/inception-vs-spy-snapshots")
+def post_inception_vs_spy_snapshot() -> dict:
+    """Capture current portfolio Inception-vs-SPY values for the cached-close date."""
+    try:
+        return portfolios.capture_inception_vs_spy_snapshot()
+    except portfolios.PortfolioError as exc:
+        _raise(exc)
+
+
 @router.get("/portfolios/symbols")
 def get_portfolio_symbols(symbols: str = Query(default="")) -> dict:
     """Validate a free-form symbol list and price the known members."""

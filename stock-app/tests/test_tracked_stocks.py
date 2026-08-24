@@ -75,6 +75,32 @@ def test_add_and_list_tracked_symbols(env):
     assert row["ytd_vs_spy"] is not None
 
 
+def test_coverage_vs_spy_snapshots_replace_same_price_date_and_keep_history(env):
+    tracked_stocks.add_symbols({"symbols": ["AAA"]}, today=TODAY)
+
+    first = tracked_stocks.capture_coverage_vs_spy_snapshot(today=TODAY)
+    assert first["coverage_vs_spy_snapshot_result"]["replaced"] is False
+    assert [item["snapshot_date"] for item in first["coverage_vs_spy_snapshots"]] == [
+        "2026-07-23"
+    ]
+    assert (first["stocks"][0]["coverage_vs_spy_snapshots"]["2026-07-23"]
+            == first["stocks"][0]["coverage_vs_spy"])
+
+    replaced = tracked_stocks.capture_coverage_vs_spy_snapshot(today=TODAY)
+    assert replaced["coverage_vs_spy_snapshot_result"]["replaced"] is True
+    assert len(replaced["coverage_vs_spy_snapshots"]) == 1
+
+    _write_series(env / "cache", "SPY", [("07-24-2026", 251.0)])
+    _write_series(env / "cache", "AAA", [("07-24-2026", 145.0)])
+    second = tracked_stocks.capture_coverage_vs_spy_snapshot(today=date(2026, 7, 25))
+    assert [item["snapshot_date"] for item in second["coverage_vs_spy_snapshots"]] == [
+        "2026-07-24", "2026-07-23"
+    ]
+    assert set(second["stocks"][0]["coverage_vs_spy_snapshots"]) == {
+        "2026-07-23", "2026-07-24"
+    }
+
+
 def test_add_with_tracking_category(env):
     payload = tracked_stocks.add_symbols(
         {"symbols": ["BBB"], "category": "Tracking"},
@@ -143,6 +169,10 @@ def test_http_round_trip(env):
     listed = client.get("/tracked-stocks")
     assert listed.status_code == 200
     assert listed.json()["stocks"][0]["symbol"] == "AAA"
+
+    captured = client.post("/tracked-stocks/coverage-vs-spy-snapshots")
+    assert captured.status_code == 200
+    assert captured.json()["coverage_vs_spy_snapshots"]
 
     updated = client.put("/tracked-stocks/AAA", json={"notes": "watching for re-entry"})
     assert updated.status_code == 200

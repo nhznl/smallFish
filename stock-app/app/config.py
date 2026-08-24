@@ -265,9 +265,25 @@ def portfolio_members_csv() -> Path:
     return _under("SFP_PORTFOLIOS_MEMBERS_CSV", data_dir(), "portfolios/portfolio_members.csv")
 
 
+def portfolio_inception_snapshots_csv() -> Path:
+    """User-captured Inception-vs-SPY comparison history for portfolios."""
+    return _under(
+        "SFP_PORTFOLIO_INCEPTION_SNAPSHOTS", data_dir(),
+        "portfolios/inception_vs_spy_snapshots.csv",
+    )
+
+
 def tracked_stocks_csv() -> Path:
     """User-authored sold/tracking symbols with coverage initiation dates."""
     return _under("SFP_TRACKED_STOCKS_CSV", data_dir(), "tracking/tracked_stocks.csv")
+
+
+def tracked_stock_coverage_snapshots_csv() -> Path:
+    """User-captured Coverage-vs-SPY comparison history for tracked symbols."""
+    return _under(
+        "SFP_TRACKED_STOCK_COVERAGE_SNAPSHOTS", data_dir(),
+        "tracking/coverage_vs_spy_snapshots.csv",
+    )
 
 
 def premiums_dir() -> Path:

@@ -246,6 +246,34 @@ def test_stale_prices_are_flagged_against_the_expected_session(env, cache_root):
     assert fresh["prices_stale"] is False
 
 
+def test_inception_vs_spy_snapshots_replace_same_price_date_and_keep_history(env, cache_root):
+    _write_series(cache_root, "AAA", [("07-23-2026", 140.0)])
+    created = portfolios.create_portfolio(
+        {"name": "Snapshot Book", "symbols": ["AAA"]}, today=TODAY,
+    )
+    portfolio_id = created["portfolio"]["id"]
+
+    first = portfolios.capture_inception_vs_spy_snapshot(today=TODAY)
+    assert first["inception_vs_spy_snapshot_result"]["replaced"] is False
+    assert [item["snapshot_date"] for item in first["inception_vs_spy_snapshots"]] == [
+        "2026-07-23"
+    ]
+    assert (first["portfolios"][0]["inception_vs_spy_snapshots"]["2026-07-23"]
+            == first["portfolios"][0]["inception_vs_spy"])
+
+    replaced = portfolios.capture_inception_vs_spy_snapshot(today=TODAY)
+    assert replaced["inception_vs_spy_snapshot_result"]["replaced"] is True
+
+    _write_series(cache_root, "SPY", [("07-24-2026", 251.0)])
+    _write_series(cache_root, "AAA", [("07-24-2026", 145.0)])
+    second = portfolios.capture_inception_vs_spy_snapshot(today=date(2026, 7, 25))
+    assert [item["snapshot_date"] for item in second["inception_vs_spy_snapshots"]] == [
+        "2026-07-24", "2026-07-23"
+    ]
+    row = next(row for row in second["portfolios"] if row["id"] == portfolio_id)
+    assert set(row["inception_vs_spy_snapshots"]) == {"2026-07-23", "2026-07-24"}
+
+
 # --------------------------------------------------------------------------- #
 # validation                                                                    #
 # --------------------------------------------------------------------------- #
@@ -399,6 +427,7 @@ def test_http_round_trip_maps_errors_to_status_codes(env, cache_root):
     client = TestClient(app)
 
     assert client.get("/portfolios").json()["portfolios"] == []
+    assert client.post("/portfolios/inception-vs-spy-snapshots").status_code == 409
     assert "Information Technology" in client.get("/portfolios/sectors").json()["sectors"]
     assert client.get("/portfolios/symbols", params={"symbols": "AAA,NOPE"}).json()["unknown"] \
         == ["NOPE"]

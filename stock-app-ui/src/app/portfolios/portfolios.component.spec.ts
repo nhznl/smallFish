@@ -27,6 +27,7 @@ function summary(overrides: Partial<PortfolioSummary> = {}): PortfolioSummary {
     inception_return: 0.1,
     spy_inception_return: 0.05,
     inception_vs_spy: 0.05,
+    inception_vs_spy_snapshots: {},
     ytd_return: 0.08,
     spy_ytd_return: 0.04,
     ytd_vs_spy: 0.04,
@@ -44,6 +45,7 @@ function listResponse(portfolios: PortfolioSummary[] = [summary()]): PortfolioLi
     spy_ytd_return: 0.04,
     spy_week_return: 0.01,
     spy_price: 500,
+    inception_vs_spy_snapshots: [],
     portfolios,
   };
 }
@@ -98,6 +100,7 @@ describe('PortfoliosComponent', () => {
       'remove',
       'addSymbols',
       'removeSymbol',
+      'captureInceptionVsSpySnapshot',
     ]);
     api.list.and.returnValue(of(listResponse()));
     api.sectors.and.returnValue(of({ sectors: ['Technology'] }));
@@ -114,6 +117,7 @@ describe('PortfoliosComponent', () => {
       symbols: [],
       symbol_count: 0,
     }))));
+    api.captureInceptionVsSpySnapshot.and.returnValue(of(listResponse()));
 
     await TestBed.configureTestingModule({
       imports: [PortfoliosComponent],
@@ -128,6 +132,7 @@ describe('PortfoliosComponent', () => {
     mount();
     expect(text()).toContain('Demo Book');
     expect(api.list).toHaveBeenCalled();
+    expect(text()).toContain('Snapshot Incep vs SPY');
   });
 
   it('shows a list load error instead of an empty book shelf', () => {

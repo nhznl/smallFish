@@ -19,6 +19,13 @@
         }
       </div>
     }
+    <button type="button" class="btn btn-sm" (click)="captureInceptionVsSpySnapshot()"
+      [attr.aria-busy]="snapshotting" [disabled]="snapshotting || !rows.length"
+      matTooltip="Save the current Incep vs SPY values for this cached-close date; up to three dates are retained."
+      matTooltipPosition="above">
+      @if (snapshotting) { <span class="btn-spinner" aria-hidden="true"></span> }
+      {{ snapshotting ? 'Saving…' : 'Snapshot Incep vs SPY' }}
+    </button>
     <button type="button" class="btn btn-primary" (click)="openCreate($event)">New portfolio</button>
   </div>
 </header>
@@ -103,6 +110,9 @@
               Incep vs SPY<span class="sort-icon" aria-hidden="true">{{ sortIcon('inception_vs_spy') }}</span>
             </button>
           </th>
+          @for (snapshot of inceptionSnapshotDates(); track snapshot.snapshot_date) {
+            <th class="num">Incep vs SPY<br><small>as of {{ date(snapshot.snapshot_date) }}</small></th>
+          }
           <th class="num sortable" [attr.aria-sort]="ariaSort('ytd_vs_spy')">
             <button type="button" class="sort-button" (click)="sortBy('ytd_vs_spy')"
               matTooltip="Portfolio return since the final close of last year minus SPY's, in percentage points."
@@ -148,6 +158,12 @@
               {{ pp(row.inception_vs_spy) }}
               <small>{{ pct(row.inception_return) }} · SPY {{ pct(row.spy_inception_return) }}</small>
             </td>
+            @for (snapshot of inceptionSnapshotDates(); track snapshot.snapshot_date) {
+              <td class="num spread-cell"
+                [class]="'num spread-cell ' + signClass(row.inception_vs_spy_snapshots[snapshot.snapshot_date])">
+                {{ pp(row.inception_vs_spy_snapshots[snapshot.snapshot_date]) }}
+              </td>
+            }
             <td class="num spread-cell" [class]="'num spread-cell ' + signClass(row.ytd_vs_spy)"
               [matTooltip]="ytdTooltip(row)" matTooltipPosition="above">
               {{ pp(row.ytd_vs_spy) }}

@@ -53,6 +53,11 @@ from .serializers import _fifty_two_week_range_dict
 
 _lock = threading.RLock()
 NOTES_MAX = 500
+COVERAGE_SNAPSHOT_HEADERS = [
+    "snapshot_date", "captured_at", "symbol", "coverage_vs_spy",
+]
+# Keep the small, comparable history used by the Holdings G/L snapshot feature.
+MAX_COVERAGE_SNAPSHOT_DATES = 3
 
 
 def _normalize_category(value: Any) -> str:
@@ -134,6 +139,41 @@ def _write_tracked(rows: list[dict[str, Any]]) -> None:
     _atomic_write(config.tracked_stocks_csv(), TRACKED_STOCK_HEADERS, rows)
 
 
+def _read_coverage_snapshots() -> list[dict[str, str]]:
+    return _read_rows(
+        config.tracked_stock_coverage_snapshots_csv(), COVERAGE_SNAPSHOT_HEADERS,
+    )
+
+
+def _snapshot_catalog(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Retained snapshot dates, newest first, for comparison-column headers."""
+    captured_by_date: dict[str, str] = {}
+    for row in rows:
+        snapshot_date = row.get("snapshot_date", "")
+        captured_at = row.get("captured_at", "")
+        if snapshot_date and captured_at > captured_by_date.get(snapshot_date, ""):
+            captured_by_date[snapshot_date] = captured_at
+    return [
+        {"snapshot_date": snapshot_date, "captured_at": captured_by_date[snapshot_date]}
+        for snapshot_date in sorted(captured_by_date, reverse=True)[:MAX_COVERAGE_SNAPSHOT_DATES]
+    ]
+
+
+def _snapshots_by_symbol(rows: list[dict[str, str]]) -> dict[str, dict[str, float]]:
+    """Return only parseable captured spreads; unknown is never represented as zero."""
+    snapshots: dict[str, dict[str, float]] = {}
+    for row in rows:
+        try:
+            value = float(row.get("coverage_vs_spy", ""))
+        except (TypeError, ValueError):
+            continue
+        symbol = row.get("symbol", "")
+        snapshot_date = row.get("snapshot_date", "")
+        if symbol and snapshot_date:
+            snapshots.setdefault(symbol, {})[snapshot_date] = value
+    return snapshots
+
+
 def _build_book(rows: list[dict[str, str]], today: date) -> tuple[PriceBook, date]:
     probe = PriceBook(_price_years(today, today.year))
     as_of = _reference_date(probe, today) or last_expected_session(today)
@@ -183,6 +223,7 @@ def _enrich_row(
     as_of: date,
     benchmark: BenchmarkMetrics,
     stocks_by_code: dict[str, Any],
+    coverage_snapshots: dict[str, dict[str, float]],
 ) -> dict[str, Any]:
     symbol = row["symbol"]
     coverage = _parse_date(row.get("coverage_initiation_date"), fallback=as_of)
@@ -213,6 +254,7 @@ def _enrich_row(
         "coverage_return": _round(metrics.inception_return),
         "spy_coverage_return": _round(spy_metrics.inception_return),
         "coverage_vs_spy": _round(_spread(metrics.inception_return, spy_metrics.inception_return)),
+        "coverage_vs_spy_snapshots": coverage_snapshots.get(symbol, {}),
         "ytd_return": _round(metrics.ytd_return),
         "ytd_vs_spy": _round(_spread(metrics.ytd_return, benchmark.ytd_return)),
     }
@@ -226,6 +268,8 @@ def list_tracked(today: date | None = None) -> dict[str, Any]:
     book, as_of = _build_book(rows, today)
     benchmark = BenchmarkMetrics.build(book.series(BENCHMARK), as_of)
     stocks_by_code = cache.by_code()
+    snapshot_rows = _read_coverage_snapshots()
+    coverage_snapshots = _snapshots_by_symbol(snapshot_rows)
     stocks = [
         _enrich_row(
             row,
@@ -234,11 +278,68 @@ def list_tracked(today: date | None = None) -> dict[str, Any]:
             as_of=as_of,
             benchmark=benchmark,
             stocks_by_code=stocks_by_code,
+            coverage_snapshots=coverage_snapshots,
         )
         for row in rows
     ]
     stocks.sort(key=lambda row: (row["symbol"].casefold(),))
-    return {**_snapshot_meta(as_of, today, benchmark), "stocks": stocks}
+    return {
+        **_snapshot_meta(as_of, today, benchmark),
+        "coverage_vs_spy_snapshots": _snapshot_catalog(snapshot_rows),
+        "stocks": stocks,
+    }
+
+
+def capture_coverage_vs_spy_snapshot(today: date | None = None) -> dict[str, Any]:
+    """Capture the current per-symbol Coverage-vs-SPY values under price as-of date.
+
+    Re-capturing the same cached-close date replaces that complete date instead
+    of mixing values from separate moments. The three newest dates are retained.
+    """
+    current = list_tracked(today=today)
+    stocks = current["stocks"]
+    if not stocks:
+        raise PortfolioError("There are no tracked stocks to snapshot.", status_code=409)
+    snapshot_date = str(current["as_of"])
+    captured_at = _now()
+    captured = [
+        {
+            "snapshot_date": snapshot_date,
+            "captured_at": captured_at,
+            "symbol": row["symbol"],
+            "coverage_vs_spy": row["coverage_vs_spy"],
+        }
+        for row in stocks
+        if row["coverage_vs_spy"] is not None
+    ]
+    if not captured:
+        raise PortfolioError(
+            "Coverage vs SPY is unavailable for every tracked stock; no snapshot was saved.",
+            status_code=409,
+        )
+    with _lock:
+        existing = _read_coverage_snapshots()
+        replaced = any(row.get("snapshot_date") == snapshot_date for row in existing)
+        retained = [
+            row for row in existing if row.get("snapshot_date") != snapshot_date
+        ] + captured
+        dates = sorted(
+            {row.get("snapshot_date", "") for row in retained if row.get("snapshot_date")},
+            reverse=True,
+        )[:MAX_COVERAGE_SNAPSHOT_DATES]
+        retained = [row for row in retained if row.get("snapshot_date") in dates]
+        retained.sort(key=lambda row: (row.get("snapshot_date", ""), row.get("symbol", "")),
+                      reverse=True)
+        _atomic_write(config.tracked_stock_coverage_snapshots_csv(),
+                      COVERAGE_SNAPSHOT_HEADERS, retained)
+    result = list_tracked(today=today)
+    result["coverage_vs_spy_snapshot_result"] = {
+        "snapshot_date": snapshot_date,
+        "captured_at": captured_at,
+        "replaced": replaced,
+        "stock_count": len(captured),
+    }
+    return result
 
 
 def lookup_symbols(raw: Any, today: date | None = None) -> dict[str, Any]:

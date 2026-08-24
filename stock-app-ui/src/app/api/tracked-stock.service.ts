@@ -51,4 +51,10 @@ export class TrackedStockService {
       `${this.baseUrl}/${encodeURIComponent(symbol)}`
     );
   }
+
+  captureCoverageVsSpySnapshot(): Observable<TrackedStockListResponse> {
+    return this.http.post<TrackedStockListResponse>(
+      `${this.baseUrl}/coverage-vs-spy-snapshots`, {}
+    );
+  }
 }

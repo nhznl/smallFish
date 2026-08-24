@@ -83,6 +83,7 @@ export class PortfoliosComponent {
   error: string | null = null;
   sortKey: SortKey = 'inception_vs_spy';
   sortAsc = false;
+  snapshotting = false;
 
   // ── create modal ────────────────────────────────────────────────────────
   createOpen = false;
@@ -170,6 +171,31 @@ export class PortfoliosComponent {
 
   get totalMissingData(): number {
     return this.rows.filter(row => row.missing_data_symbols.length).length;
+  }
+
+  inceptionSnapshotDates(): { snapshot_date: string }[] {
+    return this.snapshot?.inception_vs_spy_snapshots ?? [];
+  }
+
+  captureInceptionVsSpySnapshot(): void {
+    this.snapshotting = true;
+    this.error = null;
+    this.cdr.markForCheck();
+    this.api.captureInceptionVsSpySnapshot()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: response => {
+          this.snapshot = response;
+          this.rows = this.sortRows(response.portfolios ?? []);
+          this.snapshotting = false;
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.snapshotting = false;
+          this.error = this.message(error, 'Incep vs SPY snapshot could not be saved.');
+          this.cdr.markForCheck();
+        }
+      });
   }
 
   // ── sorting ─────────────────────────────────────────────────────────────

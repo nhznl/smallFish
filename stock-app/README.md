@@ -99,7 +99,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 |---|---|
 | `GET /health` | Service health check. |
 | `GET /capabilities` | Which optional integrations are configured and whether core data exists. Contains no secret or account identifier. |
-| `GET /portfolios` | Named symbol lists with returns and sector exposure. |
+| `GET /portfolios`, `POST /portfolios/inception-vs-spy-snapshots` | Named symbol lists with returns, sector exposure, and up to three captured Inception-vs-SPY comparison dates. |
 | `GET /portfolios/{id}` | One portfolio, with per-symbol detail. |
 | `GET /stocks/{symbol}/analysis` | Focused cached-analysis data for Stock Detail. |
 | `GET /stocks` | Legacy collection using the same focused analysis contract. |
@@ -109,6 +109,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `GET /api/studies/{studyId}/scan` | Latest materialized candidate snapshot for a scan-capable study. |
 | `POST /api/studies/{studyId}/scan` | Verify/refresh upcoming earnings, then run an explicitly allowlisted study scan; fails closed when freshness is unavailable. |
 | `GET /wheelCandidates?horizon=37` | Wheel candidates with trend data. |
+| `GET /tracked-stocks`, `POST /tracked-stocks/coverage-vs-spy-snapshots` | Tracked-stock returns and up to three captured Coverage-vs-SPY comparison dates. |
 | `GET /stocks/{symbol}/info` | Live Yahoo company information for Stock Detail (see below). |
 | `GET /api/brokerages/{id}/symbols` | Brokerage-agnostic Symbol Ledger list with derived lifecycle and retained-history P/L. |
 | `GET /api/brokerages/{id}/symbols/{symbol}/events` | Immutable, cursor-paginated current, all, or archived event history. |

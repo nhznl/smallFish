@@ -25,6 +25,12 @@ export class PortfolioService {
     return this.http.get<PortfolioListResponse>(this.baseUrl);
   }
 
+  captureInceptionVsSpySnapshot(): Observable<PortfolioListResponse> {
+    return this.http.post<PortfolioListResponse>(
+      `${this.baseUrl}/inception-vs-spy-snapshots`, {}
+    );
+  }
+
   /** One portfolio with its member rows. */
   detail(id: string): Observable<PortfolioDetailResponse> {
     return this.http.get<PortfolioDetailResponse>(`${this.baseUrl}/${encodeURIComponent(id)}`);

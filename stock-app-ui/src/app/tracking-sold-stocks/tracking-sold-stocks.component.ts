@@ -100,6 +100,7 @@ export class TrackingSoldStocksComponent {
   editError: string | null = null;
 
   removingSymbol: string | null = null;
+  snapshotting = false;
   copyState: 'idle' | 'copied' | 'failed' = 'idle';
   private copyTimer?: ReturnType<typeof setTimeout>;
 
@@ -320,6 +321,30 @@ export class TrackingSoldStocksComponent {
 
   get hasVisibleRows(): boolean {
     return this.rows.length > 0;
+  }
+
+  coverageSnapshotDates(): { snapshot_date: string }[] {
+    return this.snapshot?.coverage_vs_spy_snapshots ?? [];
+  }
+
+  captureCoverageVsSpySnapshot(): void {
+    this.snapshotting = true;
+    this.error = null;
+    this.cdr.markForCheck();
+    this.api.captureCoverageVsSpySnapshot()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: response => {
+          this.applyResponse(response);
+          this.snapshotting = false;
+          this.cdr.markForCheck();
+        },
+        error: error => {
+          this.snapshotting = false;
+          this.error = this.message(error, 'Coverage vs SPY snapshot could not be saved.');
+          this.cdr.markForCheck();
+        }
+      });
   }
 
   isReady(row: TrackedStockRow): boolean {

@@ -187,3 +187,4 @@ manual_pins:
   XMTR: {type: STOCK, notes: "Xometry, on-demand manufacturing marketplace (outside configured index universe)"}
   ISSC: {type: STOCK, notes: "INNOVATIVE SOLTNS & SUPP INC"}
   KSPI: {type: STOCK, notes: "Kaspi"}
+  VIST: {type: STOCK, notes: "Vista Energy"}

@@ -43,6 +43,10 @@ WEEK_SESSIONS = 5
 DESCRIPTION_MAX = 1_000
 NAME_MAX = 80
 TAG_MAX = 60
+INCEPTION_SNAPSHOT_HEADERS = [
+    "snapshot_date", "captured_at", "portfolio_id", "inception_vs_spy",
+]
+MAX_INCEPTION_SNAPSHOT_DATES = 3
 
 # Shared with utilities.bootstrap_data, which seeds an example portfolio. The
 # two run in separate environments and cannot import each other, so the column
@@ -120,6 +124,37 @@ def _write_portfolios(rows: list[dict[str, Any]]) -> None:
 
 def _write_members(rows: list[dict[str, Any]]) -> None:
     _atomic_write(config.portfolio_members_csv(), MEMBER_HEADERS, rows)
+
+
+def _read_inception_snapshots() -> list[dict[str, str]]:
+    return _read_rows(config.portfolio_inception_snapshots_csv(), INCEPTION_SNAPSHOT_HEADERS)
+
+
+def _inception_snapshot_catalog(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    captured_by_date: dict[str, str] = {}
+    for row in rows:
+        snapshot_date = row.get("snapshot_date", "")
+        captured_at = row.get("captured_at", "")
+        if snapshot_date and captured_at > captured_by_date.get(snapshot_date, ""):
+            captured_by_date[snapshot_date] = captured_at
+    return [
+        {"snapshot_date": snapshot_date, "captured_at": captured_by_date[snapshot_date]}
+        for snapshot_date in sorted(captured_by_date, reverse=True)[:MAX_INCEPTION_SNAPSHOT_DATES]
+    ]
+
+
+def _inception_snapshots_by_portfolio(rows: list[dict[str, str]]) -> dict[str, dict[str, float]]:
+    snapshots: dict[str, dict[str, float]] = {}
+    for row in rows:
+        try:
+            value = float(row.get("inception_vs_spy", ""))
+        except (TypeError, ValueError):
+            continue
+        portfolio_id = row.get("portfolio_id", "")
+        snapshot_date = row.get("snapshot_date", "")
+        if portfolio_id and snapshot_date:
+            snapshots.setdefault(portfolio_id, {})[snapshot_date] = value
+    return snapshots
 
 
 def _members_by_portfolio(members: list[dict[str, str]]) -> dict[str, list[dict[str, str]]]:
@@ -547,10 +582,14 @@ def list_portfolios(today: date | None = None) -> dict[str, Any]:
     book, as_of = _build_book(rows, today)
     benchmark = BenchmarkMetrics.build(book.series(BENCHMARK), as_of)
 
+    snapshot_rows = _read_inception_snapshots()
+    snapshots = _inception_snapshots_by_portfolio(snapshot_rows)
     summaries = [
         compute_portfolio(row, grouped.get(row["id"], []), book, as_of, benchmark)[0]
         for row in rows
     ]
+    for summary in summaries:
+        summary["inception_vs_spy_snapshots"] = snapshots.get(summary["id"], {})
     summaries.sort(
         key=lambda summary: (
             summary["inception_vs_spy"] is None,
@@ -558,7 +597,57 @@ def list_portfolios(today: date | None = None) -> dict[str, Any]:
             summary["name"].casefold(),
         )
     )
-    return {**_snapshot_meta(as_of, today, benchmark), "portfolios": summaries}
+    return {
+        **_snapshot_meta(as_of, today, benchmark),
+        "inception_vs_spy_snapshots": _inception_snapshot_catalog(snapshot_rows),
+        "portfolios": summaries,
+    }
+
+
+def capture_inception_vs_spy_snapshot(today: date | None = None) -> dict[str, Any]:
+    """Capture every current portfolio's Inception-vs-SPY value for its cache date."""
+    current = list_portfolios(today=today)
+    portfolios = current["portfolios"]
+    if not portfolios:
+        raise PortfolioError("There are no portfolios to snapshot.", status_code=409)
+    snapshot_date = str(current["as_of"])
+    captured_at = _now()
+    captured = [
+        {
+            "snapshot_date": snapshot_date,
+            "captured_at": captured_at,
+            "portfolio_id": row["id"],
+            "inception_vs_spy": row["inception_vs_spy"],
+        }
+        for row in portfolios
+        if row["inception_vs_spy"] is not None
+    ]
+    if not captured:
+        raise PortfolioError(
+            "Inception vs SPY is unavailable for every portfolio; no snapshot was saved.",
+            status_code=409,
+        )
+    with _lock:
+        existing = _read_inception_snapshots()
+        replaced = any(row.get("snapshot_date") == snapshot_date for row in existing)
+        retained = [row for row in existing if row.get("snapshot_date") != snapshot_date] + captured
+        dates = sorted(
+            {row.get("snapshot_date", "") for row in retained if row.get("snapshot_date")},
+            reverse=True,
+        )[:MAX_INCEPTION_SNAPSHOT_DATES]
+        retained = [row for row in retained if row.get("snapshot_date") in dates]
+        retained.sort(key=lambda row: (row.get("snapshot_date", ""), row.get("portfolio_id", "")),
+                      reverse=True)
+        _atomic_write(config.portfolio_inception_snapshots_csv(),
+                      INCEPTION_SNAPSHOT_HEADERS, retained)
+    result = list_portfolios(today=today)
+    result["inception_vs_spy_snapshot_result"] = {
+        "snapshot_date": snapshot_date,
+        "captured_at": captured_at,
+        "replaced": replaced,
+        "portfolio_count": len(captured),
+    }
+    return result
 
 
 def get_portfolio(portfolio_id: str, today: date | None = None) -> dict[str, Any]:

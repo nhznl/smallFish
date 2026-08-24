@@ -32,6 +32,15 @@ def get_tracked_symbols(symbols: str = Query(default="")) -> dict:
         _raise(exc)
 
 
+@router.post("/tracked-stocks/coverage-vs-spy-snapshots")
+def post_coverage_vs_spy_snapshot() -> dict:
+    """Capture current Coverage-vs-SPY values for the cached-close date."""
+    try:
+        return tracked_stocks.capture_coverage_vs_spy_snapshot()
+    except PortfolioError as exc:
+        _raise(exc)
+
+
 @router.post("/tracked-stocks")
 def post_tracked_stocks(request: dict) -> dict:
     """Add symbols with a shared coverage initiation date."""
