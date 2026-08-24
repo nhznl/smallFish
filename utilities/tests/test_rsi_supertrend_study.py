@@ -301,9 +301,23 @@ def test_corrupt_primary_data_fails_closed(tmp_path):
         raise AssertionError("corrupt primary ETF history must fail closed")
 
 
+def _approved_parity(tmp_path: Path) -> tuple[dict, Path]:
+    report = {
+        "ok": True,
+        "fixture_sha256": "abc123",
+        "study_id": FROZEN_CONFIG["study_id"],
+    }
+    path = tmp_path / "tradingview_parity.json"
+    path.write_text(json.dumps(report) + "\n", encoding="utf-8")
+    return report, path
+
+
 def test_holdout_guard_requires_confirm_flag(tmp_path):
+    report, path = _approved_parity(tmp_path)
     try:
-        enforce_holdout_guard(_cfg(), tmp_path, confirm=False, claim_root=tmp_path)
+        enforce_holdout_guard(
+            _cfg(), tmp_path, confirm=False, claim_root=tmp_path,
+            parity_report=report, parity_report_path=path)
     except ValueError as exc:
         assert "--confirm-holdout" in str(exc)
     else:
@@ -313,23 +327,43 @@ def test_holdout_guard_requires_confirm_flag(tmp_path):
 def test_holdout_guard_requires_clean_worktree(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "studies.rsi_supertrend.study.git_is_dirty", lambda: True)
+    report, path = _approved_parity(tmp_path)
     try:
-        enforce_holdout_guard(_cfg(), tmp_path, confirm=True, claim_root=tmp_path)
+        enforce_holdout_guard(
+            _cfg(), tmp_path, confirm=True, claim_root=tmp_path,
+            parity_report=report, parity_report_path=path)
     except ValueError as exc:
         assert "clean committed worktree" in str(exc)
     else:
         raise AssertionError("dirty worktree must block holdout")
 
 
+def test_holdout_guard_requires_parity_report(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "studies.rsi_supertrend.study.git_is_dirty", lambda: False)
+    try:
+        enforce_holdout_guard(_cfg(), tmp_path, confirm=True, claim_root=tmp_path)
+    except ValueError as exc:
+        assert "parity report" in str(exc)
+    else:
+        raise AssertionError("holdout without parity evidence must fail")
+
+
 def test_holdout_guard_claims_atomically_and_ignores_output_root(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "studies.rsi_supertrend.study.git_is_dirty", lambda: False)
+    report, path = _approved_parity(tmp_path)
     first = enforce_holdout_guard(
-        _cfg(), tmp_path / "out-a", confirm=True, claim_root=tmp_path)
+        _cfg(), tmp_path / "out-a", confirm=True, claim_root=tmp_path,
+        parity_report=report, parity_report_path=path)
     assert (first / "claim.json").is_file()
+    claim = json.loads((first / "claim.json").read_text(encoding="utf-8"))
+    assert claim["parity_report_sha256"]
+    assert claim["fixture_sha256"] == "abc123"
     try:
         enforce_holdout_guard(
-            _cfg(), tmp_path / "out-b", confirm=True, claim_root=tmp_path)
+            _cfg(), tmp_path / "out-b", confirm=True, claim_root=tmp_path,
+            parity_report=report, parity_report_path=path)
     except ValueError as exc:
         assert "already claimed" in str(exc)
     else:
@@ -409,7 +443,7 @@ def test_stock_outputs_are_written_separately(tmp_path):
     assert manifest["stock_survivorship_bias"] is True
 
 
-def _tv_frame(n: int = 40) -> pd.DataFrame:
+def _tv_frame(n: int = 60, with_fills: bool = False) -> pd.DataFrame:
     frame = _bars(n)
     close = frame["close"].to_numpy(dtype="float64")
     high = frame["high"].to_numpy(dtype="float64")
@@ -418,7 +452,7 @@ def _tv_frame(n: int = 40) -> pd.DataFrame:
     signal = pine_sma(rsi, 10)
     _st, direction = pine_supertrend(high, low, close, 2.5, 10)
     special = special_buy_signals(rsi, signal, 50.0, 2)
-    return pd.DataFrame({
+    out = pd.DataFrame({
         "date": pd.to_datetime(frame["date"]).dt.strftime("%Y-%m-%d"),
         "open": frame["open"],
         "high": frame["high"],
@@ -429,6 +463,48 @@ def _tv_frame(n: int = 40) -> pd.DataFrame:
         "st_direction": direction,
         "special_buy": special,
     })
+    if with_fills:
+        entry_day = str(pd.Timestamp(frame["date"].iloc[25]).date())
+        exit_day = str(pd.Timestamp(frame["date"].iloc[40]).date())
+        out["entry_fill"] = np.nan
+        out["exit_fill"] = np.nan
+        out.loc[out["date"] == entry_day, "entry_fill"] = float(frame["open"].iloc[25])
+        out.loc[out["date"] == exit_day, "exit_fill"] = float(frame["open"].iloc[40])
+    return out
+
+
+def _patch_emulate_with_fills(monkeypatch, frame: pd.DataFrame) -> None:
+    from studies.rsi_supertrend import study as study_mod
+    from studies.rsi_supertrend.emulator import SleeveResult
+
+    entry_day = str(pd.Timestamp(frame["date"].iloc[25]).date())
+    exit_day = str(pd.Timestamp(frame["date"].iloc[40]).date())
+    entry_price = float(frame["open"].iloc[25])
+    exit_price = float(frame["open"].iloc[40])
+    idx = pd.DatetimeIndex(pd.to_datetime(frame["date"]))
+
+    def fake_emulate(_frame, cfg, start, end, symbol):
+        return SleeveResult(
+            equity=pd.Series(np.full(len(idx), 10000.0), index=idx),
+            buy_hold=pd.Series(np.full(len(idx), 10000.0), index=idx),
+            trades=[{
+                "symbol": symbol,
+                "signal_date": str(pd.Timestamp(frame["date"].iloc[24]).date()),
+                "entry_date": entry_day,
+                "entry_price": entry_price,
+                "exit_signal_date": str(pd.Timestamp(frame["date"].iloc[39]).date()),
+                "exit_date": exit_day,
+                "exit_price": exit_price,
+                "direction_at_entry": -1.0,
+                "shares": 100.0,
+                "return": exit_price / entry_price - 1.0,
+                "duration_days": 15,
+                "exit_reason": "supertrend_flip",
+                "open_at_cutoff": False,
+            }],
+        )
+
+    monkeypatch.setattr(study_mod, "emulate_symbol", fake_emulate)
 
 
 def test_tradingview_comparison_fails_closed_when_fixture_missing():
@@ -450,8 +526,9 @@ def test_tradingview_comparison_matches_recomputed_indicators(tmp_path):
     _tv_frame().to_csv(path, index=False)
     report = compare_tradingview_export(path)
     assert report["ok"]
-    assert report["st_direction_mismatches"] == 0
-    assert report["special_buy_mismatches"] == 0
+    assert report["comparisons"]["st_direction_mismatches"] == 0
+    assert report["comparisons"]["special_buy_mismatches"] == 0
+    assert report["fixture_sha256"]
 
 
 def test_tradingview_comparison_detects_indicator_mismatch(tmp_path):
@@ -465,3 +542,55 @@ def test_tradingview_comparison_detects_indicator_mismatch(tmp_path):
         assert "disagrees" in str(exc)
     else:
         raise AssertionError("a mismatched TradingView export must fail")
+
+
+def test_tradingview_comparison_detects_missing_tv_rsi_on_defined_bar(tmp_path):
+    frame = _tv_frame()
+    defined = frame["rsi"].notna()
+    assert defined.any()
+    frame.loc[frame.index[defined.to_numpy().nonzero()[0][-1]], "rsi"] = float("nan")
+    path = tmp_path / "tradingview_export.csv"
+    frame.to_csv(path, index=False)
+    try:
+        compare_tradingview_export(path)
+    except ValueError as exc:
+        assert "rsi_defined_mask_mismatches" in str(exc)
+    else:
+        raise AssertionError("a blank TradingView RSI on a defined bar must fail")
+
+
+def test_tradingview_comparison_detects_extra_local_fills(tmp_path, monkeypatch):
+    frame = _tv_frame(with_fills=True)
+    _patch_emulate_with_fills(monkeypatch, _bars(60))
+    # Empty fill columns while the local emulator still produces entries.
+    frame["entry_fill"] = float("nan")
+    frame["exit_fill"] = float("nan")
+    path = tmp_path / "tradingview_export.csv"
+    frame.to_csv(path, index=False)
+    try:
+        compare_tradingview_export(path, require_fills=True)
+    except ValueError as exc:
+        assert "extra_local_entry_dates" in str(exc) or "entry_fill_mismatches" in str(exc)
+    else:
+        raise AssertionError("extra local fills against empty TV fills must fail")
+
+
+def test_tradingview_holdout_require_fills_rejects_missing_columns(tmp_path):
+    path = tmp_path / "tradingview_export.csv"
+    _tv_frame(with_fills=False).to_csv(path, index=False)
+    try:
+        compare_tradingview_export(path, require_fills=True)
+    except ValueError as exc:
+        assert "fill columns" in str(exc)
+    else:
+        raise AssertionError("holdout parity must require fill columns")
+
+
+def test_tradingview_comparison_with_fills_passes(tmp_path, monkeypatch):
+    frame = _tv_frame(with_fills=True)
+    _patch_emulate_with_fills(monkeypatch, _bars(60))
+    path = tmp_path / "tradingview_export.csv"
+    frame.to_csv(path, index=False)
+    report = compare_tradingview_export(path, require_fills=True)
+    assert report["ok"]
+    assert report["fills_compared"] is True

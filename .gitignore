@@ -33,3 +33,8 @@ stock-app/static/
 !/data/studies/*/
 /data/studies/*/*
 !/data/studies/*/study.json
+
+# External TradingView development export for the RSI/SuperTrend study.
+# Keep the CSV outside the worktree for holdout; if placed in the default
+# slot it must not dirty git status.
+studies/rsi_supertrend/fixtures/tradingview_export.csv

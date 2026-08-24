@@ -86,11 +86,15 @@ STOCK_TABLES = (
 )
 
 CANONICAL_HOLDOUT_CLAIM = Path("studies") / "rsi-supertrend-pine-v1" / "holdout" / ".authoritative-claim"
+CANONICAL_PARITY_REPORT = (
+    Path("studies") / "rsi-supertrend-pine-v1" / "parity" / "tradingview_parity.json")
 
 TV_REQUIRED_COLUMNS = (
     "date", "open", "high", "low", "close",
     "rsi", "rsi_signal", "st_direction", "special_buy",
 )
+TV_FILL_COLUMNS = ("entry_fill", "exit_fill")
+TV_VALUE_TOLERANCE = 1e-4
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict:
@@ -245,7 +249,9 @@ def resolve_stock_symbols(registry_path: Path, retired_path: Path) -> tuple[list
     return symbols, meta
 
 
-def compare_tradingview_export(path: Path = TV_FIXTURE_PATH, cfg: dict | None = None) -> dict:
+def compare_tradingview_export(path: Path = TV_FIXTURE_PATH, cfg: dict | None = None,
+                               *, require_fills: bool = False) -> dict:
+    path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(
             "TradingView development export is missing "
@@ -256,8 +262,28 @@ def compare_tradingview_export(path: Path = TV_FIXTURE_PATH, cfg: dict | None = 
     missing = [col for col in TV_REQUIRED_COLUMNS if col not in export.columns]
     if missing:
         raise ValueError(f"TradingView export missing columns: {missing}")
+    if require_fills:
+        fill_missing = [col for col in TV_FILL_COLUMNS if col not in export.columns]
+        if fill_missing:
+            raise ValueError(
+                f"TradingView export missing fill columns required for holdout: {fill_missing}")
+
     export = export.copy()
     export["date"] = pd.to_datetime(export["date"])
+    if export["date"].isna().any():
+        raise ValueError("TradingView export has unparseable dates")
+    if not export["date"].is_unique:
+        raise ValueError("TradingView export dates must be unique")
+    if not export["date"].is_monotonic_increasing:
+        raise ValueError("TradingView export dates must be sorted ascending")
+
+    min_rows = max(int(cfg["rsi_length"]) + int(cfg["signal_length"]),
+                   int(cfg["atr_period"])) + 1
+    if len(export) < min_rows:
+        raise ValueError(
+            f"TradingView export needs at least {min_rows} rows for indicator warm-up, "
+            f"got {len(export)}")
+
     close = export["close"].to_numpy(dtype="float64")
     high = export["high"].to_numpy(dtype="float64")
     low = export["low"].to_numpy(dtype="float64")
@@ -268,73 +294,150 @@ def compare_tradingview_export(path: Path = TV_FIXTURE_PATH, cfg: dict | None = 
     special = special_buy_signals(
         rsi, signal, float(cfg["trigger_level"]), int(cfg["target_cross_count"]))
 
+    tv_rsi = pd.to_numeric(export["rsi"], errors="coerce").to_numpy(dtype="float64")
+    tv_signal = pd.to_numeric(export["rsi_signal"], errors="coerce").to_numpy(dtype="float64")
+    tv_dir = pd.to_numeric(export["st_direction"], errors="coerce").to_numpy(dtype="float64")
+    tv_buy = export["special_buy"].fillna(False).astype(bool).to_numpy()
+
+    def _mask_mismatches(left: np.ndarray, right: np.ndarray) -> int:
+        return int(np.sum(np.isfinite(left) != np.isfinite(right)))
+
     def _max_abs(left: np.ndarray, right: np.ndarray) -> float | None:
         mask = np.isfinite(left) & np.isfinite(right)
         if not mask.any():
             return None
         return float(np.max(np.abs(left[mask] - right[mask])))
 
-    tv_rsi = export["rsi"].to_numpy(dtype="float64")
-    tv_signal = export["rsi_signal"].to_numpy(dtype="float64")
-    tv_dir = export["st_direction"].to_numpy(dtype="float64")
-    tv_buy = export["special_buy"].astype(bool).to_numpy()
-    defined = np.isfinite(rsi) & np.isfinite(signal)
-    dir_mask = np.isfinite(direction) & np.isfinite(tv_dir)
+    fully_defined = np.isfinite(rsi) & np.isfinite(signal) & np.isfinite(direction)
+    if not fully_defined.any():
+        raise ValueError("TradingView export never reaches fully defined RSI/SMA/SuperTrend")
+
+    both_dir = np.isfinite(direction) & np.isfinite(tv_dir)
     comparisons = {
+        "rsi_defined_mask_mismatches": _mask_mismatches(rsi, tv_rsi),
+        "rsi_signal_defined_mask_mismatches": _mask_mismatches(signal, tv_signal),
+        "st_direction_defined_mask_mismatches": _mask_mismatches(direction, tv_dir),
         "rsi_max_abs_diff": _max_abs(rsi, tv_rsi),
         "rsi_signal_max_abs_diff": _max_abs(signal, tv_signal),
-        "st_direction_mismatches": int(np.sum(direction[dir_mask] != tv_dir[dir_mask])),
-        "special_buy_mismatches": int(np.sum(special[defined] != tv_buy[defined])),
+        "st_direction_mismatches": int(np.sum(direction[both_dir] != tv_dir[both_dir])),
+        "special_buy_mismatches": int(np.sum(special != tv_buy)),
         "entry_fill_mismatches": 0,
         "exit_fill_mismatches": 0,
+        "extra_local_entry_dates": [],
+        "missing_local_entry_dates": [],
+        "extra_local_exit_dates": [],
+        "missing_local_exit_dates": [],
+        "fully_defined_bars": int(fully_defined.sum()),
+        "min_rows_required": min_rows,
     }
-    if "entry_fill" in export.columns or "exit_fill" in export.columns:
+
+    has_fills = all(col in export.columns for col in TV_FILL_COLUMNS)
+    if has_fills:
         result = emulate_symbol(
             export, cfg, export["date"].iloc[0], export["date"].iloc[-1], "TV")
-        entry_by_date = {row["entry_date"]: row["entry_price"] for row in result.trades}
-        exit_by_date = {
-            row["exit_date"]: row["exit_price"]
-            for row in result.trades if not row["open_at_cutoff"] and row["exit_date"]
+        local_entries = {
+            row["entry_date"]: float(row["entry_price"]) for row in result.trades}
+        local_exits = {
+            row["exit_date"]: float(row["exit_price"])
+            for row in result.trades
+            if not row["open_at_cutoff"] and row["exit_date"] is not None
         }
-        if "entry_fill" in export.columns:
-            for row in export.itertuples(index=False):
-                tv_fill = getattr(row, "entry_fill")
-                if pd.isna(tv_fill):
-                    continue
-                local = entry_by_date.get(str(pd.Timestamp(row.date).date()))
-                if local is None or abs(float(local) - float(tv_fill)) > 1e-4:
-                    comparisons["entry_fill_mismatches"] += 1
-        if "exit_fill" in export.columns:
-            for row in export.itertuples(index=False):
-                tv_fill = getattr(row, "exit_fill")
-                if pd.isna(tv_fill):
-                    continue
-                local = exit_by_date.get(str(pd.Timestamp(row.date).date()))
-                if local is None or abs(float(local) - float(tv_fill)) > 1e-4:
-                    comparisons["exit_fill_mismatches"] += 1
-    tolerance = 1e-4
+        tv_entries: dict[str, float] = {}
+        tv_exits: dict[str, float] = {}
+        for row in export.itertuples(index=False):
+            day = str(pd.Timestamp(row.date).date())
+            entry = getattr(row, "entry_fill")
+            if pd.notna(entry):
+                tv_entries[day] = float(entry)
+            exit_ = getattr(row, "exit_fill")
+            if pd.notna(exit_):
+                tv_exits[day] = float(exit_)
+        comparisons["extra_local_entry_dates"] = sorted(set(local_entries) - set(tv_entries))
+        comparisons["missing_local_entry_dates"] = sorted(set(tv_entries) - set(local_entries))
+        comparisons["extra_local_exit_dates"] = sorted(set(local_exits) - set(tv_exits))
+        comparisons["missing_local_exit_dates"] = sorted(set(tv_exits) - set(local_exits))
+        for day in sorted(set(local_entries) & set(tv_entries)):
+            if abs(local_entries[day] - tv_entries[day]) > TV_VALUE_TOLERANCE:
+                comparisons["entry_fill_mismatches"] += 1
+        for day in sorted(set(local_exits) & set(tv_exits)):
+            if abs(local_exits[day] - tv_exits[day]) > TV_VALUE_TOLERANCE:
+                comparisons["exit_fill_mismatches"] += 1
+        comparisons["entry_fill_mismatches"] += (
+            len(comparisons["extra_local_entry_dates"])
+            + len(comparisons["missing_local_entry_dates"]))
+        comparisons["exit_fill_mismatches"] += (
+            len(comparisons["extra_local_exit_dates"])
+            + len(comparisons["missing_local_exit_dates"]))
+
     ok = (
-        comparisons["rsi_max_abs_diff"] is not None
-        and comparisons["rsi_max_abs_diff"] <= tolerance
+        comparisons["rsi_defined_mask_mismatches"] == 0
+        and comparisons["rsi_signal_defined_mask_mismatches"] == 0
+        and comparisons["st_direction_defined_mask_mismatches"] == 0
+        and comparisons["rsi_max_abs_diff"] is not None
+        and comparisons["rsi_max_abs_diff"] <= TV_VALUE_TOLERANCE
         and comparisons["rsi_signal_max_abs_diff"] is not None
-        and comparisons["rsi_signal_max_abs_diff"] <= tolerance
+        and comparisons["rsi_signal_max_abs_diff"] <= TV_VALUE_TOLERANCE
         and comparisons["st_direction_mismatches"] == 0
         and comparisons["special_buy_mismatches"] == 0
         and comparisons["entry_fill_mismatches"] == 0
         and comparisons["exit_fill_mismatches"] == 0
+        and (has_fills or not require_fills)
     )
     report = {
+        "schema_name": "smallfish.rsi-supertrend-tv-parity",
+        "schema_version": 1,
+        "study_id": cfg["study_id"],
         "ok": ok,
-        "path": str(path),
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "git_commit": _git("rev-parse", "HEAD"),
+        "fixture_path": str(path.resolve()),
+        "fixture_sha256": sha256_file(path),
+        "date_start": str(export["date"].iloc[0].date()),
+        "date_end": str(export["date"].iloc[-1].date()),
         "rows": int(len(export)),
-        "tolerance": tolerance,
-        **comparisons,
+        "tolerance": TV_VALUE_TOLERANCE,
+        "require_fills": require_fills,
+        "fills_compared": has_fills,
+        "settings": {
+            "rsi_length": int(cfg["rsi_length"]),
+            "signal_length": int(cfg["signal_length"]),
+            "trigger_level": float(cfg["trigger_level"]),
+            "target_cross_count": int(cfg["target_cross_count"]),
+            "atr_period": int(cfg["atr_period"]),
+            "st_factor": float(cfg["st_factor"]),
+        },
+        "comparisons": comparisons,
     }
     if not ok:
         raise ValueError(
             "TradingView export disagrees with the local Pine replication: "
-            + json.dumps(comparisons, sort_keys=True))
+            + json.dumps(comparisons, sort_keys=True, default=str))
     return report
+
+
+def write_parity_report(report: dict, path: Path) -> Path:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + "\n",
+                    encoding="utf-8")
+    return path
+
+
+def require_approved_parity_report(path: Path, *, fixture_sha256: str | None = None) -> dict:
+    path = Path(path)
+    if not path.is_file():
+        raise ValueError(f"approved TradingView parity report missing: {path}")
+    report = json.loads(path.read_text(encoding="utf-8"))
+    if not report.get("ok"):
+        raise ValueError(f"TradingView parity report is not approved (ok=false): {path}")
+    if fixture_sha256 is not None and report.get("fixture_sha256") != fixture_sha256:
+        raise ValueError(
+            "TradingView parity report fixture hash does not match the supplied export")
+    return report
+
+
+def canonical_parity_report_path(data_root: Path) -> Path:
+    return Path(data_root) / CANONICAL_PARITY_REPORT
 
 
 def _max_drawdown(equity: pd.Series) -> float | None:
@@ -350,13 +453,19 @@ def canonical_holdout_claim_dir(data_root: Path) -> Path:
 
 
 def enforce_holdout_guard(cfg: dict, output_root: Path, confirm: bool,
-                          *, claim_root: Path | None = None) -> Path:
+                          *, claim_root: Path | None = None,
+                          parity_report: dict | None = None,
+                          parity_report_path: Path | None = None) -> Path:
     if cfg.get("protocol_status") != "FROZEN":
         raise ValueError("holdout requires protocol_status=FROZEN")
     if not confirm:
         raise ValueError("holdout requires --confirm-holdout")
     if git_is_dirty():
         raise ValueError("holdout requires a clean committed worktree")
+    if parity_report is None or parity_report_path is None:
+        raise ValueError("holdout requires an approved TradingView parity report")
+    if not parity_report.get("ok"):
+        raise ValueError("holdout requires a passing TradingView parity report")
     root = Path(claim_root) if claim_root is not None else default_cache_root()
     claim_dir = canonical_holdout_claim_dir(root)
     claim_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -370,6 +479,9 @@ def enforce_holdout_guard(cfg: dict, output_root: Path, confirm: bool,
         "pid": os.getpid(),
         "status": "reserved",
         "output_root": str(output_root),
+        "parity_report_path": str(Path(parity_report_path).resolve()),
+        "parity_report_sha256": sha256_file(Path(parity_report_path)),
+        "fixture_sha256": parity_report.get("fixture_sha256"),
     }
     (claim_dir / "claim.json").write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -550,7 +662,8 @@ def run_cohort(cache_root: Path, cfg: dict, symbols: list[str], window: str,
 
 def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
               universe_meta: dict, source_digest: str,
-              stock_result: dict | None = None) -> None:
+              stock_result: dict | None = None,
+              parity_report_path: Path | None = None) -> None:
     run_dir.mkdir(parents=True, exist_ok=False)
     csv_opts = {"index": False, "float_format": "%.12g", "lineterminator": "\n"}
     result["instruments"].to_csv(run_dir / "instrument_summary.csv", **csv_opts)
@@ -574,6 +687,13 @@ def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
         for name in STOCK_TABLES:
             outputs[name] = sha256_file(run_dir / name)
         stock_price_hashes = stock_result["price_hashes"]
+    parity_meta = None
+    if parity_report_path is not None:
+        parity_path = Path(parity_report_path)
+        parity_meta = {
+            "path": str(parity_path.resolve()),
+            "sha256": sha256_file(parity_path),
+        }
     manifest = {
         "schema_name": cfg["schema_name"],
         "schema_version": cfg["schema_version"],
@@ -591,6 +711,7 @@ def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
         "stock_price_sha256": stock_price_hashes,
         "stock_evidence_label": None if stock_result is None else "EXPLORATORY",
         "stock_survivorship_bias": None if stock_result is None else True,
+        "tradingview_parity": parity_meta,
         "output_sha256": outputs,
         "dependencies": {
             "python": sys.version.split()[0],
@@ -620,6 +741,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--include-stocks", action="store_true")
     parser.add_argument("--compare-tradingview", nargs="?", const=str(TV_FIXTURE_PATH),
                         default=None)
+    parser.add_argument("--tradingview-export", type=Path, default=None,
+                        help="External TradingView CSV; required for holdout")
+    parser.add_argument("--parity-report", type=Path, default=None,
+                        help="Durable TradingView parity report path")
     parser.add_argument("--cache-root", type=Path, default=None)
     parser.add_argument("--output-root", type=Path, default=None)
     args = parser.parse_args(argv)
@@ -627,6 +752,8 @@ def main(argv: list[str] | None = None) -> int:
     cache_root = (args.cache_root or default_cache_root()).resolve()
     output_root = (args.output_root or (
         cache_root / "studies" / "rsi-supertrend-pine-v1")).resolve()
+    parity_report_path = (args.parity_report or canonical_parity_report_path(cache_root)
+                          ).resolve()
 
     if args.validate_coverage:
         start = args.coverage_start or cfg["development_start"]
@@ -636,14 +763,33 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if any(not row["ok"] for row in report["instruments"]) else 0
 
     if args.compare_tradingview:
-        report = compare_tradingview_export(Path(args.compare_tradingview), cfg)
-        print(json.dumps(report, indent=2, sort_keys=True, default=str))
+        export_path = Path(args.compare_tradingview)
+        if args.tradingview_export is not None:
+            export_path = Path(args.tradingview_export)
+        report = compare_tradingview_export(export_path, cfg, require_fills=False)
+        write_parity_report(report, parity_report_path)
+        print(json.dumps({**report, "parity_report_path": str(parity_report_path)},
+                         indent=2, sort_keys=True, default=str))
         return 0
 
+    parity_report = None
     if args.window == "holdout":
         if not args.include_stocks:
             raise SystemExit("holdout requires --include-stocks")
-        enforce_holdout_guard(cfg, output_root, args.confirm_holdout)
+        if args.tradingview_export is None:
+            raise SystemExit(
+                "holdout requires --tradingview-export PATH "
+                "(external CSV; keep it outside the git worktree)")
+        export_path = Path(args.tradingview_export).expanduser().resolve()
+        # Compare and persist the durable report before claiming the holdout.
+        parity_report = compare_tradingview_export(
+            export_path, cfg, require_fills=True)
+        write_parity_report(parity_report, parity_report_path)
+        require_approved_parity_report(
+            parity_report_path, fixture_sha256=parity_report["fixture_sha256"])
+        enforce_holdout_guard(
+            cfg, output_root, args.confirm_holdout,
+            parity_report=parity_report, parity_report_path=parity_report_path)
 
     source_digest = verify_source_hash()
 
@@ -674,7 +820,8 @@ def main(argv: list[str] | None = None) -> int:
     short = _git("rev-parse", "--short", "HEAD") or "nogit"
     run_dir = output_root / args.window / f"{run_id}-{short}"
     write_run(run_dir, result, cfg, vars(args), universe_meta, source_digest,
-              stock_result=stock_result)
+              stock_result=stock_result,
+              parity_report_path=parity_report_path if parity_report is not None else None)
     summary = result["summary"]
     print(f"window={summary['window']} verdict={summary['verdict']} "
           f"n={summary['primary_endpoint']['n']} "
