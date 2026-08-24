@@ -150,22 +150,9 @@ export class StockService {
       );
   }
 
-  /**
-   * Collect option quotes, optionally scoped to the Wheel view's horizon,
-   * cushion, and filtered symbols. Scope only ever narrows the collection.
-   */
-  runChains(scope?: CollectionScopeRequest): Observable<ChainsJobResult> {
-    let params = new HttpParams();
-    if (scope?.horizonDte != null) {
-      params = params.set('horizonDte', String(scope.horizonDte));
-    }
-    if (scope?.symbols?.length) {
-      params = params.set('symbols', scope.symbols.join(','));
-    }
-    if (scope?.minOtmPct != null) {
-      params = params.set('minOtmPct', String(scope.minOtmPct));
-    }
-    return this.http.post<ChainsJobResult>(`${this.apiBaseUrl}/runChains`, null, { params })
+  /** Collect quotes for the Wheel view's explicit horizon, cushion, and symbols. */
+  runChains(scope: CollectionScopeRequest): Observable<ChainsJobResult> {
+    return this.http.post<ChainsJobResult>(`${this.apiBaseUrl}/runChains`, scope)
       .pipe(
         catchError((err) => {
           console.error('runChains failed:', err);

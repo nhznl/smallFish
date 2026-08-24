@@ -17,8 +17,9 @@ import time
 from collections.abc import Callable
 from contextlib import contextmanager
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from .. import config
 from ..cache import cache
@@ -29,6 +30,14 @@ router = APIRouter()
 _TIMEOUT_SECONDS = 300
 _TAIL_LINES = 12
 _SYMBOL_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,9}$")
+
+
+class ChainsCollectionScopeRequest(BaseModel):
+    """Optional view scope sent by the dashboard's POST collection request."""
+
+    horizonDte: int | None = None
+    symbols: list[str] | None = None
+    minOtmPct: float | None = None
 
 _JOB_LOCKS = {
     "earnings_scan": threading.Lock(),
@@ -263,8 +272,23 @@ def run_chains(
     horizonDte: int | None = Query(default=None),
     symbols: str | None = Query(default=None),
     minOtmPct: float | None = Query(default=None),
+    scope: ChainsCollectionScopeRequest | None = Body(default=None),
 ) -> JSONResponse:
-    """Collect option quotes. Prefer POST; GET kept for compatibility."""
+    """Collect option quotes, scoped to the submitted Wheel view when given.
+
+    The POST body avoids an arbitrary URL-length cap for large filtered views.
+    Query parameters remain supported for the deprecated GET and legacy callers.
+    """
+    if scope is not None:
+        if any(value is not None for value in (horizonDte, symbols, minOtmPct)):
+            raise HTTPException(
+                status_code=400,
+                detail=("Collection scope must be supplied in either the request body "
+                        "or query parameters, not both."),
+            )
+        horizonDte = scope.horizonDte
+        symbols = ",".join(scope.symbols) if scope.symbols is not None else None
+        minOtmPct = scope.minOtmPct
     # Validate scope before taking the lock so bad requests do not block a run.
     args = _chains_args(horizonDte, symbols, minOtmPct)
     return _run_locked("chains", lambda: _run_command("chains", args))

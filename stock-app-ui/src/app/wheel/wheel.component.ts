@@ -136,18 +136,10 @@ export class WheelComponent implements OnInit, OnDestroy {
   rvDetailLoading = false;
   rvDetailError = '';
 
-  // Collection scoping. ON by default so the button collects what the controls
-  // above it describe; turn it off to run the full configured sweep. Scope is
-  // subtractive only -- it can never widen a run or relax a quality gate.
-  scopeCollection = true;
   // Only these DTEs are configured for chain collection (chains.yaml
   // `chain_dtes`). The wheel table offers more horizons than the chain policy
-  // covers, so a scoped run at 14/30/45 DTE has nothing to collect.
+  // covers, so view-scoped collection at 14/30/45 DTE has nothing to collect.
   readonly collectibleHorizons: number[] = [7, 37];
-  // A symbol list only rides in the query string when the view is genuinely
-  // narrowed. The unfiltered table runs to four figures, which would overflow
-  // the URL and narrow nothing the collection pool does not already cap.
-  readonly maxScopedSymbols = 100;
 
   ngOnInit(): void {
     this.symbolFilter = this.symbolFilterService.getFilter();
@@ -392,7 +384,7 @@ export class WheelComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** Symbols currently visible in the table — what a scoped run collects. */
+  /** Symbols currently visible in the table — exactly what collection considers. */
   scopedSymbols(): string[] {
     return Array.from(new Set(
       this.dataSource.data.map(c => (c.wheel?.symbol ?? '').toUpperCase()).filter(s => s)
@@ -404,25 +396,11 @@ export class WheelComponent implements OnInit, OnDestroy {
     return this.collectibleHorizons.includes(this.horizon);
   }
 
-  /**
-   * The visible symbols, but only when that list is small enough to be a real
-   * narrowing. Above the cap the request omits symbols entirely and the
-   * collection pool's own quality/liquidity gates and rank cap apply.
-   */
-  private scopedSymbolsForRequest(): string[] | undefined {
-    const symbols = this.scopedSymbols();
-    return symbols.length && symbols.length <= this.maxScopedSymbols ? symbols : undefined;
-  }
-
-  /** Blocking reason for a scoped run, or '' when it can proceed. */
+  /** Blocking reason for view-scoped collection, or '' when it can proceed. */
   scopeBlockReason(): string {
-    if (!this.scopeCollection) {
-      return '';
-    }
     if (!this.horizonCollectible()) {
       return `${this.horizon} DTE is not a configured collection horizon ` +
-        `(${this.collectibleHorizons.join(', ')}). Switch horizon, or turn off ` +
-        `"Scope collection to this view" to run the full sweep.`;
+        `(${this.collectibleHorizons.join(', ')}). Switch to a configured horizon.`;
     }
     if (!this.scopedSymbols().length) {
       return 'No symbols match the current filters, so a scoped run would ' +
@@ -433,15 +411,8 @@ export class WheelComponent implements OnInit, OnDestroy {
 
   /** One-line description of what the button will collect. */
   scopeSummary(): string {
-    if (!this.scopeCollection) {
-      return 'Full configured sweep: every collection horizon and the whole eligible pool.';
-    }
-    const scoped = this.scopedSymbolsForRequest();
-    const symbolText = scoped
-      ? `${scoped.length} symbol${scoped.length === 1 ? '' : 's'} in view`
-      : `the eligible pool (${this.scopedSymbols().length} shown is above the ` +
-        `${this.maxScopedSymbols}-symbol scoping limit — filter further to target symbols)`;
-    return `Scoped: ${this.horizon} DTE, ${symbolText}, entry strikes at least ` +
+    const symbols = this.scopedSymbols();
+    return `Current view: ${this.horizon} DTE, ${symbols.length} symbol${symbols.length === 1 ? '' : 's'}, entry strikes at least ` +
       `${this.cushion}% OTM. Roll/exit (ITM) strikes are unaffected by the cushion.`;
   }
 
@@ -453,21 +424,17 @@ export class WheelComponent implements OnInit, OnDestroy {
       this.chainsMessageAt = new Date();
       return;
     }
-    const scoped = this.scopedSymbolsForRequest();
+    const symbols = this.scopedSymbols();
     this.chainsRunning = true;
     this.chainsStatus = 'idle';
-    this.chainsMessage = this.scopeCollection
-      ? `Collecting exact Tastytrade option quotes — ${this.horizon} DTE, ` +
-        `${scoped ? scoped.length + ' symbols' : 'eligible pool'}, ≥${this.cushion}% OTM…`
-      : 'Collecting exact Tastytrade option quotes for the full pool…';
+    this.chainsMessage = `Collecting exact Tastytrade option quotes — ${this.horizon} DTE, ` +
+      `${symbols.length} symbols, ≥${this.cushion}% OTM…`;
     this.chainsMessageAt = new Date();
-    const scope = this.scopeCollection
-      ? {
-          horizonDte: this.horizon,
-          symbols: scoped,
-          minOtmPct: this.cushion
-        }
-      : undefined;
+    const scope = {
+      horizonDte: this.horizon,
+      symbols,
+      minOtmPct: this.cushion
+    };
     this.stockService.runChains(scope).subscribe(res => {
       this.chainsRunning = false;
       if (res && res.status === 'ok') {

@@ -46,7 +46,7 @@ export interface OptionQuoteSummary {
   providerStatusCounts: Record<string, number>;
 }
 
-/** What the Wheel view asked collection to narrow to. Subtractive only. */
+/** The Wheel view's explicit collection scope. It can only narrow the configured policy. */
 export interface CollectionScopeRequest {
   horizonDte?: number;
   symbols?: string[];

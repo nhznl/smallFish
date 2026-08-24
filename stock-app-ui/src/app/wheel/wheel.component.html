@@ -78,12 +78,6 @@
           }
           {{ chainsRunning ? 'Collecting…' : 'Collect Option Quotes' }}
         </button>
-        <label class="check-filter"
-          matTooltip="Collect only the horizon, symbols, and cushion shown below. Scope can only narrow a run — it never widens collection or relaxes a quality gate."
-          matTooltipPosition="above">
-          <input type="checkbox" [(ngModel)]="scopeCollection" [disabled]="chainsRunning">
-          Scope collection to this view
-        </label>
         @if (chainsMessage) {
           <span class="job-status" [class]="'job-status ' + jobStatusClass(chainsStatus)">
             @if (chainsMessageAt) {

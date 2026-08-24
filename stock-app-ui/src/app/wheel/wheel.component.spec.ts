@@ -180,4 +180,17 @@ describe('WheelComponent', () => {
     expect(fixture.componentInstance.chainsStatus).toBe('error');
     expect(text()).toContain('Invalid collection scope');
   });
+
+  it('always collects the symbols currently in view', () => {
+    mount();
+
+    fixture.componentInstance.runChains();
+
+    expect(stockService.runChains).toHaveBeenCalledWith({
+      horizonDte: 37,
+      symbols: ['DEMO'],
+      minOtmPct: 5,
+    });
+    expect(text()).not.toContain('Scope collection to this view');
+  });
 });

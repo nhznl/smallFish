@@ -116,7 +116,7 @@ development, use `npm start` in `stock-app-ui/` instead.
 | `POST /api/brokerages/{id}/sync` | Sync common holdings, activity, and market-data resources without creating group state. |
 | `POST /api/brokerages/{id}/activity/manual`, `PUT`/`DELETE /api/brokerages/{id}/activity/manual/{event_id}` | Create, edit, or remove a manual reconciliation event in the selected brokerage ledger. |
 | `GET /api/brokerages/{id}/holdings` | Current equity positions with editable classifications, captured G/L comparison columns, and declining-trend state. |
-| `GET /runWheel`, `/runChains` | Run the wheel job (with best-effort upcoming-earnings refresh) and manual prospective option-quote collection. |
+| `GET`/`POST /runWheel`, `/runChains` | Run the wheel job (with best-effort upcoming-earnings refresh) and manual prospective option-quote collection. `POST /runChains` accepts the Wheel view's horizon, OTM cushion, and symbol list in its JSON body. |
 | `GET /runEarningsScan` | Refresh the shared upcoming-earnings calendar (Finnhub, only when stale), then report how many scanner symbols have an upcoming report. |
 
 `/api/brokerages/{id}` is the dashboard contract. It uses public brokerage IDs

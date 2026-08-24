@@ -165,6 +165,23 @@ def test_run_chains_forwards_the_requested_collection_scope(monkeypatch):
     ]
 
 
+def test_run_chains_post_body_forwards_a_large_view_scope(monkeypatch):
+    """The view may contain more symbols than were safe to place in a URL."""
+    called = _capture_chains(monkeypatch)
+    symbols = [f"A{number:03d}" for number in range(101)]
+
+    response = client.post(
+        "/runChains",
+        json={"horizonDte": 37, "symbols": symbols, "minOtmPct": 5},
+    )
+
+    assert response.status_code == 200
+    assert called["args"][4:] == [
+        "chains", "--horizon-dte", "37", "--symbols", ",".join(symbols),
+        "--min-otm-pct", "5",
+    ]
+
+
 def test_run_chains_scope_arguments_cannot_extend_the_command(monkeypatch):
     """A shell metacharacter is rejected as a symbol, not passed through."""
     called = _capture_chains(monkeypatch)

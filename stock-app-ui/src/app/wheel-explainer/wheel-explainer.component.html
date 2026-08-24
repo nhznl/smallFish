@@ -200,8 +200,9 @@ which is expected, not an error.</li>
   </table>
   <p class="note">
     <strong>Collect Option Quotes</strong> is the only UI action here that contacts Tastytrade. It uses the
-    configured collection policy, not the Wheel page's Horizon, OTM cushion, or text filters. In the quote
-    archive, <strong>ENTRY</strong> is a strike-selection view; it is not the same as <code>entry_eligible</code>.
+    current Wheel view's Horizon, OTM cushion, and filtered symbols. The configured quality/liquidity gates
+    still apply, then at most 60 eligible symbols are retained by RV percentile. In the quote archive,
+    <strong>ENTRY</strong> is a strike-selection view; it is not the same as <code>entry_eligible</code>.
   </p>
 </section>
 </div>
