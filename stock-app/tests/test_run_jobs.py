@@ -151,6 +151,25 @@ def test_run_chains_dispatches_prospective_quote_collection(monkeypatch):
     assert "COMPLETE" in body["output"]
 
 
+def test_run_chains_surfaces_tastytrade_unavailable_message(monkeypatch):
+    def _run(_args, **_kwargs):
+        return _FakeProc(
+            2,
+            "DtypeWarning: mixed types\n"
+            "Tastytrade quote service unavailable: no quotes were received for 472 "
+            "requested contracts. No premium report was written. Check the Tastytrade "
+            "connection and credentials, then retry.",
+        )
+
+    monkeypatch.setattr(run_jobs.subprocess, "run", _run)
+
+    body = run_jobs._run_command("chains", reload_cache=False)
+
+    assert body["status"] == "error"
+    assert body["message"].startswith("Tastytrade quote service unavailable:")
+    assert "DtypeWarning" not in body["message"]
+
+
 def test_run_chains_forwards_the_requested_collection_scope(monkeypatch):
     called = _capture_chains(monkeypatch)
 

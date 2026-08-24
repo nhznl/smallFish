@@ -791,6 +791,16 @@ def main(argv: list[str] | None = None) -> int:
         # An unsatisfiable scope is a user error, not a run failure: say so
         # before any provider request is made.
         raise SystemExit(f"collection scope rejected: {exc}")
+    provider = result.meta.get("quote_provider", {})
+    if provider.get("status") == "UNAVAILABLE":
+        # A Yahoo chain is only contract-discovery evidence.  Do not turn an
+        # all-zero Tastytrade response into an archive that looks collected.
+        print(
+            "Tastytrade quote service unavailable: "
+            f"no quotes were received for {provider.get('requested_contracts', 0)} "
+            "requested contracts. No premium report was written. Check the "
+            "Tastytrade connection and credentials, then retry.")
+        return 2
     for warning in result.warnings:
         print(f"WARNING: {warning}")
     paths = write_chain_artifacts(
@@ -809,7 +819,6 @@ def main(argv: list[str] | None = None) -> int:
               "deliberate subset, not a full sweep")
     print(f"Wrote {result.meta['rows']} premium rows to {paths['daily_report']}")
     print(f"Archived immutable run at {paths['immutable_report'].parent}")
-    provider = result.meta.get("quote_provider", {})
     quality = result.meta.get("quote_quality_counts", {})
     print(
         "Tastytrade quote collection: "
@@ -818,7 +827,7 @@ def main(argv: list[str] | None = None) -> int:
         f"{provider.get('requested_contracts', 0)} contracts); "
         f"quality={quality}; entry-eligible={result.meta.get('entry_eligible_rows', 0)}"
     )
-    return 2 if provider.get("status") == "UNAVAILABLE" else 0
+    return 0
 
 
 if __name__ == "__main__":

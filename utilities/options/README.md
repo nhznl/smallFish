@@ -24,12 +24,13 @@ The Wheel screen is the credential-free half and is what a new user sees. Its
 UI action reuses or conditionally refreshes the shared upcoming-earnings cache,
 but refresh failure never blocks the scan: uncovered horizons remain visibly
 `Unknown (stale)`.
-Quote collection is the credentialed half: `chains` writes every attempt
-immutably, reports complete/partial/unavailable provider coverage, and exits
-non-zero when no requested Tastytrade quote arrives. Yahoo quotes are
-diagnostic-only — they cannot authorize entry economics. Running off-hours is
-allowed for diagnostics, but off-hours or untimestamped observations can never
-become entry-eligible.
+Quote collection is the credentialed half: `chains` writes an immutable archive
+when Tastytrade supplies at least one requested quote, and reports partial
+provider coverage in that archive. If Tastytrade supplies no quotes, it stops
+without writing a premium report and gives a concise connection/credential
+error. Yahoo quotes are diagnostic-only — they cannot authorize entry
+economics. Running off-hours is allowed for diagnostics, but off-hours or
+untimestamped observations can never become entry-eligible.
 Every Wheel horizon (7, 14, 30, 37, and 45 DTE) is configured for collection;
 their listed-expiry tolerances are defined in `config/chains.yaml`.
 `chains` discovers contracts through Yahoo, then requests live bid/ask

@@ -121,6 +121,17 @@ def _run_command(job: str, args: list[str] | None = None, *,
     output = (proc.stdout or "").strip()
     lines = output.split("\n")
     result["output"] = "\n".join(lines[max(0, len(lines) - _TAIL_LINES):])
+    if job == "chains" and exit_code != 0:
+        # The collection CLI emits this concise, credential-safe failure after
+        # Tastytrade returns no quotes. Prefer it over incidental warnings from
+        # contract discovery when presenting the error in the dashboard.
+        provider_error = next(
+            (line for line in reversed(lines)
+             if line.startswith("Tastytrade quote service unavailable:")),
+            None,
+        )
+        if provider_error:
+            result["message"] = provider_error
     return result
 
 

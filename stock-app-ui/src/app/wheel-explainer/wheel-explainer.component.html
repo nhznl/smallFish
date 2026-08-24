@@ -153,7 +153,7 @@ which is expected, not an error.</li>
     <tr><td>Symbol</td><td>●</td><td>Ticker; links to the stock detail view.</td></tr>
     <tr><td>DTE / horizon_sessions</td><td>●</td><td>Horizon in calendar days; sessions = <code>round(DTE × 252/365)</code>.</td></tr>
     <tr><td>Last close</td><td>●</td><td>Latest close (dollars), as of <code>price_as_of</code>.</td></tr>
-    <tr><td>RV Rank (rv_rank_252)</td><td>●</td><td>Unitless number giving current 21-day RV's normalized position between its trailing 252-session low and high RV: <code>(current − low) ÷ (high − low)</code>. Select it to inspect the current, low, high, and dated RV readings.</td></tr>
+    <tr><td>RV Rank (rv_rank_252)</td><td>●</td><td>Current 21-day RV's normalized position between its trailing 252-session low and high RV: <code>(current − low) ÷ (high − low)</code>. The table displays this value × 100 without a percent sign. Select it to inspect the current, low, high, and dated RV readings.</td></tr>
     <tr><td>RV %ile (rv_percentile_252)</td><td>●</td><td>21-day RV as a percentile of its trailing-year values. Select it to inspect the same RV evidence.</td></tr>
     <tr><td>1σ move (sigma_move_pct / _dollars)</td><td>●</td><td>Expected 1σ move as % of spot (and dollars in the CSV).</td></tr>
     <tr><td>ATR14% (atr14_pct)</td><td>●</td><td>14-session Average True Range as a % of last close; a daily range-and-gap heuristic, not an expected move.</td></tr>

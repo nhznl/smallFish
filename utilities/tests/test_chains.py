@@ -22,6 +22,7 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
+import utilities.options.chains as chains_module
 
 from models.premium import PREMIUM_SCHEMA_NAME, PREMIUM_SCHEMA_VERSION
 from utilities.options.exchange_calendar import nyse_sessions
@@ -973,6 +974,30 @@ def test_chain_artifacts_archive_immutable_run_and_daily_view():
             pass
         else:
             raise AssertionError("an immutable run ID must never be overwritten")
+
+
+def test_main_does_not_archive_when_tastytrade_returns_no_quotes(monkeypatch, capsys):
+    result = chains_module.ChainsResult(
+        report=pd.DataFrame(),
+        meta={"quote_provider": {"status": "UNAVAILABLE",
+                                 "requested_contracts": 472,
+                                 "received_contracts": 0}},
+        warnings=[],
+    )
+    monkeypatch.setattr(chains_module, "load_config", lambda: {"chains": {}})
+    monkeypatch.setattr(chains_module, "chains_config", lambda _strategy: {})
+    monkeypatch.setattr(chains_module, "make_yfinance_fetcher", lambda _sleep: None)
+    monkeypatch.setattr(chains_module, "run_chains", lambda *_args, **_kwargs: result)
+    monkeypatch.setattr(
+        chains_module, "write_chain_artifacts",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not write")),
+    )
+
+    assert chains_module.main(["--as-of", "2026-07-16"]) == 2
+    assert capsys.readouterr().out.strip() == (
+        "Tastytrade quote service unavailable: no quotes were received for 472 "
+        "requested contracts. No premium report was written. Check the Tastytrade "
+        "connection and credentials, then retry.")
 
 
 # ======================================================= collection scope ====

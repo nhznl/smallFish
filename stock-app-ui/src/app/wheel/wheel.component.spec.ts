@@ -144,7 +144,7 @@ describe('WheelComponent', () => {
     const columns = fixture.componentInstance.displayedColumns;
     expect(columns.indexOf('rvRank252')).toBe(columns.indexOf('rvPercentile252') - 1);
     expect(text()).toContain('RV Rank');
-    expect(text()).toContain('0.50');
+    expect(text()).toContain('50.00');
   });
 
   it('keeps only rows whose overlapping sample count exceeds the configured minimum', () => {
