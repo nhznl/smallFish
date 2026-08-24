@@ -324,7 +324,7 @@ def test_rolling_rv_used_last_value_matches_point_estimators():
     assert _approx(float(series[-1]), expected, tol=1e-10)
 
 
-def test_run_wheel_does_not_reintroduce_retired_symbol_from_stale_report():
+def test_run_wheel_ignores_strategy_report_symbols():
     with tempfile.TemporaryDirectory() as t:
         tmp = Path(t)
         registry = tmp / "universe.csv"
@@ -342,7 +342,7 @@ def test_run_wheel_does_not_reintroduce_retired_symbol_from_stale_report():
             encoding="utf-8",
         )
         (reports / "2026-07-16.csv").write_text(
-            "ticker,score_total,signal_band,sector\nDEAD,90,Super High,Industrials\n",
+            "ticker,score_total,signal_band,sector\nEXTRA,90,Super High,Industrials\n",
             encoding="utf-8",
         )
         strategy = {
@@ -352,7 +352,7 @@ def test_run_wheel_does_not_reintroduce_retired_symbol_from_stale_report():
                 "registry_file": str(registry),
                 "retired_file": str(retired),
             },
-            "wheel": {"universe": {"use_latest_strategy_report": True}},
+            "wheel": {},
         }
 
         result = run_wheel(tmp, strategy, "2026-07-17")
@@ -361,6 +361,7 @@ def test_run_wheel_does_not_reintroduce_retired_symbol_from_stale_report():
         assert result.snapshot["schema_version"] == WHEEL_SCHEMA_VERSION
         assert result.snapshot["run_mode"] == RUN_MODE_CURRENT_CONTEXT_ONLY
         assert len(result.snapshot["source_hashes"]["validated_price_inputs"]) == 64
+        assert "strategy_report" not in result.snapshot["source_hashes"]
         assert result.exclusions.empty
 
 

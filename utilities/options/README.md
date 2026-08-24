@@ -16,7 +16,7 @@ collection, immutable quote archives, and archive verification.
 
 | Command | Needs Tastytrade? | Produces |
 |---|---|---|
-| `./commands.sh wheel` | **No** | The Wheel candidate screen from the local price cache; the UI first attempts a conditional Finnhub earnings refresh when configured |
+| `./commands.sh wheel` | **No** | The Wheel candidate screen from the active local universe and price cache; the UI first attempts a conditional Finnhub earnings refresh when configured |
 | `./commands.sh verify-premiums [run-id]` | **No** | Offline integrity check of an existing archive |
 | `./commands.sh chains` | **Yes** | Exact-contract discovery plus timestamped DXLink quotes |
 

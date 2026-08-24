@@ -5,9 +5,6 @@ itm_frequency_target: 0.20
 rv_window_by_dte: { 7: 7, 14: 21, 30: 21, 37: 21, 45: 37 }
 rv_percentile_lookback: 252
 rv_percentile_min_lookback: 60
-universe:
-  use_latest_strategy_report: true
-  strategy_report: pre_earnings_momentum
 discontinuity_abs_log_return: 0.30
 min_clean_sessions: 300
 quality:

@@ -13,7 +13,7 @@ Reads ONLY local files (no network calls anywhere in the scan path):
   - prices from the shared repository cache via data/stock_app_reader.py (all cached
     years are loaded so the volatility/frequency windows are fully warmed up)
   - universe from the universe.py registry (S&P Composite 1500 + curated ETF
-    seed + manual pins) + the latest namespaced strategy report
+    seed + manual pins), excluding retired symbols
   - events from data/events.csv, freshness from data/events_meta.json
 
 Output (written by ``python -m utilities.options.wheel``):
@@ -400,26 +400,11 @@ def price_quality(price_as_of: pd.Timestamp,
 
 
 def latest_report_path(reports_dir: Path, as_of: str) -> Path | None:
-    """Latest strategy report dated on or before as_of (filenames are
-    YYYY-MM-DD.csv, so lexicographic order is date order)."""
+    """Latest dated CSV on or before ``as_of`` (filenames sort by date)."""
     if not reports_dir.is_dir():
         return None
     candidates = sorted(p for p in reports_dir.glob("*.csv") if p.stem <= as_of)
     return candidates[-1] if candidates else None
-
-
-def load_report_context(path: Path) -> dict[str, dict]:
-    """ticker -> {score_total, signal_band, sector} from a strategy report.
-    Swing scan context only: a missing symbol means NOT EVALUATED, never 0."""
-    df = pd.read_csv(path)
-    context = {}
-    for _, row in df.iterrows():
-        context[str(row["ticker"]).upper()] = {
-            "score_total": row.get("score_total"),
-            "signal_band": row.get("signal_band"),
-            "sector": row.get("sector"),
-        }
-    return context
 
 
 def load_events_meta(path: Path) -> tuple[str | None, pd.Timestamp | None]:
@@ -458,7 +443,7 @@ class WheelResult:
 
 
 def _symbol_context(df: pd.DataFrame, wheel_cfg: dict, as_of: str,
-                    report_ctx: dict, events_fetched_as_of: str | None,
+                    events_fetched_as_of: str | None,
                     *, data_quality: str, quality_reasons: list[str],
                     expected_price_as_of: str | None,
                     price_age_sessions: int | None) -> dict:
@@ -514,10 +499,11 @@ def _symbol_context(df: pd.DataFrame, wheel_cfg: dict, as_of: str,
     ctx["dist_sma50_pct"] = float(closes[-1] / sma50 - 1.0) if pd.notna(sma50) else float("nan")
     ctx["bb_lower"] = float(compute_bollinger(close_series, 20, 2.0)["bb_lower"].iloc[-1])
 
-    scan = report_ctx.get(symbol.upper(), {})
-    ctx["score_total"] = scan.get("score_total")
-    ctx["signal_band"] = scan.get("signal_band")
-    ctx["sector"] = scan.get("sector")
+    # Retained only for the versioned CSV contract. Wheel no longer reads a
+    # strategy report, and these context fields do not affect its analytics.
+    ctx["score_total"] = None
+    ctx["signal_band"] = None
+    ctx["sector"] = None
     return ctx
 
 
@@ -540,38 +526,18 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
         "underlying_max_stale_sessions", 0))
     if max_stale < 0:
         raise ValueError("wheel quality.underlying_max_stale_sessions must be nonnegative")
-    universe_cfg = wheel_cfg.get("universe", {})
     warnings: list[str] = []
     price_input_digest = hashlib.sha256()
 
-    # -- Universe: the universe.py registry (S&P Composite 1500 +
-    # curated ETF seed + manual pins) + the latest
-    # strategy report, deduped. Liveness is always registry minus the retirement
-    # journal; a stale report must not reintroduce a newly retired symbol.
+    # -- Universe: the generated registry (S&P Composite 1500 + curated ETF
+    # seed + manual pins), minus the retirement journal.
     reg_paths = universe.resolve_registry_paths(
         None if strategy.get("utility_runtime") else strategy)
     symbols: set[str] = set(universe.live_universe_symbols(
         registry_path=reg_paths["registry"], retired_path=reg_paths["retired"]))
-    retired_symbols = universe.load_retired_symbols(reg_paths["retired"])
     if not symbols:
         warnings.append(f"universe registry empty/missing: {reg_paths['registry']} "
                         "-- run `cli.py universe`")
-
-    report_ctx: dict[str, dict] = {}
-    report_path: Path | None = None
-    if universe_cfg.get("use_latest_strategy_report", True):
-        report_strategy = universe_cfg.get(
-            "strategy_report", "pre_earnings_momentum"
-        )
-        report_path = latest_report_path(
-            output_root / "reports" / report_strategy, as_of
-        )
-        if report_path is not None:
-            report_ctx = load_report_context(report_path)
-            symbols.update(symbol for symbol in report_ctx if symbol not in retired_symbols)
-        else:
-            warnings.append("no strategy report found on or before as_of -- "
-                            "skipping that universe source")
 
     # -- Events + freshness sidecar --
     events_path = output_root / "events.csv"
@@ -654,7 +620,7 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
             clean["date"].iloc[-1], benchmark_sessions, max_stale)
 
         ctx = _symbol_context(
-            clean, wheel_cfg, as_of, report_ctx, events_fetched_as_of,
+            clean, wheel_cfg, as_of, events_fetched_as_of,
             data_quality=quality, quality_reasons=quality_reasons,
             expected_price_as_of=expected_price_as_of,
             price_age_sessions=age_sessions,
@@ -728,7 +694,6 @@ def run_wheel(root: Path, strategy: dict, as_of: str) -> WheelResult:
             wheel_cfg, sort_keys=True, default=str).encode("utf-8")).hexdigest(),
         "universe_registry": sha256_file(reg_paths["registry"]),
         "retired_symbols": sha256_file(reg_paths["retired"]),
-        "strategy_report": sha256_file(report_path) if report_path else None,
         "events": sha256_file(events_path),
         "events_meta": sha256_file(output_root / "events_meta.json"),
         "validated_price_inputs": price_input_digest.hexdigest(),
