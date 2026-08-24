@@ -210,7 +210,7 @@
                 <button type="button" class="rv-detail-button" (click)="openRvDetail(c)"
                   [attr.aria-label]="'Show ' + c.wheel.symbol + ' RV rank detail'"
                   matTooltip="Current 21-session RV's position between its trailing 252-session low and high RV. Show the dated readings and exact inputs." matTooltipPosition="above">
-                  <span class="rv-value">{{ (c.wheel.rvRank252 * 100) | number:'1.0-0' }}%</span>
+                  <span class="rv-value">{{ c.wheel.rvRank252 | number:'1.2-2' }}</span>
                 </button>
               } @else {
                 <span>—</span>
@@ -369,9 +369,9 @@
         </p>
         <div class="rv-detail-summary">
           <div><span>Current RV</span><strong>{{ detail.current_rv * 100 | number:'1.1-1' }}%</strong></div>
-          <div><span>Trailing low RV</span><strong>{{ detail.low_rv * 100 | number:'1.1-1' }}%</strong></div>
-          <div><span>Trailing high RV</span><strong>{{ detail.high_rv * 100 | number:'1.1-1' }}%</strong></div>
-          <div><span>RV Rank</span><strong>{{ detail.rank != null ? ((detail.rank * 100 | number:'1.0-0') + '%') : '—' }}</strong></div>
+          <div><span>Trailing low RV</span><strong>{{ detail.low_rv * 100 | number:'1.2-2' }}%</strong></div>
+          <div><span>Trailing high RV</span><strong>{{ detail.high_rv * 100 | number:'1.2-2' }}%</strong></div>
+          <div><span>RV Rank</span><strong>{{ detail.rank != null ? (detail.rank | number:'1.2-2') : '—' }}</strong></div>
           <div><span>RV %ile</span><strong>{{ detail.percentile * 100 | number:'1.0-0' }}%</strong></div>
           <div><span>Calculation</span><strong>{{ rvObservationsAtOrBelowCurrent() }} / {{ detail.lookback_sessions }} at or below</strong></div>
           <div><span>Price as of</span><strong>{{ detail.price_as_of }}</strong></div>
@@ -381,8 +381,14 @@
           <thead><tr><th>Date</th><th>21-session RV</th><th>Counted</th></tr></thead>
           <tbody>
             @for (observation of rvObservationsNewestFirst(); track observation.date; let first = $first) {
-              <tr [class.current-rv-row]="first">
-                <td>{{ observation.date }} @if (first) { <span class="badge badge-info">Current</span> }</td>
+              <tr [class.current-rv-row]="first" [class.rv-low-row]="observation.rv === detail.low_rv"
+                [class.rv-high-row]="observation.rv === detail.high_rv">
+                <td>
+                  {{ observation.date }}
+                  @if (first) { <span class="badge badge-info">Current</span> }
+                  @if (observation.rv === detail.low_rv) { <span class="badge badge-pos">Trailing low</span> }
+                  @if (observation.rv === detail.high_rv) { <span class="badge badge-warn">Trailing high</span> }
+                </td>
                 <td>{{ observation.rv * 100 | number:'1.2-2' }}%</td>
                 <td>{{ observation.rv <= detail.current_rv ? 'Yes' : 'No' }}</td>
               </tr>

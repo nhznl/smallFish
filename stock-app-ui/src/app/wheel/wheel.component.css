@@ -458,6 +458,8 @@
 .rv-detail-table td:nth-child(n + 2) { text-align: right; }
 
 .current-rv-row { background: var(--info-soft); }
+.rv-low-row { background: var(--pos-soft); }
+.rv-high-row { background: var(--warn-soft); }
 
 @media (max-width: 440px) {
   .rv-detail-summary { grid-template-columns: 1fr; }

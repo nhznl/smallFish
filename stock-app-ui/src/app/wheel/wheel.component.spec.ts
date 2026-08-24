@@ -127,6 +127,8 @@ describe('WheelComponent', () => {
     expect(fixture.componentInstance.rvObservationsAtOrBelowCurrent()).toBe(3);
     expect(text()).toContain('Trailing low RV');
     expect(text()).toContain('RV Rank');
+    expect(text()).toContain('Trailing low');
+    expect(text()).toContain('Trailing high');
   });
 
   it('places ATR14% immediately after the 1σ move', () => {
@@ -142,7 +144,7 @@ describe('WheelComponent', () => {
     const columns = fixture.componentInstance.displayedColumns;
     expect(columns.indexOf('rvRank252')).toBe(columns.indexOf('rvPercentile252') - 1);
     expect(text()).toContain('RV Rank');
-    expect(text()).toContain('50%');
+    expect(text()).toContain('0.50');
   });
 
   it('keeps only rows whose overlapping sample count exceeds the configured minimum', () => {
