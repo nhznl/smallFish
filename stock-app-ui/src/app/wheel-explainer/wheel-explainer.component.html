@@ -200,7 +200,9 @@ which is expected, not an error.</li>
   </table>
   <p class="note">
     <strong>Collect Option Quotes</strong> is the only UI action here that contacts Tastytrade. It uses the
-    current Wheel view's Horizon, OTM cushion, and filtered symbols. The configured quality/liquidity gates
+    current Wheel view's Horizon, OTM cushion, and filtered symbols. <strong>Filter to Holdings</strong>
+    limits that view to the union of current Trading and Retirement equity holdings; if either holdings source
+    is unavailable, it leaves the table unchanged. The configured quality/liquidity gates
     still apply, then at most 60 eligible symbols are retained by RV percentile. In the quote archive,
     <strong>ENTRY</strong> is a strike-selection view; it is not the same as <code>entry_eligible</code>.
   </p>

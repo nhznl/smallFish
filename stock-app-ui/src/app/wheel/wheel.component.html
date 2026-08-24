@@ -53,7 +53,7 @@
           @if (!wheelRunning) {
             <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 11 7-11 7V5Z" fill="currentColor" stroke="none"/></svg>
           }
-          {{ wheelRunning ? 'Running…' : 'Run Wheel' }}
+          {{ wheelRunning ? 'Running…' : 'Compute Options Stats' }}
         </button>
         @if (wheelMessage) {
           <span class="job-status" [class]="'job-status ' + jobStatusClass(wheelStatus)">
@@ -113,6 +113,14 @@
         <input class="sample-input" type="number" min="0" step="1"
           [(ngModel)]="minSamples" (ngModelChange)="applyFilters()" aria-label="Minimum overlapping samples">
       </label>
+      <label class="check-filter" matTooltip="Filter to the union of current Trading and Retirement equity holdings." matTooltipPosition="above">
+        <input type="checkbox" [checked]="holdingsOnly" [disabled]="holdingsFilterLoading"
+          [attr.aria-busy]="holdingsFilterLoading" (change)="toggleHoldingsFilter()">
+        @if (holdingsFilterLoading) {
+          <span class="btn-spinner" aria-hidden="true"></span>
+        }
+        {{ holdingsFilterLoading ? 'Loading holdings…' : 'Filter to Holdings' }}
+      </label>
       <label class="check-filter">
         <input type="checkbox" [(ngModel)]="hideBearish" (ngModelChange)="applyFilters()">
         Hide bearish
@@ -135,6 +143,9 @@
       }
       <span class="result-count">{{ dataSource.data.length | number }} shown</span>
     </div>
+    @if (holdingsFilterError) {
+      <p class="holdings-filter-error" role="status">{{ holdingsFilterError }}</p>
+    }
     <div class="caveat">
       Put/Call <strong>ITM</strong> and <strong>Touch</strong> columns are shown at the selected
       <strong>{{ cushion }}%</strong> OTM cushion. ITM = historical terminal-close breach;

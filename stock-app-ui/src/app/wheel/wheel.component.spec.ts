@@ -3,7 +3,9 @@ import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 
 import { StockService } from '../api/stock.service';
+import { BrokerageService } from '../api/brokerage.service';
 import { SymbolFilterService } from '../services/symbol-filter.service';
+import { HoldingsResponse } from '../model/brokerage';
 import { WheelCandidate } from '../model/wheel-candidate';
 import { WheelComponent } from './wheel.component';
 import { OptionQuotesTabComponent } from './option-quotes-tab.component';
@@ -41,9 +43,17 @@ function candidate(symbol: string): WheelCandidate {
   };
 }
 
+function holdingsResponse(symbols: string[] = []): HoldingsResponse {
+  return {
+    availability: { status: 'AVAILABLE', reasons: [] },
+    items: symbols.map(symbol => ({ symbol })),
+  } as unknown as HoldingsResponse;
+}
+
 describe('WheelComponent', () => {
   let fixture: ComponentFixture<WheelComponent>;
   let stockService: jasmine.SpyObj<StockService>;
+  let brokerageService: jasmine.SpyObj<BrokerageService>;
 
   function text(): string {
     return (fixture.nativeElement as HTMLElement).textContent ?? '';
@@ -61,6 +71,7 @@ describe('WheelComponent', () => {
       'runWheel',
       'runChains',
     ]);
+    brokerageService = jasmine.createSpyObj<BrokerageService>('BrokerageService', ['getHoldings']);
     stockService.getWheelCandidates.and.returnValue(of([candidate('DEMO')]));
     stockService.getWheelRvDetail.and.returnValue(of({
       rv_window_sessions: 21,
@@ -76,12 +87,14 @@ describe('WheelComponent', () => {
     }));
     stockService.runWheel.and.returnValue(of({ status: 'ok', durationMs: 1200 }));
     stockService.runChains.and.returnValue(of({ status: 'ok', durationMs: 800 }));
+    brokerageService.getHoldings.and.returnValue(of(holdingsResponse()));
 
     await TestBed.configureTestingModule({
       imports: [WheelComponent],
       providers: [
         provideRouter([]),
         { provide: StockService, useValue: stockService },
+        { provide: BrokerageService, useValue: brokerageService },
         SymbolFilterService,
       ],
     })
@@ -129,6 +142,38 @@ describe('WheelComponent', () => {
     fixture.componentInstance.minSamples = 0;
     fixture.componentInstance.applyFilters();
     expect(fixture.componentInstance.dataSource.data.map(row => row.wheel.symbol)).toEqual(['DEMO', 'LOW']);
+  });
+
+  it('filters to the union of Trading and Retirement holdings', () => {
+    stockService.getWheelCandidates.and.returnValue(of([candidate('TRADING'), candidate('RETIREMENT'), candidate('OTHER')]));
+    brokerageService.getHoldings.and.callFake(id =>
+      of(holdingsResponse([id === 'tastytrade' ? 'TRADING' : 'RETIREMENT']))
+    );
+    mount();
+
+    fixture.componentInstance.toggleHoldingsFilter();
+
+    expect(brokerageService.getHoldings).toHaveBeenCalledWith('tastytrade');
+    expect(brokerageService.getHoldings).toHaveBeenCalledWith('fidelity');
+    expect(fixture.componentInstance.holdingsOnly).toBeTrue();
+    expect(fixture.componentInstance.dataSource.data.map(row => row.wheel.symbol))
+      .toEqual(['TRADING', 'RETIREMENT']);
+
+    fixture.componentInstance.toggleHoldingsFilter();
+    expect(fixture.componentInstance.dataSource.data.map(row => row.wheel.symbol))
+      .toEqual(['TRADING', 'RETIREMENT', 'OTHER']);
+  });
+
+  it('leaves the table unchanged when either holdings source cannot be loaded', () => {
+    brokerageService.getHoldings.and.returnValue(throwError(() => new Error('Unavailable')));
+    mount();
+
+    fixture.componentInstance.toggleHoldingsFilter();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.holdingsOnly).toBeFalse();
+    expect(fixture.componentInstance.dataSource.data.map(row => row.wheel.symbol)).toEqual(['DEMO']);
+    expect(text()).toContain('Could not load both Trading and Retirement holdings');
   });
 
   it('shows a transport error instead of the empty-state when the load fails', () => {

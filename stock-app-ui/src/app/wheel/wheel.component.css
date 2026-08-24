@@ -232,6 +232,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+.holdings-filter-error {
+  margin: 8px 0 0;
+  color: var(--neg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
 .symbol-input:focus-visible,
 .sample-input:focus-visible,
 .control-select:focus-visible {

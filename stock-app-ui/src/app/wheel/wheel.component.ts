@@ -11,8 +11,10 @@ import { MatSortModule, MatSort, MatSortable } from '@angular/material/sort';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FormsModule } from '@angular/forms';
 import { StockService } from '../api/stock.service';
+import { BrokerageService } from '../api/brokerage.service';
 import { SymbolFilterService } from '../services/symbol-filter.service';
-import { Subscription } from 'rxjs';
+import { forkJoin, Subscription } from 'rxjs';
+import { HoldingsResponse } from '../model/brokerage';
 import { RvPercentileDetail, WheelCandidate } from '../model/wheel-candidate';
 import { OptionQuotesTabComponent } from './option-quotes-tab.component';
 import { WheelCandidatesViewModel } from './wheel-candidates.view-model';
@@ -58,10 +60,12 @@ export class WheelComponent implements OnInit, OnDestroy {
   }
 
   private stockService = inject(StockService);
+  private brokerageService = inject(BrokerageService);
   private symbolFilterService = inject(SymbolFilterService);
   private filterSub?: Subscription;
   private loadSub?: Subscription;
   private rvDetailSub?: Subscription;
+  private holdingsFilterSub?: Subscription;
 
   readonly candidatesVm = new WheelCandidatesViewModel();
 
@@ -90,6 +94,10 @@ export class WheelComponent implements OnInit, OnDestroy {
   etfsOnly = false;
   minSamples = 1000;                  // primary overlapping-window evidence threshold
   symbolFilter = '';
+  holdingsOnly = false;
+  holdingsFilterLoading = false;
+  holdingsFilterError = '';
+  private holdingSymbols = new Set<string>();
 
   // Curated, decision-relevant subset of the versioned wheel columns.
   // the CSV report (and the Wheel Explainer) for auditing -- see the column-sync
@@ -120,7 +128,7 @@ export class WheelComponent implements OnInit, OnDestroy {
 
   readonly skeletonRows = Array.from({ length: 8 });
 
-  // Run Wheel button state (mirrors the Strategy Explainer "Run Scan Now" button)
+  // Compute Options Stats button state (mirrors the Strategy Explainer "Run Scan Now" button)
   wheelRunning = false;
   wheelStatus: 'idle' | 'ok' | 'warning' | 'error' = 'idle';
   wheelMessage = '';
@@ -154,6 +162,9 @@ export class WheelComponent implements OnInit, OnDestroy {
       }
       // Symbol filter (shared across tabs).
       if (!this.symbolFilterService.matchesFilter(c.wheel?.symbol ?? '')) {
+        return false;
+      }
+      if (this.holdingsOnly && !this.holdingSymbols.has(c.wheel?.symbol.toUpperCase() ?? '')) {
         return false;
       }
       // Hide predicate is EXACTLY trendDirection === 'BEARISH'. A null/absent
@@ -195,7 +206,7 @@ export class WheelComponent implements OnInit, OnDestroy {
         this.rvDetailLoading = false;
       },
       error: () => {
-        this.rvDetailError = 'RV-percentile detail is unavailable for this report. Run Wheel to create a current report.';
+        this.rvDetailError = 'RV-percentile detail is unavailable for this report. Compute Options Stats to create a current report.';
         this.rvDetailLoading = false;
       },
     });
@@ -355,6 +366,49 @@ export class WheelComponent implements OnInit, OnDestroy {
     this.symbolFilterService.clearFilter();
   }
 
+  /** Toggle a union of the current Trading and Retirement equity holdings. */
+  toggleHoldingsFilter(): void {
+    if (this.holdingsOnly) {
+      this.holdingsOnly = false;
+      this.holdingsFilterError = '';
+      this.applyFilters();
+      return;
+    }
+
+    this.holdingsFilterSub?.unsubscribe();
+    this.holdingsFilterLoading = true;
+    this.holdingsFilterError = '';
+    this.holdingsFilterSub = forkJoin({
+      trading: this.brokerageService.getHoldings('tastytrade'),
+      retirement: this.brokerageService.getHoldings('fidelity'),
+    }).subscribe({
+      next: ({ trading, retirement }) => {
+        this.holdingsFilterLoading = false;
+        if (!this.holdingsAvailable(trading) || !this.holdingsAvailable(retirement)) {
+          this.holdingsFilterError =
+            'Trading or Retirement holdings are unavailable, so the table was left unchanged.';
+          return;
+        }
+        this.holdingSymbols = new Set(
+          [...trading.items, ...retirement.items]
+            .map(item => item.symbol.trim().toUpperCase())
+            .filter(Boolean)
+        );
+        this.holdingsOnly = true;
+        this.applyFilters();
+      },
+      error: () => {
+        this.holdingsFilterLoading = false;
+        this.holdingsFilterError =
+          'Could not load both Trading and Retirement holdings, so the table was left unchanged.';
+      },
+    });
+  }
+
+  private holdingsAvailable(response: HoldingsResponse): boolean {
+    return response.availability.status !== 'UNAVAILABLE';
+  }
+
   runWheel(): void {
     this.wheelRunning = true;
     this.wheelStatus = 'idle';
@@ -468,5 +522,6 @@ export class WheelComponent implements OnInit, OnDestroy {
     this.filterSub?.unsubscribe();
     this.loadSub?.unsubscribe();
     this.rvDetailSub?.unsubscribe();
+    this.holdingsFilterSub?.unsubscribe();
   }
 }
