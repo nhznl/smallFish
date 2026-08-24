@@ -4,8 +4,18 @@ Operational notes for `rsi-supertrend-pine-v1`. Methodology lives in
 [`rsi_supertrend_study_spec.md`](rsi_supertrend_study_spec.md) and must not be
 edited.
 
-**Holdout is not authorized.** Do not run `--window holdout --confirm-holdout`
-until independent Stage 1 review is accepted.
+**Holdout is not authorized.** Do not run the holdout command until independent
+Stage 1 review is accepted. The official holdout command, **not executed**, is:
+
+```bash
+./commands.sh rsi-supertrend-study --window holdout --confirm-holdout --include-stocks
+```
+
+`--include-stocks` is required for holdout. The stock cohort is labeled
+`EXPLORATORY` and survivorship-biased; it is never pooled into the primary
+verdict. The holdout is reserved atomically under
+`$SFP_DATA_DIR/studies/rsi-supertrend-pine-v1/holdout/.authoritative-claim`
+before any holdout calculation, independent of `--output-root`.
 
 ## Runner
 

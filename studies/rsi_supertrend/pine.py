@@ -67,9 +67,8 @@ def pine_rsi(close: np.ndarray, length: int = 10) -> np.ndarray:
         u, d = up[i], down[i]
         if not np.isfinite(u) or not np.isfinite(d):
             continue
-        if d == 0 and u == 0:
-            rsi[i] = 50.0
-        elif d == 0:
+        # Pine: down == 0 ? 100 : up == 0 ? 0 : 100 - (100 / (1 + up / down))
+        if d == 0:
             rsi[i] = 100.0
         elif u == 0:
             rsi[i] = 0.0

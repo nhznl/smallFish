@@ -22,7 +22,9 @@ import yaml
 
 from models.universe import TYPE_STOCK
 from studies.rsi_supertrend.emulator import emulate_symbol
-from studies.rsi_supertrend.pine import PINE_SHA256
+from studies.rsi_supertrend.pine import (
+    PINE_SHA256, pine_rsi, pine_sma, pine_supertrend, special_buy_signals,
+)
 from utilities.price_reader import read_prices_validated
 from utilities.universe import load_registry, load_retired_symbols, resolve_registry_paths
 
@@ -75,6 +77,19 @@ OUTPUT_TABLES = (
     "exclusions.csv",
     "resolved_universe.json",
     "summary.json",
+)
+
+STOCK_TABLES = (
+    "stock_instrument_summary.csv",
+    "stock_daily_equity.csv",
+    "stock_trades.csv",
+)
+
+CANONICAL_HOLDOUT_CLAIM = Path("studies") / "rsi-supertrend-pine-v1" / "holdout" / ".authoritative-claim"
+
+TV_REQUIRED_COLUMNS = (
+    "date", "open", "high", "low", "close",
+    "rsi", "rsi_signal", "st_direction", "special_buy",
 )
 
 
@@ -177,12 +192,12 @@ def moving_block_summary(values: list[float] | np.ndarray, cfg: dict) -> dict:
     block = min(int(inf["block_length_sessions"]), n)
     draws = int(inf["bootstrap_draws"])
     rng = np.random.default_rng(int(inf["random_seed"]))
+    max_start = n - block
     starts_needed = math.ceil(n / block)
     boot = np.empty(draws)
     for draw in range(draws):
-        starts = rng.integers(0, n, size=starts_needed)
-        sampled = np.concatenate([
-            clean[(np.arange(start, start + block) % n)] for start in starts])[:n]
+        starts = rng.integers(0, max_start + 1, size=starts_needed)
+        sampled = np.concatenate([clean[start:start + block] for start in starts])[:n]
         boot[draw] = sampled.mean()
     alpha = 1.0 - float(inf["confidence_level"])
     lower, upper = np.quantile(boot, [alpha / 2.0, 1.0 - alpha / 2.0])
@@ -223,17 +238,103 @@ def resolve_stock_symbols(registry_path: Path, retired_path: Path) -> tuple[list
         "registry_sha256": sha256_file(registry_path),
         "retired_sha256": sha256_file(retired_path) if retired_path.is_file() else None,
         "stock_count": len(symbols),
+        "symbols": symbols,
         "survivorship_bias": True,
         "evidence_label": "EXPLORATORY",
     }
     return symbols, meta
 
 
-def compare_tradingview_export(path: Path = TV_FIXTURE_PATH) -> dict:
-    raise FileNotFoundError(
-        "TradingView development export is missing "
-        f"({path}). Parity with TradingView cannot be claimed from "
-        "self-consistency alone.")
+def compare_tradingview_export(path: Path = TV_FIXTURE_PATH, cfg: dict | None = None) -> dict:
+    if not path.is_file():
+        raise FileNotFoundError(
+            "TradingView development export is missing "
+            f"({path}). Required columns: {', '.join(TV_REQUIRED_COLUMNS)}. "
+            "Parity with TradingView cannot be claimed from self-consistency alone.")
+    cfg = cfg or FROZEN_CONFIG
+    export = pd.read_csv(path)
+    missing = [col for col in TV_REQUIRED_COLUMNS if col not in export.columns]
+    if missing:
+        raise ValueError(f"TradingView export missing columns: {missing}")
+    export = export.copy()
+    export["date"] = pd.to_datetime(export["date"])
+    close = export["close"].to_numpy(dtype="float64")
+    high = export["high"].to_numpy(dtype="float64")
+    low = export["low"].to_numpy(dtype="float64")
+    rsi = pine_rsi(close, int(cfg["rsi_length"]))
+    signal = pine_sma(rsi, int(cfg["signal_length"]))
+    _st, direction = pine_supertrend(
+        high, low, close, float(cfg["st_factor"]), int(cfg["atr_period"]))
+    special = special_buy_signals(
+        rsi, signal, float(cfg["trigger_level"]), int(cfg["target_cross_count"]))
+
+    def _max_abs(left: np.ndarray, right: np.ndarray) -> float | None:
+        mask = np.isfinite(left) & np.isfinite(right)
+        if not mask.any():
+            return None
+        return float(np.max(np.abs(left[mask] - right[mask])))
+
+    tv_rsi = export["rsi"].to_numpy(dtype="float64")
+    tv_signal = export["rsi_signal"].to_numpy(dtype="float64")
+    tv_dir = export["st_direction"].to_numpy(dtype="float64")
+    tv_buy = export["special_buy"].astype(bool).to_numpy()
+    defined = np.isfinite(rsi) & np.isfinite(signal)
+    dir_mask = np.isfinite(direction) & np.isfinite(tv_dir)
+    comparisons = {
+        "rsi_max_abs_diff": _max_abs(rsi, tv_rsi),
+        "rsi_signal_max_abs_diff": _max_abs(signal, tv_signal),
+        "st_direction_mismatches": int(np.sum(direction[dir_mask] != tv_dir[dir_mask])),
+        "special_buy_mismatches": int(np.sum(special[defined] != tv_buy[defined])),
+        "entry_fill_mismatches": 0,
+        "exit_fill_mismatches": 0,
+    }
+    if "entry_fill" in export.columns or "exit_fill" in export.columns:
+        result = emulate_symbol(
+            export, cfg, export["date"].iloc[0], export["date"].iloc[-1], "TV")
+        entry_by_date = {row["entry_date"]: row["entry_price"] for row in result.trades}
+        exit_by_date = {
+            row["exit_date"]: row["exit_price"]
+            for row in result.trades if not row["open_at_cutoff"] and row["exit_date"]
+        }
+        if "entry_fill" in export.columns:
+            for row in export.itertuples(index=False):
+                tv_fill = getattr(row, "entry_fill")
+                if pd.isna(tv_fill):
+                    continue
+                local = entry_by_date.get(str(pd.Timestamp(row.date).date()))
+                if local is None or abs(float(local) - float(tv_fill)) > 1e-4:
+                    comparisons["entry_fill_mismatches"] += 1
+        if "exit_fill" in export.columns:
+            for row in export.itertuples(index=False):
+                tv_fill = getattr(row, "exit_fill")
+                if pd.isna(tv_fill):
+                    continue
+                local = exit_by_date.get(str(pd.Timestamp(row.date).date()))
+                if local is None or abs(float(local) - float(tv_fill)) > 1e-4:
+                    comparisons["exit_fill_mismatches"] += 1
+    tolerance = 1e-4
+    ok = (
+        comparisons["rsi_max_abs_diff"] is not None
+        and comparisons["rsi_max_abs_diff"] <= tolerance
+        and comparisons["rsi_signal_max_abs_diff"] is not None
+        and comparisons["rsi_signal_max_abs_diff"] <= tolerance
+        and comparisons["st_direction_mismatches"] == 0
+        and comparisons["special_buy_mismatches"] == 0
+        and comparisons["entry_fill_mismatches"] == 0
+        and comparisons["exit_fill_mismatches"] == 0
+    )
+    report = {
+        "ok": ok,
+        "path": str(path),
+        "rows": int(len(export)),
+        "tolerance": tolerance,
+        **comparisons,
+    }
+    if not ok:
+        raise ValueError(
+            "TradingView export disagrees with the local Pine replication: "
+            + json.dumps(comparisons, sort_keys=True))
+    return report
 
 
 def _max_drawdown(equity: pd.Series) -> float | None:
@@ -244,16 +345,35 @@ def _max_drawdown(equity: pd.Series) -> float | None:
     return float((clean / peak - 1.0).min())
 
 
-def enforce_holdout_guard(cfg: dict, output_root: Path, confirm: bool) -> None:
+def canonical_holdout_claim_dir(data_root: Path) -> Path:
+    return Path(data_root) / CANONICAL_HOLDOUT_CLAIM
+
+
+def enforce_holdout_guard(cfg: dict, output_root: Path, confirm: bool,
+                          *, claim_root: Path | None = None) -> Path:
     if cfg.get("protocol_status") != "FROZEN":
         raise ValueError("holdout requires protocol_status=FROZEN")
     if not confirm:
         raise ValueError("holdout requires --confirm-holdout")
     if git_is_dirty():
         raise ValueError("holdout requires a clean committed worktree")
-    holdout_root = output_root / "holdout"
-    if holdout_root.exists() and any(path.is_dir() for path in holdout_root.iterdir()):
-        raise ValueError(f"authoritative holdout already exists under {holdout_root}")
+    root = Path(claim_root) if claim_root is not None else default_cache_root()
+    claim_dir = canonical_holdout_claim_dir(root)
+    claim_dir.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        claim_dir.mkdir(exist_ok=False)
+    except FileExistsError as exc:
+        raise ValueError(f"authoritative holdout already claimed at {claim_dir}") from exc
+    payload = {
+        "claimed_at_utc": datetime.now(timezone.utc).isoformat(),
+        "git_commit": _git("rev-parse", "HEAD"),
+        "pid": os.getpid(),
+        "status": "reserved",
+        "output_root": str(output_root),
+    }
+    (claim_dir / "claim.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return claim_dir
 
 
 def validate_coverage(cache_root: Path, cfg: dict, start: str, end: str) -> dict:
@@ -429,7 +549,8 @@ def run_cohort(cache_root: Path, cfg: dict, symbols: list[str], window: str,
 
 
 def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
-              universe_meta: dict, source_digest: str) -> None:
+              universe_meta: dict, source_digest: str,
+              stock_result: dict | None = None) -> None:
     run_dir.mkdir(parents=True, exist_ok=False)
     csv_opts = {"index": False, "float_format": "%.12g", "lineterminator": "\n"}
     result["instruments"].to_csv(run_dir / "instrument_summary.csv", **csv_opts)
@@ -441,6 +562,18 @@ def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
     (run_dir / "summary.json").write_text(
         json.dumps(result["summary"], indent=2, sort_keys=True) + "\n", encoding="utf-8")
     outputs = {name: sha256_file(run_dir / name) for name in OUTPUT_TABLES}
+    stock_price_hashes = None
+    if stock_result is not None:
+        stock_instruments = stock_result["instruments"].copy()
+        if not stock_instruments.empty:
+            stock_instruments.insert(1, "cohort", "EXPLORATORY")
+            stock_instruments.insert(2, "survivorship_bias", True)
+        stock_instruments.to_csv(run_dir / "stock_instrument_summary.csv", **csv_opts)
+        stock_result["daily"].to_csv(run_dir / "stock_daily_equity.csv", **csv_opts)
+        stock_result["trades"].to_csv(run_dir / "stock_trades.csv", **csv_opts)
+        for name in STOCK_TABLES:
+            outputs[name] = sha256_file(run_dir / name)
+        stock_price_hashes = stock_result["price_hashes"]
     manifest = {
         "schema_name": cfg["schema_name"],
         "schema_version": cfg["schema_version"],
@@ -455,6 +588,9 @@ def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
         "spec_sha256": sha256_file(SPEC_PATH),
         "source_pine_sha256": source_digest,
         "source_price_sha256": result["price_hashes"],
+        "stock_price_sha256": stock_price_hashes,
+        "stock_evidence_label": None if stock_result is None else "EXPLORATORY",
+        "stock_survivorship_bias": None if stock_result is None else True,
         "output_sha256": outputs,
         "dependencies": {
             "python": sys.version.split()[0],
@@ -482,6 +618,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--coverage-start", default=None)
     parser.add_argument("--coverage-end", default=None)
     parser.add_argument("--include-stocks", action="store_true")
+    parser.add_argument("--compare-tradingview", nargs="?", const=str(TV_FIXTURE_PATH),
+                        default=None)
     parser.add_argument("--cache-root", type=Path, default=None)
     parser.add_argument("--output-root", type=Path, default=None)
     args = parser.parse_args(argv)
@@ -497,7 +635,14 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 1 if any(not row["ok"] for row in report["instruments"]) else 0
 
+    if args.compare_tradingview:
+        report = compare_tradingview_export(Path(args.compare_tradingview), cfg)
+        print(json.dumps(report, indent=2, sort_keys=True, default=str))
+        return 0
+
     if args.window == "holdout":
+        if not args.include_stocks:
+            raise SystemExit("holdout requires --include-stocks")
         enforce_holdout_guard(cfg, output_root, args.confirm_holdout)
 
     source_digest = verify_source_hash()
@@ -509,6 +654,7 @@ def main(argv: list[str] | None = None) -> int:
         "window": args.window,
         "stocks": None,
     }
+    stock_result = None
     if args.include_stocks:
         paths = resolve_registry_paths()
         stocks, stock_meta = resolve_stock_symbols(paths["registry"], paths["retired"])
@@ -519,6 +665,7 @@ def main(argv: list[str] | None = None) -> int:
             "evidence_label": "EXPLORATORY",
             "survivorship_bias": True,
         }
+        stock_meta["simulated_count"] = int(len(stock_result["sleeves"]))
         universe_meta["stocks"] = stock_meta
         result["exclusions"] = pd.concat(
             [result["exclusions"], stock_result["exclusions"]], ignore_index=True)
@@ -526,7 +673,8 @@ def main(argv: list[str] | None = None) -> int:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     short = _git("rev-parse", "--short", "HEAD") or "nogit"
     run_dir = output_root / args.window / f"{run_id}-{short}"
-    write_run(run_dir, result, cfg, vars(args), universe_meta, source_digest)
+    write_run(run_dir, result, cfg, vars(args), universe_meta, source_digest,
+              stock_result=stock_result)
     summary = result["summary"]
     print(f"window={summary['window']} verdict={summary['verdict']} "
           f"n={summary['primary_endpoint']['n']} "

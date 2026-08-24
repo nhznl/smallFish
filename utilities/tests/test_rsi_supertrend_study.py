@@ -1,11 +1,12 @@
 """Synthetic coverage for the RSI/SuperTrend Pine replication.
 
 No test opens a socket. No test uses 2022-2025 strategy results as expected
-values. TradingView export comparison is skipped when the fixture is absent.
+values. A missing TradingView export fails closed rather than skipping.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -13,12 +14,14 @@ import pandas as pd
 import pytest
 
 from studies.rsi_supertrend import emulator as emulator_mod
-from studies.rsi_supertrend.emulator import emulate_symbol
+from studies.rsi_supertrend.emulator import emulate_symbol, percent_equity_qty
 from studies.rsi_supertrend.pine import (
     PINE_SHA256,
     pine_atr,
     pine_rma,
     pine_rsi,
+    pine_sma,
+    pine_supertrend,
     pine_true_range,
     special_buy_signals,
 )
@@ -27,11 +30,14 @@ from studies.rsi_supertrend.study import (
     FROZEN_CONFIG,
     SOURCE_PATH,
     TV_FIXTURE_PATH,
+    compare_tradingview_export,
     enforce_holdout_guard,
     load_config,
+    moving_block_summary,
     run_cohort,
     sha256_file,
     verify_source_hash,
+    write_run,
 )
 from utilities.indicators.ta import compute_atr
 
@@ -131,6 +137,14 @@ def test_rsi_uses_rma_gains_and_losses():
     assert ((rsi[5:] >= 0.0) & (rsi[5:] <= 100.0)).all()
 
 
+def test_rsi_flat_prices_follow_pine_down_zero_first():
+    close = np.full(20, 10.0)
+    rsi = pine_rsi(close, length=5)
+    defined = rsi[np.isfinite(rsi)]
+    assert len(defined)
+    assert (defined == 100.0).all()
+
+
 def test_two_cross_state_and_reset_after_special_buy():
     rsi = np.array([40.0, 45.0, 40.0, 45.0, 40.0, 45.0], dtype=float)
     signal = np.array([42.0, 42.0, 42.0, 42.0, 42.0, 42.0], dtype=float)
@@ -175,16 +189,29 @@ def _emulate(monkeypatch, frame, special, direction, start=None, end=None):
     return emulate_symbol(frame, _cfg(), start, end, "TEST")
 
 
-def test_next_open_fill_uses_signal_close_for_quantity(monkeypatch):
+def test_next_open_fill_sizes_from_fill_price(monkeypatch):
     frame = _bars(8)
+    frame["close"] = 100.0
+    frame["open"] = 100.0
+    frame["high"] = 101.0
+    frame["low"] = 99.0
+    frame.loc[frame.index[3], "open"] = 120.0
     special = np.zeros(8, dtype=bool)
     special[2] = True
     result = _emulate(monkeypatch, frame, special, np.full(8, -1.0))
     trade = result.trades[0]
     assert trade["signal_date"] == str(pd.Timestamp(frame["date"].iloc[2]).date())
     assert trade["entry_date"] == str(pd.Timestamp(frame["date"].iloc[3]).date())
-    assert trade["entry_price"] == pytest.approx(float(frame["open"].iloc[3]))
-    assert trade["shares"] == pytest.approx(10000.0 / float(frame["close"].iloc[2]))
+    assert trade["entry_price"] == pytest.approx(120.0)
+    assert trade["shares"] == pytest.approx(percent_equity_qty(10000.0, 120.0))
+    assert trade["shares"] == 83.0
+    assert trade["shares"] * trade["entry_price"] <= 10000.0
+
+
+def test_percent_equity_qty_floors_to_whole_shares():
+    assert percent_equity_qty(10000.0, 120.0) == 83.0
+    assert percent_equity_qty(100.0, 120.0) == 0.0
+    assert percent_equity_qty(10000.0, 100.0) == 100.0
 
 
 def test_bearish_supertrend_at_entry_does_not_auto_exit(monkeypatch):
@@ -276,7 +303,7 @@ def test_corrupt_primary_data_fails_closed(tmp_path):
 
 def test_holdout_guard_requires_confirm_flag(tmp_path):
     try:
-        enforce_holdout_guard(_cfg(), tmp_path, confirm=False)
+        enforce_holdout_guard(_cfg(), tmp_path, confirm=False, claim_root=tmp_path)
     except ValueError as exc:
         assert "--confirm-holdout" in str(exc)
     else:
@@ -287,28 +314,154 @@ def test_holdout_guard_requires_clean_worktree(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "studies.rsi_supertrend.study.git_is_dirty", lambda: True)
     try:
-        enforce_holdout_guard(_cfg(), tmp_path, confirm=True)
+        enforce_holdout_guard(_cfg(), tmp_path, confirm=True, claim_root=tmp_path)
     except ValueError as exc:
         assert "clean committed worktree" in str(exc)
     else:
         raise AssertionError("dirty worktree must block holdout")
 
 
-def test_holdout_guard_rejects_prior_holdout_directory(tmp_path, monkeypatch):
+def test_holdout_guard_claims_atomically_and_ignores_output_root(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "studies.rsi_supertrend.study.git_is_dirty", lambda: False)
-    prior = tmp_path / "holdout" / "already-ran"
-    prior.mkdir(parents=True)
+    first = enforce_holdout_guard(
+        _cfg(), tmp_path / "out-a", confirm=True, claim_root=tmp_path)
+    assert (first / "claim.json").is_file()
     try:
-        enforce_holdout_guard(_cfg(), tmp_path, confirm=True)
+        enforce_holdout_guard(
+            _cfg(), tmp_path / "out-b", confirm=True, claim_root=tmp_path)
     except ValueError as exc:
-        assert "already exists" in str(exc)
+        assert "already claimed" in str(exc)
     else:
-        raise AssertionError("a prior holdout directory must block a second run")
+        raise AssertionError("a second holdout caller must not pass the claim")
 
 
-def test_tradingview_parity_skips_when_fixture_missing():
+def test_moving_block_starts_do_not_wrap(monkeypatch):
+    recorded = []
+    real_rng = np.random.default_rng
+
+    class Recorder:
+        def __init__(self, seed):
+            self._rng = real_rng(seed)
+
+        def integers(self, low, high, size=None):
+            recorded.append((low, high, size))
+            return self._rng.integers(low, high, size=size)
+
+    monkeypatch.setattr(np.random, "default_rng", lambda seed: Recorder(seed))
+    cfg = _cfg()
+    cfg["inference"]["block_length_sessions"] = 6
+    cfg["inference"]["bootstrap_draws"] = 5
+    moving_block_summary(list(range(20)), cfg)
+    assert recorded
+    for low, high, size in recorded:
+        assert low == 0
+        assert high == 20 - 6 + 1
+        assert size == 4
+
+
+def test_stock_outputs_are_written_separately(tmp_path):
+    instruments = pd.DataFrame([{"symbol": "AAA", "special_buy_signals": 0}])
+    daily = pd.DataFrame({"date": ["2010-01-04"], "AAA_strategy": [10000.0]})
+    trades = pd.DataFrame([{"symbol": "AAA", "entry_date": "2010-01-05"}])
+    exclusions = pd.DataFrame([{"symbol": "BBB", "reason": "no bars"}])
+    primary = {
+        "instruments": pd.DataFrame([{"symbol": "SPY", "special_buy_signals": 1}]),
+        "daily": pd.DataFrame({"date": ["2010-01-04"], "SPY_strategy": [10000.0]}),
+        "trades": pd.DataFrame([{"symbol": "SPY", "entry_date": "2010-01-05"}]),
+        "exclusions": exclusions,
+        "summary": {"window": "development", "verdict": None},
+        "price_hashes": {"2010/SPY.txt": "abc"},
+    }
+    stock = {
+        "instruments": instruments,
+        "daily": daily,
+        "trades": trades,
+        "exclusions": exclusions,
+        "summary": {"window": "development", "verdict": None, "evidence_label": "EXPLORATORY"},
+        "price_hashes": {"2010/AAA.txt": "def"},
+        "sleeves": {"AAA": object()},
+    }
+    universe = {
+        "primary": ["SPY"],
+        "window": "development",
+        "stocks": {
+            "symbols": ["AAA"],
+            "stock_count": 1,
+            "evidence_label": "EXPLORATORY",
+            "survivorship_bias": True,
+        },
+    }
+    run_dir = tmp_path / "run"
+    write_run(run_dir, primary, _cfg(), {"include_stocks": True}, universe, "digest",
+              stock_result=stock)
+    resolved = json.loads((run_dir / "resolved_universe.json").read_text(encoding="utf-8"))
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert resolved["stocks"]["symbols"] == ["AAA"]
+    assert (run_dir / "stock_instrument_summary.csv").is_file()
+    assert (run_dir / "stock_daily_equity.csv").is_file()
+    assert (run_dir / "stock_trades.csv").is_file()
+    assert "AAA" in (run_dir / "stock_instrument_summary.csv").read_text(encoding="utf-8")
+    assert "SPY" in (run_dir / "instrument_summary.csv").read_text(encoding="utf-8")
+    assert "AAA" not in (run_dir / "instrument_summary.csv").read_text(encoding="utf-8")
+    assert manifest["stock_price_sha256"] == {"2010/AAA.txt": "def"}
+    assert manifest["stock_evidence_label"] == "EXPLORATORY"
+    assert manifest["stock_survivorship_bias"] is True
+
+
+def _tv_frame(n: int = 40) -> pd.DataFrame:
+    frame = _bars(n)
+    close = frame["close"].to_numpy(dtype="float64")
+    high = frame["high"].to_numpy(dtype="float64")
+    low = frame["low"].to_numpy(dtype="float64")
+    rsi = pine_rsi(close, 10)
+    signal = pine_sma(rsi, 10)
+    _st, direction = pine_supertrend(high, low, close, 2.5, 10)
+    special = special_buy_signals(rsi, signal, 50.0, 2)
+    return pd.DataFrame({
+        "date": pd.to_datetime(frame["date"]).dt.strftime("%Y-%m-%d"),
+        "open": frame["open"],
+        "high": frame["high"],
+        "low": frame["low"],
+        "close": frame["close"],
+        "rsi": rsi,
+        "rsi_signal": signal,
+        "st_direction": direction,
+        "special_buy": special,
+    })
+
+
+def test_tradingview_comparison_fails_closed_when_fixture_missing():
     if TV_FIXTURE_PATH.is_file():
-        pytest.fail("unexpected TradingView fixture; wire a real comparison")
-    pytest.skip(
-        "missing external fixture: TradingView development export is not in the repository")
+        report = compare_tradingview_export(TV_FIXTURE_PATH)
+        assert report["ok"]
+        return
+    try:
+        compare_tradingview_export(TV_FIXTURE_PATH)
+    except FileNotFoundError as exc:
+        assert "missing" in str(exc).lower()
+        assert "rsi" in str(exc).lower()
+    else:
+        raise AssertionError("a missing TradingView export must fail closed")
+
+
+def test_tradingview_comparison_matches_recomputed_indicators(tmp_path):
+    path = tmp_path / "tradingview_export.csv"
+    _tv_frame().to_csv(path, index=False)
+    report = compare_tradingview_export(path)
+    assert report["ok"]
+    assert report["st_direction_mismatches"] == 0
+    assert report["special_buy_mismatches"] == 0
+
+
+def test_tradingview_comparison_detects_indicator_mismatch(tmp_path):
+    frame = _tv_frame()
+    frame.loc[frame.index[-1], "rsi"] = 0.0
+    path = tmp_path / "tradingview_export.csv"
+    frame.to_csv(path, index=False)
+    try:
+        compare_tradingview_export(path)
+    except ValueError as exc:
+        assert "disagrees" in str(exc)
+    else:
+        raise AssertionError("a mismatched TradingView export must fail")

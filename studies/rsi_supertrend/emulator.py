@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -57,6 +58,21 @@ def _trade_row(trade: OpenTrade, exit_date, exit_price: float, reason: str,
     }
 
 
+MIN_SHARE_QTY = 1.0
+
+
+def percent_equity_qty(equity: float, fill_price: float, percent: float = 100.0,
+                       min_qty: float = MIN_SHARE_QTY) -> float:
+    """TradingView percent-of-equity size at fill, floored to ``min_qty`` steps."""
+    if fill_price <= 0 or not np.isfinite(fill_price) or equity <= 0:
+        return 0.0
+    raw = (equity * (percent / 100.0)) / fill_price
+    steps = math.floor(raw / min_qty + 1e-12)
+    if steps <= 0:
+        return 0.0
+    return float(steps * min_qty)
+
+
 def emulate_symbol(frame: pd.DataFrame, cfg: dict, window_start, window_end,
                    symbol: str) -> SleeveResult:
     """Run one independent sleeve on completed daily bars.
@@ -91,9 +107,9 @@ def emulate_symbol(frame: pd.DataFrame, cfg: dict, window_start, window_end,
     shares = 0.0
     pending_entry = False
     pending_exit = False
-    entry_qty_price = np.nan
     entry_equity = np.nan
     signal_date = None
+    qty_percent = float(cfg.get("qty_percent_of_equity", 100.0))
     open_trade: OpenTrade | None = None
     trades: list[dict] = []
     equity_vals = np.full(n, np.nan)
@@ -119,18 +135,20 @@ def emulate_symbol(frame: pd.DataFrame, cfg: dict, window_start, window_end,
 
         if pending_entry:
             if in_window and shares == 0 and open_[i] > 0 and np.isfinite(open_[i]):
-                qty = float(entry_equity / entry_qty_price)
-                cash -= qty * float(open_[i])
-                shares = qty
-                prev_dir = direction[i - 1] if i else direction[i]
-                open_trade = OpenTrade(
-                    symbol=symbol,
-                    signal_date=signal_date,
-                    entry_date=date,
-                    entry_price=float(open_[i]),
-                    shares=qty,
-                    direction_at_entry=float(prev_dir) if np.isfinite(prev_dir) else float("nan"),
-                )
+                qty = percent_equity_qty(float(entry_equity), float(open_[i]), qty_percent)
+                if qty > 0:
+                    cash -= qty * float(open_[i])
+                    shares = qty
+                    prev_dir = direction[i - 1] if i else direction[i]
+                    open_trade = OpenTrade(
+                        symbol=symbol,
+                        signal_date=signal_date,
+                        entry_date=date,
+                        entry_price=float(open_[i]),
+                        shares=qty,
+                        direction_at_entry=(
+                            float(prev_dir) if np.isfinite(prev_dir) else float("nan")),
+                    )
             pending_entry = False
 
         equity = cash + shares * float(close[i])
@@ -147,7 +165,6 @@ def emulate_symbol(frame: pd.DataFrame, cfg: dict, window_start, window_end,
                 ignored += 1
             elif close[i] > 0 and np.isfinite(close[i]):
                 pending_entry = True
-                entry_qty_price = float(close[i])
                 entry_equity = float(equity)
                 signal_date = date
 
