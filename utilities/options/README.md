@@ -30,6 +30,8 @@ non-zero when no requested Tastytrade quote arrives. Yahoo quotes are
 diagnostic-only — they cannot authorize entry economics. Running off-hours is
 allowed for diagnostics, but off-hours or untimestamped observations can never
 become entry-eligible.
+Every Wheel horizon (7, 14, 30, 37, and 45 DTE) is configured for collection;
+their listed-expiry tolerances are defined in `config/chains.yaml`.
 `chains` discovers contracts through Yahoo, then requests live bid/ask
 observations through `services.options_market` (Tastytrade is the routed
 provider today). This package retains quote eligibility, coverage metadata, and

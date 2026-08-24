@@ -11,8 +11,7 @@ from utilities.options.market_quotes import SOURCE_TASTYTRADE_DXLINK
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config" / "chains.yaml"
 
-DEFAULT_CHAIN_DTES = [7, 37]           # matches how the wheel is traded; two DTEs
-                                       # ~halve the request count vs all five.
+DEFAULT_CHAIN_DTES = [7, 14, 30, 37, 45]  # every Wheel table horizon.
 DEFAULT_MIN_DOLLAR_VOLUME = 10_000_000
 DEFAULT_FETCH_POOL_N = 60
 DEFAULT_PER_EXPIRY_TOP_N = 60

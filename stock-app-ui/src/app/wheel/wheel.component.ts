@@ -136,11 +136,6 @@ export class WheelComponent implements OnInit, OnDestroy {
   rvDetailLoading = false;
   rvDetailError = '';
 
-  // Only these DTEs are configured for chain collection (chains.yaml
-  // `chain_dtes`). The wheel table offers more horizons than the chain policy
-  // covers, so view-scoped collection at 14/30/45 DTE has nothing to collect.
-  readonly collectibleHorizons: number[] = [7, 37];
-
   ngOnInit(): void {
     this.symbolFilter = this.symbolFilterService.getFilter();
     this.load();
@@ -391,17 +386,8 @@ export class WheelComponent implements OnInit, OnDestroy {
     )).sort();
   }
 
-  /** True when the selected horizon is one the chain policy actually collects. */
-  horizonCollectible(): boolean {
-    return this.collectibleHorizons.includes(this.horizon);
-  }
-
   /** Blocking reason for view-scoped collection, or '' when it can proceed. */
   scopeBlockReason(): string {
-    if (!this.horizonCollectible()) {
-      return `${this.horizon} DTE is not a configured collection horizon ` +
-        `(${this.collectibleHorizons.join(', ')}). Switch to a configured horizon.`;
-    }
     if (!this.scopedSymbols().length) {
       return 'No symbols match the current filters, so a scoped run would ' +
         'collect nothing.';

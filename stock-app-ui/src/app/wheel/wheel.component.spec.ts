@@ -193,4 +193,12 @@ describe('WheelComponent', () => {
     });
     expect(text()).not.toContain('Scope collection to this view');
   });
+
+  it('allows quote collection at every Wheel horizon', () => {
+    mount();
+    for (const horizon of fixture.componentInstance.horizons) {
+      fixture.componentInstance.horizon = horizon;
+      expect(fixture.componentInstance.scopeBlockReason()).toBe('');
+    }
+  });
 });

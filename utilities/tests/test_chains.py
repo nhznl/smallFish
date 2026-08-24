@@ -1034,6 +1034,18 @@ def test_scope_rejects_a_horizon_the_chain_policy_does_not_cover():
         raise AssertionError("an unconfigured horizon must fail closed")
 
 
+def test_scope_accepts_every_configured_wheel_horizon():
+    cfg = chains_config({"chains": {
+        "chain_dtes": [7, 14, 30, 37, 45],
+        "expiry_tolerance_days": {7: 0, 14: 4, 30: 4, 37: 9, 45: 4},
+    }})
+
+    scope = normalize_collection_scope(cfg, horizon_dtes=[7, 14, 30, 37, 45])
+
+    assert scope["requested_dtes"] == [7, 14, 30, 37, 45]
+    assert scope["configured_dtes"] == [7, 14, 30, 37, 45]
+
+
 def test_scope_defaults_describe_a_full_unscoped_sweep():
     cfg = chains_config(_scope_strategy())
     scope = normalize_collection_scope(cfg)

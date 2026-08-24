@@ -1,10 +1,15 @@
 # Behavioral settings for utilities.options.chains. Artifact paths come from app.env.
-chain_dtes: [7, 37]
-# The weekly target remains exact. The 37-DTE target accepts an actual listed
-# expiry within ±9 calendar days (28–46 DTE), approved 2026-07-24.
+chain_dtes: [7, 14, 30, 37, 45]
+# The weekly target remains exact. The 14-, 30-, and 45-DTE targets accept the
+# nearest standard listed expiry within ±4 calendar days. The 37-DTE target
+# accepts an actual listed expiry within ±9 calendar days (28–46 DTE), approved
+# 2026-07-24.
 expiry_tolerance_days:
   7: 0
+  14: 4
+  30: 4
   37: 9
+  45: 4
 min_dollar_volume: 10000000
 # Horizon-independent symbols are fetched first; eligibility and rank caps are
 # then applied independently after each listed expiry is discovered.
