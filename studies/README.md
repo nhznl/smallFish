@@ -50,6 +50,14 @@ work done afterwards, carries no verdict, and cannot rescue the first.
 Neither result lifts a product gate. The Momentum and Sectors views remain
 descriptive screens.
 
+## Frozen studies awaiting implementation
+
+[`rsi_supertrend/rsi_supertrend_study_spec.md`](rsi_supertrend/rsi_supertrend_study_spec.md)
+is the frozen design and handoff for an exact RSI/SuperTrend Pine implementation
+replication approved on 2026-08-23. It has no implementation, published
+artifact, result, or verdict. Implementation must return for review before the
+one-shot holdout is run.
+
 ## How a study is published
 
 Studies are **materialized ahead of time**, not computed on request. The API
@@ -108,12 +116,14 @@ studies/
 │   ├── scan.py                 the live scan (needs FINNHUB_API_KEY)
 │   ├── backtest.py             walk-forward backtest
 │   └── event_backtest.py       event-study backtest
-└── sector_rotation/
+├── sector_rotation/
     ├── definition.json
     ├── sector_rotation_study*_spec.md
     ├── config/
     ├── study_v1.py             frozen legacy-nine study
     └── study_v2.py             frozen full-period exploration
+└── rsi_supertrend/
+    └── rsi_supertrend_study_spec.md   frozen protocol and agent handoff
 ```
 
 Studies share the `utilities/.venv` environment and may import `models/` and

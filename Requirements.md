@@ -110,14 +110,19 @@ verification package. The safety-critical parts — fail-closed quote quality,
 exact contract identity, immutable archives, deterministic archive
 verification — are done; these are the completeness items.
 
-**Stock-strategy studies.** Closed 2026-07-18. Ticker-clustered trade
-confidence intervals, point-in-time data acquisition, full event-source parity,
-and a new prospective validation are all deferred.
+**Stock-strategy studies.** Narrowly reopened by explicit owner decision on
+2026-08-23 for a documentation-only design of the exact RSI/SuperTrend Pine
+implementation replication in
+[`studies/rsi_supertrend/rsi_supertrend_study_spec.md`](studies/rsi_supertrend/rsi_supertrend_study_spec.md).
+Implementation and result generation are explicitly deferred to a handoff
+agent. The dated protocol is frozen; implementation must pass independent
+review before the one-shot 2022–2025 holdout is run. The current-universe stock
+cohort is exploratory and survivorship-biased.
 
-Reopening requires an explicit decision, and any validation claim requires a
-dated pre-registration made **before** new outcomes are observed. The completed
-studies keep their documented limitations and must never be promoted as
-validated edge evidence.
+Ticker-clustered trade confidence intervals, point-in-time data acquisition,
+full event-source parity, and a new prospective validation remain deferred for
+the earlier completed studies. Their documented limitations remain unchanged
+and they must never be promoted as validated edge evidence.
 
 ## Standing decisions
 
