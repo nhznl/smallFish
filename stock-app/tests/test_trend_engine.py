@@ -117,8 +117,11 @@ def test_stock_detail_dict_contract_is_focused():
     assert len(d["recentWeeks"]) == 5
     assert set(d["lastTradeStats"]) == {"tradeDate", "open", "high", "low", "close", "volume"}
     assert all(set(week) == {"startDate", "endDate", "avgClose"} for week in d["recentWeeks"])
-    # Daily closes back the detail price chart; it scopes its own range client-side.
-    assert all(set(bar) == {"tradeDate", "close", "volume"} for bar in d["dailyBars"])
+    # Daily OHLCV backs both detail charts; they scope their own ranges client-side.
+    assert all(
+        set(bar) == {"tradeDate", "open", "high", "low", "close", "volume"}
+        for bar in d["dailyBars"]
+    )
     assert len(d["dailyBars"]) == 80
 
 

@@ -8,6 +8,7 @@ import { catchError, distinctUntilChanged, map, switchMap, tap } from 'rxjs/oper
 import { StockService } from '../api/stock.service';
 import { StockAnalysis, YearlySlope } from '../model/stock';
 import { StockInfo } from '../model/stock-info';
+import { TechnicalChartComponent } from './technical-chart.component';
 
 const WEEKLY_CHART_HEIGHT = 240;
 const WEEKLY_CHART_MIN_WIDTH = 320;
@@ -52,10 +53,13 @@ type WeeklyCloseChart = {
 
 // Price chart. Unlike the weekly chart this one scales to its container rather
 // than scrolling: a 1Y range is ~250 points, far too many to scroll through.
-const PRICE_CHART_HEIGHT = 260;
+const PRICE_CHART_HEIGHT = 330;
 const PRICE_CHART_WIDTH = 900;
 const PRICE_CHART_PADDING = 28;
 const PRICE_CHART_Y_AXIS_LABEL_SPACE = 60;
+const PRICE_CHART_PRICE_BASELINE_Y = 230;
+const PRICE_CHART_VOLUME_TOP_Y = 250;
+const PRICE_CHART_VOLUME_BASELINE_Y = 302;
 const PRICE_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 // A range spanning years labels by month + full year. A 2-digit year reads as a
 // day of the month ("Jul 25 – Jul 26" looks like two days, not two years).
@@ -86,8 +90,13 @@ type PricePoint = {
   /** Exact session date, shown on hover. */
   fullLabel: string;
   value: number;
+  volume: number;
   x: number;
   y: number;
+  volumeY: number;
+  volumeHeight: number;
+  volumeWidth: number;
+  volumeRising: boolean;
 };
 
 type PriceChart = {
@@ -100,6 +109,8 @@ type PriceChart = {
   height: number;
   padding: number;
   baselineY: number;
+  volumeTopY: number;
+  volumeBaselineY: number;
   viewBox: string;
   rangeLabel: string;
   first: number | null;
@@ -127,7 +138,7 @@ type HeatmapData = {
   selector: 'app-stock-detail',
   templateUrl: './stock-detail.component.html',
   styleUrls: ['./stock-detail.component.css'],
-  imports: [RouterLink, MatTooltipModule],
+  imports: [RouterLink, MatTooltipModule, TechnicalChartComponent],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StockDetailComponent implements OnInit {
@@ -335,14 +346,23 @@ export class StockDetailComponent implements OnInit {
       points: [], polyline: '', area: '', ticks: [], xLabels: [],
       width: PRICE_CHART_WIDTH, height: PRICE_CHART_HEIGHT,
       padding: PRICE_CHART_PADDING,
-      baselineY: PRICE_CHART_HEIGHT - PRICE_CHART_PADDING,
+      baselineY: PRICE_CHART_PRICE_BASELINE_Y,
+      volumeTopY: PRICE_CHART_VOLUME_TOP_Y,
+      volumeBaselineY: PRICE_CHART_VOLUME_BASELINE_Y,
       viewBox: `-${PRICE_CHART_Y_AXIS_LABEL_SPACE} 0 ${PRICE_CHART_WIDTH + PRICE_CHART_Y_AXIS_LABEL_SPACE} ${PRICE_CHART_HEIGHT}`,
       rangeLabel: '', first: null, last: null, changePct: null, rising: true
     };
 
     const bars = (this._stock()?.dailyBars ?? [])
-      .map(bar => ({ date: this.parseDate(bar.tradeDate), close: Number(bar.close) }))
-      .filter((bar): bar is { date: Date; close: number } =>
+      .map(bar => {
+        const volume = Number(bar.volume);
+        return {
+          date: this.parseDate(bar.tradeDate),
+          close: Number(bar.close),
+          volume: Number.isFinite(volume) && volume >= 0 ? volume : 0
+        };
+      })
+      .filter((bar): bar is { date: Date; close: number; volume: number } =>
         !!bar.date && Number.isFinite(bar.close))
       .sort((a, b) => a.date.getTime() - b.date.getTime());
     if (!bars.length) {
@@ -375,20 +395,31 @@ export class StockDetailComponent implements OnInit {
     const padding = PRICE_CHART_PADDING;
     const width = PRICE_CHART_WIDTH;
     const height = PRICE_CHART_HEIGHT;
-    const innerHeight = height - padding * 2;
+    const baselineY = PRICE_CHART_PRICE_BASELINE_Y;
+    const innerHeight = baselineY - padding;
     const innerWidth = width - padding * 2;
-    const baselineY = height - padding;
+    const volumeTopY = PRICE_CHART_VOLUME_TOP_Y;
+    const volumeBaselineY = PRICE_CHART_VOLUME_BASELINE_Y;
+    const volumePanelHeight = volumeBaselineY - volumeTopY;
     const step = innerWidth / (selected.length - 1);
+    const volumeWidth = Math.max(1, Math.min(14, step * 0.72));
+    const maxVolume = Math.max(...selected.map(bar => bar.volume));
     const multiYear = selected[0].date.getFullYear() !== selected[selected.length - 1].date.getFullYear();
 
     const points: PricePoint[] = selected.map((bar, index) => {
       const ratio = spread === 0 ? 0.5 : (bar.close - minValue) / safeSpread;
+      const volumeHeight = maxVolume === 0 ? 0 : (bar.volume / maxVolume) * volumePanelHeight;
       return {
         label: (multiYear ? PRICE_DATE_YEAR_FORMATTER : PRICE_DATE_FORMATTER).format(bar.date),
         fullLabel: PRICE_DATE_FULL_FORMATTER.format(bar.date),
         value: bar.close,
+        volume: bar.volume,
         x: padding + step * index,
-        y: baselineY - ratio * innerHeight
+        y: baselineY - ratio * innerHeight,
+        volumeY: volumeBaselineY - volumeHeight,
+        volumeHeight,
+        volumeWidth,
+        volumeRising: index === 0 || bar.close >= selected[index - 1].close
       };
     });
 
@@ -433,6 +464,8 @@ export class StockDetailComponent implements OnInit {
       height,
       padding,
       baselineY,
+      volumeTopY,
+      volumeBaselineY,
       viewBox: `-${PRICE_CHART_Y_AXIS_LABEL_SPACE} 0 ${width + PRICE_CHART_Y_AXIS_LABEL_SPACE} ${height}`,
       rangeLabel: `${points[0].fullLabel} – ${lastPoint.fullLabel}`,
       first,

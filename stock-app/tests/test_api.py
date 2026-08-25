@@ -53,6 +53,10 @@ def test_stock_analysis_contract_and_edge_cases(env_fixtures):
     }
     assert set(r.json()["lastTradeStats"]) == {"tradeDate", "open", "high", "low", "close", "volume"}
     assert all(set(week) == {"startDate", "endDate", "avgClose"} for week in r.json()["recentWeeks"])
+    assert all(
+        set(bar) == {"tradeDate", "open", "high", "low", "close", "volume"}
+        for bar in r.json()["dailyBars"]
+    )
 
     short_history = client.get("/stocks/TESTA/analysis")
     assert short_history.status_code == 200

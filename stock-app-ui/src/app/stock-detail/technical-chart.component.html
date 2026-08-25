@@ -1,0 +1,115 @@
+@if (chart().points.length) {
+  <section class="technical-card" aria-labelledby="technical-chart-title">
+    <div class="technical-head">
+      <div>
+        <h3 id="technical-chart-title">Technical chart <small>{{ chart().rangeLabel }}</small></h3>
+        <p>Daily price with selectable EMAs, Bollinger Bands, and confirmed historical pivot zones.</p>
+      </div>
+      <div class="range-tabs" role="group" aria-label="Technical chart range">
+        @for (chartRange of ranges; track chartRange) {
+          <button type="button" class="range-tab" [class.active]="range() === chartRange"
+                  [attr.aria-pressed]="range() === chartRange"
+                  (click)="setRange(chartRange)">{{ chartRange }}</button>
+        }
+      </div>
+    </div>
+
+    <div class="overlay-controls" aria-label="Technical overlays">
+      <div class="overlay-group">
+        <span class="overlay-group-label">EMA · dashed</span>
+        @for (period of periods; track period) {
+          <button type="button" class="overlay-toggle ema-toggle" [class.active]="isEnabled(movingAverageKey(period))"
+                  [class]="'overlay-toggle ema-toggle period-' + period"
+                  [attr.aria-pressed]="isEnabled(movingAverageKey(period))"
+                  (click)="toggle(movingAverageKey(period))">{{ period }}</button>
+        }
+      </div>
+      <button type="button" class="overlay-toggle auxiliary" [class.active]="isEnabled('bollinger')"
+              [attr.aria-pressed]="isEnabled('bollinger')" (click)="toggle('bollinger')">Bollinger 20, 2</button>
+      <button type="button" class="overlay-toggle auxiliary levels-toggle" [class.active]="isEnabled('levels')"
+              [attr.aria-pressed]="isEnabled('levels')" (click)="toggle('levels')">S / R zones</button>
+    </div>
+
+    <svg class="technical-svg" [attr.viewBox]="chart().viewBox" preserveAspectRatio="none"
+         role="img" [attr.aria-label]="symbol() + ' daily technical chart over ' + range()"
+         (mousemove)="onChartMove($event, chart())" (mouseleave)="clearHover()">
+      @if (isEnabled('levels')) {
+        <g class="price-zones">
+          @for (zone of chart().zones; track zone.kind + '-' + zone.center) {
+            <rect [class]="'price-zone zone-' + zone.kind"
+                  [attr.x]="chart().padding" [attr.y]="zone.y"
+                  [attr.width]="chart().width - chart().padding * 2" [attr.height]="zone.height"></rect>
+            <text [class]="'zone-label label-' + zone.kind"
+                  [attr.x]="chart().width - chart().padding - 4" [attr.y]="zone.y - 3">
+              {{ zone.kind === 'support' ? 'S' : 'R' }} · {{ formatPrice(zone.center) }} · {{ zone.touches }} touches
+            </text>
+          }
+        </g>
+      }
+
+      @if (isEnabled('bollinger') && chart().bollingerArea) {
+        <polygon class="bollinger-area" [attr.points]="chart().bollingerArea"></polygon>
+      }
+
+      <g class="axes">
+        @for (tick of chart().ticks; track tick.value) {
+          <g class="y-tick" [attr.transform]="'translate(0,' + tick.y + ')'">
+            <line class="tick-line" [attr.x1]="chart().padding"
+                  [attr.x2]="chart().width - chart().padding" y1="0" y2="0"></line>
+            <text class="tick-label" [attr.x]="chart().padding - 10" y="4">{{ formatAxisPrice(tick.value) }}</text>
+          </g>
+        }
+        <line class="axis axis-x" [attr.x1]="chart().padding"
+              [attr.x2]="chart().width - chart().padding"
+              [attr.y1]="chart().baselineY" [attr.y2]="chart().baselineY"></line>
+      </g>
+
+      @if (isEnabled('bollinger')) {
+        <polyline class="bollinger-line" [attr.points]="chart().bollingerUpper"></polyline>
+        <polyline class="bollinger-line bollinger-middle" [attr.points]="chart().bollingerMiddle"></polyline>
+        <polyline class="bollinger-line" [attr.points]="chart().bollingerLower"></polyline>
+      }
+
+      @for (line of chart().lines; track line.key) {
+        @if (isEnabled(line.key) && line.points) {
+          <polyline [class]="'technical-line ' + line.kind + ' period-' + line.period"
+                    [attr.points]="line.points"></polyline>
+        }
+      }
+      <polyline class="technical-close" [attr.points]="chart().closePoints"></polyline>
+
+      @for (label of chart().xLabels; track label.x) {
+        <text class="x-tick-label" [attr.x]="label.x" [attr.y]="chart().height - 8">{{ label.label }}</text>
+      }
+
+      @if (hoveredPoint(); as hovered) {
+        <line class="hover-line" [attr.x1]="hovered.x" [attr.x2]="hovered.x"
+              [attr.y1]="chart().padding" [attr.y2]="chart().baselineY"></line>
+        <circle class="hover-dot" [attr.cx]="hovered.x" [attr.cy]="hovered.closeY" r="4"></circle>
+      }
+    </svg>
+
+    <div class="technical-readout" aria-live="polite">
+      @if (hoveredPoint(); as hovered) {
+        <strong>{{ hovered.fullLabel }}</strong>
+        <span>O {{ formatPrice(hovered.open) }}</span>
+        <span>H {{ formatPrice(hovered.high) }}</span>
+        <span>L {{ formatPrice(hovered.low) }}</span>
+        <span>C {{ formatPrice(hovered.close) }}</span>
+        @for (average of activeMovingAverages(hovered); track average.label) {
+          <span>{{ average.label }} {{ formatPrice(average.value) }}</span>
+        }
+        @if (isEnabled('bollinger') && hovered.bollingerUpper !== null) {
+          <span>BB {{ formatPrice(hovered.bollingerLower) }} – {{ formatPrice(hovered.bollingerUpper) }}</span>
+        }
+      } @else {
+        <span><strong>Close</strong> is the dark line. EMA lines are dashed.</span>
+      }
+    </div>
+
+    <p class="technical-caveat">
+      Bollinger Bands use a 20-session average and two sample standard deviations, matching smallFish shared TA.
+      S / R zones require two or more confirmed swing-pivot touches and describe past price behavior—not a forecast.
+    </p>
+  </section>
+}

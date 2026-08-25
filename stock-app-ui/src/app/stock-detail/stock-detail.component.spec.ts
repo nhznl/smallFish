@@ -108,6 +108,41 @@ describe('StockDetailComponent', () => {
     expect(stockService.getStockInfo).toHaveBeenCalledWith('DEMO');
   });
 
+  it('renders cached daily volume in the Price chart and hover readout', () => {
+    stockService.getStockAnalysis.and.returnValue(of(analysis('DEMO', {
+      dailyBars: Array.from({ length: 5 }, (_, index) => ({
+        tradeDate: `2026-07-${String(24 + index).padStart(2, '0')}`,
+        open: 10 + index,
+        high: 11 + index,
+        low: 9 + index,
+        close: 10.5 + index,
+        volume: (index + 1) * 1_000,
+      })),
+    })));
+    mount();
+
+    const chart = fixture.componentInstance.priceChart();
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.price-chart-svg .volume-bar').length).toBe(5);
+    expect(Math.max(...chart.points.map(point => point.volumeHeight)))
+      .toBe(chart.volumeBaselineY - chart.volumeTopY);
+
+    const svg = (fixture.nativeElement as HTMLElement).querySelector<SVGSVGElement>('.price-chart-svg')!;
+    spyOn(svg, 'getBoundingClientRect').and.returnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 960,
+      bottom: 330,
+      width: 960,
+      height: 330,
+      toJSON: () => ({})
+    } as DOMRect);
+    svg.dispatchEvent(new MouseEvent('mousemove', { clientX: 959, clientY: 100, bubbles: true }));
+    fixture.detectChanges();
+    expect(text()).toContain('Volume 5K');
+  });
+
   it('surfaces a scanner-cache 404 without pretending the analysis succeeded', () => {
     stockService.getStockAnalysis.and.returnValue(
       throwError(() => ({ status: 404, message: 'Not Found' }))

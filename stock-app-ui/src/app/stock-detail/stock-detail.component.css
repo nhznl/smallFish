@@ -630,7 +630,7 @@
 .price-chart-svg {
   display: block;
   width: 100%;
-  height: 260px;
+  height: 330px;
 }
 
 .price-area { fill: url(#priceAreaFill); stroke: none; }
@@ -645,6 +645,26 @@
 }
 
 .price-line-down { stroke: var(--neg); }
+
+.volume-axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.volume-label {
+  fill: var(--text-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.volume-bar {
+  fill: var(--pos);
+  opacity: .58;
+}
+
+.volume-bar-down { fill: var(--neg); }
 
 .x-tick-label {
   fill: var(--text-faint);
@@ -668,4 +688,5 @@
 
 @media (max-width: 720px) {
   .price-chart-head { flex-direction: column; }
+  .price-chart-svg { height: 300px; }
 }

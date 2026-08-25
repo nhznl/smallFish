@@ -114,7 +114,7 @@
           [attr.viewBox]="priceChart().viewBox"
           preserveAspectRatio="none"
           role="img"
-          [attr.aria-label]="'Closing price chart over ' + priceRange()"
+          [attr.aria-label]="'Closing price and volume chart over ' + priceRange()"
           (mousemove)="onPriceChartMove($event, priceChart())"
           (mouseleave)="clearPriceChartHover()"
         >
@@ -145,6 +145,19 @@
                     [class.price-line-down]="!priceChart().rising"
                     [attr.points]="priceChart().polyline"></polyline>
 
+          <g class="volume-panel">
+            <line class="volume-axis"
+                  [attr.x1]="priceChart().padding" [attr.x2]="priceChart().width - priceChart().padding"
+                  [attr.y1]="priceChart().volumeBaselineY" [attr.y2]="priceChart().volumeBaselineY"></line>
+            <text class="volume-label" [attr.x]="priceChart().padding"
+                  [attr.y]="priceChart().volumeTopY - 6">Volume</text>
+            @for (point of priceChart().points; track point.x) {
+              <rect class="volume-bar" [class.volume-bar-down]="!point.volumeRising"
+                    [attr.x]="point.x - point.volumeWidth / 2" [attr.y]="point.volumeY"
+                    [attr.width]="point.volumeWidth" [attr.height]="point.volumeHeight"></rect>
+            }
+          </g>
+
           @for (label of priceChart().xLabels; track label.x) {
             <text class="x-tick-label" [attr.x]="label.x" [attr.y]="priceChart().height - 8">{{ label.label }}</text>
           }
@@ -152,20 +165,26 @@
           @if (hoveredPricePoint) {
             <line class="hover-line"
                   [attr.x1]="hoveredPricePoint.x" [attr.x2]="hoveredPricePoint.x"
-                  [attr.y1]="priceChart().padding" [attr.y2]="priceChart().baselineY"></line>
+                  [attr.y1]="priceChart().padding" [attr.y2]="priceChart().volumeBaselineY"></line>
             <circle class="hover-dot" [attr.cx]="hoveredPricePoint.x" [attr.cy]="hoveredPricePoint.y" r="4"></circle>
           }
         </svg>
 
         <p class="price-chart-note">
           @if (hoveredPricePoint) {
-            <strong>{{ hoveredPricePoint.fullLabel }}</strong> · {{ formatPrice(hoveredPricePoint.value) }}
+            <strong>{{ hoveredPricePoint.fullLabel }}</strong>
+            · Close {{ formatPrice(hoveredPricePoint.value) }}
+            · Volume {{ formatCompactNumber(hoveredPricePoint.volume) }}
           } @else {
-            Daily closing prices from the local price cache. Intraday (1D) is not
+            Daily closing prices and volume from the local price cache. Intraday (1D) is not
             available — the cache stores one bar per session.
           }
         </p>
       </section>
+    }
+
+    @if (stock()?.dailyBars?.length) {
+      <app-technical-chart [symbol]="symbol()" [bars]="stock()!.dailyBars!"></app-technical-chart>
     }
 
     <section class="company-section">

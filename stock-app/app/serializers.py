@@ -105,14 +105,10 @@ def stock_detail_dict(s: Stock, yearly_slopes: dict[int, dict] | None = None) ->
             "endDate": market_date_iso(week.end_date) if week.end_date else None,
             "avgClose": float32_json(week.avg_close),
         } for week in s.recent_weeks],
-        # Daily closes back through the prior year, so the price chart can scope
-        # its own range client-side. These are daily bars: the shortest range the
-        # cache can support is one week, not one intraday session.
-        "dailyBars": [{
-            "tradeDate": market_date_iso(bar.date),
-            "close": float32_json(bar.close),
-            "volume": bar.volume,
-        } for bar in s.dailies],
+        # Daily OHLCV back through the prior year, so the price and technical
+        # charts can scope their own ranges client-side. The cache has one bar
+        # per session; it does not contain intraday data.
+        "dailyBars": [_stock_detail_daily_dict(bar) for bar in s.dailies],
         "atrPct": metric(s.atr_pct),
         "volumeRatio": metric(s.volume_ratio),
         "relativeStrengthSpyOneMonth": metric(s.relative_strength_spy_one_month),

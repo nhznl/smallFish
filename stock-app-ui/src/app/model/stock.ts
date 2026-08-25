@@ -128,9 +128,12 @@ export interface StockAnalysisWeek {
   avgClose: number;
 }
 
-/** One cached daily close. Daily bars only — the cache holds no intraday data. */
+/** One cached daily OHLCV bar. Daily bars only — the cache holds no intraday data. */
 export interface StockDailyBar {
   tradeDate: string;
+  open: number;
+  high: number;
+  low: number;
   close: number;
   volume: number;
 }
