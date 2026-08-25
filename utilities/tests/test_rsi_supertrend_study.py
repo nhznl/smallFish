@@ -6,6 +6,7 @@ values. A missing TradingView export fails closed rather than skipping.
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from studies.rsi_supertrend import emulator as emulator_mod
 from studies.rsi_supertrend.emulator import (
     PINE_IMPLEMENTATION,
     SHARED_TA_IMPLEMENTATION,
+    SleeveResult,
     StrategyIndicators,
     compute_strategy_indicators,
     emulate_symbol,
@@ -32,9 +34,23 @@ from studies.rsi_supertrend.pine import (
     special_buy_signals,
     supertrend_from_atr,
 )
+from studies.rsi_supertrend.comparison import (
+    IMPLEMENTATION_SENSITIVITY_LABEL,
+    build_cohort_comparison,
+    compare_indicator_series,
+    compare_symbol_outcomes,
+    label_shared_ta_summary,
+    require_complete_paired_result,
+)
 from studies.rsi_supertrend.study import (
+    COMPARISON_TABLES,
     CONFIG_PATH,
     FROZEN_CONFIG,
+    OUTPUT_TABLES,
+    PINE_INSTRUMENT_COLUMNS,
+    SHARED_TA_STOCK_TABLES,
+    SHARED_TA_TABLES,
+    STOCK_COMPARISON_TABLES,
     TV_FIXTURE_PATH,
     assert_holdout_unclaimed,
     compare_tradingview_export,
@@ -45,6 +61,7 @@ from studies.rsi_supertrend.study import (
     moving_block_summary,
     resolve_export_identity,
     run_cohort,
+    run_paired_cohort,
     sha256_file,
     write_parity_report,
     write_run,
@@ -803,3 +820,424 @@ def test_tradingview_comparison_with_fills_passes(tmp_path, monkeypatch):
     assert report["ok"]
     assert report["fills_compared"] is True
     assert report["export_identity"]["session"] == "NYSE"
+
+
+def _oscillating_closes(n: int) -> np.ndarray:
+    return 100.0 + np.sin(np.arange(n) / 2.0) * 4.0
+
+
+def _write_ohlc_cache(root: Path, symbol: str, dates: pd.DatetimeIndex,
+                      closes: np.ndarray) -> None:
+    for year in sorted(set(dates.year)):
+        mask = dates.year == year
+        lines = []
+        for date, close in zip(dates[mask], closes[mask]):
+            high = close + 1.0
+            low = close - 1.0
+            open_ = close + 0.25
+            lines.append(
+                f"{date.strftime('%m-%d-%Y')},{open_},{high},{low},{close},{close},1000000")
+        year_dir = root / str(year)
+        year_dir.mkdir(parents=True, exist_ok=True)
+        (year_dir / f"{symbol}.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _paired_cfg(**overrides) -> dict:
+    cfg = _cfg(
+        development_start="2010-01-04",
+        development_end="2010-04-23",
+        **overrides,
+    )
+    cfg["inference"] = dict(cfg["inference"])
+    cfg["inference"]["bootstrap_draws"] = 8
+    cfg["inference"]["block_length_sessions"] = 5
+    cfg["inference"]["minimum_benchmark_sessions"] = 1
+    return cfg
+
+
+def _seed_primary_cache(root: Path, symbols: list[str] = ("SPY", "XLK"),
+                        n: int = 80) -> tuple[pd.DatetimeIndex, dict]:
+    dates = pd.bdate_range("2010-01-04", periods=n)
+    closes = _oscillating_closes(n)
+    for symbol in symbols:
+        _write_ohlc_cache(root, symbol, dates, closes)
+    return dates, _paired_cfg()
+
+
+def test_emulate_symbol_defaults_to_pine():
+    parameter = inspect.signature(emulate_symbol).parameters["indicator_implementation"]
+    assert parameter.default == PINE_IMPLEMENTATION
+    assert inspect.signature(run_cohort).parameters["indicator_implementation"].default == (
+        PINE_IMPLEMENTATION)
+
+
+def test_run_cohort_default_path_is_pine(tmp_path, monkeypatch):
+    from studies.rsi_supertrend import study as study_mod
+    _seed_primary_cache(tmp_path)
+    calls = []
+    real = study_mod.emulate_symbol
+
+    def spy(frame, cfg, start, end, symbol, *, indicator_implementation=PINE_IMPLEMENTATION):
+        calls.append(indicator_implementation)
+        return real(frame, cfg, start, end, symbol,
+                    indicator_implementation=indicator_implementation)
+
+    monkeypatch.setattr(study_mod, "emulate_symbol", spy)
+    run_cohort(tmp_path, _paired_cfg(), ["SPY", "XLK"], "development", True)
+    assert calls
+    assert all(implementation == PINE_IMPLEMENTATION for implementation in calls)
+
+
+def test_paired_pine_outcomes_match_pine_only_contract(tmp_path):
+    _seed_primary_cache(tmp_path)
+    cfg = _paired_cfg()
+    pine_only = run_cohort(tmp_path, cfg, ["SPY", "XLK"], "development", True)
+    paired_pine, paired_shared, comparison = run_paired_cohort(
+        tmp_path, cfg, ["SPY", "XLK"], "development", True, cohort="primary")
+    pd.testing.assert_frame_equal(pine_only["instruments"], paired_pine["instruments"])
+    pd.testing.assert_frame_equal(pine_only["daily"], paired_pine["daily"])
+    pd.testing.assert_frame_equal(pine_only["trades"], paired_pine["trades"])
+    assert list(paired_pine["instruments"].columns) == list(PINE_INSTRUMENT_COLUMNS)
+    assert paired_pine["summary"]["verdict"] == pine_only["summary"]["verdict"]
+    assert paired_pine["summary"]["evidence_label"] == "DEVELOPMENT"
+    assert paired_shared["summary"]["evidence_label"] == IMPLEMENTATION_SENSITIVITY_LABEL
+    assert paired_shared["summary"]["primary_verdict_eligible"] is False
+    assert paired_shared["summary"]["verdict"] is None
+    assert comparison["primary_verdict_eligible"] is False
+    assert "AAA" not in paired_pine["instruments"]["symbol"].tolist()
+
+
+def test_paired_runner_passes_identical_bars_and_frozen_parameters(tmp_path, monkeypatch):
+    from studies.rsi_supertrend import study as study_mod
+    _seed_primary_cache(tmp_path)
+    cfg = _paired_cfg()
+    calls = []
+    real = study_mod.emulate_symbol
+
+    def spy(frame, cfg, start, end, symbol, *, indicator_implementation=PINE_IMPLEMENTATION):
+        calls.append({
+            "frame_id": id(frame),
+            "cfg_id": id(cfg),
+            "start": pd.Timestamp(start),
+            "end": pd.Timestamp(end),
+            "symbol": symbol,
+            "implementation": indicator_implementation,
+            "rsi_length": cfg["rsi_length"],
+            "signal_length": cfg["signal_length"],
+            "atr_period": cfg["atr_period"],
+            "trigger_level": cfg["trigger_level"],
+            "target_cross_count": cfg["target_cross_count"],
+            "st_factor": cfg["st_factor"],
+            "closes": frame["close"].to_numpy().copy(),
+        })
+        return real(frame, cfg, start, end, symbol,
+                    indicator_implementation=indicator_implementation)
+
+    monkeypatch.setattr(study_mod, "emulate_symbol", spy)
+    run_paired_cohort(tmp_path, cfg, ["SPY"], "development", True, cohort="primary")
+    pine_calls = [row for row in calls if row["implementation"] == PINE_IMPLEMENTATION]
+    shared_calls = [row for row in calls if row["implementation"] == SHARED_TA_IMPLEMENTATION]
+    assert len(pine_calls) == 1
+    assert len(shared_calls) == 1
+    pine, shared = pine_calls[0], shared_calls[0]
+    assert pine["frame_id"] == shared["frame_id"]
+    assert pine["cfg_id"] == shared["cfg_id"]
+    assert pine["start"] == shared["start"]
+    assert pine["end"] == shared["end"]
+    assert pine["symbol"] == shared["symbol"] == "SPY"
+    np.testing.assert_array_equal(pine["closes"], shared["closes"])
+    for key in ("rsi_length", "signal_length", "atr_period", "trigger_level",
+                "target_cross_count", "st_factor"):
+        assert pine[key] == shared[key] == cfg[key]
+    assert {row["implementation"] for row in calls} == {
+        PINE_IMPLEMENTATION, SHARED_TA_IMPLEMENTATION}
+
+
+def test_paired_runner_changes_only_the_indicator_provider(tmp_path, monkeypatch):
+    from studies.rsi_supertrend import study as study_mod
+    _seed_primary_cache(tmp_path)
+    calls = []
+    real = study_mod.emulate_symbol
+
+    def spy(frame, cfg, start, end, symbol, *, indicator_implementation=PINE_IMPLEMENTATION):
+        calls.append((symbol, indicator_implementation, id(frame), id(cfg),
+                      pd.Timestamp(start), pd.Timestamp(end)))
+        return real(frame, cfg, start, end, symbol,
+                    indicator_implementation=indicator_implementation)
+
+    monkeypatch.setattr(study_mod, "emulate_symbol", spy)
+    run_paired_cohort(tmp_path, _paired_cfg(), ["SPY", "XLK"], "development", True,
+                      cohort="primary")
+    assert [(symbol, impl) for symbol, impl, *_ in calls] == [
+        ("SPY", PINE_IMPLEMENTATION), ("SPY", SHARED_TA_IMPLEMENTATION),
+        ("XLK", PINE_IMPLEMENTATION), ("XLK", SHARED_TA_IMPLEMENTATION),
+    ]
+    by_symbol = {}
+    for symbol, impl, frame_id, cfg_id, start, end in calls:
+        by_symbol.setdefault(symbol, []).append((impl, frame_id, cfg_id, start, end))
+    for pair in by_symbol.values():
+        assert pair[0][1:] == pair[1][1:]
+        assert pair[0][0] != pair[1][0]
+
+
+def test_indicator_comparison_captures_synthetic_atr_seed_difference():
+    frame = _bars(60)
+    frame["close"] = _oscillating_closes(len(frame))
+    frame["high"] = frame["close"] + 1.0
+    frame["low"] = frame["close"] - 1.0
+    pine = compute_strategy_indicators(frame, _cfg(), PINE_IMPLEMENTATION)
+    shared = compute_strategy_indicators(frame, _cfg(), SHARED_TA_IMPLEMENTATION)
+    dates = pd.DatetimeIndex(pd.to_datetime(frame["date"]))
+    row = compare_indicator_series(pine, shared, dates)
+    assert row["atr_defined_mask_mismatches"] >= 1
+    assert np.flatnonzero(np.isfinite(pine.atr))[0] == 9
+    assert np.flatnonzero(np.isfinite(shared.atr))[0] == 10
+
+
+def _trade(symbol: str, entry: str, exit_: str | None, price: float,
+           open_at_cutoff: bool = False) -> dict:
+    return {
+        "symbol": symbol,
+        "signal_date": entry,
+        "entry_date": entry,
+        "entry_price": price,
+        "exit_signal_date": exit_,
+        "exit_date": exit_,
+        "exit_price": price if exit_ is None else price + 1.0,
+        "direction_at_entry": -1.0,
+        "shares": 10.0,
+        "return": 0.01,
+        "duration_days": 2,
+        "exit_reason": "open_at_cutoff" if open_at_cutoff else "supertrend_flip",
+        "open_at_cutoff": open_at_cutoff,
+    }
+
+
+def _sleeve_from_trades(trades: list[dict], exposure: float = 0.4) -> SleeveResult:
+    idx = pd.bdate_range("2010-01-04", periods=8)
+    zeros = np.zeros(8)
+    return SleeveResult(
+        equity=pd.Series(np.full(8, 10000.0), index=idx),
+        buy_hold=pd.Series(np.full(8, 10000.0), index=idx),
+        trades=trades,
+        exposure=exposure,
+        indicators=StrategyIndicators(
+            implementation=PINE_IMPLEMENTATION,
+            rsi=zeros, signal=zeros, atr=zeros, supertrend=zeros,
+            direction=np.full(8, -1.0), special_buy=np.zeros(8, dtype=bool),
+        ),
+    )
+
+
+def test_identical_fills_have_empty_bidirectional_difference_sets():
+    trades = [
+        _trade("SPY", "2010-01-06", "2010-01-08", 100.0),
+        _trade("SPY", "2010-01-12", "2010-01-14", 101.0),
+    ]
+    pine = _sleeve_from_trades(trades)
+    shared = _sleeve_from_trades(list(trades))
+    row = compare_symbol_outcomes(
+        "SPY", pine, shared,
+        {"strategy_return": 0.1, "max_drawdown": -0.05},
+        {"strategy_return": 0.1, "max_drawdown": -0.05},
+    )
+    assert row["pine_only_entry_dates"] == []
+    assert row["shared_ta_only_entry_dates"] == []
+    assert row["pine_only_exit_dates"] == []
+    assert row["shared_ta_only_exit_dates"] == []
+    assert row["fill_price_differences"] == []
+
+
+def test_deliberate_exit_mismatch_lands_in_the_correct_only_sets():
+    pine = _sleeve_from_trades([_trade("SPY", "2010-01-06", "2010-01-08", 100.0)])
+    shared = _sleeve_from_trades([_trade("SPY", "2010-01-06", "2010-01-13", 100.0)])
+    row = compare_symbol_outcomes(
+        "SPY", pine, shared,
+        {"strategy_return": 0.2, "max_drawdown": -0.04},
+        {"strategy_return": 0.1, "max_drawdown": -0.05},
+    )
+    assert row["pine_only_entry_dates"] == []
+    assert row["shared_ta_only_entry_dates"] == []
+    assert row["pine_only_exit_dates"] == ["2010-01-08"]
+    assert row["shared_ta_only_exit_dates"] == ["2010-01-13"]
+    assert row["strategy_return_difference"] == pytest.approx(0.1)
+
+
+def test_shared_ta_cannot_change_the_primary_verdict(tmp_path):
+    _seed_primary_cache(tmp_path)
+    cfg = _paired_cfg()
+    pine, shared, comparison = run_paired_cohort(
+        tmp_path, cfg, ["SPY", "XLK"], "development", True, cohort="primary")
+    pine_verdict = pine["summary"]["verdict"]
+    shared["summary"] = label_shared_ta_summary(
+        {**shared["summary"], "verdict": "PASSED"})
+    pine["summary"]["verdict"] = "FAILED"
+    rebuilt = build_cohort_comparison(
+        pine, shared, comparison["symbols"], cfg,
+        cohort="primary", window="development")
+    assert pine["summary"]["verdict"] == "FAILED"
+    assert shared["summary"]["verdict"] is None
+    assert shared["summary"]["diagnostic_verdict"] == "PASSED"
+    assert rebuilt["shared_ta_diagnostic_verdict"] == "PASSED"
+    assert rebuilt["shared_ta_verdict_differs"] is True
+    assert rebuilt["primary_verdict_eligible"] is False
+    run_dir = tmp_path / "paired-verdict"
+    write_run(
+        run_dir, pine, cfg, {"include_stocks": False},
+        {"primary": ["SPY", "XLK"], "window": "development", "stocks": None},
+        shared_ta_result=shared, comparison=rebuilt, require_paired=True)
+    written = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    shared_written = json.loads(
+        (run_dir / "shared_ta_summary.json").read_text(encoding="utf-8"))
+    assert written["verdict"] == "FAILED"
+    assert written["verdict"] != shared_written["diagnostic_verdict"]
+    assert shared_written["verdict"] is None
+    assert shared_written["primary_verdict_eligible"] is False
+    assert pine_verdict is None
+
+
+def test_shared_ta_stock_artifacts_keep_sensitivity_and_exploratory_labels(tmp_path):
+    _seed_primary_cache(tmp_path, ["SPY", "XLK", "AAA"])
+    cfg = _paired_cfg()
+    pine, shared, comparison = run_paired_cohort(
+        tmp_path, cfg, ["SPY"], "development", True, cohort="primary")
+    stock_pine, stock_shared, stock_comparison = run_paired_cohort(
+        tmp_path, cfg, ["AAA"], "development", False, cohort="stocks")
+    universe = {
+        "primary": ["SPY"],
+        "window": "development",
+        "stocks": {
+            "symbols": ["AAA"],
+            "stock_count": 1,
+            "evidence_label": "EXPLORATORY",
+            "survivorship_bias": True,
+        },
+    }
+    run_dir = tmp_path / "paired-stocks"
+    write_run(
+        run_dir, pine, cfg, {"include_stocks": True}, universe,
+        stock_result=stock_pine, shared_ta_result=shared, comparison=comparison,
+        shared_ta_stock_result=stock_shared, stock_comparison=stock_comparison,
+        require_paired=True)
+    stock_csv = (run_dir / "shared_ta_stock_instrument_summary.csv").read_text(encoding="utf-8")
+    assert "IMPLEMENTATION_SENSITIVITY" in stock_csv
+    assert "EXPLORATORY" in stock_csv
+    assert "AAA" in stock_csv
+    assert "SPY" not in stock_csv
+    stock_summary = json.loads(
+        (run_dir / "shared_ta_stock_summary.json").read_text(encoding="utf-8"))
+    assert stock_summary["evidence_label"] == IMPLEMENTATION_SENSITIVITY_LABEL
+    assert stock_summary["stock_evidence_label"] == "EXPLORATORY"
+    assert stock_summary["survivorship_bias"] is True
+    assert stock_summary["primary_verdict_eligible"] is False
+    assert stock_summary["verdict"] is None
+    assert stock_comparison["cohort"] == "stocks"
+    assert "any_primary_fill_mismatch" not in stock_comparison
+    assert "any_fill_mismatch" in stock_comparison
+    pine_summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    assert pine_summary["evidence_label"] == "DEVELOPMENT"
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["stock_evidence_label"] == "EXPLORATORY"
+    assert manifest["stock_survivorship_bias"] is True
+    assert manifest["implementation_sensitivity"]["primary_verdict_eligible"] is False
+
+
+def test_new_paired_artifacts_are_hashed_in_the_manifest(tmp_path):
+    _seed_primary_cache(tmp_path, ["SPY", "XLK", "AAA"])
+    cfg = _paired_cfg()
+    pine, shared, comparison = run_paired_cohort(
+        tmp_path, cfg, ["SPY", "XLK"], "development", True, cohort="primary")
+    stock_pine, stock_shared, stock_comparison = run_paired_cohort(
+        tmp_path, cfg, ["AAA"], "development", False, cohort="stocks")
+    run_dir = tmp_path / "paired-manifest"
+    write_run(
+        run_dir, pine, cfg, {"include_stocks": True},
+        {
+            "primary": ["SPY", "XLK"],
+            "window": "development",
+            "stocks": {
+                "symbols": ["AAA"],
+                "stock_count": 1,
+                "evidence_label": "EXPLORATORY",
+                "survivorship_bias": True,
+            },
+        },
+        stock_result=stock_pine, shared_ta_result=shared, comparison=comparison,
+        shared_ta_stock_result=stock_shared, stock_comparison=stock_comparison,
+        require_paired=True)
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    expected = (
+        list(OUTPUT_TABLES) + list(SHARED_TA_TABLES) + list(COMPARISON_TABLES)
+        + ["stock_instrument_summary.csv", "stock_daily_equity.csv", "stock_trades.csv"]
+        + list(SHARED_TA_STOCK_TABLES) + list(STOCK_COMPARISON_TABLES)
+    )
+    for name in expected:
+        assert name in manifest["output_sha256"]
+        assert manifest["output_sha256"][name] == sha256_file(run_dir / name)
+        assert (run_dir / name).is_file()
+    assert list(pd.read_csv(run_dir / "instrument_summary.csv").columns) == list(
+        PINE_INSTRUMENT_COLUMNS)
+    assert manifest["indicator_implementations"] == [
+        PINE_IMPLEMENTATION, SHARED_TA_IMPLEMENTATION]
+
+
+def test_missing_or_incomplete_paired_results_fail_closed(tmp_path):
+    _seed_primary_cache(tmp_path)
+    cfg = _paired_cfg()
+    pine, shared, comparison = run_paired_cohort(
+        tmp_path, cfg, ["SPY", "XLK"], "development", True, cohort="primary")
+    run_dir = tmp_path / "missing-paired"
+    try:
+        write_run(
+            run_dir, pine, cfg, {},
+            {"primary": ["SPY", "XLK"], "window": "development", "stocks": None},
+            require_paired=True)
+    except ValueError as exc:
+        assert "shared_ta result is missing" in str(exc)
+    else:
+        raise AssertionError("missing shared_ta result must fail closed")
+    assert not run_dir.exists()
+
+    incomplete = dict(comparison)
+    incomplete.pop("deltas")
+    try:
+        require_complete_paired_result(
+            pine, shared, incomplete, symbols=["SPY", "XLK"],
+            fail_closed=True, cohort="primary")
+    except ValueError as extra:
+        assert "incomplete" in str(extra)
+    else:
+        raise AssertionError("incomplete comparison must fail closed")
+
+    shared["summary"]["verdict"] = "PASSED"
+    try:
+        require_complete_paired_result(
+            pine, shared, comparison, symbols=["SPY", "XLK"],
+            fail_closed=True, cohort="primary")
+    except ValueError as extra:
+        assert "primary verdict" in str(extra)
+    else:
+        raise AssertionError("shared_ta carrying a primary verdict must fail closed")
+
+
+def test_holdout_remains_blocked_before_claim_or_parity_evidence(tmp_path):
+    export = tmp_path / "tradingview_export.csv"
+    export.write_text("date,open,high,low,close\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="paired shared-ta sensitivity outcome runner"):
+        main([
+            "--window", "holdout",
+            "--confirm-holdout",
+            "--include-stocks",
+            "--tradingview-export", str(export),
+            "--tv-symbol", "SPY",
+            "--tv-timeframe", "1D",
+            "--tv-adjustment", "adjusted",
+            "--tv-session", "NYSE",
+            "--cache-root", str(tmp_path),
+            "--output-root", str(tmp_path / "out"),
+        ])
+    claim = tmp_path / "studies" / "rsi-supertrend-pine-v1" / "holdout" / ".authoritative-claim"
+    parity = tmp_path / "studies" / "rsi-supertrend-pine-v1" / "parity"
+    assert not claim.exists()
+    assert not parity.exists()
+    assert not (tmp_path / "out").exists()

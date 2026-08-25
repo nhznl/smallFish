@@ -5,9 +5,9 @@ Operational notes for `rsi-supertrend-pine-v1`. Methodology lives in
 edited.
 
 **Holdout is not authorized and is currently blocked in code.** The paired
-Pine/shared-TA outcome runner and artifacts must be implemented and independently
-reviewed, and a real TradingView development export must pass strict parity.
-The eventual holdout command, **not executed**, is:
+Pine/shared-TA outcome runner is implemented and must be independently reviewed,
+and a real TradingView development export must pass strict parity, before
+holdout authorization. The eventual holdout command, **not executed**, is:
 
 ```bash
 ./commands.sh rsi-supertrend-study \
@@ -38,15 +38,42 @@ pooled into the primary verdict.
 
 ## Implementation sensitivity
 
-The indicator layer supports `pine` and `shared_ta`. The latter calls
-`utilities.indicators.ta` directly with the same RSI(10), RSI-SMA(10), and
-ATR(10) parameters, then supplies the shared ATR to the same SuperTrend
-recurrence. Pine remains primary; shared-TA results will be labeled
-`IMPLEMENTATION_SENSITIVITY` and cannot change the primary verdict.
+The development runner calculates `pine` and `shared_ta` from the same validated
+histories in one invocation. Shared-TA calls `utilities.indicators.ta` directly
+with the same RSI(10), RSI-SMA(10), and ATR(10) parameters, then supplies the
+shared ATR to the same SuperTrend recurrence and the same order emulator. Pine
+remains the sole primary implementation and the only result eligible for the
+primary verdict. Shared-TA outputs are labeled `IMPLEMENTATION_SENSITIVITY` with
+`primary_verdict_eligible: false`. Stock outputs retain the additional
+`EXPLORATORY` and survivorship-bias labels and are never pooled into the 14-ETF
+endpoint.
 
-Only indicator calculation is implemented in this phase. Paired cohort outcome
-artifacts are not yet implemented, so the runner refuses every holdout attempt
-before creating a claim or parity evidence.
+Pine artifact names are unchanged. Creation-only shared-TA and comparison files:
+
+| File | Contents |
+|---|---|
+| `shared_ta_instrument_summary.csv` | Shared-TA primary-cohort instrument summary |
+| `shared_ta_daily_equity.csv` | Shared-TA primary-cohort daily equity |
+| `shared_ta_trades.csv` | Shared-TA primary-cohort trades |
+| `shared_ta_summary.json` | Shared-TA primary-cohort summary; not verdict-eligible |
+| `implementation_comparison.json` | Per-symbol indicator/fill/outcome diffs plus cohort deltas |
+| `implementation_comparison_by_symbol.csv` | Flattened per-symbol comparison |
+| `shared_ta_stock_instrument_summary.csv` | Shared-TA stock instrument summary (`--include-stocks`) |
+| `shared_ta_stock_daily_equity.csv` | Shared-TA stock daily equity |
+| `shared_ta_stock_trades.csv` | Shared-TA stock trades |
+| `shared_ta_stock_summary.json` | Shared-TA stock summary; `IMPLEMENTATION_SENSITIVITY` and `EXPLORATORY` |
+| `stock_implementation_comparison.json` | Stock-only comparison; never mixed with the 14 ETFs |
+| `stock_implementation_comparison_by_symbol.csv` | Flattened stock comparison |
+
+`manifest.json` hashes every new file and records providers `pine` and
+`shared_ta`. Holdout remains refused before any claim or parity evidence is
+created.
+
+The proposed development command, **not executed** in the implementation pass:
+
+```bash
+./commands.sh rsi-supertrend-study --window development --include-stocks
+```
 
 ## Runner
 

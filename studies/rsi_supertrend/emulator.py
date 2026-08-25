@@ -37,6 +37,10 @@ class SleeveResult:
     special_buy_count: int = 0
     ignored_repeat_entries: int = 0
     open_trade: OpenTrade | None = None
+    indicators: StrategyIndicators | None = None
+    exposure: float | None = None
+    in_position_bars: int = 0
+    coverage_bars: int = 0
 
 
 @dataclass(frozen=True)
@@ -178,6 +182,8 @@ def emulate_symbol(frame: pd.DataFrame, cfg: dict, window_start, window_end,
     ignored = 0
     buy_count = 0
     last_in_window: int | None = None
+    in_position_bars = 0
+    coverage_bars = 0
 
     for i in range(n):
         date = pd.Timestamp(dates.iloc[i])
@@ -216,6 +222,9 @@ def emulate_symbol(frame: pd.DataFrame, cfg: dict, window_start, window_end,
         equity = cash + shares * float(close[i])
         if in_window:
             equity_vals[i] = equity
+            coverage_bars += 1
+            if shares > 0:
+                in_position_bars += 1
 
         if not in_window:
             continue
@@ -257,6 +266,8 @@ def emulate_symbol(frame: pd.DataFrame, cfg: dict, window_start, window_end,
     equity = pd.Series(equity_vals, index=idx, name=symbol)
     bh = pd.Series(buy_hold, index=idx, name=symbol)
     in_win = (idx >= window_start) & (idx <= window_end)
+    exposure = (float(in_position_bars) / float(coverage_bars)
+                if coverage_bars else None)
     return SleeveResult(
         equity=equity[in_win],
         buy_hold=bh[in_win],
@@ -265,4 +276,8 @@ def emulate_symbol(frame: pd.DataFrame, cfg: dict, window_start, window_end,
         ignored_repeat_entries=ignored,
         open_trade=open_trade if (open_trade is not None and trades
                                   and trades[-1]["open_at_cutoff"]) else None,
+        indicators=indicators,
+        exposure=exposure,
+        in_position_bars=in_position_bars,
+        coverage_bars=coverage_bars,
     )

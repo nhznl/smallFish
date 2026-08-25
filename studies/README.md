@@ -50,12 +50,13 @@ work done afterwards, carries no verdict, and cannot rescue the first.
 Neither result lifts a product gate. The Momentum and Sectors views remain
 descriptive screens.
 
-## Frozen studies awaiting implementation
+## Frozen studies awaiting holdout
 
 [`rsi_supertrend/rsi_supertrend_study_spec.md`](rsi_supertrend/rsi_supertrend_study_spec.md)
 is the frozen design and handoff for an exact RSI/SuperTrend Pine implementation
-replication approved on 2026-08-23. It has no implementation, published
-artifact, result, or verdict. Implementation must return for review before the
+replication approved on 2026-08-23. Pine execution, shared-TA sensitivity
+comparison, and synthetic tests are present. There is no published artifact,
+result, or verdict. Independent review must accept this stage before the
 one-shot holdout is run.
 
 ## How a study is published
@@ -126,13 +127,13 @@ studies/
     ├── rsi_supertrend_study_spec.md   frozen protocol (do not edit)
     ├── source.pine                    pasted executable Pine source
     ├── config/study.yaml              frozen parameters and cohorts
-    ├── pine.py / emulator.py / study.py
+    ├── pine.py / emulator.py / comparison.py / study.py
     └── README.md                      operational runner notes
 ```
 
-The RSI/SuperTrend Pine emulator and Pine/shared-TA indicator providers are
-implemented. Paired sensitivity outcome artifacts remain pending. The
-2022–2025 holdout has not been authorized and is blocked in code at this stage.
+The RSI/SuperTrend Pine emulator, Pine/shared-TA indicator providers, and paired
+sensitivity outcome artifacts are implemented. The 2022–2025 holdout has not
+been authorized and remains blocked in code pending independent review.
 
 Studies share the `utilities/.venv` environment and may import `models/` and
 `utilities/`. Nothing in `stock-app/` may import them.

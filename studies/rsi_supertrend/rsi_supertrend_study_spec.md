@@ -11,9 +11,9 @@
 **Protocol amended:** 2026-08-25, before any 2022–2025 strategy result, to add
 the owner-approved shared-TA implementation sensitivity.
 
-**Work status:** Pine execution and both indicator providers are implemented;
-paired sensitivity outcomes and artifacts remain to be implemented and
-reviewed before holdout authorization.
+**Work status:** Pine execution, both indicator providers, and paired
+sensitivity outcome artifacts are implemented; independent review of this
+stage is required before holdout authorization.
 
 **Source:** supplied Pine Script v6
 
@@ -372,3 +372,7 @@ verification may a separate publication change expose the aggregate result in
   remains primary. The variant uses identical parameters and execution, runs in
   the same eventual authoritative holdout, and cannot change the primary
   verdict. Indicator-provider implementation preceded outcome comparison.
+- 2026-08-25: Paired Pine/shared-TA outcome comparison was implemented and
+  covered with synthetic tests. No real development cohort was run, and no
+  2022–2025 strategy result, authoritative claim, or TradingView parity report
+  was created.

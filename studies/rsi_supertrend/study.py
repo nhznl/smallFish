@@ -21,7 +21,20 @@ import pandas as pd
 import yaml
 
 from models.universe import TYPE_STOCK
-from studies.rsi_supertrend.emulator import emulate_symbol
+from studies.rsi_supertrend.comparison import (
+    IMPLEMENTATION_SENSITIVITY_LABEL,
+    annotate_shared_ta_instruments,
+    build_cohort_comparison,
+    compare_symbol,
+    label_shared_ta_summary,
+    require_complete_paired_result,
+    symbol_rows_to_frame,
+)
+from studies.rsi_supertrend.emulator import (
+    PINE_IMPLEMENTATION,
+    SHARED_TA_IMPLEMENTATION,
+    emulate_symbol,
+)
 from studies.rsi_supertrend.pine import (
     pine_rsi, pine_sma, pine_supertrend, special_buy_signals,
 )
@@ -91,6 +104,44 @@ STOCK_TABLES = (
     "stock_instrument_summary.csv",
     "stock_daily_equity.csv",
     "stock_trades.csv",
+)
+
+SHARED_TA_TABLES = (
+    "shared_ta_instrument_summary.csv",
+    "shared_ta_daily_equity.csv",
+    "shared_ta_trades.csv",
+    "shared_ta_summary.json",
+)
+
+SHARED_TA_STOCK_TABLES = (
+    "shared_ta_stock_instrument_summary.csv",
+    "shared_ta_stock_daily_equity.csv",
+    "shared_ta_stock_trades.csv",
+    "shared_ta_stock_summary.json",
+)
+
+COMPARISON_TABLES = (
+    "implementation_comparison.json",
+    "implementation_comparison_by_symbol.csv",
+)
+
+STOCK_COMPARISON_TABLES = (
+    "stock_implementation_comparison.json",
+    "stock_implementation_comparison_by_symbol.csv",
+)
+
+PINE_INSTRUMENT_COLUMNS = (
+    "symbol",
+    "special_buy_signals",
+    "ignored_repeat_entries",
+    "closed_trades",
+    "open_trades",
+    "strategy_return",
+    "buy_hold_return",
+    "max_drawdown",
+    "coverage_bars",
+    "first_bar",
+    "last_bar",
 )
 
 CANONICAL_HOLDOUT_CLAIM = Path("studies") / "rsi-supertrend-pine-v1" / "holdout" / ".authoritative-claim"
@@ -659,14 +710,13 @@ def validate_coverage(cache_root: Path, cfg: dict, start: str, end: str) -> dict
     }
 
 
-def run_cohort(cache_root: Path, cfg: dict, symbols: list[str], window: str,
-               fail_closed: bool) -> dict:
+def prepare_cohort(cache_root: Path, cfg: dict, symbols: list[str], window: str,
+                   fail_closed: bool) -> dict:
+    """Load and validate each symbol once. No strategy result is calculated."""
     start, end = window_bounds(cfg, window)
     sessions = spy_sessions(cache_root, start, end)
-    sleeves = {}
+    frames: dict[str, pd.DataFrame] = {}
     exclusions: list[dict] = []
-    instrument_rows = []
-    all_trades: list[dict] = []
     price_hashes: dict[str, str] = {}
     for symbol in symbols:
         frame, issues = load_symbol_bars(cache_root, symbol, int(end.year))
@@ -700,34 +750,87 @@ def run_cohort(cache_root: Path, cfg: dict, symbols: list[str], window: str,
             path = cache_root / str(year) / f"{symbol}.txt"
             if path.is_file():
                 price_hashes[f"{year}/{symbol}.txt"] = sha256_file(path)
-        result = emulate_symbol(frame, cfg, start, end, symbol)
-        eq = result.equity.dropna()
-        if eq.empty:
-            exclusions.append({"symbol": symbol, "reason": "indicators never defined in window"})
-            if fail_closed:
-                raise ValueError(f"{symbol}: indicators never defined in window")
-            continue
-        sleeves[symbol] = result
-        closed = [row for row in result.trades if not row["open_at_cutoff"]]
-        bh = result.buy_hold.dropna()
-        instrument_rows.append({
-            "symbol": symbol,
-            "special_buy_signals": result.special_buy_count,
-            "ignored_repeat_entries": result.ignored_repeat_entries,
-            "closed_trades": len(closed),
-            "open_trades": int(any(row["open_at_cutoff"] for row in result.trades)),
-            "strategy_return": float(eq.iloc[-1] / eq.iloc[0] - 1.0) if len(eq) else None,
-            "buy_hold_return": float(bh.iloc[-1] / bh.iloc[0] - 1.0) if len(bh) else None,
-            "max_drawdown": _max_drawdown(eq),
-            "coverage_bars": int(len(eq)),
-            "first_bar": str(eq.index[0].date()),
-            "last_bar": str(eq.index[-1].date()),
-        })
-        all_trades.extend(result.trades)
+        frames[symbol] = frame
+    return {
+        "start": start,
+        "end": end,
+        "window": window,
+        "frames": frames,
+        "exclusions": exclusions,
+        "price_hashes": price_hashes,
+        "requested_symbols": list(symbols),
+        "fail_closed": fail_closed,
+    }
 
+
+def _instrument_row(symbol: str, result) -> dict:
+    eq = result.equity.dropna()
+    closed = [row for row in result.trades if not row["open_at_cutoff"]]
+    bh = result.buy_hold.dropna()
+    return {
+        "symbol": symbol,
+        "special_buy_signals": result.special_buy_count,
+        "ignored_repeat_entries": result.ignored_repeat_entries,
+        "closed_trades": len(closed),
+        "open_trades": int(any(row["open_at_cutoff"] for row in result.trades)),
+        "strategy_return": float(eq.iloc[-1] / eq.iloc[0] - 1.0) if len(eq) else None,
+        "buy_hold_return": float(bh.iloc[-1] / bh.iloc[0] - 1.0) if len(bh) else None,
+        "max_drawdown": _max_drawdown(eq),
+        "coverage_bars": int(len(eq)),
+        "first_bar": str(eq.index[0].date()),
+        "last_bar": str(eq.index[-1].date()),
+    }
+
+
+def result_from_sleeves(sleeves: dict, exclusions: list[dict], price_hashes: dict,
+                        cfg: dict, window: str, symbols: list[str],
+                        fail_closed: bool) -> dict:
     if fail_closed and len(sleeves) != len(symbols):
         raise ValueError("primary cohort is incomplete")
-
+    if not sleeves:
+        inference = moving_block_summary([], cfg)
+        summary = {
+            "schema_name": cfg["schema_name"],
+            "schema_version": cfg["schema_version"],
+            "study_id": cfg["study_id"],
+            "window": window,
+            "protocol_status": cfg["protocol_status"],
+            "primary_endpoint": inference,
+            "verdict": verdict_from_interval(inference, window),
+            "evidence_label": "CONFIRMATORY" if window == "holdout" else "DEVELOPMENT",
+            "replication_assumption": (
+                "Exact-code zero commission and zero slippage because the Pine source "
+                "declares neither. This is a replication assumption, not achievable execution."),
+            "holdout_limitation": (
+                "The holdout is a historical, procedurally sealed window, not a genuinely "
+                "prospective future test."),
+            "cash_earns_zero": True,
+            "independent_sleeves": True,
+            "secondary": {
+                "equal_weight_strategy_total_return": None,
+                "max_drawdown": None,
+                "completed_trade_count": 0,
+                "completed_trade_mean_return": None,
+                "win_rate": None,
+                "spy_strategy_return": None,
+            },
+            "instrument_count": 0,
+            "exclusion_count": len(exclusions),
+        }
+        return {
+            "daily": pd.DataFrame(columns=[
+                "date", "equal_weight_strategy_return",
+                "equal_weight_buy_hold_return", "excess_return",
+            ]),
+            "instruments": pd.DataFrame(columns=list(PINE_INSTRUMENT_COLUMNS)),
+            "trades": pd.DataFrame(),
+            "exclusions": pd.DataFrame(exclusions, columns=["symbol", "reason"]),
+            "summary": summary,
+            "price_hashes": price_hashes,
+            "sleeves": sleeves,
+        }
+    instrument_rows = [_instrument_row(symbol, result) for symbol, result in sleeves.items()]
+    all_trades = [row for result in sleeves.values() for row in result.trades]
     equity_frame = pd.DataFrame({sym: res.equity for sym, res in sleeves.items()})
     bh_frame = pd.DataFrame({sym: res.buy_hold for sym, res in sleeves.items()})
     ew_strat = equity_frame.pct_change().mean(axis=1, skipna=True)
@@ -784,9 +887,17 @@ def run_cohort(cache_root: Path, cfg: dict, symbols: list[str], window: str,
         "instrument_count": len(sleeves),
         "exclusion_count": len(exclusions),
     }
+    instruments = pd.DataFrame(instrument_rows)
+    if not instruments.empty:
+        missing_cols = [col for col in PINE_INSTRUMENT_COLUMNS if col not in instruments.columns]
+        extra = [col for col in instruments.columns if col not in PINE_INSTRUMENT_COLUMNS]
+        if missing_cols or extra:
+            raise ValueError(
+                f"pine instrument_summary columns drifted: missing {missing_cols} extra {extra}")
+        instruments = instruments.loc[:, list(PINE_INSTRUMENT_COLUMNS)]
     return {
         "daily": daily,
-        "instruments": pd.DataFrame(instrument_rows),
+        "instruments": instruments,
         "trades": pd.DataFrame(all_trades),
         "exclusions": pd.DataFrame(exclusions, columns=["symbol", "reason"]),
         "summary": summary,
@@ -795,10 +906,130 @@ def run_cohort(cache_root: Path, cfg: dict, symbols: list[str], window: str,
     }
 
 
+def emulate_prepared_cohort(prepared: dict, cfg: dict,
+                            indicator_implementation: str = PINE_IMPLEMENTATION
+                            ) -> dict:
+    """Run the shared emulator on already-validated histories."""
+    sleeves = {}
+    exclusions = list(prepared["exclusions"])
+    start, end, window = prepared["start"], prepared["end"], prepared["window"]
+    fail_closed = prepared["fail_closed"]
+    for symbol, frame in prepared["frames"].items():
+        result = emulate_symbol(
+            frame, cfg, start, end, symbol,
+            indicator_implementation=indicator_implementation)
+        eq = result.equity.dropna()
+        if eq.empty:
+            exclusions.append({"symbol": symbol, "reason": "indicators never defined in window"})
+            if fail_closed:
+                raise ValueError(f"{symbol}: indicators never defined in window")
+            continue
+        sleeves[symbol] = result
+    return result_from_sleeves(
+        sleeves, exclusions, prepared["price_hashes"], cfg, window,
+        prepared["requested_symbols"], fail_closed)
+
+
+def run_cohort(cache_root: Path, cfg: dict, symbols: list[str], window: str,
+               fail_closed: bool,
+               indicator_implementation: str = PINE_IMPLEMENTATION) -> dict:
+    """Pine is the default and primary implementation."""
+    prepared = prepare_cohort(cache_root, cfg, symbols, window, fail_closed)
+    return emulate_prepared_cohort(prepared, cfg, indicator_implementation)
+
+
+def _instrument_lookup(result: dict) -> dict[str, dict]:
+    if result["instruments"].empty:
+        return {}
+    return {row["symbol"]: dict(row) for row in result["instruments"].to_dict("records")}
+
+
+def compare_prepared_implementations(prepared: dict, pine_result: dict,
+                                     shared_result: dict, cfg: dict, *,
+                                     cohort: str) -> dict:
+    pine_rows = _instrument_lookup(pine_result)
+    shared_rows = _instrument_lookup(shared_result)
+    symbol_rows = []
+    for symbol in pine_result["sleeves"]:
+        frame = prepared["frames"][symbol]
+        dates = pd.DatetimeIndex(pd.to_datetime(frame["date"]))
+        symbol_rows.append(compare_symbol(
+            symbol, dates,
+            pine_result["sleeves"][symbol],
+            shared_result["sleeves"][symbol],
+            pine_rows[symbol],
+            shared_rows[symbol],
+        ))
+    return build_cohort_comparison(
+        pine_result, shared_result, symbol_rows, cfg,
+        cohort=cohort, window=prepared["window"])
+
+
+def run_paired_cohort(cache_root: Path, cfg: dict, symbols: list[str], window: str,
+                      fail_closed: bool, *, cohort: str) -> tuple[dict, dict, dict]:
+    """Calculate Pine and shared-TA from the same validated histories.
+
+    Only the indicator provider changes. The Pine result remains primary.
+    """
+    prepared = prepare_cohort(cache_root, cfg, symbols, window, fail_closed)
+    pine_sleeves = {}
+    shared_sleeves = {}
+    exclusions = list(prepared["exclusions"])
+    start, end = prepared["start"], prepared["end"]
+    for symbol, frame in prepared["frames"].items():
+        pine_sleeve = emulate_symbol(
+            frame, cfg, start, end, symbol,
+            indicator_implementation=PINE_IMPLEMENTATION)
+        shared_sleeve = emulate_symbol(
+            frame, cfg, start, end, symbol,
+            indicator_implementation=SHARED_TA_IMPLEMENTATION)
+        pine_eq = pine_sleeve.equity.dropna()
+        shared_eq = shared_sleeve.equity.dropna()
+        if pine_eq.empty or shared_eq.empty:
+            reason = "indicators never defined in window for a paired implementation"
+            exclusions.append({"symbol": symbol, "reason": reason})
+            if fail_closed:
+                raise ValueError(f"{symbol}: {reason}")
+            continue
+        pine_sleeves[symbol] = pine_sleeve
+        shared_sleeves[symbol] = shared_sleeve
+    pine_result = result_from_sleeves(
+        pine_sleeves, exclusions, prepared["price_hashes"], cfg, window,
+        symbols, fail_closed)
+    shared_result = result_from_sleeves(
+        shared_sleeves, list(exclusions), prepared["price_hashes"], cfg, window,
+        symbols, fail_closed)
+    shared_result["summary"] = label_shared_ta_summary(
+        shared_result["summary"], stocks=(cohort != "primary"))
+    comparison = compare_prepared_implementations(
+        prepared, pine_result, shared_result, cfg, cohort=cohort)
+    require_complete_paired_result(
+        pine_result, shared_result, comparison,
+        symbols=symbols, fail_closed=fail_closed, cohort=cohort)
+    return pine_result, shared_result, comparison
+
+
 def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
               universe_meta: dict,
               stock_result: dict | None = None,
-              parity_report_path: Path | None = None) -> None:
+              parity_report_path: Path | None = None,
+              shared_ta_result: dict | None = None,
+              comparison: dict | None = None,
+              shared_ta_stock_result: dict | None = None,
+              stock_comparison: dict | None = None,
+              require_paired: bool = False) -> None:
+    if require_paired:
+        require_complete_paired_result(
+            result, shared_ta_result, comparison,
+            symbols=list(universe_meta.get("primary") or []),
+            fail_closed=True, cohort="primary")
+        if stock_result is not None:
+            require_complete_paired_result(
+                stock_result, shared_ta_stock_result, stock_comparison,
+                symbols=list((universe_meta.get("stocks") or {}).get("symbols") or []),
+                fail_closed=False, cohort="stocks")
+        elif shared_ta_stock_result is not None or stock_comparison is not None:
+            raise ValueError("shared-TA stock artifacts require a pine stock result")
     run_dir.mkdir(parents=True, exist_ok=False)
     csv_opts = {"index": False, "float_format": "%.12g", "lineterminator": "\n"}
     result["instruments"].to_csv(run_dir / "instrument_summary.csv", **csv_opts)
@@ -822,6 +1053,45 @@ def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
         for name in STOCK_TABLES:
             outputs[name] = sha256_file(run_dir / name)
         stock_price_hashes = stock_result["price_hashes"]
+    if shared_ta_result is not None:
+        shared_instruments = annotate_shared_ta_instruments(shared_ta_result["instruments"])
+        shared_instruments.to_csv(run_dir / "shared_ta_instrument_summary.csv", **csv_opts)
+        shared_ta_result["daily"].to_csv(run_dir / "shared_ta_daily_equity.csv", **csv_opts)
+        shared_ta_result["trades"].to_csv(run_dir / "shared_ta_trades.csv", **csv_opts)
+        (run_dir / "shared_ta_summary.json").write_text(
+            json.dumps(shared_ta_result["summary"], indent=2, sort_keys=True) + "\n",
+            encoding="utf-8")
+        for name in SHARED_TA_TABLES:
+            outputs[name] = sha256_file(run_dir / name)
+    if comparison is not None:
+        (run_dir / "implementation_comparison.json").write_text(
+            json.dumps(comparison, indent=2, sort_keys=True, default=str) + "\n",
+            encoding="utf-8")
+        symbol_rows_to_frame(comparison.get("symbols") or []).to_csv(
+            run_dir / "implementation_comparison_by_symbol.csv", **csv_opts)
+        for name in COMPARISON_TABLES:
+            outputs[name] = sha256_file(run_dir / name)
+    if shared_ta_stock_result is not None:
+        shared_stock = annotate_shared_ta_instruments(
+            shared_ta_stock_result["instruments"], stocks=True)
+        shared_stock.to_csv(run_dir / "shared_ta_stock_instrument_summary.csv", **csv_opts)
+        shared_ta_stock_result["daily"].to_csv(
+            run_dir / "shared_ta_stock_daily_equity.csv", **csv_opts)
+        shared_ta_stock_result["trades"].to_csv(
+            run_dir / "shared_ta_stock_trades.csv", **csv_opts)
+        (run_dir / "shared_ta_stock_summary.json").write_text(
+            json.dumps(shared_ta_stock_result["summary"], indent=2, sort_keys=True) + "\n",
+            encoding="utf-8")
+        for name in SHARED_TA_STOCK_TABLES:
+            outputs[name] = sha256_file(run_dir / name)
+    if stock_comparison is not None:
+        (run_dir / "stock_implementation_comparison.json").write_text(
+            json.dumps(stock_comparison, indent=2, sort_keys=True, default=str) + "\n",
+            encoding="utf-8")
+        symbol_rows_to_frame(stock_comparison.get("symbols") or []).to_csv(
+            run_dir / "stock_implementation_comparison_by_symbol.csv", **csv_opts)
+        for name in STOCK_COMPARISON_TABLES:
+            outputs[name] = sha256_file(run_dir / name)
     parity_meta = None
     if parity_report_path is not None:
         parity_path = Path(parity_report_path)
@@ -845,6 +1115,15 @@ def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
         "stock_price_sha256": stock_price_hashes,
         "stock_evidence_label": None if stock_result is None else "EXPLORATORY",
         "stock_survivorship_bias": None if stock_result is None else True,
+        "indicator_implementations": (
+            [PINE_IMPLEMENTATION, SHARED_TA_IMPLEMENTATION]
+            if shared_ta_result is not None else [PINE_IMPLEMENTATION]),
+        "implementation_sensitivity": {
+            "primary": PINE_IMPLEMENTATION,
+            "variant": SHARED_TA_IMPLEMENTATION,
+            "label": IMPLEMENTATION_SENSITIVITY_LABEL,
+            "primary_verdict_eligible": False,
+        } if shared_ta_result is not None else None,
         "tradingview_parity": parity_meta,
         "output_sha256": outputs,
         "dependencies": {
@@ -951,23 +1230,42 @@ def main(argv: list[str] | None = None) -> int:
         require_approved_parity_report(
             parity_report_path, fixture_sha256=parity_report["fixture_sha256"])
 
-    result = run_cohort(
-        cache_root, cfg, list(cfg["primary_universe"]), args.window, fail_closed=True)
+    result, shared_ta_result, comparison = run_paired_cohort(
+        cache_root, cfg, list(cfg["primary_universe"]), args.window, True,
+        cohort="primary")
     universe_meta = {
         "primary": list(cfg["primary_universe"]),
         "window": args.window,
         "stocks": None,
+        "indicator_implementations": [PINE_IMPLEMENTATION, SHARED_TA_IMPLEMENTATION],
+        "implementation_sensitivity": {
+            "primary": PINE_IMPLEMENTATION,
+            "variant": SHARED_TA_IMPLEMENTATION,
+            "label": IMPLEMENTATION_SENSITIVITY_LABEL,
+            "primary_verdict_eligible": False,
+        },
     }
     stock_result = None
+    shared_ta_stock_result = None
+    stock_comparison = None
     if args.include_stocks:
         paths = resolve_registry_paths()
         stocks, stock_meta = resolve_stock_symbols(paths["registry"], paths["retired"])
-        stock_result = run_cohort(cache_root, cfg, stocks, args.window, fail_closed=False)
+        stock_result, shared_ta_stock_result, stock_comparison = run_paired_cohort(
+            cache_root, cfg, stocks, args.window, False, cohort="stocks")
         stock_meta["summary"] = {
             **stock_result["summary"],
             "verdict": None,
             "evidence_label": "EXPLORATORY",
             "survivorship_bias": True,
+        }
+        stock_meta["shared_ta_summary"] = {
+            **shared_ta_stock_result["summary"],
+            "verdict": None,
+            "evidence_label": IMPLEMENTATION_SENSITIVITY_LABEL,
+            "stock_evidence_label": "EXPLORATORY",
+            "survivorship_bias": True,
+            "primary_verdict_eligible": False,
         }
         stock_meta["simulated_count"] = int(len(stock_result["sleeves"]))
         universe_meta["stocks"] = stock_meta
@@ -979,12 +1277,22 @@ def main(argv: list[str] | None = None) -> int:
     run_dir = output_root / args.window / f"{run_id}-{short}"
     write_run(run_dir, result, cfg, vars(args), universe_meta,
               stock_result=stock_result,
-              parity_report_path=parity_report_path)
+              parity_report_path=parity_report_path,
+              shared_ta_result=shared_ta_result,
+              comparison=comparison,
+              shared_ta_stock_result=shared_ta_stock_result,
+              stock_comparison=stock_comparison,
+              require_paired=True)
     summary = result["summary"]
     print(f"window={summary['window']} verdict={summary['verdict']} "
           f"n={summary['primary_endpoint']['n']} "
           f"mean={summary['primary_endpoint']['mean']} "
           f"run={run_dir}")
+    print(
+        f"implementation_sensitivity={IMPLEMENTATION_SENSITIVITY_LABEL} "
+        f"shared_ta_diagnostic={comparison['shared_ta_diagnostic_verdict']} "
+        f"verdict_differs={comparison['shared_ta_verdict_differs']} "
+        f"primary_fill_mismatch={comparison['any_primary_fill_mismatch']}")
     return 0
 
 
