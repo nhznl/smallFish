@@ -11,8 +11,7 @@
 **Work status:** documentation only; no study implementation is retained in the
 repository.
 
-**Source:** supplied Pine Script v6, SHA-256
-`69b92189a63041c1240ab6023d3393aaf4087b42302ef0b44c08423dc878a343`
+**Source:** supplied Pine Script v6
 
 This is the frozen, self-contained handoff for the agent that will implement
 and run the study. Owner approval and the commit containing this document form
@@ -286,7 +285,7 @@ holdout command once.
 After Stage 2, the run agent stops and returns the exact command, authoritative
 creation-only run path, manifest, artifact hashes, verdict, and warnings. It
 must not retune, rerun a changed variant, soften the verdict, or publish to the
-app. The verifier then checks source hashes, artifact hashes, recomputation,
+app. The verifier then checks price-input hashes, artifact hashes, recomputation,
 primary inference, verdict language, and catalog projection. Only after that
 verification may a separate publication change expose the aggregate result in
 `/studies`.

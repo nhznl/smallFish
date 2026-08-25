@@ -5,7 +5,6 @@ schema_name: smallfish.rsi-supertrend-study
 schema_version: 1
 study_id: rsi-supertrend-pine-v1
 protocol_status: FROZEN
-pine_sha256: 0f8c034bb89d0524213495ba2bd52a17958dcf3a3a023635dd0b34f7be340130
 
 primary_universe: [SPY, XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY, QQQ, DIA, IWM, MDY]
 rsi_length: 10

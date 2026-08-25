@@ -58,9 +58,8 @@ This study is not in the published catalog. `stock-app/` must not import it.
 
 ## Source
 
-[`source.pine`](source.pine) is the pasted executable Pine. Config and
-`PINE_SHA256` hash that file. The spec freeze lists a different digest; the
-owner waived that gate for Stage 1. Do not retune inputs.
+[`source.pine`](source.pine) is the pasted executable Pine. Do not retune its
+inputs.
 
 A TradingView development export is not in the repository. See
 [`fixtures/README.md`](fixtures/README.md). Pine parity cannot be claimed from

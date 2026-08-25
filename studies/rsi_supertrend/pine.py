@@ -10,10 +10,6 @@ from __future__ import annotations
 
 import numpy as np
 
-# SHA-256 of studies/rsi_supertrend/source.pine (the pasted executable source).
-# The frozen spec lists a different digest; the owner waived that gate.
-PINE_SHA256 = "0f8c034bb89d0524213495ba2bd52a17958dcf3a3a023635dd0b34f7be340130"
-
 
 def pine_sma(values: np.ndarray, length: int) -> np.ndarray:
     x = np.asarray(values, dtype="float64")

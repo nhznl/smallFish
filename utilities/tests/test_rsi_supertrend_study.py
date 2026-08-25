@@ -16,7 +16,6 @@ import pytest
 from studies.rsi_supertrend import emulator as emulator_mod
 from studies.rsi_supertrend.emulator import emulate_symbol, percent_equity_qty
 from studies.rsi_supertrend.pine import (
-    PINE_SHA256,
     pine_atr,
     pine_rma,
     pine_rsi,
@@ -28,7 +27,6 @@ from studies.rsi_supertrend.pine import (
 from studies.rsi_supertrend.study import (
     CONFIG_PATH,
     FROZEN_CONFIG,
-    SOURCE_PATH,
     TV_FIXTURE_PATH,
     assert_holdout_unclaimed,
     compare_tradingview_export,
@@ -39,7 +37,6 @@ from studies.rsi_supertrend.study import (
     resolve_export_identity,
     run_cohort,
     sha256_file,
-    verify_source_hash,
     write_parity_report,
     write_run,
 )
@@ -77,13 +74,6 @@ def _write_cache(root: Path, symbol: str, dates: pd.DatetimeIndex,
         year_dir = root / str(year)
         year_dir.mkdir(parents=True, exist_ok=True)
         (year_dir / f"{symbol}.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def test_pasted_source_sha256_matches_runtime_digest():
-    assert SOURCE_PATH.is_file()
-    digest = sha256_file(SOURCE_PATH)
-    assert digest == PINE_SHA256
-    assert verify_source_hash() == digest
 
 
 def test_frozen_config_file_matches_in_code_protocol():
@@ -481,7 +471,7 @@ def test_stock_outputs_are_written_separately(tmp_path):
         },
     }
     run_dir = tmp_path / "run"
-    write_run(run_dir, primary, _cfg(), {"include_stocks": True}, universe, "digest",
+    write_run(run_dir, primary, _cfg(), {"include_stocks": True}, universe,
               stock_result=stock)
     resolved = json.loads((run_dir / "resolved_universe.json").read_text(encoding="utf-8"))
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))

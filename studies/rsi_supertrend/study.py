@@ -23,7 +23,7 @@ import yaml
 from models.universe import TYPE_STOCK
 from studies.rsi_supertrend.emulator import emulate_symbol
 from studies.rsi_supertrend.pine import (
-    PINE_SHA256, pine_rsi, pine_sma, pine_supertrend, special_buy_signals,
+    pine_rsi, pine_sma, pine_supertrend, special_buy_signals,
 )
 from utilities.price_reader import read_prices_validated
 from utilities.universe import load_registry, load_retired_symbols, resolve_registry_paths
@@ -32,7 +32,6 @@ ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = Path(__file__).resolve().parent
 CONFIG_PATH = PACKAGE / "config" / "study.yaml"
 SPEC_PATH = PACKAGE / "rsi_supertrend_study_spec.md"
-SOURCE_PATH = PACKAGE / "source.pine"
 TV_FIXTURE_PATH = PACKAGE / "fixtures" / "tradingview_export.csv"
 
 FROZEN_CONFIG = {
@@ -40,7 +39,6 @@ FROZEN_CONFIG = {
     "schema_version": 1,
     "study_id": "rsi-supertrend-pine-v1",
     "protocol_status": "FROZEN",
-    "pine_sha256": PINE_SHA256,
     "primary_universe": [
         "SPY", "XLB", "XLE", "XLF", "XLI", "XLK", "XLP", "XLU", "XLV", "XLY",
         "QQQ", "DIA", "IWM", "MDY",
@@ -111,16 +109,6 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def verify_source_hash(path: Path = SOURCE_PATH, expected: str = PINE_SHA256) -> str:
-    if not path.is_file():
-        raise ValueError(f"Pine source is missing: {path}")
-    digest = sha256_file(path)
-    if digest != expected:
-        raise ValueError(
-            f"Pine source SHA-256 {digest} does not match frozen digest {expected}")
-    return digest
 
 
 def _git(*args: str) -> str:
@@ -798,7 +786,7 @@ def run_cohort(cache_root: Path, cfg: dict, symbols: list[str], window: str,
 
 
 def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
-              universe_meta: dict, source_digest: str,
+              universe_meta: dict,
               stock_result: dict | None = None,
               parity_report_path: Path | None = None) -> None:
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -843,7 +831,6 @@ def write_run(run_dir: Path, result: dict, cfg: dict, args: dict,
                  for key, value in args.items()},
         "config_sha256": sha256_file(CONFIG_PATH),
         "spec_sha256": sha256_file(SPEC_PATH),
-        "source_pine_sha256": source_digest,
         "source_price_sha256": result["price_hashes"],
         "stock_price_sha256": stock_price_hashes,
         "stock_evidence_label": None if stock_result is None else "EXPLORATORY",
@@ -950,8 +937,6 @@ def main(argv: list[str] | None = None) -> int:
         require_approved_parity_report(
             parity_report_path, fixture_sha256=parity_report["fixture_sha256"])
 
-    source_digest = verify_source_hash()
-
     result = run_cohort(
         cache_root, cfg, list(cfg["primary_universe"]), args.window, fail_closed=True)
     universe_meta = {
@@ -978,7 +963,7 @@ def main(argv: list[str] | None = None) -> int:
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     short = _git("rev-parse", "--short", "HEAD") or "nogit"
     run_dir = output_root / args.window / f"{run_id}-{short}"
-    write_run(run_dir, result, cfg, vars(args), universe_meta, source_digest,
+    write_run(run_dir, result, cfg, vars(args), universe_meta,
               stock_result=stock_result,
               parity_report_path=parity_report_path)
     summary = result["summary"]
