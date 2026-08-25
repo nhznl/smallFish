@@ -108,10 +108,10 @@ When sources disagree, prefer in this order:
    below.
 4. **Module READMEs** and `docs/` — current behaviour. Fix them when you change
    behaviour.
-5. **`Requirements.md`** — outstanding, deferred, and closed work only. It
+5. **`PROJECT_STATUS.md`** — active evidence gaps and closed decisions only. It
    states what must not be reopened without a decision, so read it before
-   starting anything in those areas. It no longer records finished work; for
-   how something behaves, read the code and `docs/`.
+   starting anything in those areas. It does not record finished work; for how
+   something behaves, read the code and `docs/`.
 6. **`stock-app-ui/docs/UX_GUIDANCE.md`** — required reading before UI work.
 
 ## Hard rules

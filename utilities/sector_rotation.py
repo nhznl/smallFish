@@ -43,7 +43,7 @@ SCHEMA_VERSION = 1
 
 BENCHMARK = "SPY"
 
-# The 11 US Select Sector SPDR ETFs, per Requirements.md.
+# The 11 US Select Sector SPDR ETFs used by the sector-rotation package.
 SECTOR_ETFS: dict[str, str] = {
     "XLC": "Communication Services",
     "XLY": "Consumer Discretionary",
@@ -357,7 +357,7 @@ def build_rotation_candidates(sector_rows: pd.DataFrame, cfg: dict) -> list[dict
 
     A pair surfaces only when the target is strengthening AND improving in
     cross-sector rank while the source is weakening AND losing rank -- the
-    condition Requirements.md sets out. The per-window evidence travels with the
+    condition the sector-rotation study sets out. The per-window evidence travels with the
     candidate so nothing is presented as an unexplained categorical call.
     """
     if sector_rows.empty:

@@ -127,8 +127,9 @@ The durable corrections are now enforced in code and tests:
 - User-facing results distinguish diagnostics and descriptive observations from
   validated performance claims.
 
-`Requirements.md` owns the platform-wide data contracts. This README records
-how the strategy consumes them; it does not replace them.
+Shared models, active configuration, and [`../../docs/DATA.md`](../../docs/DATA.md)
+own the platform-wide data contracts. This README records how the strategy
+consumes them; it does not replace them.
 
 ## Remediation disposition
 
@@ -212,7 +213,8 @@ behavior.
 
 When documents differ, use this order:
 
-1. `Requirements.md` for platform and data contracts;
+1. code, shared models, and [`../../docs/DATA.md`](../../docs/DATA.md) for
+   executable behavior and platform data contracts;
 2. `config/scan.yaml` and `config/backtest.yaml` for active/frozen configuration;
 3. `backtest_spec.md` and `backtest_spec_2.md` for immutable study protocols and
    results;

@@ -2,8 +2,8 @@
 
 The repository-wide architecture and brokerage refactoring program is complete
 as of 2026-07-30. There is no active migration or cleanup plan. This document
-describes the current design; [`../Requirements.md`](../Requirements.md) tracks
-only open evidence gaps, optional deferred decisions, and standing constraints.
+describes the current design; [`../PROJECT_STATUS.md`](../PROJECT_STATUS.md)
+tracks only active evidence gaps and standing constraints.
 
 ## Shape
 

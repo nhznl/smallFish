@@ -6,8 +6,8 @@
 
 **Current decision:** the owner confirmed on 2026-07-30 that there are no
 external consumers and chose to retain Layer A materialization for now. Any
-future trim requires a new explicit decision; tracked in
-[`../Requirements.md`](../Requirements.md).
+future trim requires a new explicit decision. This document is the retained
+decision record.
 
 ## Purpose
 

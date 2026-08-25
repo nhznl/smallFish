@@ -42,8 +42,8 @@ that spans more market regimes.
 2022 bear). If you trim to 2024+, every frequency is estimated from bull-market
 data only. Puts would look far safer than they are — which is precisely the
 failure mode for a put seller, whose whole risk is the downside tail. The
-requirements deliberately ship `sample_count` and `history_start` alongside every
-frequency *because mixed regimes are the point* (`Requirements.md` §3, §4.3).
+Wheel artifacts deliberately ship `sample_count` and `history_start` alongside
+every frequency *because mixed regimes are the point*.
 
 The `YearlySlope` heatmap on the stock-detail page also literally renders one
 column per year of data, so trimming visibly shortens it.

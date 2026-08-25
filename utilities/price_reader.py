@@ -61,7 +61,7 @@ def read_prices_validated(cache_root: Path, symbol: str,
     non-empty `issues` list means hard corruption and the caller must
     quarantine the symbol rather than compute on it.
 
-    Contract checks (per Requirements.md and the pre-earnings strategy README):
+    Contract checks (per docs/DATA.md and the pre-earnings strategy README):
       * every row's date belongs to its partition year;
       * duplicate dates with CONFLICTING values are corruption (identical
         duplicate rows are collapsed silently -- deterministic and harmless);
