@@ -620,6 +620,52 @@ def test_tradingview_identity_rejects_non_daily_timeframe():
         raise AssertionError("non-daily timeframe must fail")
 
 
+def test_tradingview_identity_rejects_nonconstant_csv_column(tmp_path):
+    frame = _tv_frame(n=8)
+    frame["symbol"] = "SPY"
+    frame.loc[frame.index[5], "symbol"] = "QQQ"
+    path = tmp_path / "tradingview_export.csv"
+    frame.to_csv(path, index=False)
+    try:
+        resolve_export_identity(
+            path, timeframe="1D", adjustment="adjusted", session="NYSE", require=True)
+    except ValueError as exc:
+        assert "not constant" in str(exc)
+        assert "QQQ" in str(exc)
+    else:
+        raise AssertionError("non-constant CSV identity columns must fail")
+
+
+def test_tradingview_identity_rejects_cli_csv_conflict(tmp_path):
+    frame = _tv_frame(n=8)
+    frame["symbol"] = "QQQ"
+    path = tmp_path / "tradingview_export.csv"
+    frame.to_csv(path, index=False)
+    try:
+        resolve_export_identity(
+            path, symbol="SPY", timeframe="1D", adjustment="adjusted", session="NYSE",
+            require=True)
+    except ValueError as exc:
+        assert "conflicts" in str(exc)
+    else:
+        raise AssertionError("CLI/CSV identity conflicts must fail")
+
+
+def test_tradingview_identity_rejects_sidecar_cli_conflict(tmp_path):
+    path = tmp_path / "tradingview_export.csv"
+    _tv_frame().to_csv(path, index=False)
+    sidecar = tmp_path / "tradingview_export.meta.json"
+    sidecar.write_text(json.dumps(_tv_identity(symbol="QQQ")) + "\n", encoding="utf-8")
+    try:
+        resolve_export_identity(
+            path, symbol="SPY", timeframe="1D", adjustment="adjusted", session="NYSE",
+            require=True)
+    except ValueError as exc:
+        assert "conflicts" in str(exc)
+    else:
+        raise AssertionError("sidecar/CLI identity conflicts must fail")
+
+
 def test_tradingview_comparison_detects_indicator_mismatch(tmp_path):
     frame = _tv_frame()
     frame.loc[frame.index[-1], "rsi"] = 0.0

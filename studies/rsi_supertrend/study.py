@@ -258,42 +258,78 @@ def normalize_tv_timeframe(value: object) -> str:
         f"TradingView timeframe must be daily (1D); got {value!r}")
 
 
+def _normalize_identity_field(key: str, value: object) -> str:
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"TradingView identity {key!r} is empty")
+    if key == "timeframe":
+        return normalize_tv_timeframe(text)
+    return text
+
+
+def _merge_identity_source(identity: dict[str, str], source: str,
+                           values: dict[str, object]) -> None:
+    for key, raw in values.items():
+        if raw in (None, ""):
+            continue
+        normalized = _normalize_identity_field(key, raw)
+        existing = identity.get(key)
+        if existing is not None and existing != normalized:
+            raise ValueError(
+                f"TradingView identity {key!r} conflicts between sources "
+                f"({existing!r} vs {normalized!r} from {source})")
+        identity[key] = normalized
+
+
 def resolve_export_identity(export_path: Path, *,
                             symbol: str | None = None,
                             timeframe: str | None = None,
                             adjustment: str | None = None,
                             session: str | None = None,
                             require: bool = False) -> dict:
-    """Resolve TradingView chart identity from CLI, sidecar, or CSV constants."""
+    """Resolve TradingView chart identity from CLI, sidecar, or CSV constants.
+
+    Every identity-column value in the CSV is inspected. Conflicting values
+    within the CSV, or between CSV, sidecar, and CLI, fail closed.
+    """
     export_path = Path(export_path)
     identity: dict[str, str] = {}
+
+    if export_path.is_file():
+        frame = pd.read_csv(export_path)
+        csv_values: dict[str, object] = {}
+        for key in TV_IDENTITY_KEYS:
+            if key not in frame.columns:
+                continue
+            values = {
+                str(value).strip()
+                for value in frame[key].tolist()
+                if pd.notna(value) and str(value).strip()
+            }
+            if len(values) > 1:
+                raise ValueError(
+                    f"TradingView export column {key!r} is not constant across all rows: "
+                    f"{sorted(values)}")
+            if len(values) == 1:
+                csv_values[key] = next(iter(values))
+        _merge_identity_source(identity, "csv", csv_values)
+
     sidecar = export_path.with_name(export_path.stem + ".meta.json")
     if sidecar.is_file():
         loaded = json.loads(sidecar.read_text(encoding="utf-8")) or {}
         if not isinstance(loaded, dict):
             raise ValueError(f"TradingView sidecar must be a JSON object: {sidecar}")
-        for key in TV_IDENTITY_KEYS:
-            if loaded.get(key) not in (None, ""):
-                identity[key] = str(loaded[key]).strip()
-    if export_path.is_file():
-        header = pd.read_csv(export_path, nrows=5)
-        for key in TV_IDENTITY_KEYS:
-            if key not in header.columns:
-                continue
-            values = {str(value).strip() for value in header[key].dropna().tolist() if str(value).strip()}
-            if len(values) == 1:
-                identity.setdefault(key, next(iter(values)))
-            elif len(values) > 1:
-                raise ValueError(f"TradingView export column {key!r} is not constant")
-    cli = {
+        _merge_identity_source(
+            identity, "sidecar",
+            {key: loaded.get(key) for key in TV_IDENTITY_KEYS})
+
+    _merge_identity_source(identity, "cli", {
         "symbol": symbol,
         "timeframe": timeframe,
         "adjustment": adjustment,
         "session": session,
-    }
-    for key, value in cli.items():
-        if value not in (None, ""):
-            identity[key] = str(value).strip()
+    })
+
     missing = [key for key in TV_IDENTITY_KEYS if not identity.get(key)]
     if require and missing:
         raise ValueError(
@@ -301,8 +337,6 @@ def resolve_export_identity(export_path: Path, *,
             f"(missing {missing}). Pass --tv-symbol/--tv-timeframe/"
             "--tv-adjustment/--tv-session, or provide a sidecar "
             f"{export_path.stem}.meta.json, or constant CSV columns.")
-    if "timeframe" in identity:
-        identity["timeframe"] = normalize_tv_timeframe(identity["timeframe"])
     return {key: identity[key] for key in TV_IDENTITY_KEYS if key in identity}
 
 
@@ -484,19 +518,20 @@ def compare_tradingview_export(path: Path = TV_FIXTURE_PATH, cfg: dict | None = 
 
 
 def write_parity_report(report: dict, path: Path, *, exist_ok: bool = False) -> Path:
-    """Write a parity report. Creation-only unless ``exist_ok`` is true."""
+    """Write a parity report with exclusive creation (``O_CREAT|O_EXCL``)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(report, indent=2, sort_keys=True, default=str) + "\n"
-    if path.exists():
+    try:
+        with path.open("x", encoding="utf-8") as stream:
+            stream.write(payload)
+    except FileExistsError as exc:
         if not exist_ok:
-            raise ValueError(f"parity report already exists (creation-only): {path}")
+            raise ValueError(
+                f"parity report already exists (creation-only): {path}") from exc
         if path.read_text(encoding="utf-8") != payload:
-            raise ValueError(f"parity report already exists with different contents: {path}")
-        return path
-    tmp = path.with_name(f".{path.name}.tmp.{os.getpid()}")
-    tmp.write_text(payload, encoding="utf-8")
-    os.replace(tmp, path)
+            raise ValueError(
+                f"parity report already exists with different contents: {path}") from exc
     return path
 
 
