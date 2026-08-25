@@ -86,15 +86,16 @@ STOCK_TABLES = (
 )
 
 CANONICAL_HOLDOUT_CLAIM = Path("studies") / "rsi-supertrend-pine-v1" / "holdout" / ".authoritative-claim"
-CANONICAL_PARITY_REPORT = (
-    Path("studies") / "rsi-supertrend-pine-v1" / "parity" / "tradingview_parity.json")
+CANONICAL_PARITY_DIR = Path("studies") / "rsi-supertrend-pine-v1" / "parity"
 
 TV_REQUIRED_COLUMNS = (
     "date", "open", "high", "low", "close",
     "rsi", "rsi_signal", "st_direction", "special_buy",
 )
 TV_FILL_COLUMNS = ("entry_fill", "exit_fill")
+TV_IDENTITY_KEYS = ("symbol", "timeframe", "adjustment", "session")
 TV_VALUE_TOLERANCE = 1e-4
+TV_DAILY_TIMEFRAMES = frozenset({"1d", "d", "daily", "1day", "day"})
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict:
@@ -249,8 +250,66 @@ def resolve_stock_symbols(registry_path: Path, retired_path: Path) -> tuple[list
     return symbols, meta
 
 
+def normalize_tv_timeframe(value: object) -> str:
+    text = str(value or "").strip()
+    if text.lower() in TV_DAILY_TIMEFRAMES:
+        return "1D"
+    raise ValueError(
+        f"TradingView timeframe must be daily (1D); got {value!r}")
+
+
+def resolve_export_identity(export_path: Path, *,
+                            symbol: str | None = None,
+                            timeframe: str | None = None,
+                            adjustment: str | None = None,
+                            session: str | None = None,
+                            require: bool = False) -> dict:
+    """Resolve TradingView chart identity from CLI, sidecar, or CSV constants."""
+    export_path = Path(export_path)
+    identity: dict[str, str] = {}
+    sidecar = export_path.with_name(export_path.stem + ".meta.json")
+    if sidecar.is_file():
+        loaded = json.loads(sidecar.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded, dict):
+            raise ValueError(f"TradingView sidecar must be a JSON object: {sidecar}")
+        for key in TV_IDENTITY_KEYS:
+            if loaded.get(key) not in (None, ""):
+                identity[key] = str(loaded[key]).strip()
+    if export_path.is_file():
+        header = pd.read_csv(export_path, nrows=5)
+        for key in TV_IDENTITY_KEYS:
+            if key not in header.columns:
+                continue
+            values = {str(value).strip() for value in header[key].dropna().tolist() if str(value).strip()}
+            if len(values) == 1:
+                identity.setdefault(key, next(iter(values)))
+            elif len(values) > 1:
+                raise ValueError(f"TradingView export column {key!r} is not constant")
+    cli = {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "adjustment": adjustment,
+        "session": session,
+    }
+    for key, value in cli.items():
+        if value not in (None, ""):
+            identity[key] = str(value).strip()
+    missing = [key for key in TV_IDENTITY_KEYS if not identity.get(key)]
+    if require and missing:
+        raise ValueError(
+            "TradingView export identity is required "
+            f"(missing {missing}). Pass --tv-symbol/--tv-timeframe/"
+            "--tv-adjustment/--tv-session, or provide a sidecar "
+            f"{export_path.stem}.meta.json, or constant CSV columns.")
+    if "timeframe" in identity:
+        identity["timeframe"] = normalize_tv_timeframe(identity["timeframe"])
+    return {key: identity[key] for key in TV_IDENTITY_KEYS if key in identity}
+
+
 def compare_tradingview_export(path: Path = TV_FIXTURE_PATH, cfg: dict | None = None,
-                               *, require_fills: bool = False) -> dict:
+                               *, require_fills: bool = False,
+                               identity: dict | None = None,
+                               require_identity: bool = False) -> dict:
     path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(
@@ -258,6 +317,14 @@ def compare_tradingview_export(path: Path = TV_FIXTURE_PATH, cfg: dict | None = 
             f"({path}). Required columns: {', '.join(TV_REQUIRED_COLUMNS)}. "
             "Parity with TradingView cannot be claimed from self-consistency alone.")
     cfg = cfg or FROZEN_CONFIG
+    resolved_identity = resolve_export_identity(
+        path,
+        symbol=(identity or {}).get("symbol"),
+        timeframe=(identity or {}).get("timeframe"),
+        adjustment=(identity or {}).get("adjustment"),
+        session=(identity or {}).get("session"),
+        require=require_identity,
+    )
     export = pd.read_csv(path)
     missing = [col for col in TV_REQUIRED_COLUMNS if col not in export.columns]
     if missing:
@@ -398,6 +465,7 @@ def compare_tradingview_export(path: Path = TV_FIXTURE_PATH, cfg: dict | None = 
         "tolerance": TV_VALUE_TOLERANCE,
         "require_fills": require_fills,
         "fills_compared": has_fills,
+        "export_identity": resolved_identity,
         "settings": {
             "rsi_length": int(cfg["rsi_length"]),
             "signal_length": int(cfg["signal_length"]),
@@ -415,12 +483,25 @@ def compare_tradingview_export(path: Path = TV_FIXTURE_PATH, cfg: dict | None = 
     return report
 
 
-def write_parity_report(report: dict, path: Path) -> Path:
+def write_parity_report(report: dict, path: Path, *, exist_ok: bool = False) -> Path:
+    """Write a parity report. Creation-only unless ``exist_ok`` is true."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + "\n",
-                    encoding="utf-8")
+    payload = json.dumps(report, indent=2, sort_keys=True, default=str) + "\n"
+    if path.exists():
+        if not exist_ok:
+            raise ValueError(f"parity report already exists (creation-only): {path}")
+        if path.read_text(encoding="utf-8") != payload:
+            raise ValueError(f"parity report already exists with different contents: {path}")
+        return path
+    tmp = path.with_name(f".{path.name}.tmp.{os.getpid()}")
+    tmp.write_text(payload, encoding="utf-8")
+    os.replace(tmp, path)
     return path
+
+
+def content_addressed_parity_path(data_root: Path, fixture_sha256: str) -> Path:
+    return Path(data_root) / CANONICAL_PARITY_DIR / f"{fixture_sha256}.json"
 
 
 def require_approved_parity_report(path: Path, *, fixture_sha256: str | None = None) -> dict:
@@ -433,11 +514,12 @@ def require_approved_parity_report(path: Path, *, fixture_sha256: str | None = N
     if fixture_sha256 is not None and report.get("fixture_sha256") != fixture_sha256:
         raise ValueError(
             "TradingView parity report fixture hash does not match the supplied export")
+    identity = report.get("export_identity") or {}
+    missing = [key for key in TV_IDENTITY_KEYS if not identity.get(key)]
+    if missing:
+        raise ValueError(
+            f"approved TradingView parity report missing export identity: {missing}")
     return report
-
-
-def canonical_parity_report_path(data_root: Path) -> Path:
-    return Path(data_root) / CANONICAL_PARITY_REPORT
 
 
 def _max_drawdown(equity: pd.Series) -> float | None:
@@ -452,40 +534,60 @@ def canonical_holdout_claim_dir(data_root: Path) -> Path:
     return Path(data_root) / CANONICAL_HOLDOUT_CLAIM
 
 
+def assert_holdout_unclaimed(claim_root: Path) -> Path:
+    """Fail closed if the authoritative holdout claim already exists. No writes."""
+    claim_dir = canonical_holdout_claim_dir(claim_root)
+    if claim_dir.exists():
+        raise ValueError(f"authoritative holdout already claimed at {claim_dir}")
+    return claim_dir
+
+
 def enforce_holdout_guard(cfg: dict, output_root: Path, confirm: bool,
                           *, claim_root: Path | None = None,
-                          parity_report: dict | None = None,
-                          parity_report_path: Path | None = None) -> Path:
+                          parity_report: dict | None = None) -> tuple[Path, Path]:
+    """Atomically claim the holdout and seal the parity report inside the claim.
+
+    Returns ``(claim_dir, parity_report_path)``. The claim directory is created
+    before any parity evidence is written. The parity report is creation-only
+    under the claim, so a later attempt cannot overwrite authoritative evidence.
+    """
     if cfg.get("protocol_status") != "FROZEN":
         raise ValueError("holdout requires protocol_status=FROZEN")
     if not confirm:
         raise ValueError("holdout requires --confirm-holdout")
     if git_is_dirty():
         raise ValueError("holdout requires a clean committed worktree")
-    if parity_report is None or parity_report_path is None:
+    if parity_report is None or not parity_report.get("ok"):
         raise ValueError("holdout requires an approved TradingView parity report")
-    if not parity_report.get("ok"):
-        raise ValueError("holdout requires a passing TradingView parity report")
+    identity = parity_report.get("export_identity") or {}
+    missing = [key for key in TV_IDENTITY_KEYS if not identity.get(key)]
+    if missing:
+        raise ValueError(
+            f"holdout parity report missing export identity fields: {missing}")
     root = Path(claim_root) if claim_root is not None else default_cache_root()
-    claim_dir = canonical_holdout_claim_dir(root)
+    claim_dir = assert_holdout_unclaimed(root)
     claim_dir.parent.mkdir(parents=True, exist_ok=True)
     try:
         claim_dir.mkdir(exist_ok=False)
     except FileExistsError as exc:
         raise ValueError(f"authoritative holdout already claimed at {claim_dir}") from exc
+    parity_report_path = claim_dir / "tradingview_parity.json"
+    write_parity_report(parity_report, parity_report_path, exist_ok=False)
     payload = {
         "claimed_at_utc": datetime.now(timezone.utc).isoformat(),
         "git_commit": _git("rev-parse", "HEAD"),
         "pid": os.getpid(),
         "status": "reserved",
         "output_root": str(output_root),
-        "parity_report_path": str(Path(parity_report_path).resolve()),
-        "parity_report_sha256": sha256_file(Path(parity_report_path)),
+        "parity_report_path": str(parity_report_path.resolve()),
+        "parity_report_sha256": sha256_file(parity_report_path),
         "fixture_sha256": parity_report.get("fixture_sha256"),
+        "export_identity": identity,
     }
-    (claim_dir / "claim.json").write_text(
+    claim_json = claim_dir / "claim.json"
+    claim_json.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return claim_dir
+    return claim_dir, parity_report_path
 
 
 def validate_coverage(cache_root: Path, cfg: dict, start: str, end: str) -> dict:
@@ -744,7 +846,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tradingview-export", type=Path, default=None,
                         help="External TradingView CSV; required for holdout")
     parser.add_argument("--parity-report", type=Path, default=None,
-                        help="Durable TradingView parity report path")
+                        help="Optional creation-only path for a compare-only parity report")
+    parser.add_argument("--tv-symbol", default=None, help="TradingView chart symbol")
+    parser.add_argument("--tv-timeframe", default=None, help="TradingView timeframe (must be 1D)")
+    parser.add_argument("--tv-adjustment", default=None,
+                        help="TradingView price adjustment mode")
+    parser.add_argument("--tv-session", default=None, help="TradingView session")
     parser.add_argument("--cache-root", type=Path, default=None)
     parser.add_argument("--output-root", type=Path, default=None)
     args = parser.parse_args(argv)
@@ -752,8 +859,12 @@ def main(argv: list[str] | None = None) -> int:
     cache_root = (args.cache_root or default_cache_root()).resolve()
     output_root = (args.output_root or (
         cache_root / "studies" / "rsi-supertrend-pine-v1")).resolve()
-    parity_report_path = (args.parity_report or canonical_parity_report_path(cache_root)
-                          ).resolve()
+    identity_args = {
+        "symbol": args.tv_symbol,
+        "timeframe": args.tv_timeframe,
+        "adjustment": args.tv_adjustment,
+        "session": args.tv_session,
+    }
 
     if args.validate_coverage:
         start = args.coverage_start or cfg["development_start"]
@@ -766,13 +877,21 @@ def main(argv: list[str] | None = None) -> int:
         export_path = Path(args.compare_tradingview)
         if args.tradingview_export is not None:
             export_path = Path(args.tradingview_export)
-        report = compare_tradingview_export(export_path, cfg, require_fills=False)
-        write_parity_report(report, parity_report_path)
+        export_path = export_path.expanduser().resolve()
+        report = compare_tradingview_export(
+            export_path, cfg, require_fills=False, identity=identity_args,
+            require_identity=True)
+        parity_report_path = (
+            Path(args.parity_report).expanduser().resolve()
+            if args.parity_report is not None
+            else content_addressed_parity_path(cache_root, report["fixture_sha256"]))
+        write_parity_report(report, parity_report_path, exist_ok=False)
         print(json.dumps({**report, "parity_report_path": str(parity_report_path)},
                          indent=2, sort_keys=True, default=str))
         return 0
 
     parity_report = None
+    parity_report_path = None
     if args.window == "holdout":
         if not args.include_stocks:
             raise SystemExit("holdout requires --include-stocks")
@@ -780,16 +899,21 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(
                 "holdout requires --tradingview-export PATH "
                 "(external CSV; keep it outside the git worktree)")
+        if not args.confirm_holdout:
+            raise SystemExit("holdout requires --confirm-holdout")
+        if git_is_dirty():
+            raise SystemExit("holdout requires a clean committed worktree")
+        # Refuse before any parity evidence is written.
+        assert_holdout_unclaimed(cache_root)
         export_path = Path(args.tradingview_export).expanduser().resolve()
-        # Compare and persist the durable report before claiming the holdout.
         parity_report = compare_tradingview_export(
-            export_path, cfg, require_fills=True)
-        write_parity_report(parity_report, parity_report_path)
+            export_path, cfg, require_fills=True, identity=identity_args,
+            require_identity=True)
+        _claim_dir, parity_report_path = enforce_holdout_guard(
+            cfg, output_root, args.confirm_holdout,
+            claim_root=cache_root, parity_report=parity_report)
         require_approved_parity_report(
             parity_report_path, fixture_sha256=parity_report["fixture_sha256"])
-        enforce_holdout_guard(
-            cfg, output_root, args.confirm_holdout,
-            parity_report=parity_report, parity_report_path=parity_report_path)
 
     source_digest = verify_source_hash()
 
@@ -821,7 +945,7 @@ def main(argv: list[str] | None = None) -> int:
     run_dir = output_root / args.window / f"{run_id}-{short}"
     write_run(run_dir, result, cfg, vars(args), universe_meta, source_digest,
               stock_result=stock_result,
-              parity_report_path=parity_report_path if parity_report is not None else None)
+              parity_report_path=parity_report_path)
     summary = result["summary"]
     print(f"window={summary['window']} verdict={summary['verdict']} "
           f"n={summary['primary_endpoint']['n']} "

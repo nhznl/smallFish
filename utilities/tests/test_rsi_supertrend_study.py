@@ -30,13 +30,17 @@ from studies.rsi_supertrend.study import (
     FROZEN_CONFIG,
     SOURCE_PATH,
     TV_FIXTURE_PATH,
+    assert_holdout_unclaimed,
     compare_tradingview_export,
+    content_addressed_parity_path,
     enforce_holdout_guard,
     load_config,
     moving_block_summary,
+    resolve_export_identity,
     run_cohort,
     sha256_file,
     verify_source_hash,
+    write_parity_report,
     write_run,
 )
 from utilities.indicators.ta import compute_atr
@@ -301,23 +305,32 @@ def test_corrupt_primary_data_fails_closed(tmp_path):
         raise AssertionError("corrupt primary ETF history must fail closed")
 
 
-def _approved_parity(tmp_path: Path) -> tuple[dict, Path]:
-    report = {
+def _tv_identity(**overrides) -> dict:
+    identity = {
+        "symbol": "SPY",
+        "timeframe": "1D",
+        "adjustment": "adjusted",
+        "session": "NYSE",
+    }
+    identity.update(overrides)
+    return identity
+
+
+def _approved_parity(tmp_path: Path) -> dict:
+    return {
         "ok": True,
         "fixture_sha256": "abc123",
         "study_id": FROZEN_CONFIG["study_id"],
+        "export_identity": _tv_identity(),
     }
-    path = tmp_path / "tradingview_parity.json"
-    path.write_text(json.dumps(report) + "\n", encoding="utf-8")
-    return report, path
 
 
 def test_holdout_guard_requires_confirm_flag(tmp_path):
-    report, path = _approved_parity(tmp_path)
+    report = _approved_parity(tmp_path)
     try:
         enforce_holdout_guard(
             _cfg(), tmp_path, confirm=False, claim_root=tmp_path,
-            parity_report=report, parity_report_path=path)
+            parity_report=report)
     except ValueError as exc:
         assert "--confirm-holdout" in str(exc)
     else:
@@ -327,11 +340,11 @@ def test_holdout_guard_requires_confirm_flag(tmp_path):
 def test_holdout_guard_requires_clean_worktree(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "studies.rsi_supertrend.study.git_is_dirty", lambda: True)
-    report, path = _approved_parity(tmp_path)
+    report = _approved_parity(tmp_path)
     try:
         enforce_holdout_guard(
             _cfg(), tmp_path, confirm=True, claim_root=tmp_path,
-            parity_report=report, parity_report_path=path)
+            parity_report=report)
     except ValueError as exc:
         assert "clean committed worktree" in str(exc)
     else:
@@ -349,25 +362,66 @@ def test_holdout_guard_requires_parity_report(tmp_path, monkeypatch):
         raise AssertionError("holdout without parity evidence must fail")
 
 
-def test_holdout_guard_claims_atomically_and_ignores_output_root(tmp_path, monkeypatch):
+def test_holdout_guard_seals_parity_inside_claim_and_is_creation_only(
+        tmp_path, monkeypatch):
     monkeypatch.setattr(
         "studies.rsi_supertrend.study.git_is_dirty", lambda: False)
-    report, path = _approved_parity(tmp_path)
-    first = enforce_holdout_guard(
+    report_a = _approved_parity(tmp_path)
+    report_a["fixture_sha256"] = "export-a"
+    claim_dir, parity_path = enforce_holdout_guard(
         _cfg(), tmp_path / "out-a", confirm=True, claim_root=tmp_path,
-        parity_report=report, parity_report_path=path)
-    assert (first / "claim.json").is_file()
-    claim = json.loads((first / "claim.json").read_text(encoding="utf-8"))
-    assert claim["parity_report_sha256"]
-    assert claim["fixture_sha256"] == "abc123"
+        parity_report=report_a)
+    assert parity_path == claim_dir / "tradingview_parity.json"
+    sealed = json.loads(parity_path.read_text(encoding="utf-8"))
+    assert sealed["fixture_sha256"] == "export-a"
+    claim = json.loads((claim_dir / "claim.json").read_text(encoding="utf-8"))
+    assert claim["parity_report_sha256"] == sha256_file(parity_path)
+    assert claim["export_identity"]["symbol"] == "SPY"
+
+    report_b = _approved_parity(tmp_path)
+    report_b["fixture_sha256"] = "export-b"
     try:
         enforce_holdout_guard(
             _cfg(), tmp_path / "out-b", confirm=True, claim_root=tmp_path,
-            parity_report=report, parity_report_path=path)
+            parity_report=report_b)
     except ValueError as exc:
         assert "already claimed" in str(exc)
     else:
         raise AssertionError("a second holdout caller must not pass the claim")
+    # Authoritative claim evidence must still be report A.
+    assert json.loads(parity_path.read_text(encoding="utf-8"))["fixture_sha256"] == "export-a"
+
+
+def test_assert_holdout_unclaimed_before_evidence_write(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "studies.rsi_supertrend.study.git_is_dirty", lambda: False)
+    enforce_holdout_guard(
+        _cfg(), tmp_path / "out", confirm=True, claim_root=tmp_path,
+        parity_report=_approved_parity(tmp_path))
+    try:
+        assert_holdout_unclaimed(tmp_path)
+    except ValueError as exc:
+        assert "already claimed" in str(exc)
+    else:
+        raise AssertionError("existing claim must be detected before evidence writes")
+
+
+def test_parity_report_is_creation_only(tmp_path):
+    path = tmp_path / "parity.json"
+    write_parity_report({"ok": True, "fixture_sha256": "a"}, path, exist_ok=False)
+    try:
+        write_parity_report({"ok": True, "fixture_sha256": "b"}, path, exist_ok=False)
+    except ValueError as exc:
+        assert "already exists" in str(exc)
+    else:
+        raise AssertionError("parity report overwrite must fail closed")
+    assert json.loads(path.read_text(encoding="utf-8"))["fixture_sha256"] == "a"
+
+
+def test_content_addressed_parity_path_uses_fixture_hash(tmp_path):
+    path = content_addressed_parity_path(tmp_path, "deadbeef")
+    assert path.name == "deadbeef.json"
+    assert "parity" in str(path)
 
 
 def test_moving_block_starts_do_not_wrap(monkeypatch):
@@ -524,11 +578,46 @@ def test_tradingview_comparison_fails_closed_when_fixture_missing():
 def test_tradingview_comparison_matches_recomputed_indicators(tmp_path):
     path = tmp_path / "tradingview_export.csv"
     _tv_frame().to_csv(path, index=False)
-    report = compare_tradingview_export(path)
+    report = compare_tradingview_export(
+        path, identity=_tv_identity(), require_identity=True)
     assert report["ok"]
     assert report["comparisons"]["st_direction_mismatches"] == 0
     assert report["comparisons"]["special_buy_mismatches"] == 0
     assert report["fixture_sha256"]
+    assert report["export_identity"] == _tv_identity()
+
+
+def test_tradingview_comparison_requires_export_identity(tmp_path):
+    path = tmp_path / "tradingview_export.csv"
+    _tv_frame().to_csv(path, index=False)
+    try:
+        compare_tradingview_export(path, require_identity=True)
+    except ValueError as exc:
+        assert "identity" in str(exc).lower()
+    else:
+        raise AssertionError("missing TradingView identity must fail")
+
+
+def test_tradingview_identity_from_sidecar(tmp_path):
+    path = tmp_path / "tradingview_export.csv"
+    _tv_frame().to_csv(path, index=False)
+    sidecar = tmp_path / "tradingview_export.meta.json"
+    sidecar.write_text(json.dumps(_tv_identity()) + "\n", encoding="utf-8")
+    identity = resolve_export_identity(path, require=True)
+    assert identity["timeframe"] == "1D"
+    assert identity["symbol"] == "SPY"
+
+
+def test_tradingview_identity_rejects_non_daily_timeframe():
+    try:
+        resolve_export_identity(
+            Path("/tmp/missing.csv"),
+            symbol="SPY", timeframe="60", adjustment="adjusted", session="NYSE",
+            require=True)
+    except ValueError as exc:
+        assert "daily" in str(exc).lower()
+    else:
+        raise AssertionError("non-daily timeframe must fail")
 
 
 def test_tradingview_comparison_detects_indicator_mismatch(tmp_path):
@@ -568,7 +657,8 @@ def test_tradingview_comparison_detects_extra_local_fills(tmp_path, monkeypatch)
     path = tmp_path / "tradingview_export.csv"
     frame.to_csv(path, index=False)
     try:
-        compare_tradingview_export(path, require_fills=True)
+        compare_tradingview_export(path, require_fills=True, identity=_tv_identity(),
+                                   require_identity=True)
     except ValueError as exc:
         assert "extra_local_entry_dates" in str(exc) or "entry_fill_mismatches" in str(exc)
     else:
@@ -591,6 +681,8 @@ def test_tradingview_comparison_with_fills_passes(tmp_path, monkeypatch):
     _patch_emulate_with_fills(monkeypatch, _bars(60))
     path = tmp_path / "tradingview_export.csv"
     frame.to_csv(path, index=False)
-    report = compare_tradingview_export(path, require_fills=True)
+    report = compare_tradingview_export(
+        path, require_fills=True, identity=_tv_identity(), require_identity=True)
     assert report["ok"]
     assert report["fills_compared"] is True
+    assert report["export_identity"]["session"] == "NYSE"
