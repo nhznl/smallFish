@@ -4,9 +4,10 @@ Operational notes for `rsi-supertrend-pine-v1`. Methodology lives in
 [`rsi_supertrend_study_spec.md`](rsi_supertrend_study_spec.md) and must not be
 edited.
 
-**Holdout is not authorized.** Do not run the holdout command until independent
-Stage 1 review is accepted and a real TradingView development export has passed
-strict parity. The official holdout command, **not executed**, is:
+**Holdout is not authorized and is currently blocked in code.** The paired
+Pine/shared-TA outcome runner and artifacts must be implemented and independently
+reviewed, and a real TradingView development export must pass strict parity.
+The eventual holdout command, **not executed**, is:
 
 ```bash
 ./commands.sh rsi-supertrend-study \
@@ -34,6 +35,18 @@ Compare-only runs write a content-addressed report under
 
 The stock cohort is labeled `EXPLORATORY` and survivorship-biased; it is never
 pooled into the primary verdict.
+
+## Implementation sensitivity
+
+The indicator layer supports `pine` and `shared_ta`. The latter calls
+`utilities.indicators.ta` directly with the same RSI(10), RSI-SMA(10), and
+ATR(10) parameters, then supplies the shared ATR to the same SuperTrend
+recurrence. Pine remains primary; shared-TA results will be labeled
+`IMPLEMENTATION_SENSITIVITY` and cannot change the primary verdict.
+
+Only indicator calculation is implemented in this phase. Paired cohort outcome
+artifacts are not yet implemented, so the runner refuses every holdout attempt
+before creating a claim or parity evidence.
 
 ## Runner
 

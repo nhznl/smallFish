@@ -8,8 +8,12 @@
 
 **Protocol frozen:** 2026-08-23
 
-**Work status:** documentation only; no study implementation is retained in the
-repository.
+**Protocol amended:** 2026-08-25, before any 2022–2025 strategy result, to add
+the owner-approved shared-TA implementation sensitivity.
+
+**Work status:** Pine execution and both indicator providers are implemented;
+paired sensitivity outcomes and artifacts remain to be implemented and
+reviewed before holdout authorization.
 
 **Source:** supplied Pine Script v6
 
@@ -28,9 +32,12 @@ not change its methodology or outcome rules after that commit.
    Select Sector SPDRs, QQQ, DIA, IWM, and MDY.
 4. The current smallFish stock universe is a separate exploratory historical
    cohort and must be labeled survivorship-biased.
-5. This document is a design and handoff only. Another agent owns
-   implementation and execution; the completed artifacts return for independent
-   verification before any app publication.
+5. Indicator implementation, paired outcome construction, holdout execution,
+   and publication are separate reviewed stages. Completed artifacts return for
+   independent verification before any app publication.
+6. The Pine implementation remains the sole primary result. A prespecified
+   `shared_ta` variant will measure whether smallFish's established indicator
+   conventions meaningfully change behavior or outcomes.
 
 ## 2. Research questions and evidence boundaries
 
@@ -118,6 +125,48 @@ The implementation must use a study-local Pine-compatible ATR. TradingView's
 `ta.atr` is based on `ta.tr(true)`, whose first bar uses high-low. Do not change
 smallFish's established shared ATR initialization to make this study match
 Pine.
+
+### Prespecified implementation sensitivity
+
+Run the same strategy and order emulator with two indicator providers:
+
+- `pine` — the primary implementation specified above;
+- `shared_ta` — direct calls to `utilities.indicators.ta.compute_rsi`,
+  `compute_sma`, and `compute_atr`.
+
+The shared-TA variant must use the primary parameters: RSI(10), SMA(10) of that
+RSI, ATR(10), trigger 50, cross target 2, and SuperTrend factor 2.5. It must not
+substitute smallFish's usual RSI(14), price SMA(20/50), or ATR(14). Because
+smallFish has no shared SuperTrend function, both providers use the same
+TradingView-compatible recursive SuperTrend band and direction logic; only the
+supplied RSI, SMA, and ATR series differ.
+
+Everything downstream of indicator calculation is shared byte-for-byte:
+`specialBuy` state, SuperTrend flip rule, next-open fills, whole-share sizing,
+zero costs, sleeve accounting, cohort aggregation, and bootstrap inference.
+Do not build a second emulator.
+
+The paired comparison covers the primary ETFs and the separately labeled stock
+cohort in development. When holdout is eventually authorized, both providers
+must run in the same authoritative one-shot command and claim; never open the
+holdout once for Pine and again for shared TA. The Pine result remains solely
+eligible for the primary verdict. Shared-TA outputs are labeled
+`IMPLEMENTATION_SENSITIVITY`; stock outputs retain the additional
+`EXPLORATORY` and survivorship-bias labels.
+
+Required comparison evidence:
+
+- defined-mask and maximum absolute differences for RSI, RSI-SMA, ATR, and
+  SuperTrend value;
+- mismatched `specialBuy`, SuperTrend direction, and exit-flip dates;
+- mismatched entry and exit fill dates and prices;
+- per-symbol and cohort return, exposure, and drawdown deltas;
+- whether the shared-TA bootstrap verdict category would differ, reported only
+  as a secondary diagnostic.
+
+Any primary-symbol fill mismatch is a behavioral implementation difference. A
+different bootstrap verdict category is inferentially material, but neither can
+replace, rescue, or reverse the Pine primary verdict.
 
 ## 5. Cohorts
 
@@ -208,11 +257,13 @@ reverse the primary verdict.
 
 ## 8. Implementation requirements for the handoff agent
 
-Create a new `studies/rsi_supertrend/` runtime package without editing this
-specification after it is frozen. Minimum components:
+Maintain the `studies/rsi_supertrend/` runtime package without changing frozen
+methodology absent another explicit pre-holdout owner amendment. Minimum
+components:
 
 - frozen YAML config matching every parameter and cohort above;
 - study-local Pine RMA/RSI/ATR/SuperTrend helpers;
+- direct shared-TA RSI/SMA/ATR provider plus one common SuperTrend recurrence;
 - single-symbol order emulator with Pine default order timing and pyramiding;
 - independent-sleeve daily equity curves;
 - primary moving-block inference plus descriptive ETF/stock outputs;
@@ -316,3 +367,8 @@ verification may a separate publication change expose the aggregate result in
 - 2026-08-23: Owner approved the methodology, primary endpoint, inference, and
   staged implementation-review-run workflow. The protocol was frozen before
   any 2022–2025 strategy result was observed.
+- 2026-08-25: Before any 2022–2025 strategy result, the owner amended the
+  protocol to add a prespecified `shared_ta` implementation sensitivity. Pine
+  remains primary. The variant uses identical parameters and execution, runs in
+  the same eventual authoritative holdout, and cannot change the primary
+  verdict. Indicator-provider implementation preceded outcome comparison.

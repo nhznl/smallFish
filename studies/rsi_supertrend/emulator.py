@@ -1,4 +1,4 @@
-"""Single-symbol Pine order emulator: next-open fills, pyramiding=1, zero costs."""
+"""Single-symbol frozen order emulator with a selectable indicator provider."""
 
 from __future__ import annotations
 
@@ -9,8 +9,13 @@ import numpy as np
 import pandas as pd
 
 from studies.rsi_supertrend.pine import (
-    pine_rsi, pine_sma, pine_supertrend, special_buy_signals,
+    pine_atr, pine_rsi, pine_sma, special_buy_signals, supertrend_from_atr,
 )
+from utilities.indicators import ta as shared_ta
+
+PINE_IMPLEMENTATION = "pine"
+SHARED_TA_IMPLEMENTATION = "shared_ta"
+INDICATOR_IMPLEMENTATIONS = frozenset({PINE_IMPLEMENTATION, SHARED_TA_IMPLEMENTATION})
 
 
 @dataclass
@@ -32,6 +37,67 @@ class SleeveResult:
     special_buy_count: int = 0
     ignored_repeat_entries: int = 0
     open_trade: OpenTrade | None = None
+
+
+@dataclass(frozen=True)
+class StrategyIndicators:
+    """Indicator arrays consumed by the otherwise shared order emulator."""
+
+    implementation: str
+    rsi: np.ndarray
+    signal: np.ndarray
+    atr: np.ndarray
+    supertrend: np.ndarray
+    direction: np.ndarray
+    special_buy: np.ndarray
+
+
+def compute_strategy_indicators(frame: pd.DataFrame, cfg: dict,
+                                implementation: str = PINE_IMPLEMENTATION
+                                ) -> StrategyIndicators:
+    """Calculate the frozen strategy statistics with one selected provider.
+
+    ``shared_ta`` calls ``utilities.indicators.ta`` directly with the same
+    periods as the Pine strategy. It changes no signal, SuperTrend recurrence,
+    execution, sizing, or portfolio rule.
+    """
+    if implementation not in INDICATOR_IMPLEMENTATIONS:
+        raise ValueError(f"unknown indicator implementation {implementation!r}")
+
+    close_series = frame["close"].astype("float64")
+    close = close_series.to_numpy()
+    high = frame["high"].to_numpy(dtype="float64")
+    low = frame["low"].to_numpy(dtype="float64")
+    rsi_length = int(cfg["rsi_length"])
+    signal_length = int(cfg["signal_length"])
+    atr_period = int(cfg["atr_period"])
+    factor = float(cfg["st_factor"])
+
+    if implementation == PINE_IMPLEMENTATION:
+        rsi = pine_rsi(close, rsi_length)
+        signal = pine_sma(rsi, signal_length)
+        atr = pine_atr(high, low, close, atr_period)
+    else:
+        rsi_series = shared_ta.compute_rsi(close_series, rsi_length)
+        signal_series = shared_ta.compute_sma(rsi_series, signal_length)
+        atr_series = shared_ta.compute_atr(
+            frame.loc[:, ["high", "low", "close"]].astype("float64"), atr_period)
+        rsi = rsi_series.to_numpy(dtype="float64")
+        signal = signal_series.to_numpy(dtype="float64")
+        atr = atr_series.to_numpy(dtype="float64")
+
+    supertrend, direction = supertrend_from_atr(high, low, close, atr, factor)
+    special = special_buy_signals(
+        rsi, signal, float(cfg["trigger_level"]), int(cfg["target_cross_count"]))
+    return StrategyIndicators(
+        implementation=implementation,
+        rsi=rsi,
+        signal=signal,
+        atr=atr,
+        supertrend=supertrend,
+        direction=direction,
+        special_buy=special,
+    )
 
 
 def _trade_row(trade: OpenTrade, exit_date, exit_price: float, reason: str,
@@ -74,29 +140,25 @@ def percent_equity_qty(equity: float, fill_price: float, percent: float = 100.0,
 
 
 def emulate_symbol(frame: pd.DataFrame, cfg: dict, window_start, window_end,
-                   symbol: str) -> SleeveResult:
+                   symbol: str, *,
+                   indicator_implementation: str = PINE_IMPLEMENTATION) -> SleeveResult:
     """Run one independent sleeve on completed daily bars.
 
     ``frame`` must include causal history before ``window_start``. Orders are
     generated at close and filled at the next session open. Only signals whose
     close falls inside the window may submit orders. Fills after the window
     end are dropped. A position still open at the last in-window close is
-    marked, not liquidated.
+    marked, not liquidated. Pine remains the default and primary provider.
     """
     window_start = pd.Timestamp(window_start)
     window_end = pd.Timestamp(window_end)
     close = frame["close"].to_numpy(dtype="float64")
     open_ = frame["open"].to_numpy(dtype="float64")
-    high = frame["high"].to_numpy(dtype="float64")
-    low = frame["low"].to_numpy(dtype="float64")
     dates = pd.to_datetime(frame["date"]).reset_index(drop=True)
     n = len(frame)
-    rsi = pine_rsi(close, int(cfg["rsi_length"]))
-    signal = pine_sma(rsi, int(cfg["signal_length"]))
-    special = special_buy_signals(
-        rsi, signal, float(cfg["trigger_level"]), int(cfg["target_cross_count"]))
-    _st, direction = pine_supertrend(
-        high, low, close, float(cfg["st_factor"]), int(cfg["atr_period"]))
+    indicators = compute_strategy_indicators(frame, cfg, indicator_implementation)
+    special = indicators.special_buy
+    direction = indicators.direction
     st_sell = np.zeros(n, dtype=bool)
     for i in range(1, n):
         if np.isfinite(direction[i]) and np.isfinite(direction[i - 1]):

@@ -14,7 +14,14 @@ import pandas as pd
 import pytest
 
 from studies.rsi_supertrend import emulator as emulator_mod
-from studies.rsi_supertrend.emulator import emulate_symbol, percent_equity_qty
+from studies.rsi_supertrend.emulator import (
+    PINE_IMPLEMENTATION,
+    SHARED_TA_IMPLEMENTATION,
+    StrategyIndicators,
+    compute_strategy_indicators,
+    emulate_symbol,
+    percent_equity_qty,
+)
 from studies.rsi_supertrend.pine import (
     pine_atr,
     pine_rma,
@@ -23,6 +30,7 @@ from studies.rsi_supertrend.pine import (
     pine_supertrend,
     pine_true_range,
     special_buy_signals,
+    supertrend_from_atr,
 )
 from studies.rsi_supertrend.study import (
     CONFIG_PATH,
@@ -33,6 +41,7 @@ from studies.rsi_supertrend.study import (
     content_addressed_parity_path,
     enforce_holdout_guard,
     load_config,
+    main,
     moving_block_summary,
     resolve_export_identity,
     run_cohort,
@@ -40,7 +49,7 @@ from studies.rsi_supertrend.study import (
     write_parity_report,
     write_run,
 )
-from utilities.indicators.ta import compute_atr
+from utilities.indicators.ta import compute_atr, compute_rsi, compute_sma
 
 
 def _cfg(**overrides) -> dict:
@@ -77,7 +86,10 @@ def _write_cache(root: Path, symbol: str, dates: pd.DatetimeIndex,
 
 
 def test_frozen_config_file_matches_in_code_protocol():
-    assert load_config() == FROZEN_CONFIG
+    cfg = load_config()
+    assert cfg == FROZEN_CONFIG
+    assert cfg["implementation_sensitivity"]["primary"] == PINE_IMPLEMENTATION
+    assert cfg["implementation_sensitivity"]["variant"] == SHARED_TA_IMPLEMENTATION
 
 
 def test_config_drift_fails_closed(tmp_path):
@@ -120,6 +132,63 @@ def test_atr_bar0_is_high_minus_low_unlike_shared_atr():
         frame["high"].to_numpy(), frame["low"].to_numpy(),
         frame["close"].to_numpy(), length=2)
     assert np.isfinite(pine[1])
+
+
+def test_pine_supertrend_wrapper_matches_supplied_atr_recurrence():
+    frame = _bars(40)
+    high = frame["high"].to_numpy(dtype="float64")
+    low = frame["low"].to_numpy(dtype="float64")
+    close = frame["close"].to_numpy(dtype="float64")
+    atr = pine_atr(high, low, close, length=10)
+    expected_st, expected_direction = supertrend_from_atr(
+        high, low, close, atr, factor=2.5)
+    actual_st, actual_direction = pine_supertrend(
+        high, low, close, factor=2.5, atr_period=10)
+    np.testing.assert_allclose(actual_st, expected_st, equal_nan=True)
+    np.testing.assert_allclose(actual_direction, expected_direction, equal_nan=True)
+
+
+def test_shared_ta_indicator_provider_calls_shared_statistics_directly():
+    frame = _bars(60)
+    frame["close"] = 100.0 + np.sin(np.arange(len(frame)) / 2.0) * 4.0
+    frame["open"] = frame["close"] + 0.1
+    frame["high"] = frame["close"] + 1.0
+    frame["low"] = frame["close"] - 1.0
+    cfg = _cfg()
+    actual = compute_strategy_indicators(frame, cfg, SHARED_TA_IMPLEMENTATION)
+
+    expected_rsi = compute_rsi(frame["close"], 10)
+    expected_signal = compute_sma(expected_rsi, 10)
+    expected_atr = compute_atr(frame[["high", "low", "close"]], 10)
+    expected_st, expected_direction = supertrend_from_atr(
+        frame["high"].to_numpy(), frame["low"].to_numpy(),
+        frame["close"].to_numpy(), expected_atr.to_numpy(), 2.5)
+
+    assert actual.implementation == SHARED_TA_IMPLEMENTATION
+    np.testing.assert_allclose(actual.rsi, expected_rsi.to_numpy(), equal_nan=True)
+    np.testing.assert_allclose(actual.signal, expected_signal.to_numpy(), equal_nan=True)
+    np.testing.assert_allclose(actual.atr, expected_atr.to_numpy(), equal_nan=True)
+    np.testing.assert_allclose(actual.supertrend, expected_st, equal_nan=True)
+    np.testing.assert_allclose(actual.direction, expected_direction, equal_nan=True)
+
+
+def test_pine_and_shared_ta_use_same_rsi_sma_but_distinct_atr_seed():
+    frame = _bars(60)
+    frame["close"] = 100.0 + np.sin(np.arange(len(frame)) / 2.0) * 4.0
+    frame["high"] = frame["close"] + 1.0
+    frame["low"] = frame["close"] - 1.0
+    pine = compute_strategy_indicators(frame, _cfg(), PINE_IMPLEMENTATION)
+    shared = compute_strategy_indicators(frame, _cfg(), SHARED_TA_IMPLEMENTATION)
+
+    np.testing.assert_allclose(pine.rsi, shared.rsi, equal_nan=True)
+    np.testing.assert_allclose(pine.signal, shared.signal, equal_nan=True)
+    assert np.flatnonzero(np.isfinite(pine.atr))[0] == 9
+    assert np.flatnonzero(np.isfinite(shared.atr))[0] == 10
+
+
+def test_unknown_indicator_provider_fails_closed():
+    with pytest.raises(ValueError, match="unknown indicator implementation"):
+        compute_strategy_indicators(_bars(20), _cfg(), "other")
 
 
 def test_rsi_uses_rma_gains_and_losses():
@@ -173,11 +242,18 @@ def _emulate(monkeypatch, frame, special, direction, start=None, end=None):
     n = len(frame)
     special = np.asarray(special, dtype=bool)
     direction = np.asarray(direction, dtype=float)
-    monkeypatch.setattr(
-        emulator_mod, "special_buy_signals", lambda *_args, **_kwargs: special)
-    monkeypatch.setattr(
-        emulator_mod, "pine_supertrend",
-        lambda *_args, **_kwargs: (np.zeros(n), direction))
+    def fake_indicators(_frame, _cfg, implementation=PINE_IMPLEMENTATION):
+        return StrategyIndicators(
+            implementation=implementation,
+            rsi=np.zeros(n),
+            signal=np.zeros(n),
+            atr=np.zeros(n),
+            supertrend=np.zeros(n),
+            direction=direction,
+            special_buy=special,
+        )
+
+    monkeypatch.setattr(emulator_mod, "compute_strategy_indicators", fake_indicators)
     start = start or frame["date"].iloc[0]
     end = end or frame["date"].iloc[-1]
     return emulate_symbol(frame, _cfg(), start, end, "TEST")
@@ -293,6 +369,11 @@ def test_corrupt_primary_data_fails_closed(tmp_path):
         assert "XLK" in str(exc)
     else:
         raise AssertionError("corrupt primary ETF history must fail closed")
+
+
+def test_holdout_is_blocked_until_paired_sensitivity_outcomes_exist(tmp_path):
+    with pytest.raises(SystemExit, match="paired shared-ta sensitivity outcome runner"):
+        main(["--window", "holdout", "--cache-root", str(tmp_path)])
 
 
 def _tv_identity(**overrides) -> dict:

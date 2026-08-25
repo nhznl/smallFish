@@ -18,6 +18,17 @@ qty_percent_of_equity: 100.0
 commission: 0.0
 slippage: 0.0
 calculate_divergence: false
+
+implementation_sensitivity:
+  primary: pine
+  variant: shared_ta
+  label: IMPLEMENTATION_SENSITIVITY
+  use_primary_parameters: true
+  supertrend_recurrence: pine
+  cohorts: [primary, stocks]
+  paired_holdout_required: true
+  primary_verdict_eligible: false
+
 development_start: '1999-01-01'
 development_end: '2021-12-31'
 holdout_start: '2022-01-01'

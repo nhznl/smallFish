@@ -94,19 +94,25 @@ def pine_atr(high: np.ndarray, low: np.ndarray, close: np.ndarray,
     return pine_rma(pine_true_range(high, low, close), length)
 
 
-def pine_supertrend(high: np.ndarray, low: np.ndarray, close: np.ndarray,
-                    factor: float = 2.5, atr_period: int = 10
-                    ) -> tuple[np.ndarray, np.ndarray]:
-    """TradingView ``ta.supertrend`` band ratchet and direction.
+def supertrend_from_atr(high: np.ndarray, low: np.ndarray, close: np.ndarray,
+                        atr: np.ndarray, factor: float = 2.5
+                        ) -> tuple[np.ndarray, np.ndarray]:
+    """Apply the TradingView SuperTrend band recurrence to a supplied ATR.
 
     Direction is ``-1`` in an uptrend (line below price) and ``+1`` in a
     downtrend. ``ta.change(direction) > 0`` is therefore ``-1`` to ``+1``.
+
+    Supplying ATR separately lets the implementation-sensitivity variant use
+    smallFish's shared ATR while keeping every SuperTrend state transition
+    rule identical to the Pine replication.
     """
     high = np.asarray(high, dtype="float64")
     low = np.asarray(low, dtype="float64")
     close = np.asarray(close, dtype="float64")
+    atr = np.asarray(atr, dtype="float64")
     n = len(close)
-    atr = pine_atr(high, low, close, atr_period)
+    if len(high) != n or len(low) != n or len(atr) != n:
+        raise ValueError("SuperTrend inputs must have equal lengths")
     src = (high + low) / 2.0
     st = np.full(n, np.nan, dtype="float64")
     direction = np.full(n, np.nan, dtype="float64")
@@ -134,6 +140,14 @@ def pine_supertrend(high: np.ndarray, low: np.ndarray, close: np.ndarray,
             direction[i] = 1.0 if close[i] < lower[i] else -1.0
         st[i] = lower[i] if direction[i] == -1.0 else upper[i]
     return st, direction
+
+
+def pine_supertrend(high: np.ndarray, low: np.ndarray, close: np.ndarray,
+                    factor: float = 2.5, atr_period: int = 10
+                    ) -> tuple[np.ndarray, np.ndarray]:
+    """TradingView ``ta.supertrend`` using Pine-compatible ``ta.atr``."""
+    atr = pine_atr(high, low, close, atr_period)
+    return supertrend_from_atr(high, low, close, atr, factor)
 
 
 def bull_cross(rsi: np.ndarray, signal: np.ndarray) -> np.ndarray:

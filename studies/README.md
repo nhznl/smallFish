@@ -130,8 +130,9 @@ studies/
     └── README.md                      operational runner notes
 ```
 
-The RSI/SuperTrend package is implemented. The 2022–2025 holdout has not been
-authorized and must not be run from this stage.
+The RSI/SuperTrend Pine emulator and Pine/shared-TA indicator providers are
+implemented. Paired sensitivity outcome artifacts remain pending. The
+2022–2025 holdout has not been authorized and is blocked in code at this stage.
 
 Studies share the `utilities/.venv` environment and may import `models/` and
 `utilities/`. Nothing in `stock-app/` may import them.

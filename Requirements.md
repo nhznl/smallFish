@@ -115,8 +115,10 @@ implementation in [`studies/rsi_supertrend/`](studies/rsi_supertrend/). The
 dated protocol remains frozen in
 [`studies/rsi_supertrend/rsi_supertrend_study_spec.md`](studies/rsi_supertrend/rsi_supertrend_study_spec.md).
 Implementation is present; the one-shot 2022–2025 holdout is not authorized
-until independent review accepts Stage 1. The current-universe stock cohort is
-exploratory and survivorship-biased.
+until the paired Pine/shared-TA sensitivity outcome runner is implemented and
+independent review accepts Stage 1. The indicator providers are implemented,
+but no sensitivity outcome has been calculated. The current-universe stock
+cohort is exploratory and survivorship-biased.
 
 Ticker-clustered trade confidence intervals, point-in-time data acquisition,
 full event-source parity, and a new prospective validation remain deferred for

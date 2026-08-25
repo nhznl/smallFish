@@ -54,6 +54,16 @@ FROZEN_CONFIG = {
     "commission": 0.0,
     "slippage": 0.0,
     "calculate_divergence": False,
+    "implementation_sensitivity": {
+        "primary": "pine",
+        "variant": "shared_ta",
+        "label": "IMPLEMENTATION_SENSITIVITY",
+        "use_primary_parameters": True,
+        "supertrend_recurrence": "pine",
+        "cohorts": ["primary", "stocks"],
+        "paired_holdout_required": True,
+        "primary_verdict_eligible": False,
+    },
     "development_start": "1999-01-01",
     "development_end": "2021-12-31",
     "holdout_start": "2022-01-01",
@@ -915,6 +925,10 @@ def main(argv: list[str] | None = None) -> int:
     parity_report = None
     parity_report_path = None
     if args.window == "holdout":
+        if cfg["implementation_sensitivity"]["paired_holdout_required"]:
+            raise SystemExit(
+                "holdout blocked until the paired shared-ta sensitivity outcome "
+                "runner and artifacts are implemented and independently reviewed")
         if not args.include_stocks:
             raise SystemExit("holdout requires --include-stocks")
         if args.tradingview_export is None:
