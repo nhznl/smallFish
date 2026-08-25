@@ -21,6 +21,8 @@ COMPARISON_SCHEMA = "smallfish.rsi-supertrend-implementation-comparison"
 
 SYMBOL_COMPARISON_REQUIRED = frozenset({
     "symbol",
+    "indicator_comparison_scope",
+    "causal_pre_window_indicator_diagnostics",
     "rsi_defined_mask_mismatches",
     "rsi_max_abs_diff",
     "rsi_sma_defined_mask_mismatches",
@@ -48,6 +50,8 @@ COHORT_COMPARISON_REQUIRED = frozenset({
     "schema_version",
     "study_id",
     "window",
+    "indicator_comparison_scope",
+    "causal_pre_window_diagnostics_included",
     "cohort",
     "implementations",
     "evidence_label",
@@ -89,10 +93,15 @@ def _dates_where(mask: np.ndarray, dates: pd.DatetimeIndex) -> list[str]:
 
 
 def compare_indicator_series(pine: StrategyIndicators, shared: StrategyIndicators,
-                             dates: pd.DatetimeIndex) -> dict:
+                             dates: pd.DatetimeIndex, *,
+                             include_mask: np.ndarray | None = None) -> dict:
     """Defined-mask, magnitude, and Boolean signal mismatches for one symbol."""
     if len(pine.rsi) != len(shared.rsi) or len(pine.rsi) != len(dates):
         raise ValueError("paired indicator series and dates must have equal length")
+    scope = (np.ones(len(dates), dtype=bool) if include_mask is None
+             else np.asarray(include_mask, dtype=bool))
+    if scope.ndim != 1 or len(scope) != len(dates):
+        raise ValueError("indicator comparison mask and dates must have equal length")
     both_dir = np.isfinite(pine.direction) & np.isfinite(shared.direction)
     direction_mismatch = np.zeros(len(dates), dtype=bool)
     direction_mismatch[both_dir] = pine.direction[both_dir] != shared.direction[both_dir]
@@ -101,22 +110,46 @@ def compare_indicator_series(pine: StrategyIndicators, shared: StrategyIndicator
     shared_flips = supertrend_exit_flips(shared.direction)
     flip_mismatch = pine_flips != shared_flips
     return {
-        "rsi_defined_mask_mismatches": defined_mask_mismatches(pine.rsi, shared.rsi),
-        "rsi_max_abs_diff": max_abs_diff(pine.rsi, shared.rsi),
+        "rsi_defined_mask_mismatches": defined_mask_mismatches(
+            pine.rsi[scope], shared.rsi[scope]),
+        "rsi_max_abs_diff": max_abs_diff(pine.rsi[scope], shared.rsi[scope]),
         "rsi_sma_defined_mask_mismatches": defined_mask_mismatches(
-            pine.signal, shared.signal),
-        "rsi_sma_max_abs_diff": max_abs_diff(pine.signal, shared.signal),
-        "atr_defined_mask_mismatches": defined_mask_mismatches(pine.atr, shared.atr),
-        "atr_max_abs_diff": max_abs_diff(pine.atr, shared.atr),
+            pine.signal[scope], shared.signal[scope]),
+        "rsi_sma_max_abs_diff": max_abs_diff(
+            pine.signal[scope], shared.signal[scope]),
+        "atr_defined_mask_mismatches": defined_mask_mismatches(
+            pine.atr[scope], shared.atr[scope]),
+        "atr_max_abs_diff": max_abs_diff(pine.atr[scope], shared.atr[scope]),
         "supertrend_defined_mask_mismatches": defined_mask_mismatches(
-            pine.supertrend, shared.supertrend),
-        "supertrend_max_abs_diff": max_abs_diff(pine.supertrend, shared.supertrend),
-        "supertrend_direction_mismatch_count": int(direction_mismatch.sum()),
-        "supertrend_direction_mismatch_dates": _dates_where(direction_mismatch, dates),
-        "special_buy_mismatch_count": int(special_mismatch.sum()),
-        "special_buy_mismatch_dates": _dates_where(special_mismatch, dates),
-        "supertrend_exit_flip_mismatch_count": int(flip_mismatch.sum()),
-        "supertrend_exit_flip_mismatch_dates": _dates_where(flip_mismatch, dates),
+            pine.supertrend[scope], shared.supertrend[scope]),
+        "supertrend_max_abs_diff": max_abs_diff(
+            pine.supertrend[scope], shared.supertrend[scope]),
+        "supertrend_direction_mismatch_count": int((direction_mismatch & scope).sum()),
+        "supertrend_direction_mismatch_dates": _dates_where(
+            direction_mismatch & scope, dates),
+        "special_buy_mismatch_count": int((special_mismatch & scope).sum()),
+        "special_buy_mismatch_dates": _dates_where(special_mismatch & scope, dates),
+        "supertrend_exit_flip_mismatch_count": int((flip_mismatch & scope).sum()),
+        "supertrend_exit_flip_mismatch_dates": _dates_where(flip_mismatch & scope, dates),
+    }
+
+
+def _scope_metadata(name: str, dates: pd.DatetimeIndex,
+                    mask: np.ndarray, *, registered_start: pd.Timestamp | None = None,
+                    registered_end: pd.Timestamp | None = None,
+                    exclusive_end: pd.Timestamp | None = None) -> dict:
+    scoped_dates = dates[np.asarray(mask, dtype=bool)]
+    return {
+        "name": name,
+        "registered_start": (
+            None if registered_start is None else str(registered_start.date())),
+        "registered_end": None if registered_end is None else str(registered_end.date()),
+        "exclusive_end": None if exclusive_end is None else str(exclusive_end.date()),
+        "first_observation": (
+            None if len(scoped_dates) == 0 else str(pd.Timestamp(scoped_dates[0]).date())),
+        "last_observation": (
+            None if len(scoped_dates) == 0 else str(pd.Timestamp(scoped_dates[-1]).date())),
+        "observation_count": int(len(scoped_dates)),
     }
 
 
@@ -202,12 +235,31 @@ def symbol_has_fill_mismatch(row: dict) -> bool:
 
 
 def compare_symbol(symbol: str, dates: pd.DatetimeIndex, pine_sleeve,
-                   shared_sleeve, pine_row: dict, shared_row: dict) -> dict:
+                   shared_sleeve, pine_row: dict, shared_row: dict, *,
+                   window_start, window_end) -> dict:
     if pine_sleeve.indicators is None or shared_sleeve.indicators is None:
         raise ValueError(f"{symbol}: paired indicator series are missing")
+    dates = pd.DatetimeIndex(pd.to_datetime(dates))
+    start = pd.Timestamp(window_start)
+    end = pd.Timestamp(window_end)
+    evaluation_mask = np.asarray((dates >= start) & (dates <= end), dtype=bool)
+    causal_pre_window_mask = np.asarray(dates < start, dtype=bool)
     row = {
-        **compare_indicator_series(pine_sleeve.indicators, shared_sleeve.indicators, dates),
+        **compare_indicator_series(
+            pine_sleeve.indicators, shared_sleeve.indicators, dates,
+            include_mask=evaluation_mask),
         **compare_symbol_outcomes(symbol, pine_sleeve, shared_sleeve, pine_row, shared_row),
+        "indicator_comparison_scope": _scope_metadata(
+            "evaluation_window", dates, evaluation_mask,
+            registered_start=start, registered_end=end),
+        "causal_pre_window_indicator_diagnostics": {
+            "scope": _scope_metadata(
+                "causal_pre_window", dates, causal_pre_window_mask,
+                exclusive_end=start),
+            "metrics": compare_indicator_series(
+                pine_sleeve.indicators, shared_sleeve.indicators, dates,
+                include_mask=causal_pre_window_mask),
+        },
     }
     row["symbol"] = symbol
     missing = SYMBOL_COMPARISON_REQUIRED - row.keys()
@@ -287,9 +339,11 @@ def build_cohort_comparison(pine_result: dict, shared_result: dict,
         diagnostic_verdict=diagnostic)
     report = {
         "schema_name": COMPARISON_SCHEMA,
-        "schema_version": 1,
+        "schema_version": 2,
         "study_id": cfg["study_id"],
         "window": window,
+        "indicator_comparison_scope": "evaluation_window",
+        "causal_pre_window_diagnostics_included": True,
         "cohort": cohort,
         "implementations": [PINE_IMPLEMENTATION, SHARED_TA_IMPLEMENTATION],
         "evidence_label": IMPLEMENTATION_SENSITIVITY_LABEL,
@@ -327,8 +381,15 @@ def build_cohort_comparison(pine_result: dict, shared_result: dict,
 def symbol_rows_to_frame(rows: list[dict]) -> pd.DataFrame:
     records = []
     for row in rows:
+        scope = row["indicator_comparison_scope"]
+        causal = row["causal_pre_window_indicator_diagnostics"]
+        causal_scope = causal["scope"]
+        causal_metrics = causal["metrics"]
         records.append({
             "symbol": row["symbol"],
+            "indicator_comparison_start": scope["registered_start"],
+            "indicator_comparison_end": scope["registered_end"],
+            "indicator_comparison_observations": scope["observation_count"],
             "rsi_defined_mask_mismatches": row["rsi_defined_mask_mismatches"],
             "rsi_max_abs_diff": row["rsi_max_abs_diff"],
             "rsi_sma_defined_mask_mismatches": row["rsi_sma_defined_mask_mismatches"],
@@ -349,9 +410,34 @@ def symbol_rows_to_frame(rows: list[dict]) -> pd.DataFrame:
             "strategy_return_difference": row["strategy_return_difference"],
             "exposure_difference": row["exposure_difference"],
             "max_drawdown_difference": row["max_drawdown_difference"],
+            "causal_pre_window_start": causal_scope["first_observation"],
+            "causal_pre_window_end": causal_scope["last_observation"],
+            "causal_pre_window_observations": causal_scope["observation_count"],
+            "causal_pre_window_rsi_defined_mask_mismatches": causal_metrics[
+                "rsi_defined_mask_mismatches"],
+            "causal_pre_window_rsi_max_abs_diff": causal_metrics["rsi_max_abs_diff"],
+            "causal_pre_window_rsi_sma_defined_mask_mismatches": causal_metrics[
+                "rsi_sma_defined_mask_mismatches"],
+            "causal_pre_window_rsi_sma_max_abs_diff": causal_metrics[
+                "rsi_sma_max_abs_diff"],
+            "causal_pre_window_atr_defined_mask_mismatches": causal_metrics[
+                "atr_defined_mask_mismatches"],
+            "causal_pre_window_atr_max_abs_diff": causal_metrics["atr_max_abs_diff"],
+            "causal_pre_window_supertrend_defined_mask_mismatches": causal_metrics[
+                "supertrend_defined_mask_mismatches"],
+            "causal_pre_window_supertrend_max_abs_diff": causal_metrics[
+                "supertrend_max_abs_diff"],
+            "causal_pre_window_supertrend_direction_mismatch_count": causal_metrics[
+                "supertrend_direction_mismatch_count"],
+            "causal_pre_window_special_buy_mismatch_count": causal_metrics[
+                "special_buy_mismatch_count"],
+            "causal_pre_window_supertrend_exit_flip_mismatch_count": causal_metrics[
+                "supertrend_exit_flip_mismatch_count"],
         })
     columns = [
         "symbol",
+        "indicator_comparison_start", "indicator_comparison_end",
+        "indicator_comparison_observations",
         "rsi_defined_mask_mismatches", "rsi_max_abs_diff",
         "rsi_sma_defined_mask_mismatches", "rsi_sma_max_abs_diff",
         "atr_defined_mask_mismatches", "atr_max_abs_diff",
@@ -364,6 +450,19 @@ def symbol_rows_to_frame(rows: list[dict]) -> pd.DataFrame:
         "matching_fill_price_difference_count",
         "trade_count_difference", "strategy_return_difference",
         "exposure_difference", "max_drawdown_difference",
+        "causal_pre_window_start", "causal_pre_window_end",
+        "causal_pre_window_observations",
+        "causal_pre_window_rsi_defined_mask_mismatches",
+        "causal_pre_window_rsi_max_abs_diff",
+        "causal_pre_window_rsi_sma_defined_mask_mismatches",
+        "causal_pre_window_rsi_sma_max_abs_diff",
+        "causal_pre_window_atr_defined_mask_mismatches",
+        "causal_pre_window_atr_max_abs_diff",
+        "causal_pre_window_supertrend_defined_mask_mismatches",
+        "causal_pre_window_supertrend_max_abs_diff",
+        "causal_pre_window_supertrend_direction_mismatch_count",
+        "causal_pre_window_special_buy_mismatch_count",
+        "causal_pre_window_supertrend_exit_flip_mismatch_count",
     ]
     return pd.DataFrame(records, columns=columns)
 

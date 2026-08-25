@@ -164,6 +164,11 @@ Required comparison evidence:
 - whether the shared-TA bootstrap verdict category would differ, reported only
   as a secondary diagnostic.
 
+Top-level indicator comparison metrics are scoped to the registered evaluation
+window. Because both implementations receive causal pre-window history, any
+pre-window indicator differences are preserved as separately labeled
+diagnostics and are not mixed into the evaluation-window counts.
+
 Any primary-symbol fill mismatch is a behavioral implementation difference. A
 different bootstrap verdict category is inferentially material, but neither can
 replace, rescue, or reverse the Pine primary verdict.

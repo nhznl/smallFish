@@ -38,6 +38,7 @@ from studies.rsi_supertrend.comparison import (
     IMPLEMENTATION_SENSITIVITY_LABEL,
     build_cohort_comparison,
     compare_indicator_series,
+    compare_symbol,
     compare_symbol_outcomes,
     label_shared_ta_summary,
     require_complete_paired_result,
@@ -898,6 +899,9 @@ def test_paired_pine_outcomes_match_pine_only_contract(tmp_path):
     pd.testing.assert_frame_equal(pine_only["daily"], paired_pine["daily"])
     pd.testing.assert_frame_equal(pine_only["trades"], paired_pine["trades"])
     assert list(paired_pine["instruments"].columns) == list(PINE_INSTRUMENT_COLUMNS)
+    assert "exposure" in paired_pine["instruments"].columns
+    assert paired_pine["instruments"]["exposure"].between(0.0, 1.0).all()
+    assert "exposure" in paired_shared["instruments"].columns
     assert paired_pine["summary"]["verdict"] == pine_only["summary"]["verdict"]
     assert paired_pine["summary"]["evidence_label"] == "DEVELOPMENT"
     assert paired_shared["summary"]["evidence_label"] == IMPLEMENTATION_SENSITIVITY_LABEL
@@ -1027,6 +1031,37 @@ def _sleeve_from_trades(trades: list[dict], exposure: float = 0.4) -> SleeveResu
             direction=np.full(8, -1.0), special_buy=np.zeros(8, dtype=bool),
         ),
     )
+
+
+def test_symbol_indicator_comparison_separates_evaluation_and_causal_history():
+    dates = pd.bdate_range("2009-12-30", periods=8)
+    pine = _sleeve_from_trades([])
+    shared = _sleeve_from_trades([])
+    shared.indicators.rsi[0] = 1.0
+    shared.indicators.special_buy[1] = True
+    row = compare_symbol(
+        "SPY", dates, pine, shared,
+        {"strategy_return": 0.0, "max_drawdown": 0.0},
+        {"strategy_return": 0.0, "max_drawdown": 0.0},
+        window_start="2010-01-01", window_end="2010-01-08",
+    )
+
+    assert row["indicator_comparison_scope"] == {
+        "name": "evaluation_window",
+        "registered_start": "2010-01-01",
+        "registered_end": "2010-01-08",
+        "exclusive_end": None,
+        "first_observation": "2010-01-01",
+        "last_observation": "2010-01-08",
+        "observation_count": 6,
+    }
+    assert row["rsi_max_abs_diff"] == 0.0
+    assert row["special_buy_mismatch_count"] == 0
+    causal = row["causal_pre_window_indicator_diagnostics"]
+    assert causal["scope"]["exclusive_end"] == "2010-01-01"
+    assert causal["scope"]["observation_count"] == 2
+    assert causal["metrics"]["rsi_max_abs_diff"] == 1.0
+    assert causal["metrics"]["special_buy_mismatch_count"] == 1
 
 
 def test_identical_fills_have_empty_bidirectional_difference_sets():
@@ -1177,6 +1212,16 @@ def test_new_paired_artifacts_are_hashed_in_the_manifest(tmp_path):
         assert (run_dir / name).is_file()
     assert list(pd.read_csv(run_dir / "instrument_summary.csv").columns) == list(
         PINE_INSTRUMENT_COLUMNS)
+    for name in (
+            "instrument_summary.csv", "stock_instrument_summary.csv",
+            "shared_ta_instrument_summary.csv", "shared_ta_stock_instrument_summary.csv"):
+        frame = pd.read_csv(run_dir / name)
+        assert "exposure" in frame.columns
+        assert frame["exposure"].between(0.0, 1.0).all()
+    comparison_frame = pd.read_csv(run_dir / "implementation_comparison_by_symbol.csv")
+    assert set(comparison_frame["indicator_comparison_start"]) == {"2010-01-04"}
+    assert set(comparison_frame["indicator_comparison_end"]) == {"2010-04-23"}
+    assert "causal_pre_window_observations" in comparison_frame.columns
     assert manifest["indicator_implementations"] == [
         PINE_IMPLEMENTATION, SHARED_TA_IMPLEMENTATION]
 

@@ -52,13 +52,13 @@ Pine artifact names are unchanged. Creation-only shared-TA and comparison files:
 
 | File | Contents |
 |---|---|
-| `shared_ta_instrument_summary.csv` | Shared-TA primary-cohort instrument summary |
+| `shared_ta_instrument_summary.csv` | Shared-TA primary-cohort instrument summary, including absolute exposure |
 | `shared_ta_daily_equity.csv` | Shared-TA primary-cohort daily equity |
 | `shared_ta_trades.csv` | Shared-TA primary-cohort trades |
 | `shared_ta_summary.json` | Shared-TA primary-cohort summary; not verdict-eligible |
-| `implementation_comparison.json` | Per-symbol indicator/fill/outcome diffs plus cohort deltas |
-| `implementation_comparison_by_symbol.csv` | Flattened per-symbol comparison |
-| `shared_ta_stock_instrument_summary.csv` | Shared-TA stock instrument summary (`--include-stocks`) |
+| `implementation_comparison.json` | Per-symbol evaluation-window indicator/fill/outcome diffs, separately labeled causal pre-window diagnostics, and cohort deltas |
+| `implementation_comparison_by_symbol.csv` | Flattened per-symbol comparison with explicit evaluation and pre-window scopes |
+| `shared_ta_stock_instrument_summary.csv` | Shared-TA stock instrument summary, including absolute exposure (`--include-stocks`) |
 | `shared_ta_stock_daily_equity.csv` | Shared-TA stock daily equity |
 | `shared_ta_stock_trades.csv` | Shared-TA stock trades |
 | `shared_ta_stock_summary.json` | Shared-TA stock summary; `IMPLEMENTATION_SENSITIVITY` and `EXPLORATORY` |
@@ -68,6 +68,11 @@ Pine artifact names are unchanged. Creation-only shared-TA and comparison files:
 `manifest.json` hashes every new file and records providers `pine` and
 `shared_ta`. Holdout remains refused before any claim or parity evidence is
 created.
+
+The top-level per-symbol indicator differences cover only the registered
+evaluation window. Causal history loaded before that window is retained in the
+JSON under `causal_pre_window_indicator_diagnostics` and in explicitly prefixed
+CSV columns; it is never silently mixed into the evaluation-window counts.
 
 The proposed development command, **not executed** in the implementation pass:
 
