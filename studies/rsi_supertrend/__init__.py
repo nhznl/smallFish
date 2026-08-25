@@ -1,1 +1,1 @@
-"""RSI/SuperTrend Pine replication study (frozen protocol, holdout not yet run)."""
+"""Closed RSI/SuperTrend Pine replication; holdout permanently unrun."""

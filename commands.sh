@@ -33,7 +33,7 @@
 #                     (rotation/relative-strength proxy, not measured fund flow)
 #   sector-rotation-study - frozen legacy-nine forward-leadership study
 #   sector-rotation-study-v2 - exploratory legacy-nine full-period estimate
-#   rsi-supertrend-study - frozen RSI/SuperTrend Pine replication (holdout not authorized)
+#   rsi-supertrend-study - closed RSI/SuperTrend study (holdout permanently unrun)
 #   backtest [earnings]       - strategy walk-forward backtest
 #   event-backtest [earnings] - strategy event-study backtest
 #   earnings-history - fetch historical earnings dates (requires yfinance)

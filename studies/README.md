@@ -50,14 +50,16 @@ work done afterwards, carries no verdict, and cannot rescue the first.
 Neither result lifts a product gate. The Momentum and Sectors views remain
 descriptive screens.
 
-## Frozen studies awaiting holdout
+## Closed unpublished studies
 
 [`rsi_supertrend/rsi_supertrend_study_spec.md`](rsi_supertrend/rsi_supertrend_study_spec.md)
-is the frozen design and handoff for an exact RSI/SuperTrend Pine implementation
-replication approved on 2026-08-23. Pine execution, shared-TA sensitivity
-comparison, and synthetic tests are present. There is no published artifact,
-result, or verdict. Independent review must accept this stage before the
-one-shot holdout is run.
+records the exact RSI/SuperTrend Pine replication approved on 2026-08-23 and
+closed by owner decision on 2026-08-25. The verified 1999–2021 development
+endpoint was unfavorable: its mean daily excess-return interval was entirely
+below zero. Pine and shared-TA produced identical primary fills and outcomes,
+but TradingView parity was never completed. The owner declined to spend the
+2022–2025 holdout. The study therefore remains unpublished with `NO_VERDICT`;
+the holdout must never be run under this study ID.
 
 ## How a study is published
 
@@ -131,9 +133,8 @@ studies/
     └── README.md                      operational runner notes
 ```
 
-The RSI/SuperTrend Pine emulator, Pine/shared-TA indicator providers, and paired
-sensitivity outcome artifacts are implemented. The 2022–2025 holdout has not
-been authorized and remains blocked in code pending independent review.
+The closed RSI/SuperTrend implementation remains as a reproducibility and audit
+record. Its 2022–2025 holdout was never opened and must remain unrun.
 
 Studies share the `utilities/.venv` environment and may import `models/` and
 `utilities/`. Nothing in `stock-app/` may import them.

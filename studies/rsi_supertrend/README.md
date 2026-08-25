@@ -4,34 +4,18 @@ Operational notes for `rsi-supertrend-pine-v1`. Methodology lives in
 [`rsi_supertrend_study_spec.md`](rsi_supertrend_study_spec.md) and must not be
 edited.
 
-**Holdout is not authorized and is currently blocked in code.** The paired
-Pine/shared-TA outcome runner is implemented and must be independently reviewed,
-and a real TradingView development export must pass strict parity, before
-holdout authorization. The eventual holdout command, **not executed**, is:
+**This study is closed with no verdict.** The owner reviewed the completed
+1999–2021 development evidence on 2026-08-25 and declined to run the 2022–2025
+holdout. The holdout remains unclaimed and must never be executed under this
+study ID. TradingView parity was not completed, and no result was published to
+the Research Studies catalog.
 
-```bash
-./commands.sh rsi-supertrend-study \
-  --window holdout --confirm-holdout --include-stocks \
-  --tradingview-export /absolute/path/to/tradingview_export.csv \
-  --tv-symbol SPY --tv-timeframe 1D \
-  --tv-adjustment adjusted --tv-session NYSE
-```
-
-`--include-stocks`, `--tradingview-export`, and TradingView identity
-(`--tv-symbol`, `--tv-timeframe`, `--tv-adjustment`, `--tv-session`, or a
-sidecar / constant CSV columns) are required for holdout. Keep the export
-outside the git worktree so the clean-worktree guard still passes.
-
-Holdout flow: refuse if the claim already exists, compare the export in memory,
-atomically create
-`$SFP_DATA_DIR/studies/rsi-supertrend-pine-v1/holdout/.authoritative-claim`,
-and write a creation-only `tradingview_parity.json` **inside that claim**. A
-later attempt cannot overwrite the sealed report. The claim and run manifest
-hash it.
-
-Compare-only runs write a content-addressed report under
-`$SFP_DATA_DIR/studies/rsi-supertrend-pine-v1/parity/<fixture_sha256>.json`
-(also creation-only).
+The verified creation-only development evidence is under
+`$SFP_DATA_DIR/studies/rsi-supertrend-pine-v1/development/20260825T205046Z-22ef9f8/`.
+The primary mean daily excess return was `-0.0002687539`, with a 95% interval of
+`[-0.0004224153, -0.0000917301]`. Pine and shared-TA produced identical primary
+fills and outcomes. These are unfavorable development diagnostics, not a
+confirmatory verdict.
 
 The stock cohort is labeled `EXPLORATORY` and survivorship-biased; it is never
 pooled into the primary verdict.
@@ -65,33 +49,24 @@ Pine artifact names are unchanged. Creation-only shared-TA and comparison files:
 | `stock_implementation_comparison.json` | Stock-only comparison; never mixed with the 14 ETFs |
 | `stock_implementation_comparison_by_symbol.csv` | Flattened stock comparison |
 
-`manifest.json` hashes every new file and records providers `pine` and
-`shared_ta`. Holdout remains refused before any claim or parity evidence is
-created.
+`manifest.json` hashes every file and records providers `pine` and `shared_ta`.
 
 The top-level per-symbol indicator differences cover only the registered
 evaluation window. Causal history loaded before that window is retained in the
 JSON under `causal_pre_window_indicator_diagnostics` and in explicitly prefixed
 CSV columns; it is never silently mixed into the evaluation-window counts.
 
-The proposed development command, **not executed** in the implementation pass:
+The command that produced the retained development evidence was:
 
 ```bash
 ./commands.sh rsi-supertrend-study --window development --include-stocks
 ```
 
-## Runner
+## Archived runner
 
-```bash
-./commands.sh rsi-supertrend-study --window development
-./commands.sh rsi-supertrend-study --validate-coverage
-./commands.sh rsi-supertrend-study --validate-coverage --coverage-start 2022-01-01 --coverage-end 2025-12-31
-./commands.sh rsi-supertrend-study \
-  --compare-tradingview \
-  --tradingview-export /path/to/export.csv \
-  --tv-symbol SPY --tv-timeframe 1D \
-  --tv-adjustment adjusted --tv-session NYSE
-```
+The runner and verification helpers remain for reproducibility and code history.
+Do not start another development run, TradingView comparison, or holdout run for
+this closed study ID.
 
 The coverage command inspects file presence and OHLCV validity only. It does
 not compute signals, trades, equity, or inference.
@@ -106,6 +81,6 @@ This study is not in the published catalog. `stock-app/` must not import it.
 [`source.pine`](source.pine) is the pasted executable Pine. Do not retune its
 inputs.
 
-A TradingView development export is not in the repository. See
-[`fixtures/README.md`](fixtures/README.md). Pine parity cannot be claimed from
-self-consistency alone.
+A TradingView development export is not in the repository. Pine parity was not
+claimed from self-consistency alone and is no longer planned for this closed
+study.

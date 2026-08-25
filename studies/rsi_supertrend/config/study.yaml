@@ -1,6 +1,8 @@
-# Frozen RSI/SuperTrend Pine replication. Protocol:
+# Closed RSI/SuperTrend Pine replication; frozen parameters retained for audit.
+# Protocol and closure record:
 # studies/rsi_supertrend/rsi_supertrend_study_spec.md, frozen 2026-08-23
-# before any 2022-2025 strategy result was observed.
+# before any 2022-2025 strategy result was observed; closed 2026-08-25 without
+# running that holdout.
 schema_name: smallfish.rsi-supertrend-study
 schema_version: 1
 study_id: rsi-supertrend-pine-v1

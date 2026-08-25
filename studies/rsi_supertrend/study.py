@@ -1,7 +1,7 @@
-"""Frozen RSI/SuperTrend Pine replication study runner.
+"""Archived runner for the closed RSI/SuperTrend Pine replication.
 
-Stage 1 may use the development window. The 2022-2025 holdout requires
-``--confirm-holdout`` and is not executed in this implementation pass.
+The retained implementation reproduces the development evidence. The 2022-2025
+holdout was permanently declined and remains blocked.
 """
 
 from __future__ import annotations
@@ -1210,8 +1210,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.window == "holdout":
         if cfg["implementation_sensitivity"]["paired_holdout_required"]:
             raise SystemExit(
-                "holdout blocked until the paired shared-ta sensitivity outcome "
-                "runner and artifacts are implemented and independently reviewed")
+                "holdout permanently blocked: this study was closed by owner decision "
+                "without running the 2022-2025 holdout")
         if not args.include_stocks:
             raise SystemExit("holdout requires --include-stocks")
         if args.tradingview_export is None:

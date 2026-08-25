@@ -222,7 +222,7 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh backtest [earnings]` | Strategy walk-forward backtest |
 | `./commands.sh event-backtest [earnings]` | Strategy event-study backtest |
 | `./commands.sh sector-rotation-study[-v2]` | Reproduce a frozen study run (`--verify-run PATH`) |
-| `./commands.sh rsi-supertrend-study` | RSI/SuperTrend Pine replication (development only; holdout not authorized) |
+| `./commands.sh rsi-supertrend-study` | Closed RSI/SuperTrend replication (archival; holdout permanently unrun) |
 
 ## Testing
 

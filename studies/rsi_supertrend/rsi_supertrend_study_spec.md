@@ -1,19 +1,24 @@
-# RSI/SuperTrend Pine replication — design and implementation handoff
+# RSI/SuperTrend Pine replication — protocol and closure record
 
 **Design opened:** 2026-08-23
 
 **Study ID:** `rsi-supertrend-pine-v1`
 
-**Protocol status:** `FROZEN — HOLDOUT NOT YET RUN`
+**Protocol status:** `CLOSED — HOLDOUT PERMANENTLY NOT RUN — NO VERDICT`
 
 **Protocol frozen:** 2026-08-23
 
 **Protocol amended:** 2026-08-25, before any 2022–2025 strategy result, to add
 the owner-approved shared-TA implementation sensitivity.
 
+**Study closed:** 2026-08-25, by owner decision after reviewing the completed
+1999–2021 development run. The 2022–2025 holdout was not opened and will not be
+run under this study ID.
+
 **Work status:** Pine execution, both indicator providers, and paired
-sensitivity outcome artifacts are implemented; independent review of this
-stage is required before holdout authorization.
+sensitivity outcome artifacts were implemented and verified. Development
+evidence was unfavorable, TradingView parity was never completed, and the study
+was closed without a confirmatory result.
 
 **Source:** supplied Pine Script v6
 
@@ -146,11 +151,11 @@ Everything downstream of indicator calculation is shared byte-for-byte:
 zero costs, sleeve accounting, cohort aggregation, and bootstrap inference.
 Do not build a second emulator.
 
-The paired comparison covers the primary ETFs and the separately labeled stock
-cohort in development. When holdout is eventually authorized, both providers
-must run in the same authoritative one-shot command and claim; never open the
-holdout once for Pine and again for shared TA. The Pine result remains solely
-eligible for the primary verdict. Shared-TA outputs are labeled
+The paired comparison covered the primary ETFs and the separately labeled stock
+cohort in development. Under the original protocol, both providers would have
+run in the same authoritative one-shot holdout command and claim. That holdout
+was permanently declined. The Pine result remains solely eligible for the
+primary verdict. Shared-TA outputs are labeled
 `IMPLEMENTATION_SENSITIVITY`; stock outputs retain the additional
 `EXPLORATORY` and survivorship-bias labels.
 
@@ -282,9 +287,10 @@ components:
   `--confirm-holdout`, a clean committed worktree, and no prior authoritative
   holdout directory.
 
-Before relying on local calculations, compare fixed development fixtures with
-a TradingView export using the same symbol, daily timeframe, price adjustment,
-session, and input settings. Record any irreducible rounding/provider drift.
+The original protocol required fixed development fixtures to be compared with a
+TradingView export using the same symbol, daily timeframe, price adjustment,
+session, and input settings before relying on local calculations. That parity
+step was not completed before closure; no Pine/TradingView parity claim exists.
 
 The FastAPI runtime must not import study code. After independent result
 verification, add a materialized `data/studies/<id>/study.json` and catalog
@@ -318,6 +324,12 @@ Do not commit raw price data or stock-level position artifacts. The catalog may
 publish aggregate statistics only.
 
 ## 10. Implementation, review, and run gates
+
+**Closure supersedes the prospective workflow below.** It is retained as the
+original preregistered procedure, not as authorization for further execution.
+Stage 2 never began: no holdout calculation, authoritative claim, TradingView
+parity report, or published study artifact exists. The owner permanently closed
+this study ID on 2026-08-25.
 
 Stage 1 is implementation only. The implementation agent may use the
 development window for tests and parity, but must not execute the 2022–2025
@@ -381,3 +393,21 @@ verification may a separate publication change expose the aggregate result in
   covered with synthetic tests. No real development cohort was run, and no
   2022–2025 strategy result, authoritative claim, or TradingView parity report
   was created.
+- 2026-08-25: The complete 14-ETF development cohort and the separately labeled
+  exploratory current-stock cohort were run once for 1999–2021 from commit
+  `22ef9f8a499bdd212d95f72127332f6a09c9f58a`. The creation-only evidence is
+  recorded under
+  `$SFP_DATA_DIR/studies/rsi-supertrend-pine-v1/development/20260825T205046Z-22ef9f8/`.
+  All 14 primary ETFs were included with no primary exclusions. Pine and
+  shared-TA produced identical primary fills and outcomes. The Pine primary
+  development endpoint was mean daily excess return `-0.0002687539`, with a
+  95% block-bootstrap interval of `[-0.0004224153, -0.0000917301]`. The strategy
+  returned 112.8% versus 679.6% for equal-weight buy-and-hold and beat none of
+  the 14 individual buy-and-hold sleeves. These are development diagnostics,
+  not a registered verdict.
+- 2026-08-25: After reviewing that unfavorable development evidence, the owner
+  declined to spend the 2022–2025 holdout and permanently closed the study.
+  TradingView parity was not performed. No holdout strategy result,
+  authoritative holdout claim, parity report, catalog entry, or app publication
+  was created. This study remains `NO_VERDICT` and must not be reopened or
+  presented as confirmatory evidence.

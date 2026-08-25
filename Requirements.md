@@ -110,16 +110,6 @@ verification package. The safety-critical parts — fail-closed quote quality,
 exact contract identity, immutable archives, deterministic archive
 verification — are done; these are the completeness items.
 
-**Stock-strategy studies.** The RSI/SuperTrend Pine replication has an
-implementation in [`studies/rsi_supertrend/`](studies/rsi_supertrend/). The
-dated protocol remains frozen in
-[`studies/rsi_supertrend/rsi_supertrend_study_spec.md`](studies/rsi_supertrend/rsi_supertrend_study_spec.md).
-Implementation is present; the one-shot 2022–2025 holdout is not authorized
-until independent review accepts the paired Pine/shared-TA sensitivity outcome
-runner. That runner is implemented and covered by synthetic tests; no real
-development cohort or sensitivity outcome has been calculated. The
-current-universe stock cohort is exploratory and survivorship-biased.
-
 Ticker-clustered trade confidence intervals, point-in-time data acquisition,
 full event-source parity, and a new prospective validation remain deferred for
 the earlier completed studies. Their documented limitations remain unchanged
@@ -128,6 +118,18 @@ and they must never be promoted as validated edge evidence.
 ## Standing decisions
 
 These are settled. Treat them as constraints, not open questions.
+
+**The RSI/SuperTrend study is permanently closed without a holdout**
+(2026-08-25). The complete 1999–2021 development run was technically valid but
+unfavorable: the primary mean daily excess-return interval was entirely below
+zero, and the strategy underperformed buy-and-hold in all 14 primary ETFs.
+Pine/shared-TA primary outcomes were identical, but TradingView parity was not
+completed. The owner declined to run the 2022–2025 holdout. Study
+`rsi-supertrend-pine-v1` remains unpublished with `NO_VERDICT`; do not run its
+holdout, reopen it, or present its development result as confirmatory evidence.
+The current-universe stock cohort remains exploratory and survivorship-biased.
+See
+[`studies/rsi_supertrend/rsi_supertrend_study_spec.md`](studies/rsi_supertrend/rsi_supertrend_study_spec.md).
 
 **The 11-sector page is permanently descriptive** (2026-07-26). It must never be
 promoted as a predictive signal or an edge claim. A complete 11-sector history

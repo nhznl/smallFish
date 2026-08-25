@@ -389,8 +389,8 @@ def test_corrupt_primary_data_fails_closed(tmp_path):
         raise AssertionError("corrupt primary ETF history must fail closed")
 
 
-def test_holdout_is_blocked_until_paired_sensitivity_outcomes_exist(tmp_path):
-    with pytest.raises(SystemExit, match="paired shared-ta sensitivity outcome runner"):
+def test_closed_study_permanently_blocks_holdout(tmp_path):
+    with pytest.raises(SystemExit, match="study was closed by owner decision"):
         main(["--window", "holdout", "--cache-root", str(tmp_path)])
 
 
@@ -1268,7 +1268,7 @@ def test_missing_or_incomplete_paired_results_fail_closed(tmp_path):
 def test_holdout_remains_blocked_before_claim_or_parity_evidence(tmp_path):
     export = tmp_path / "tradingview_export.csv"
     export.write_text("date,open,high,low,close\n", encoding="utf-8")
-    with pytest.raises(SystemExit, match="paired shared-ta sensitivity outcome runner"):
+    with pytest.raises(SystemExit, match="study was closed by owner decision"):
         main([
             "--window", "holdout",
             "--confirm-holdout",
