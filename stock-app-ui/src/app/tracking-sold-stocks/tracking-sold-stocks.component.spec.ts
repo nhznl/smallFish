@@ -1,7 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ChangeDetectorRef } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { MatTooltip } from '@angular/material/tooltip';
 import { of } from 'rxjs';
 import { TrackingSoldStocksComponent } from './tracking-sold-stocks.component';
 import { TrackedStockService } from '../api/tracked-stock.service';
@@ -75,5 +78,55 @@ describe('TrackingSoldStocksComponent', () => {
     expect(text).toContain('Copy symbols');
     expect(text).toContain('Coverage vs SPY');
     expect(text).toContain('Snapshot Coverage vs SPY');
+  });
+
+  function setNotes(notes: string): void {
+    fixture.componentInstance.rows[0].notes = notes;
+    fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
+    fixture.detectChanges();
+  }
+
+  it('ellipsizes long and multiline notes without widening the table or growing the row', () => {
+    setNotes('Short note');
+    const element = fixture.nativeElement as HTMLElement;
+    const table = element.querySelector('table')!;
+    const row = element.querySelector('tbody tr')!;
+    const preview = element.querySelector<HTMLElement>('.row-meta')!;
+    const tableWidth = table.getBoundingClientRect().width;
+    const rowHeight = row.getBoundingClientRect().height;
+    for (const notes of ['Long watch-list context. '.repeat(80), 'X'.repeat(2_000), 'First line\nSecond line\n'.repeat(50)]) {
+      setNotes(notes);
+      const styles = getComputedStyle(preview);
+      expect(styles.whiteSpace).toBe('nowrap');
+      expect(styles.overflow).toBe('hidden');
+      expect(styles.textOverflow).toBe('ellipsis');
+      expect(preview.getBoundingClientRect().width).toBe(160);
+      expect(preview.scrollWidth).toBeGreaterThan(preview.clientWidth);
+      expect(table.getBoundingClientRect().width).toBeCloseTo(tableWidth, 1);
+      expect(row.getBoundingClientRect().height).toBeCloseTo(rowHeight, 1);
+      expect(preview.textContent).toContain(notes);
+    }
+  });
+
+  it('keeps the full note available to the tooltip and edit form', async () => {
+    const notes = 'Full synthetic note with a long explanation. '.repeat(20).trim();
+    setNotes(notes);
+    const preview = fixture.debugElement.query(By.css('.row-meta'));
+    expect(preview.injector.get(MatTooltip).message).toBe(notes);
+    expect(preview.nativeElement.getAttribute('tabindex')).toBe('0');
+    fixture.componentInstance.openEdit(fixture.componentInstance.rows[0]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const textarea = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLTextAreaElement>('textarea[name="editNotes"]')!;
+    expect(textarea.value).toBe(notes);
+    expect(fixture.componentInstance.rows[0].notes).toBe(notes);
+    fixture.componentInstance.closeEdit();
+    fixture.detectChanges();
+  });
+
+  it('does not render an empty notes preview', () => {
+    setNotes('');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.row-meta')).toBeNull();
   });
 });

@@ -85,13 +85,20 @@
 .tracking-table td small.row-meta {
   display: block;
   margin-top: 5px;
-  max-width: 100%;
+  /* An explicit inner width prevents auto table layout from sizing to the note. */
+  width: 160px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text-faint);
   font-weight: 500;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  white-space: nowrap;
   line-height: 1.35;
+}
+
+.tracking-table td small.row-meta:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .tracking-table th.sortable {

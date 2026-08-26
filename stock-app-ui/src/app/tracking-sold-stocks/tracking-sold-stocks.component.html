@@ -162,7 +162,8 @@
                   matTooltipPosition="above">Partial</span>
               }
               @if (row.notes) {
-                <small class="row-meta">{{ row.notes }}</small>
+                <small class="row-meta" tabindex="0" [matTooltip]="row.notes"
+                  matTooltipPosition="above">{{ row.notes }}</small>
               }
             </td>
             <td>

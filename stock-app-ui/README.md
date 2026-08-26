@@ -108,6 +108,13 @@ the crossover and other metrics without them hiding behind pinned columns.
 The calculation uses the same first-close-seeded EMAs as the Technical chart;
 see the [backend contract](../stock-app/README.md#momentum-crossover-evidence).
 
+## Tracking and Sold Stocks
+
+Notes beneath Symbol use a fixed-width, single-line preview with an ellipsis.
+Long notes do not widen the table or wrap into taller rows. Hover or keyboard
+focus reveals the full note in a tooltip; Edit retains the complete text.
+Truncation is display-only and never changes saved notes.
+
 ## Studies
 
 The Studies shell presents curated historical evidence without importing or
