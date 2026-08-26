@@ -10,7 +10,7 @@ from utilities.options.exchange_calendar import (
     NYSE_STANDARD_CALENDAR_SOURCE,
     nyse_sessions,
 )
-from utilities.options.chains_quote import _num, annualized_rv
+from utilities.options.chains_quote import _num, _text, annualized_rv
 from utilities.options.wheel import (
     EVENT_KNOWN,
     EVENT_NONE_IN_RANGE,

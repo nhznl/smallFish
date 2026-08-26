@@ -29,6 +29,7 @@ from utilities.options.exchange_calendar import nyse_sessions
 from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
 from utilities.options.market_quotes import QuoteBatch
 from utilities.options.wheel import (
+    EVENT_KNOWN,
     EVENT_NONE_IN_RANGE,
     EVENT_UNKNOWN_STALE,
     WHEEL_SCHEMA_VERSION,
@@ -200,6 +201,43 @@ def test_actual_expiry_context_fails_closed_without_nonexact_event_coverage():
     )
     assert context["pair_eligible"] is False
     assert PAIR_EVENT_COVERAGE_UNKNOWN in reasons
+
+
+def test_actual_expiry_context_preserves_exact_wheel_event_state():
+    for state in (EVENT_KNOWN, EVENT_NONE_IN_RANGE, EVENT_UNKNOWN_STALE):
+        rows = _wheel_frame([{
+            "symbol": "XYZ", "earnings_window_state": f" {state} ",
+        }], horizons=(8,))
+        context, reasons = derive_actual_expiry_context(
+            rows, actual_dte=8, expiry="2026-07-24", event_dates=[],
+            events_coverage_end=None,
+            rv_window_by_max_dte={10: 7, 40: 21, 365: 37},
+        )
+        assert context["earnings_window_state"] == state
+        assert context["earnings_in_window"] is (state == EVENT_KNOWN)
+        assert context["context_source"] == "ACTUAL_EXPIRY_DERIVED_WHEEL_EVENT_EXACT"
+        assert context["pair_eligible"] is (state != EVENT_UNKNOWN_STALE)
+        assert reasons == ([PAIR_EVENT_COVERAGE_UNKNOWN]
+                           if state == EVENT_UNKNOWN_STALE else [])
+
+
+def test_actual_expiry_context_falls_back_for_missing_or_invalid_exact_event_state():
+    for state in (None, pd.NA, float("nan"), "", " ", "INVALID_STATE"):
+        rows = _wheel_frame([{
+            "symbol": "XYZ", "earnings_window_state": state,
+        }], horizons=(8,))
+        for coverage_end in (pd.Timestamp("2026-12-31"), None):
+            context, reasons = derive_actual_expiry_context(
+                rows, actual_dte=8, expiry="2026-07-24", event_dates=[],
+                events_coverage_end=coverage_end,
+                rv_window_by_max_dte={10: 7, 40: 21, 365: 37},
+            )
+            covered = coverage_end is not None
+            assert context["earnings_window_state"] == (
+                EVENT_NONE_IN_RANGE if covered else EVENT_UNKNOWN_STALE)
+            assert context["context_source"] == "ACTUAL_EXPIRY_DERIVED_RAW_EVENT_COVERAGE"
+            assert context["pair_eligible"] is covered
+            assert reasons == ([] if covered else [PAIR_EVENT_COVERAGE_UNKNOWN])
 
 
 def test_nyse_calendar_excludes_recurring_exchange_holidays():
