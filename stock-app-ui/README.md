@@ -138,6 +138,32 @@ information, a rolling weekly-close SVG chart, and a yearly slope heatmap. It
 uses Angular signals with `ChangeDetectionStrategy.OnPush`; charts are
 hand-drawn SVG rather than a third-party charting library.
 
+The Technical chart includes a default-on **MACD 12, 26, 9** lower panel:
+MACD = EMA12 − EMA26, Signal = EMA9 of MACD, and histogram = MACD − Signal.
+Its vertical scale is independent of price; dates, range controls, and the hover
+crosshair align with the upper price panel. The legend distinguishes the solid
+MACD and dashed Signal lines. Histogram bars above/below zero use green/red;
+they are neither price changes nor trading volume. Hover either panel for
+the dated MACD/Signal/histogram values, or read the latest values when idle.
+The MACD toggle never changes the price scale or Setup Score.
+
+MACD matches the backend Momentum scanner's **SMA-seeded** EMA12/26 and
+9-valid-value signal seed, including float32 closing-price normalization.
+This is separate from the first-close-seeded EMA price overlays. It uses all
+available cached bars before selecting the visible range, so switching between
+15D/1M/3M/6M/1Y never restarts the calculation. MACD begins at the 26th bar;
+Signal/histogram begin at the 34th. Earlier values remain unavailable, not zero.
+As with the existing price chart, these are the cached daily bars, not a
+separate live feed or the crossover column's completed-session filter.
+
+MACD already affects Momentum classification and trend alignment. In reversal
+scoring, one-session histogram movement in the target direction contributes
+8 points to the trigger component and is required (alongside other evidence)
+for confirmed reversal classification. Contrary histogram movement can add
+3 points to the preliminary-reversal penalty, subject to its existing cap.
+There is no standalone fresh-MACD-crossover bonus. Charting adds no new scoring
+rule, and bullish/bearish MACD evidence is not a prediction or trade instruction.
+
 ## Project structure
 
 ```

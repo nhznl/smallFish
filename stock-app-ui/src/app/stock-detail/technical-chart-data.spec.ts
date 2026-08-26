@@ -68,6 +68,12 @@ describe('technical chart data', () => {
     expect(chart.lines.every(line => line.points.length > 0)).toBeTrue();
     expect(chart.bollingerArea.length).toBeGreaterThan(0);
     expect(chart.rangeLabel).toContain('2026');
+    const shortChart = buildTechnicalChart(bars, 15);
+    expect(shortChart.points[0].macd).toBe(chart.points.at(-15)?.macd ?? null);
+    expect(shortChart.points[0].signal).toBe(chart.points.at(-15)?.signal ?? null);
+    expect(shortChart.macdPanel.hasSignal).toBeTrue();
+    expect(shortChart.macdPanel.macdLine.split(' ')[0].split(',')[0])
+      .toBe(String(shortChart.points[0].x));
   });
 
   it('normalizes ISO cache timestamps to their exchange-session date', () => {

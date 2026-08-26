@@ -35,6 +35,7 @@ export class TechnicalChartComponent {
   readonly periods = TECHNICAL_PERIODS;
   readonly ranges = TECHNICAL_RANGES;
   readonly range = signal<TechnicalRange>('1Y');
+  readonly showMacd = signal(true);
   readonly enabled = signal<ReadonlySet<TechnicalOverlay>>(new Set<TechnicalOverlay>([
     'ema14',
     'ema20',
@@ -44,6 +45,7 @@ export class TechnicalChartComponent {
   readonly chart = computed<TechnicalChartData>(() =>
     buildTechnicalChart(this.bars(), RANGE_SESSIONS[this.range()], this.enabled()));
   readonly hoveredPoint = signal<TechnicalChartPoint | null>(null);
+  readonly macdReadout = computed(() => this.hoveredPoint() ?? this.chart().points.at(-1) ?? null);
 
   private readonly priceFormatter = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -106,6 +108,12 @@ export class TechnicalChartComponent {
 
   formatAxisPrice(value: number): string {
     return this.axisPriceFormatter.format(value);
+  }
+
+  formatMacd(value: number | null): string {
+    if (value === null || !Number.isFinite(value)) return '—';
+    if (value !== 0 && Math.abs(value) < 0.01) return value.toPrecision(2);
+    return value.toFixed(2);
   }
 
   activeMovingAverages(point: TechnicalChartPoint): Array<{ label: string; value: number }> {

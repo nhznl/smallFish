@@ -3,7 +3,7 @@
     <div class="technical-head">
       <div>
         <h3 id="technical-chart-title">Technical chart <small>{{ chart().rangeLabel }}</small></h3>
-        <p>Daily price with selectable EMAs, Bollinger Bands, and confirmed historical pivot zones.</p>
+        <p>Daily price with selectable EMAs, Bollinger Bands, historical pivot zones, and MACD.</p>
       </div>
       <div class="range-tabs" role="group" aria-label="Technical chart range">
         @for (chartRange of ranges; track chartRange) {
@@ -28,6 +28,8 @@
               [attr.aria-pressed]="isEnabled('bollinger')" (click)="toggle('bollinger')">Bollinger 20, 2</button>
       <button type="button" class="overlay-toggle auxiliary levels-toggle" [class.active]="isEnabled('levels')"
               [attr.aria-pressed]="isEnabled('levels')" (click)="toggle('levels')">S / R zones</button>
+      <button type="button" class="overlay-toggle auxiliary macd-toggle" [class.active]="showMacd()"
+              [attr.aria-pressed]="showMacd()" (click)="showMacd.set(!showMacd())">MACD 12, 26, 9</button>
     </div>
 
     <svg class="technical-svg" [attr.viewBox]="chart().viewBox" preserveAspectRatio="none"
@@ -106,6 +108,64 @@
         <span><strong>Close</strong> is the dark line. EMA lines are dashed.</span>
       }
     </div>
+
+    @if (showMacd()) {
+      <div class="macd-panel">
+        <div class="macd-head">
+          <h4>MACD <small>12, 26, 9 · separate scale</small></h4>
+          <div class="macd-legend" aria-label="MACD legend">
+            <span class="macd-key">MACD</span>
+            <span class="signal-key">Signal · dashed</span>
+            <span>Bars = MACD − Signal</span>
+          </div>
+        </div>
+        <div class="macd-plot">
+        <svg class="macd-svg" [attr.viewBox]="chart().macdPanel.viewBox" preserveAspectRatio="none"
+             role="img" [attr.aria-label]="symbol() + ' MACD 12 26 9 over ' + range()"
+             (mousemove)="onChartMove($event, chart())" (mouseleave)="clearHover()">
+          @for (tick of chart().macdPanel.ticks; track tick.value) {
+            <line class="tick-line" [attr.x1]="chart().padding" [attr.x2]="chart().width - chart().padding"
+                  [attr.y1]="tick.y" [attr.y2]="tick.y"></line>
+          }
+          <line class="macd-zero" [attr.x1]="chart().padding" [attr.x2]="chart().width - chart().padding"
+                [attr.y1]="chart().macdPanel.zeroY" [attr.y2]="chart().macdPanel.zeroY"></line>
+          @for (bar of chart().macdPanel.bars; track bar.x) {
+            <rect class="macd-bar" [class.above-zero]="bar.value > 0" [class.below-zero]="bar.value < 0"
+                  [attr.x]="bar.x" [attr.y]="bar.y" [attr.width]="bar.width" [attr.height]="bar.height"></rect>
+          }
+          <polyline class="macd-line" [attr.points]="chart().macdPanel.macdLine"></polyline>
+          <polyline class="macd-signal" [attr.points]="chart().macdPanel.signalLine"></polyline>
+          @if (hoveredPoint(); as hovered) {
+            <line class="hover-line" [attr.x1]="hovered.x" [attr.x2]="hovered.x"
+                  [attr.y1]="chart().padding" [attr.y2]="chart().macdPanel.height - chart().padding"></line>
+          }
+        </svg>
+        <div class="macd-axis-labels" aria-hidden="true">
+          @for (tick of chart().macdPanel.ticks; track tick.value) {
+            <span class="macd-value-label" [style.top.%]="tick.y / chart().macdPanel.height * 100"
+                  [style.right.%]="100 - (chart().padding + 60) / (chart().width + 60) * 100">{{ formatMacd(tick.value) }}</span>
+          }
+        </div>
+        <div class="macd-axis-labels macd-dates" aria-hidden="true">
+          @for (label of chart().xLabels; track label.x) {
+            <span class="macd-date-label" [style.left.%]="(label.x + 60) / (chart().width + 60) * 100">{{ label.label }}</span>
+          }
+        </div>
+        </div>
+        <div class="technical-readout macd-readout" aria-live="polite">
+          @if (macdReadout(); as point) {
+            <strong>{{ point.fullLabel }}</strong>
+            <span>MACD {{ formatMacd(point.macd) }}</span>
+            <span>Signal {{ formatMacd(point.signal) }}</span>
+            <span>Histogram {{ formatMacd(point.histogram) }}</span>
+          }
+        </div>
+        @if (!chart().macdPanel.hasSignal) {
+          <p class="technical-caveat">Signal and histogram need at least 34 cached sessions; missing warm-up values are not zero.</p>
+        }
+        <p class="technical-caveat">MACD crossing above Signal is bullish evidence; crossing below is bearish evidence, not a trade recommendation. Bars show their difference, not price or volume. Uses the Momentum scanner’s SMA-seeded calculation; changing the range does not restart it.</p>
+      </div>
+    }
 
     <p class="technical-caveat">
       Bollinger Bands use a 20-session average and two sample standard deviations, matching smallFish shared TA.

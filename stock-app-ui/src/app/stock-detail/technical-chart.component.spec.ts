@@ -61,7 +61,57 @@ describe('TechnicalChartComponent', () => {
         .withContext(button.textContent?.trim())
         .toBe(expectedSessions.get(button.textContent?.trim() ?? '')!);
       expect(button.getAttribute('aria-pressed')).toBe('true');
+      expect(fixture.componentInstance.chart().macdPanel.bars.length)
+        .toBe(expectedSessions.get(button.textContent?.trim() ?? '')!);
     }
+  });
+
+  it('shows MACD by default and toggles it without changing the price chart', () => {
+    const element = fixture.nativeElement as HTMLElement;
+    const pricePoints = fixture.componentInstance.chart().closePoints;
+    const ticks = fixture.componentInstance.chart().ticks;
+    expect(element.querySelector('.macd-svg')).not.toBeNull();
+    expect(element.querySelectorAll('.macd-line').length).toBe(1);
+    expect(element.querySelectorAll('.macd-signal').length).toBe(1);
+    expect(element.querySelector('.macd-bar.above-zero')).not.toBeNull();
+    expect(element.querySelector('.macd-bar.below-zero')).not.toBeNull();
+    const toggle = element.querySelector<HTMLButtonElement>('.macd-toggle')!;
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    toggle.click();
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(element.querySelector('.macd-svg')).toBeNull();
+    expect(fixture.componentInstance.chart().closePoints).toBe(pricePoints);
+    expect(fixture.componentInstance.chart().ticks).toEqual(ticks);
+  });
+
+  it('synchronizes hover from the MACD panel with price and dated values', () => {
+    const element = fixture.nativeElement as HTMLElement;
+    const svg = element.querySelector<SVGSVGElement>('.macd-svg')!;
+    spyOn(svg, 'getBoundingClientRect').and.returnValue({ left: 0, width: 960 } as DOMRect);
+    const point = fixture.componentInstance.chart().points[20];
+    svg.dispatchEvent(new MouseEvent('mousemove', { clientX: point.x + 60 }));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.hoveredPoint()?.tradeDate).toBe(point.tradeDate);
+    expect(element.querySelector('.macd-readout')?.textContent).toContain(point.fullLabel);
+    expect(element.querySelector('.macd-readout')?.textContent)
+      .toContain(fixture.componentInstance.formatMacd(point.histogram));
+    expect(element.querySelectorAll('.hover-line').length).toBe(2);
+    svg.dispatchEvent(new MouseEvent('mouseleave'));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.hoveredPoint()).toBeNull();
+    expect(fixture.componentInstance.macdReadout()?.tradeDate)
+      .toBe(fixture.componentInstance.chart().points.at(-1)?.tradeDate);
+  });
+
+  it('explains unavailable MACD signal history instead of fabricating zero', () => {
+    fixture.componentRef.setInput('bars', bars(30));
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent).toContain('at least 34 cached sessions');
+    expect(element.querySelector('.macd-readout')?.textContent).toContain('Signal —');
+    expect(element.querySelectorAll('.macd-bar').length).toBe(0);
+    expect(fixture.componentInstance.formatMacd(0.0001)).not.toBe('0.00');
   });
 });
 

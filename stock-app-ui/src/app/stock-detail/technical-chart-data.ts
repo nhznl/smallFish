@@ -1,4 +1,5 @@
 import { StockDailyBar } from '../model/stock';
+import { buildMacdPanel, calculateMacd, MacdPanel, MacdValue } from './macd-chart-data';
 
 export const TECHNICAL_PERIODS = [10, 14, 20, 50] as const;
 export type TechnicalPeriod = typeof TECHNICAL_PERIODS[number];
@@ -20,7 +21,7 @@ export interface PriceZone {
   lastTradeDate: string;
 }
 
-export interface TechnicalChartPoint extends TechnicalBar {
+export interface TechnicalChartPoint extends TechnicalBar, MacdValue {
   fullLabel: string;
   x: number;
   closeY: number;
@@ -39,6 +40,7 @@ export interface TechnicalLine {
 }
 
 export interface TechnicalChartData {
+  macdPanel: MacdPanel;
   points: TechnicalChartPoint[];
   closePoints: string;
   lines: TechnicalLine[];
@@ -220,6 +222,7 @@ export function buildTechnicalChart(
   enabledOverlays: ReadonlySet<TechnicalScaleOverlay> = new Set(),
 ): TechnicalChartData {
   const empty: TechnicalChartData = {
+    macdPanel: buildMacdPanel([]),
     points: [], closePoints: '', lines: [], bollingerArea: '', bollingerUpper: '',
     bollingerMiddle: '', bollingerLower: '', zones: [], ticks: [], xLabels: [],
     width: WIDTH, height: HEIGHT, padding: PADDING, baselineY: HEIGHT - PADDING,
@@ -235,6 +238,7 @@ export function buildTechnicalChart(
   }
 
   const closes = bars.map(bar => bar.close);
+  const macd = calculateMacd(closes);
   const values = {} as Record<MovingAverageKey, Array<number | null>>;
   for (const period of TECHNICAL_PERIODS) {
     values[`ema${period}`] = exponentialMovingAverage(closes, period);
@@ -287,6 +291,7 @@ export function buildTechnicalChart(
     }
     return {
       ...bar,
+      ...macd[sourceIndex],
       fullLabel: FULL_DATE_LABEL.format(parseMarketDate(bar.tradeDate)),
       x: xFor(visibleIndex),
       closeY: yFor(bar.close),
@@ -337,6 +342,7 @@ export function buildTechnicalChart(
 
   return {
     points,
+    macdPanel: buildMacdPanel(points, WIDTH, PADDING),
     closePoints: points.map(point => `${point.x},${point.closeY}`).join(' '),
     lines,
     bollingerArea,
