@@ -69,6 +69,7 @@ export class MomentumScannerComponent {
     'price',
     'fiftyTwoWeekRange',
     'setupScore',
+    'emaCross',
     'fiveDay',
     'fiveWeek',
     'relativeStrength',
@@ -503,6 +504,13 @@ export class MomentumScannerComponent {
       NOT_EVALUATED: 5
     };
     return rows.slice().sort((left, right) => {
+      if (sort.active === 'emaCross') {
+        // Active ages first in either direction, then No, then unavailable.
+        const rank = (stock: MomentumStock) => this.emaCrossAge(stock) !== null ? 0
+          : this.emaCrossIsNo(stock) ? 1 : 2;
+        const rankCompare = rank(left) - rank(right);
+        if (rankCompare) return rankCompare;
+      }
       if ((this.selectedSetup === 'ALL' || this.selectedSetup === 'ACTIONABLE')
           && sort.active === 'setupScore') {
         const setupCompare = (setupOrder[left.setup || ''] ?? 99) - (setupOrder[right.setup || ''] ?? 99);
@@ -534,6 +542,7 @@ export class MomentumScannerComponent {
       case 'price': return stock.lastTradeStats?.close ?? null;
       case 'fiftyTwoWeekRange': return stock.fiftyTwoWeekPosition ?? null;
       case 'setupScore': return stock.setupScore ?? null;
+      case 'emaCross': return this.emaCrossAge(stock);
       case 'fiveDay': return stock.fiveDaysToDate?.gainLoss ?? null;
       case 'fiveWeek': return stock.fiveWeeksToDate?.gainLoss ?? null;
       case 'relativeStrength': return stock.relativeStrengthSpyOneMonth ?? null;
@@ -547,5 +556,35 @@ export class MomentumScannerComponent {
       case 'freshness': return stock.freshnessStatus || '';
       default: return null;
     }
+  }
+
+  emaCrossAge(stock: MomentumStock): number | null {
+    const cross = stock.ema14Over20Cross;
+    const age = cross?.sessionsAgo;
+    return stock.freshnessStatus === 'FRESH' && cross?.status === 'ACTIVE'
+      && age != null && Number.isInteger(age) && age >= 0 && age <= 60 ? age : null;
+  }
+
+  private emaCrossIsNo(stock: MomentumStock): boolean {
+    return stock.freshnessStatus === 'FRESH' && stock.ema14Over20Cross?.status === 'NONE';
+  }
+
+  emaCrossLabel(stock: MomentumStock): string {
+    const age = this.emaCrossAge(stock);
+    if (age === 0) return '↑ Latest session';
+    if (age !== null) return `↑ ${age} session${age === 1 ? '' : 's'} ago`;
+    return this.emaCrossIsNo(stock) ? 'No' : '—';
+  }
+
+  emaCrossTooltip(stock: MomentumStock): string {
+    const date = stock.ema14Over20Cross?.asOfDate;
+    const asOf = date ? ` As of cached completed session ${date}.` : '';
+    if (this.emaCrossAge(stock) !== null) {
+      return `Latest completed close is above both EMAs and EMA14 is more than $1 above EMA20. Age counts trading sessions since the original upward crossover, not since these confirmation conditions passed.${asOf} Informational only; Setup Score is unchanged.`;
+    }
+    if (this.emaCrossIsNo(stock)) {
+      return `No qualifying upward crossover: waiting for the latest close to exceed both EMAs and the EMA14 − EMA20 gap to exceed $1, or the crossover has reversed or is older than 60 sessions. Waiting does not reset its original age.${asOf} This is not a bearish signal.`;
+    }
+    return `Crossover unavailable: stale, missing, insufficient, or unaligned completed-session data.${asOf}`;
   }
 }

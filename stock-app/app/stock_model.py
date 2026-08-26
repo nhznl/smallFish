@@ -11,6 +11,7 @@ import numpy as np
 from models.universe import TYPE_ETF, TYPE_MF, TYPE_STOCK
 
 from . import trend_engine as te
+from .ema_crossover import EmaCrossover, ema14_over_20_crossover, has_crossover_session_coverage
 from .trend_engine import (
     Daily,
     AdvancedTrendWithVolume,
@@ -197,6 +198,7 @@ class Stock:
     rsi_change_five_day: float | None = None
     macd_histogram_change: float | None = None
     days_since_macd_cross: int | None = None
+    ema14_over_20_cross: EmaCrossover = field(default_factory=EmaCrossover)
     relative_strength_spy_one_month: float | None = None
     freshness_status: str = "UNKNOWN"
     advanced_trend_with_volume: AdvancedTrendWithVolume | None = None
@@ -284,6 +286,7 @@ class Stock:
         d = self.dailies
         if not d or self.last_trade is None or self.last_trade.close <= 0:
             return
+        self.ema14_over_20_cross = ema14_over_20_crossover(d)
         atr = te.calc_atr(d, 14)
         if atr is not None:
             self.atr_pct = (atr / self.last_trade.close) * 100
@@ -333,6 +336,11 @@ class Stock:
             self.freshness_status = "FRESH"
 
         self.relative_strength_spy_one_month = None
+        if benchmark is None or not has_crossover_session_coverage(
+            self.dailies, benchmark.dailies, self.ema14_over_20_cross.as_of_date,
+            benchmark.ema14_over_20_cross.as_of_date,
+        ):
+            self.ema14_over_20_cross = self.ema14_over_20_cross.unavailable()
         if benchmark is None or not benchmark.dailies or len(self.dailies) < 22:
             return
         anchor = self.dailies[-22]

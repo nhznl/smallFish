@@ -109,6 +109,13 @@ export interface MomentumStock {
   evidenceQuality?: 'COMPLETE' | 'PARTIAL' | 'STALE_OR_INCOMPLETE';
   setup?: MomentumSetup;
   setupScore?: number;
+  /** Upward EMA14/20 crossing confirmed by close > both EMAs and EMA gap > $1.
+   * Age counts completed trading sessions since the original crossing. */
+  ema14Over20Cross?: {
+    status: 'ACTIVE' | 'NONE' | 'UNAVAILABLE';
+    sessionsAgo: number | null;
+    asOfDate: string | null;
+  };
   setupScoreVersion?: string;
   setupScoreComponents?: Record<string, number>;
   setupReason?: string;

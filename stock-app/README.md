@@ -93,6 +93,50 @@ start FastAPI:
 The UI and API are then both available at <http://localhost:8000>. During UI
 development, use `npm start` in `stock-app-ui/` instead.
 
+## Momentum crossover evidence
+
+`GET /momentumStocks` includes `ema14Over20Cross` with `status` (`ACTIVE`,
+`NONE`, or `UNAVAILABLE`), nullable `sessionsAgo`, and nullable `asOfDate`.
+It is informational only: setup classification, scores, and score version are
+unchanged. The metric is computed once per symbol during cache loading, not
+per table sort or request; it requires no provider call or new data artifact.
+
+EMA14 and EMA20 use the same first-close seed, JSON-normalized closing prices,
+and recurrence as Stock Detail's Technical chart. All available cached history
+is used for EMA initialization, not just the last 60 bars. The existing
+SMA-seeded score/MACD calculations are not modified. Cross detection starts
+after 20 bars of warmup: previous EMA14 <= EMA20 and current EMA14 > EMA20.
+The initial equal seed is never counted as a crossover.
+
+- `ACTIVE`: the latest completed close is strictly above both EMA14 and EMA20,
+  EMA14 − EMA20 is strictly greater than **$1**, and the latest upward crossing
+  occurred 0–60 completed sessions ago, inclusive. Exactly $1 does not qualify.
+  Zero means the latest cached completed session, not necessarily today.
+- `NONE`: the price/gap conditions are not met, EMA14 is at/below EMA20, or no
+  crossing occurred within the last 60 sessions. A 61-session-old crossing
+  shows **No** even when the price and gap conditions pass.
+- `UNAVAILABLE`: insufficient/invalid history, non-fresh scanner data, no SPY
+  benchmark, or missing/misaligned recent sessions relative to SPY. In
+  particular, an already-above short history does not invent a crossing date.
+
+Price and gap conditions are checked on the latest completed bar every time
+the cache is built; confirmation is not permanently latched. While waiting,
+the original crossing date is retained. If the conditions later pass without
+an EMA reversal, report the age of that original crossing, not the number of
+sessions since confirmation. Losing a price/gap condition hides the age again
+but does not restart it. EMA14 falling to/below EMA20 resets the tracker;
+the next upward crossing starts a new age. The $1 gap is an absolute dollar
+amount, not a percentage, so the same rule is relatively stricter for
+lower-priced symbols. Setup Score is unaffected.
+
+Only dated daily bars are counted, not weekends, holidays, or individual
+trades. Today's bar is excluded before 16:00 America/New_York (conservatively
+also on early-close days); future bars are excluded. `asOfDate` is the last
+included cached date. Cache reload is needed to incorporate newly completed or
+downloaded data; this column is not a live intraday signal. Freshness retains
+the scanner's existing cache-relative meaning. It is not a wall-clock claim
+that a cache has been refreshed today.
+
 ## Key endpoints
 
 | Endpoint | Purpose |

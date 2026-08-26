@@ -368,6 +368,30 @@ h1 {
   font-size: 10.5px;
 }
 
+.ema-cross-cell {
+  font-variant-numeric: tabular-nums;
+  min-width: 148px;
+}
+
+/* Four pinned columns fill a phone viewport and hide all scrollable metrics.
+   Keep just the symbol pinned there; retain sticky headers vertically. */
+@media (max-width: 760px) {
+  .scanner-table .mat-column-setup,
+  .scanner-table .mat-column-price,
+  .scanner-table .mat-column-setupScore {
+    left: auto !important;
+    z-index: 1 !important;
+  }
+
+  .scanner-table .mat-column-symbol {
+    left: 0 !important;
+  }
+
+  .scanner-table td.mat-column-symbol {
+    z-index: 2 !important;
+  }
+}
+
 .positive { color: var(--pos) !important; font-weight: 700; }
 .negative { color: var(--neg) !important; font-weight: 700; }
 .participating { color: #0d5f55; font-weight: 700; }

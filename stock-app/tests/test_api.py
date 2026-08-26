@@ -98,12 +98,13 @@ def test_momentum_stocks_returns_scanner_fields(env_fixtures):
         "volumeRatio", "averageDollarVolume20",
         "distanceSma20Pct", "rsiChangeFiveDay", "macdHistogramChange",
         "daysSinceMacdCross", "relativeStrengthSpyOneMonth", "freshnessStatus",
-        "evidenceQuality", "setup", "setupScore", "setupScoreVersion",
+        "evidenceQuality", "setup", "setupScore", "setupScoreVersion", "ema14Over20Cross",
         "setupScoreComponents", "setupReason", "triggerLabel", "preliminaryReversal",
         "preliminaryReversalLabel", "advancedTrendWithVolume",
         "nextEarningsDate", "daysToEarnings",
     }
     assert data[0]["type"] == "STOCK"
+    assert set(data[0]["ema14Over20Cross"]) == {"status", "sessionsAgo", "asOfDate"}
     assert "yearlySlopes" not in data[0]
     assert "strategyReport" not in data[0]
     assert set(data[0]["lastTradeStats"]) == {"tradeDate", "close"}

@@ -84,6 +84,30 @@ principal endpoints are:
 - `GET`/`POST` `/api/brokerages/{id}/*` for Holdings, Symbol Ledger, and
   Combined Adjusted Basis, including brokerage-scoped manual reconciliation.
 
+## Momentum crossover column
+
+The sortable **EMA14 ↑ EMA20** column sits immediately after **Setup Score**.
+It displays `↑ Latest session` for age 0, `↑ 1 session ago` through
+`↑ 60 sessions ago`, only while the latest completed close is strictly above
+both EMAs and EMA14 − EMA20 is **greater than $1** (not equal to $1).
+Until both conditions pass it shows `No`. Age counts from the original
+crossover, not from confirmation. If either condition stops passing, the age
+is hidden again without resetting it. It also shows `No` once the crossing is
+older than 60 sessions or EMA14 is at/below EMA20; that EMA reversal resets the
+tracker. A dash indicates missing, stale, insufficient, or
+unaligned data, not a negative signal. Cell tooltips include the cached
+completed-session date. Ages count daily trading sessions, not trades or
+calendar days; an intraday bar is excluded until 16:00 New York time.
+
+The first header click sorts newest first numerically; the next sorts oldest
+first. `No` then unavailable rows stay at the bottom in either direction.
+Sorting applies to all matching rows before pagination. This is descriptive
+evidence only and does not add points to Setup Score or change setup filters.
+On narrow screens only Symbol stays pinned, so horizontal scrolling can reach
+the crossover and other metrics without them hiding behind pinned columns.
+The calculation uses the same first-close-seeded EMAs as the Technical chart;
+see the [backend contract](../stock-app/README.md#momentum-crossover-evidence).
+
 ## Studies
 
 The Studies shell presents curated historical evidence without importing or

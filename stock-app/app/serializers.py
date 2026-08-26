@@ -144,6 +144,9 @@ def momentum_stock_dict(s: Stock, earnings: UpcomingEarnings | None = None) -> d
 
     atv = s.advanced_trend_with_volume
     next_earnings = earnings.next_date(s.code) if earnings else None
+    crossover = s.ema14_over_20_cross
+    if s.freshness_status != "FRESH":
+        crossover = crossover.unavailable()
     return {
         "code": s.code,
         "type": s.type,
@@ -181,6 +184,11 @@ def momentum_stock_dict(s: Stock, earnings: UpcomingEarnings | None = None) -> d
         "evidenceQuality": s.evidence_quality(),
         "setup": s.scanner_setup(),
         "setupScore": s.setup_score(),
+        "ema14Over20Cross": {
+            "status": crossover.status,
+            "sessionsAgo": crossover.sessions_ago,
+            "asOfDate": crossover.as_of_date.isoformat() if crossover.as_of_date else None,
+        },
         "setupScoreVersion": SETUP_SCORE_VERSION,
         "setupScoreComponents": s.setup_score_components(),
         "setupReason": s.setup_reason(),
