@@ -2,7 +2,7 @@
   <div class="panel-heading">
     <div>
       <h3 class="panel-title">Latest Option Quotes</h3>
-      <small>Immutable quote collection archive. Opening or filtering this tab never calls Tastytrade.</small>
+      <small>Archived option quotes with current Yahoo underlying prices (may be delayed). Opening or filtering this tab never calls Tastytrade.</small>
     </div>
     <button type="button" class="btn btn-ghost" [disabled]="loading" (click)="load()">
       @if (loading) {
@@ -11,7 +11,7 @@
       @if (!loading) {
         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 1 0 2 5.5"/><path d="M20 4v7h-7"/></svg>
       }
-      {{ loading ? 'Loading…' : 'Refresh archive' }}
+      {{ loading ? 'Loading…' : 'Refresh archive & prices' }}
     </button>
   </div>
 
@@ -29,6 +29,8 @@
         </div>
       }
       @if (data.available && data.summary; as summary) {
+        @let filteredRows = rows();
+        @let symbols = groupRows(filteredRows);
         <div class="archive-meta">
           <span><strong>Run:</strong> {{ data.runId }}</span>
           <span><strong>As of:</strong> {{ data.asOf }}</span>
@@ -85,73 +87,110 @@
             <span class="control-label">Symbol</span>
             <input class="control-input" [(ngModel)]="symbolFilter" placeholder="e.g. AAPL">
           </label>
-          <label class="control">
-            <span class="control-label">View</span>
-            <select class="control-select" [(ngModel)]="viewFilter">
-              <option value="ALL">All views</option>
-              <option value="ENTRY">ENTRY</option>
-              <option value="ROLL_EXIT">ROLL_EXIT</option>
-            </select>
-          </label>
-          <label class="control">
-            <span class="control-label">Quote quality</span>
-            <select class="control-select" [(ngModel)]="qualityFilter">
-              <option value="ALL">All qualities</option>
-              @for (quality of qualityLabels(); track quality) {
-                <option [value]="quality">{{ quality }}</option>
-              }
-            </select>
-          </label>
-          <span class="result-count">{{ rows().length | number }} shown</span>
+          <span class="result-count">{{ filteredRows.length | number }} {{ filteredRows.length === 1 ? 'contract' : 'contracts' }} · {{ symbols.length | number }} {{ symbols.length === 1 ? 'symbol' : 'symbols' }} shown</span>
         </div>
-        <div class="table-shell">
-          <table class="data-table quotes-table">
-            <thead><tr>
-              <th class="col-sticky">Symbol</th><th>Expiry<br><small>DTE actual/requested</small></th><th>Side</th>
-              <th class="num">Strike</th><th>View</th>
-              <th>Bid / Ask</th><th>Quote quality</th><th>Provider status</th><th>Event timestamp</th>
-              <th class="num">OI / volume</th><th class="num">Spread</th><th>Liquidity</th><th>Entry status</th><th>Reasons</th>
-            </tr></thead>
-            <tbody>
-              @for (row of rows(); track row) {
-                <tr>
-                  <td class="col-sticky symbol-cell">
-                    @if (row.symbol) {
-                      <a [routerLink]="['/stockDetail', row.symbol]" target="_blank">{{ row.symbol }}</a>
+        @if (holdingsLoading) {
+          <p class="banner banner-info" role="status">Loading saved Trading and Retirement holdings…</p>
+        } @else if (holdingsNotice) {
+          <p class="banner banner-warn" role="status">{{ holdingsNotice }}</p>
+        }
+        <div class="quote-results">
+          @for (symbol of symbols; track symbol.symbol; let symbolIndex = $index) {
+            <section class="quote-symbol" [attr.aria-labelledby]="'quote-symbol-' + symbolIndex">
+              <header class="symbol-heading">
+                <h4 [id]="'quote-symbol-' + symbolIndex">
+                  @if (symbol.symbol) {
+                    <a [routerLink]="['/stockDetail', symbol.symbol]" target="_blank" rel="noopener">{{ symbol.symbol }}</a>
+                  } @else {
+                    Unknown symbol
+                  }
+                </h4>
+                @let market = marketPrice(symbol.symbol);
+                <span class="symbol-price" tabindex="0" [attr.aria-busy]="market?.loading || false"
+                  [matTooltip]="marketPriceTooltip(market)" matTooltipPosition="above">
+                  Market price
+                  <strong>
+                    @if (market?.loading) {
+                      Loading…
+                    } @else if (market && market.price != null) {
+                      @if (market.currency) {
+                        {{ market.price | currency:market.currency:'symbol':'1.2-2' }}
+                      } @else {
+                        {{ market.price | number:'1.2-2' }}
+                      }
+                    } @else {
+                      —
                     }
-                  </td>
-                  <td>{{ row.expiry || '—' }}<br><small>{{ row.actualDte ?? '—' }} / {{ row.requestedDte ?? '—' }}</small></td>
-                  <td>{{ row.side || '—' }}</td>
-                  <td class="num">{{ row.strike != null ? ('$' + (row.strike | number:'1.2-2')) : '—' }}</td>
-                  <td>{{ row.analysisView || '—' }}</td>
-                  <td>{{ row.bid != null ? ('$' + (row.bid | number:'1.2-2')) : '—' }} / {{ row.ask != null ? ('$' + (row.ask | number:'1.2-2')) : '—' }}</td>
-                  <td>
-                    <span class="badge" [class]="'badge ' + qualityBadgeClass(row.quoteQuality)"
-                      [matTooltip]="row.quoteQualityReasons || ''" matTooltipPosition="above">
-                      {{ row.quoteQuality || '—' }}
-                    </span>
-                  </td>
-                  <td>{{ row.quoteProviderStatus || '—' }}</td>
-                  <td class="timestamp-cell">{{ row.quoteEventTimestamp || '—' }}</td>
-                  <td class="num">{{ row.openInterest ?? '—' }} / {{ row.volume ?? '—' }}</td>
-                  <td class="num">{{ row.spreadPct != null ? ((row.spreadPct * 100) | number:'1.1-1') + '%' : '—' }}</td>
-                  <td>{{ row.liquidityOk == null ? '—' : (row.liquidityOk ? 'OK' : 'No') }}</td>
-                  <td>
-                    <span class="badge" [class]="row.entryEligible ? 'badge badge-pos' : 'badge badge-neutral'">
-                      {{ row.entryEligible ? 'Eligible' : 'Not eligible' }}
-                    </span>
-                  </td>
-                  <td class="reason-cell"
-                    [matTooltip]="row.entryReason || row.gateReason || ''" matTooltipPosition="above">
-                    {{ row.entryReason || row.gateReason || '—' }}
-                  </td>
-                </tr>
+                  </strong>
+                </span>
+                @if (holding(symbol.symbol); as owned) {
+                  <span class="symbol-holding" tabindex="0" [matTooltip]="holdingsTooltip(owned)" matTooltipPosition="above">
+                    {{ holdingsIncomplete ? 'Known shares' : 'Shares owned' }}
+                    <strong>{{ owned.shares | number:'1.0-6' }}</strong>
+                  </span>
+                  <span class="symbol-cost" tabindex="0" [matTooltip]="holdingsTooltip(owned)" matTooltipPosition="above">
+                    {{ holdingsIncomplete ? 'Known avg cost/share' : 'Avg cost/share' }}
+                    <strong>{{ owned.costBasis != null ? ((owned.costBasis / owned.shares) | currency:'USD':'symbol':'1.2-2') : '—' }}</strong>
+                  </span>
+                }
+              </header>
+              @for (expiry of symbol.expiries; track expiry.expiry; let expiryIndex = $index) {
+                <section class="quote-expiry" [attr.aria-labelledby]="'quote-expiry-' + symbolIndex + '-' + expiryIndex">
+                  <header class="expiry-heading">
+                    <h5 [id]="'quote-expiry-' + symbolIndex + '-' + expiryIndex">{{ expiry.expiry || 'Expiry unavailable' }}</h5>
+                    <span>Actual DTE: {{ expiry.actualDtes }} · Requested: {{ expiry.requestedDtes }}</span>
+                    <span class="expiry-count">{{ expiry.count | number }} {{ expiry.count === 1 ? 'contract' : 'contracts' }}</span>
+                  </header>
+                  <div class="quote-sides">
+                    @for (side of expiry.sides; track side.side) {
+                      @let sideId = 'quote-side-' + symbolIndex + '-' + expiryIndex + '-' + side.side;
+                      <section class="quote-side" [class.other-side]="side.side === 'OTHER'" [attr.aria-labelledby]="sideId">
+                        <header class="side-heading">
+                          <h6 [id]="sideId">{{ side.label }}</h6>
+                          <span>{{ side.rows.length | number }} {{ side.rows.length === 1 ? 'contract' : 'contracts' }}</span>
+                        </header>
+                        @if (side.rows.length) {
+                          <div class="table-shell" tabindex="0" role="region" [attr.aria-label]="(symbol.symbol || 'Unknown symbol') + ' ' + (expiry.expiry || 'unknown expiry') + ' ' + side.label">
+                            <table class="data-table quotes-table" [attr.aria-labelledby]="sideId">
+                              <thead><tr>
+                                <th scope="col" class="num col-sticky">Strike / view</th>
+                                <th scope="col" class="num">Bid / Ask</th>
+                                <th scope="col" class="num">OI / volume</th>
+                                <th scope="col" class="num">Spread</th>
+                              </tr></thead>
+                              <tbody>
+                                @for (row of side.rows; track row) {
+                                  <tr>
+                                    <td class="num col-sticky strike-cell">
+                                      <strong>{{ row.strike != null ? ('$' + (row.strike | number:'1.2-2')) : '—' }}</strong>
+                                      <small>{{ viewLabel(row.analysisView) }}</small>
+                                      @if (side.side === 'OTHER') {
+                                        <small>{{ row.side || 'Unknown side' }}</small>
+                                      }
+                                      @if (expiry.multipleRequestedDtes) {
+                                        <small>Target {{ row.requestedDte ?? '—' }} DTE</small>
+                                      }
+                                    </td>
+                                    <td class="num">{{ row.bid != null ? ('$' + (row.bid | number:'1.2-2')) : '—' }} / {{ row.ask != null ? ('$' + (row.ask | number:'1.2-2')) : '—' }}</td>
+                                    <td class="num">{{ row.openInterest ?? '—' }} / {{ row.volume ?? '—' }}</td>
+                                    <td class="num">{{ row.spreadPct != null ? ((row.spreadPct * 100) | number:'1.1-1') + '%' : '—' }}</td>
+                                  </tr>
+                                }
+                              </tbody>
+                            </table>
+                          </div>
+                        } @else {
+                          <p class="side-empty">No {{ side.label.toLowerCase() }} match the current filters in this archive.</p>
+                        }
+                      </section>
+                    }
+                  </div>
+                </section>
               }
-              @if (rows().length === 0) {
-                <tr><td colspan="14" class="no-rows">No archived contracts match these filters.</td></tr>
-              }
-            </tbody>
-          </table>
+            </section>
+          } @empty {
+            <div class="empty-state">No archived contracts match these filters.</div>
+          }
         </div>
       }
     }

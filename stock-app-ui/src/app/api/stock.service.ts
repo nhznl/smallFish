@@ -53,14 +53,15 @@ export class StockService {
     };
   }
 
-  getStockInfo(symbol: string): Observable<StockInfo> {
+  /** Refresh bypasses completed cached info while sharing any in-flight request. */
+  getStockInfo(symbol: string, options: { refresh?: boolean } = {}): Observable<StockInfo> {
     const normalizedSymbol = symbol?.trim().toUpperCase();
     if (!normalizedSymbol) {
       return throwError(() => new Error('Stock symbol is required'));
     }
 
     const cached = this.stockInfoCache.get(normalizedSymbol);
-    if (cached) {
+    if (cached && !options.refresh) {
       return of(cached);
     }
 

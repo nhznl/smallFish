@@ -84,6 +84,43 @@ principal endpoints are:
 - `GET`/`POST` `/api/brokerages/{id}/*` for Holdings, Symbol Ledger, and
   Combined Adjusted Basis, including brokerage-scoped manual reconciliation.
 
+## Wheel option quotes
+
+The Option Quotes tab reads the latest immutable archive through
+`GET /optionQuotes`; opening, filtering, or refreshing the tab never collects
+new option quotes. A successful collection refreshes the archive automatically.
+Each symbol header separately loads Yahoo's latest regular-session market price
+through the existing Stock Detail info endpoint. Opening the tab or choosing
+**Refresh archive & prices** bypasses the UI's cached stock info; filtering does
+not refetch prices. Requests are limited to three at a time, once per symbol.
+The price tooltip identifies the source and retrieval time, and warns of possible
+delay. Failed or unavailable prices display `—`, never the archive's older spot.
+
+For held symbols, the header also shows shares owned and average cost per share
+across Trading and Retirement accounts, using the shared saved Holdings
+projections. Only open long equity positions count. Cost is total effective cost
+basis divided by shares, preserving broker-basis precedence and saved manual
+fallbacks; it is not option-adjusted. Any missing basis leaves average cost as
+`—`. Partial or unavailable brokerage data is flagged, and figures are labeled
+as known holdings rather than a complete combined position. Ownership tooltips
+identify the contributing portfolios and snapshot dates. Opening the tab or
+refreshing reloads both saved holdings once without syncing either brokerage;
+filtering does not refetch them. Unheld symbols omit ownership figures, and the
+symbol header no longer repeats the archive's contract/expiry count.
+
+Contracts are grouped alphabetically by symbol, then by actual expiry date.
+Each expiry has separate Put and Call tables with independent strikes sorted
+numerically. The tables sit side by side on wide layouts and stack on narrow
+ones; a missing side is explicitly empty, never filled with an unrelated strike.
+The symbol filter applies before grouping. Observations for different requested horizons
+remain separate, with their target DTE shown when they share an expiry.
+
+Strike/view, bid/ask, OI/volume, and spread remain visible. Per-contract timestamp,
+liquidity, reason, quote quality, and entry status columns are omitted from the
+tables; the archive's collection time and provider remain in the main header.
+These presentation choices do not change quote quality or entry eligibility
+checks, or remove diagnostic fields from the API and archived data.
+
 ## Momentum crossover column
 
 The sortable **EMA14 ↑ EMA20** column sits immediately after **Setup Score**.
