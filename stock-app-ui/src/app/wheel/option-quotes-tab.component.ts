@@ -8,7 +8,7 @@ import { catchError, forkJoin, from, map, mergeMap, of, Subscription, timeout } 
 import { BrokerageService } from '../api/brokerage.service';
 import { StockService } from '../api/stock.service';
 import { BrokerageId } from '../model/brokerage';
-import { OptionQuoteRow, OptionQuoteSnapshot } from '../model/option-quotes';
+import { OptionQuoteReport, OptionQuoteRow, OptionQuoteSnapshot } from '../model/option-quotes';
 
 interface QuoteSideGroup {
   side: string;
@@ -58,6 +58,7 @@ export class OptionQuotesTabComponent implements OnInit, OnChanges {
   private readonly brokerageService = inject(BrokerageService);
   private readonly destroyRef = inject(DestroyRef);
   private archiveRequest?: Subscription;
+  private reportsRequest?: Subscription;
   private priceRequest?: Subscription;
   private holdingsRequest?: Subscription;
   private readonly marketPrices = new Map<string, SymbolMarketPrice>();
@@ -66,6 +67,8 @@ export class OptionQuotesTabComponent implements OnInit, OnChanges {
   holdingsIncomplete = false;
   holdingsNotice = '';
   snapshot: OptionQuoteSnapshot | null = null;
+  reports: OptionQuoteReport[] = [];
+  selectedRunId: string | null = null;
   loading = false;
   error = '';
   symbolFilter = '';
@@ -80,6 +83,7 @@ export class OptionQuotesTabComponent implements OnInit, OnChanges {
 
   load(): void {
     this.archiveRequest?.unsubscribe();
+    this.reportsRequest?.unsubscribe();
     this.priceRequest?.unsubscribe();
     this.holdingsRequest?.unsubscribe();
     this.marketPrices.clear();
@@ -89,13 +93,72 @@ export class OptionQuotesTabComponent implements OnInit, OnChanges {
     this.holdingsNotice = '';
     this.loading = true;
     this.error = '';
-    this.archiveRequest = this.stockService.getOptionQuotes().pipe(
+    this.snapshot = null;
+    this.reportsRequest = this.stockService.getOptionQuoteReports().pipe(
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+      next: reports => {
+        this.reports = reports ?? [];
+        const selected = this.reports.find(report => report.runId === this.selectedRunId) ?? this.reports[0];
+        if (selected?.runId) {
+          this.loadReport(selected.runId);
+        } else {
+          this.loading = false;
+          this.snapshot = { available: false, reason: 'No option-quote collection has been archived yet.' };
+        }
+      },
+      error: () => {
+        this.snapshot = null;
+        this.loading = false;
+        this.error = 'Could not load option-quote reports.';
+      }
+    });
+  }
+
+  selectReport(runId: string | undefined): void {
+    if (!runId || runId === this.selectedRunId) return;
+    this.loadReport(runId);
+  }
+
+  reportTitle(report: OptionQuoteReport | OptionQuoteSnapshot): string {
+    const name = report.reportName;
+    const match = name?.match(/^(\d{4}-\d{2}-\d{2})__horizon([^_]+)_cushion([^_]+)_filterholdings\(([TF])\)_etfOnly\(([TF])\)_rvRank([^_]+)_trend(ALL|BULLISH|BEARISH)$/);
+    if (match) {
+      const [, date, horizon, cushion, holdings, etfs, rvRank, trend] = match;
+      return `${this.readableDate(date)} · ${horizon} DTE · ${cushion}% OTM · ` +
+        `Holdings: ${holdings === 'T' ? 'Yes' : 'No'} · ETFs ${etfs === 'T' ? 'only' : 'all'} · ` +
+        `RV Rank ${rvRank} · Trend ${trend[0] + trend.slice(1).toLowerCase()}`;
+    }
+    const horizon = report.collectionScope?.requestedDtes?.join(', ') ?? '—';
+    return `${this.readableDate(report.asOf)} · ${horizon} DTE quote report`;
+  }
+
+  private readableDate(value: string | null | undefined): string {
+    const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return value || 'Date unavailable';
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+      .format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))));
+  }
+
+  private loadReport(runId: string): void {
+    this.archiveRequest?.unsubscribe();
+    this.priceRequest?.unsubscribe();
+    this.holdingsRequest?.unsubscribe();
+    this.marketPrices.clear();
+    this.holdings.clear();
+    this.holdingsLoading = false;
+    this.holdingsIncomplete = false;
+    this.holdingsNotice = '';
+    this.selectedRunId = runId;
+    this.loading = true;
+    this.error = '';
+    this.archiveRequest = this.stockService.getOptionQuotes(runId).pipe(
       takeUntilDestroyed(this.destroyRef),
     ).subscribe({
       next: snapshot => {
         this.snapshot = snapshot ?? null;
         this.loading = false;
-        if (!snapshot) this.error = 'Could not load the latest quote archive.';
+        if (!snapshot) this.error = 'Could not load the selected quote report.';
         if (snapshot?.available) {
           this.loadMarketPrices(snapshot.rows ?? []);
           this.loadHoldings();
@@ -104,7 +167,7 @@ export class OptionQuotesTabComponent implements OnInit, OnChanges {
       error: err => {
         this.snapshot = null;
         this.loading = false;
-        this.error = err?.error?.detail ?? 'Could not load the latest quote archive.';
+        this.error = err?.error?.detail ?? 'Could not load the selected quote report.';
       }
     });
   }
@@ -279,21 +342,28 @@ export class OptionQuotesTabComponent implements OnInit, OnChanges {
     }
     const parts: string[] = [];
     if (scope.requestedDtes?.length) {
-      parts.push(`${scope.requestedDtes.join(', ')} DTE only` +
-        (scope.configuredDtes?.length
-          ? ` (configured: ${scope.configuredDtes.join(', ')})`
-          : ''));
+      parts.push(`${scope.requestedDtes.join(', ')} DTE only`);
     }
     if (scope.symbolCount != null) {
       parts.push(`${scope.symbolCount} requested symbol${scope.symbolCount === 1 ? '' : 's'}`);
     }
     if (scope.minOtmPct) {
-      parts.push(`entry strikes at least ${(scope.minOtmPct * 100).toFixed(1).replace(/\.0$/, '')}% OTM` +
-        ' (roll/exit strikes unaffected)');
+      parts.push(`entry strikes at least ${(scope.minOtmPct * 100).toFixed(1).replace(/\.0$/, '')}% OTM`);
     }
     if (scope.limit != null) {
       parts.push(`limit ${scope.limit}`);
     }
+    const reportFilters = this.reportFilterDescription();
+    if (reportFilters) parts.push(reportFilters);
     return parts.join('; ') + '.';
+  }
+
+  /** Filter fields embedded in the immutable report name by the collecting UI. */
+  private reportFilterDescription(): string {
+    const name = this.snapshot?.reportName;
+    const match = name?.match(/_filterholdings\(([TF])\).*_trend(ALL|BULLISH|BEARISH)$/);
+    if (!match) return '';
+    const [, holdings, trend] = match;
+    return `Holdings: ${holdings === 'T' ? 'Yes' : 'No'}; Trend: ${trend[0] + trend.slice(1).toLowerCase()}`;
   }
 }

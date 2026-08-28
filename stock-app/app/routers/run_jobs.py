@@ -16,6 +16,7 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
+from datetime import date
 
 from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -38,6 +39,11 @@ class ChainsCollectionScopeRequest(BaseModel):
     horizonDte: int | None = None
     symbols: list[str] | None = None
     minOtmPct: float | None = None
+    filterHoldings: bool = False
+    etfsOnly: bool = False
+    rvRankMin: float | None = None
+    rvRankMax: float | None = None
+    trendFilter: str = "BULLISH"
 
 _JOB_LOCKS = {
     "earnings_scan": threading.Lock(),
@@ -227,10 +233,24 @@ def _sector_rotation_payload() -> dict:
     return _run_command("sector-rotation", reload_cache=False)
 
 
+def _quote_report_name(*, horizon_dte: int | None, min_otm_pct: float | None,
+                       filter_holdings: bool, etfs_only: bool,
+                       rv_rank_min: float | None, rv_rank_max: float | None,
+                       trend_filter: str) -> str:
+    """Stable, human-readable label stored with an immutable quote report."""
+    def value(number: float | None, fallback: str) -> str:
+        return fallback if number is None else f"{number:g}"
+    rv_range = f"{value(rv_rank_min, 'all')}-{value(rv_rank_max, 'all')}"
+    return (f"{date.today().isoformat()}__horizon{value(horizon_dte, 'all')}_"
+            f"cushion{value(min_otm_pct, 'all')}_filterholdings({'T' if filter_holdings else 'F'})_"
+            f"etfOnly({'T' if etfs_only else 'F'})_rvRank{rv_range}_trend{trend_filter}")
+
+
 def _chains_args(
     horizonDte: int | None,
     symbols: str | None,
     minOtmPct: float | None,
+    report_name: str | None = None,
 ) -> list[str]:
     """Validate optional collection scope and return argv fragments."""
     args: list[str] = []
@@ -253,6 +273,8 @@ def _chains_args(
             raise HTTPException(
                 status_code=400, detail="minOtmPct must be a percentage in [0, 100).")
         args += ["--min-otm-pct", f"{minOtmPct:g}"]
+    if report_name is not None:
+        args += ["--report-name", report_name]
     return args
 
 
@@ -300,6 +322,19 @@ def run_chains(
         horizonDte = scope.horizonDte
         symbols = ",".join(scope.symbols) if scope.symbols is not None else None
         minOtmPct = scope.minOtmPct
+        if ((scope.rvRankMin is not None and not 0 <= scope.rvRankMin <= 100) or
+                (scope.rvRankMax is not None and not 0 <= scope.rvRankMax <= 100) or
+                (scope.rvRankMin is not None and scope.rvRankMax is not None and
+                 scope.rvRankMin > scope.rvRankMax)):
+            raise HTTPException(status_code=400, detail="RV Rank range must be within 0–100 and ordered.")
+        if scope.trendFilter not in {"ALL", "BULLISH", "BEARISH"}:
+            raise HTTPException(status_code=400, detail="Trend filter must be ALL, BULLISH, or BEARISH.")
     # Validate scope before taking the lock so bad requests do not block a run.
-    args = _chains_args(horizonDte, symbols, minOtmPct)
+    report_name = (_quote_report_name(
+        horizon_dte=horizonDte, min_otm_pct=minOtmPct,
+        filter_holdings=scope.filterHoldings, etfs_only=scope.etfsOnly,
+        rv_rank_min=scope.rvRankMin, rv_rank_max=scope.rvRankMax,
+        trend_filter=scope.trendFilter,
+    ) if scope is not None else None)
+    args = _chains_args(horizonDte, symbols, minOtmPct, report_name)
     return _run_locked("chains", lambda: _run_command("chains", args))

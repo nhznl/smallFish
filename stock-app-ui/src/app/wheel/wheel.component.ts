@@ -85,9 +85,10 @@ export class WheelComponent implements OnInit, OnDestroy {
   horizon = 37;                       // default per requirements section 5
   readonly cushions: number[] = [2.5, 5, 7.5, 10];
   cushion = 5;                        // default OTM cushion shown in the ITM/touch columns
-  hideBearish = true;                 // default-ON; hides ONLY trendDirection === 'BEARISH'
-  showUnavailable = false;            // default-OFF; live chain eligibility requires quality OK
+  trendFilter: 'ALL' | 'BULLISH' | 'BEARISH' = 'BULLISH';
   etfsOnly = false;
+  rvRankMin: number | null = null;
+  rvRankMax: number | null = null;
   minSamples = 1000;                  // primary overlapping-window evidence threshold
   symbolFilter = '';
   holdingsOnly = false;
@@ -164,12 +165,12 @@ export class WheelComponent implements OnInit, OnDestroy {
       if (this.holdingsOnly && !this.holdingSymbols.has(c.wheel?.symbol.toUpperCase() ?? '')) {
         return false;
       }
-      // Hide predicate is EXACTLY trendDirection === 'BEARISH'. A null/absent
-      // trendDirection ("not evaluated") is NEVER hidden.
-      if (this.hideBearish && c.trendDirection === 'BEARISH') {
+      if (this.trendFilter !== 'ALL' && c.trendDirection !== this.trendFilter) {
         return false;
       }
-      if (!this.showUnavailable && c.wheel?.dataQuality !== 'OK') {
+      const rvRank = c.wheel?.rvRank252 == null ? null : c.wheel.rvRank252 * 100;
+      if ((this.rvRankMin != null && (rvRank == null || rvRank < this.rvRankMin)) ||
+          (this.rvRankMax != null && (rvRank == null || rvRank > this.rvRankMax))) {
         return false;
       }
       if (this.etfsOnly && c.type !== 'ETF') {
@@ -439,6 +440,11 @@ export class WheelComponent implements OnInit, OnDestroy {
 
   /** Blocking reason for view-scoped collection, or '' when it can proceed. */
   scopeBlockReason(): string {
+    if ((this.rvRankMin != null && (this.rvRankMin < 0 || this.rvRankMin > 100)) ||
+        (this.rvRankMax != null && (this.rvRankMax < 0 || this.rvRankMax > 100)) ||
+        (this.rvRankMin != null && this.rvRankMax != null && this.rvRankMin > this.rvRankMax)) {
+      return 'RV Rank must be a range from 0 to 100, with minimum no greater than maximum.';
+    }
     if (!this.scopedSymbols().length) {
       return 'No symbols match the current filters, so a scoped run would ' +
         'collect nothing.';
@@ -450,7 +456,16 @@ export class WheelComponent implements OnInit, OnDestroy {
   scopeSummary(): string {
     const symbols = this.scopedSymbols();
     return `Current view: ${this.horizon} DTE, ${symbols.length} symbol${symbols.length === 1 ? '' : 's'}, entry strikes at least ` +
-      `${this.cushion}% OTM. Roll/exit (ITM) strikes are unaffected by the cushion.`;
+      `${this.cushion}% OTM, RV Rank ${this.rvRankRange()}, Holdings: ${this.holdingsOnly ? 'Yes' : 'No'}, ` +
+      `Trend: ${this.trendFilter[0] + this.trendFilter.slice(1).toLowerCase()}. ` +
+      'Only puts below and calls above the current market price are collected.';
+  }
+
+  rvRankRange(): string {
+    if (this.rvRankMin == null && this.rvRankMax == null) return 'all';
+    if (this.rvRankMin == null) return `≤${this.rvRankMax}`;
+    if (this.rvRankMax == null) return `≥${this.rvRankMin}`;
+    return `${this.rvRankMin}–${this.rvRankMax}`;
   }
 
   runChains(): void {
@@ -470,7 +485,12 @@ export class WheelComponent implements OnInit, OnDestroy {
     const scope = {
       horizonDte: this.horizon,
       symbols,
-      minOtmPct: this.cushion
+      minOtmPct: this.cushion,
+      filterHoldings: this.holdingsOnly,
+      etfsOnly: this.etfsOnly,
+      rvRankMin: this.rvRankMin,
+      rvRankMax: this.rvRankMax,
+      trendFilter: this.trendFilter,
     };
     this.stockService.runChains(scope).subscribe(res => {
       this.chainsRunning = false;

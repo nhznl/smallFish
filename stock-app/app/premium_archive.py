@@ -114,8 +114,8 @@ def _collection_scope(meta: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _safe_run_paths(root: Path, pointer: dict[str, Any]) -> tuple[str, Path, Path]:
-    run_id = str(pointer.get("run_id") or "").strip()
+def _safe_run_paths(root: Path, run_id: str, pointer: dict[str, Any] | None = None) -> tuple[str, Path, Path]:
+    run_id = str(run_id or "").strip()
     if not _RUN_ID.fullmatch(run_id):
         raise PremiumArchiveError("Latest quote archive has an invalid run id.")
     run_dir = (root / "runs" / run_id).resolve()
@@ -123,10 +123,11 @@ def _safe_run_paths(root: Path, pointer: dict[str, Any]) -> tuple[str, Path, Pat
     expected_meta = run_dir / "run_meta.json"
     if run_dir.parent != (root / "runs").resolve():
         raise PremiumArchiveError("Latest quote archive points outside its run directory.")
-    if pointer.get("immutable_report") != f"runs/{run_id}/premiums.csv":
-        raise PremiumArchiveError("Latest quote archive report pointer is inconsistent.")
-    if pointer.get("immutable_meta") != f"runs/{run_id}/run_meta.json":
-        raise PremiumArchiveError("Latest quote archive metadata pointer is inconsistent.")
+    if pointer is not None:
+        if pointer.get("immutable_report") != f"runs/{run_id}/premiums.csv":
+            raise PremiumArchiveError("Latest quote archive report pointer is inconsistent.")
+        if pointer.get("immutable_meta") != f"runs/{run_id}/run_meta.json":
+            raise PremiumArchiveError("Latest quote archive metadata pointer is inconsistent.")
     if not expected_report.is_file() or not expected_meta.is_file():
         raise PremiumArchiveError("Latest quote archive is incomplete.")
     report_path = expected_report.resolve()
@@ -136,20 +137,15 @@ def _safe_run_paths(root: Path, pointer: dict[str, Any]) -> tuple[str, Path, Pat
     return run_id, report_path, meta_path
 
 
-def latest_snapshot() -> dict[str, Any]:
-    """Return the validated latest v3 archive, without fetching market data."""
-    root = config.premiums_dir().resolve()
-    pointer_path = root / "latest.json"
-    if not pointer_path.is_file():
-        return {
-            "available": False,
-            "reason": "No option-quote collection has been archived yet. Collect quotes from Wheel first.",
-        }
-
-    pointer = _read_json(pointer_path, "latest pointer")
-    run_id, report_path, meta_path = _safe_run_paths(root, pointer)
+def _snapshot(root: Path, run_id: str, *, pointer: dict[str, Any] | None = None,
+              include_rows: bool = True) -> dict[str, Any]:
+    """Read one immutable run, optionally omitting its contract rows."""
+    run_id, report_path, meta_path = _safe_run_paths(root, run_id, pointer)
     meta = _read_json(meta_path, "run metadata")
-    for source, label in ((pointer, "latest pointer"), (meta, "run metadata")):
+    sources = [(meta, "run metadata")]
+    if pointer is not None:
+        sources.insert(0, (pointer, "latest pointer"))
+    for source, label in sources:
         if source.get("schema_name") != PREMIUM_SCHEMA_NAME:
             raise PremiumArchiveError(f"Latest quote archive has an unsupported {label} schema name.")
         if source.get("schema_version") != PREMIUM_SCHEMA_VERSION:
@@ -177,9 +173,10 @@ def latest_snapshot() -> dict[str, Any]:
     quality_counts = Counter(str(row.get("quoteQuality") or "UNKNOWN") for row in rows)
     source_counts = Counter(str(row.get("quoteSource") or "UNKNOWN") for row in rows)
     status_counts = Counter(str(row.get("quoteProviderStatus") or "UNKNOWN") for row in rows)
-    return {
+    snapshot = {
         "available": True,
         "runId": run_id,
+        "reportName": meta.get("report_name"),
         "schemaName": PREMIUM_SCHEMA_NAME,
         "schemaVersion": PREMIUM_SCHEMA_VERSION,
         "asOf": meta.get("as_of"),
@@ -196,5 +193,44 @@ def latest_snapshot() -> dict[str, Any]:
             "quoteSourceCounts": dict(sorted(source_counts.items())),
             "providerStatusCounts": dict(sorted(status_counts.items())),
         },
-        "rows": rows,
     }
+    if include_rows:
+        snapshot["rows"] = rows
+    return snapshot
+
+
+def latest_snapshot() -> dict[str, Any]:
+    """Return the validated latest v3 archive, without fetching market data."""
+    root = config.premiums_dir().resolve()
+    pointer_path = root / "latest.json"
+    if not pointer_path.is_file():
+        return {
+            "available": False,
+            "reason": "No option-quote collection has been archived yet. Collect quotes from Wheel first.",
+        }
+    pointer = _read_json(pointer_path, "latest pointer")
+    return _snapshot(root, str(pointer.get("run_id") or ""), pointer=pointer)
+
+
+def snapshot_for_run(run_id: str) -> dict[str, Any]:
+    """Return a validated archived report by immutable run ID."""
+    return _snapshot(config.premiums_dir().resolve(), run_id)
+
+
+def recent_reports(limit: int = 4) -> list[dict[str, Any]]:
+    """Return metadata for the newest valid immutable quote reports, newest first."""
+    root = config.premiums_dir().resolve()
+    runs = root / "runs"
+    if not runs.is_dir():
+        return []
+    reports: list[dict[str, Any]] = []
+    for run in sorted((path for path in runs.iterdir() if path.is_dir()), reverse=True):
+        if not _RUN_ID.fullmatch(run.name):
+            continue
+        try:
+            reports.append(_snapshot(root, run.name, include_rows=False))
+        except PremiumArchiveError:
+            continue
+        if len(reports) == limit:
+            break
+    return reports

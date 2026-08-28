@@ -4,7 +4,7 @@ import { Observable, of, throwError } from 'rxjs';
 import { catchError, tap, shareReplay, finalize, map } from 'rxjs/operators';
 import { StockInfo } from '../model/stock-info';
 import { RvPercentileDetail, WheelCandidate } from '../model/wheel-candidate';
-import { CollectionScopeRequest, OptionQuoteSnapshot } from '../model/option-quotes';
+import { CollectionScopeRequest, OptionQuoteReport, OptionQuoteSnapshot } from '../model/option-quotes';
 import { SectorRotationSnapshot } from '../model/sector-rotation';
 import { MomentumStock, StockAnalysis, StockRange } from '../model/stock';
 import {
@@ -167,8 +167,14 @@ export class StockService {
   }
 
   /** Read the latest immutable option-quote archive; this never fetches a quote provider. */
-  getOptionQuotes(): Observable<OptionQuoteSnapshot> {
-    return this.http.get<OptionQuoteSnapshot>(`${this.apiBaseUrl}/optionQuotes`);
+  getOptionQuotes(runId?: string): Observable<OptionQuoteSnapshot> {
+    const suffix = runId ? `?runId=${encodeURIComponent(runId)}` : '';
+    return this.http.get<OptionQuoteSnapshot>(`${this.apiBaseUrl}/optionQuotes${suffix}`);
+  }
+
+  getOptionQuoteReports(): Observable<OptionQuoteReport[]> {
+    return this.http.get<{ reports: OptionQuoteReport[] }>(`${this.apiBaseUrl}/optionQuoteReports`)
+      .pipe(map(response => response.reports));
   }
 
   /** Read the latest archived sector-leadership snapshot; never fetches prices. */

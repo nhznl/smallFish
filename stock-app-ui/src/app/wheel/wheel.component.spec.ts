@@ -251,8 +251,48 @@ describe('WheelComponent', () => {
       horizonDte: 37,
       symbols: ['DEMO'],
       minOtmPct: 5,
+      filterHoldings: false,
+      etfsOnly: false,
+      rvRankMin: null,
+      rvRankMax: null,
+      trendFilter: 'BULLISH',
     });
     expect(text()).not.toContain('Scope collection to this view');
+  });
+
+  it('filters the quote-collection scope by the submitted RV Rank range', () => {
+    mount();
+    fixture.componentInstance.rvRankMin = 60;
+    fixture.componentInstance.rvRankMax = 80;
+    fixture.componentInstance.applyFilters();
+
+    expect(fixture.componentInstance.dataSource.data).toEqual([]);
+    expect(fixture.componentInstance.scopeSummary()).toContain('RV Rank 60–80');
+    expect(fixture.componentInstance.scopeSummary()).toContain('Holdings: No');
+    expect(fixture.componentInstance.scopeSummary()).toContain('Trend: Bullish');
+    fixture.componentInstance.rvRankMin = 70;
+    fixture.componentInstance.rvRankMax = 60;
+    expect(fixture.componentInstance.scopeBlockReason()).toContain('minimum no greater');
+  });
+
+  it('defaults to bullish results and lets the trend picker show bearish or all rows', () => {
+    stockService.getWheelCandidates.and.returnValue(of([
+      candidate('BULL'),
+      { ...candidate('BEAR'), trendDirection: 'BEARISH' },
+      { ...candidate('UNKNOWN'), trendAvailable: false, trendDirection: undefined },
+    ]));
+    fixture = TestBed.createComponent(WheelComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.applyFilters();
+
+    expect(fixture.componentInstance.trendFilter).toBe('BULLISH');
+    expect(fixture.componentInstance.dataSource.data.map(item => item.wheel.symbol)).toEqual(['BULL']);
+    fixture.componentInstance.trendFilter = 'BEARISH';
+    fixture.componentInstance.applyFilters();
+    expect(fixture.componentInstance.dataSource.data.map(item => item.wheel.symbol)).toEqual(['BEAR']);
+    fixture.componentInstance.trendFilter = 'ALL';
+    fixture.componentInstance.applyFilters();
+    expect(fixture.componentInstance.dataSource.data.map(item => item.wheel.symbol)).toEqual(['BULL', 'BEAR', 'UNKNOWN']);
   });
 
   it('allows quote collection at every Wheel horizon', () => {

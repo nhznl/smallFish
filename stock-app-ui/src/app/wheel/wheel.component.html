@@ -98,6 +98,16 @@
           }
         </select>
       </label>
+      <label class="control">
+        <span class="control-label">RV Rank min</span>
+        <input class="sample-input" type="number" min="0" max="100" step="1"
+          [(ngModel)]="rvRankMin" (ngModelChange)="applyFilters()" aria-label="Minimum RV Rank">
+      </label>
+      <label class="control">
+        <span class="control-label">RV Rank max</span>
+        <input class="sample-input" type="number" min="0" max="100" step="1"
+          [(ngModel)]="rvRankMax" (ngModelChange)="applyFilters()" aria-label="Maximum RV Rank">
+      </label>
       <label class="control" matTooltip="Keep rows whose primary overlapping-window sample count is greater than this value. The disjoint count remains a diagnostic." matTooltipPosition="above">
         <span class="control-label">Samples &gt;</span>
         <input class="sample-input" type="number" min="0" step="1"
@@ -111,13 +121,13 @@
         }
         {{ holdingsFilterLoading ? 'Loading holdings…' : 'Filter to Holdings' }}
       </label>
-      <label class="check-filter">
-        <input type="checkbox" [(ngModel)]="hideBearish" (ngModelChange)="applyFilters()">
-        Hide bearish
-      </label>
-      <label class="check-filter">
-        <input type="checkbox" [(ngModel)]="showUnavailable" (ngModelChange)="applyFilters()">
-        Show stale/unknown
+      <label class="control">
+        <span class="control-label">Trend</span>
+        <select class="control-select" [(ngModel)]="trendFilter" (ngModelChange)="applyFilters()">
+          <option value="ALL">All</option>
+          <option value="BULLISH">Show Bullish</option>
+          <option value="BEARISH">Show Bearish</option>
+        </select>
       </label>
       <label class="check-filter" matTooltip="Keep only rows classified as ETF in the backend universe." matTooltipPosition="above">
         <input type="checkbox" [(ngModel)]="etfsOnly" (ngModelChange)="applyFilters()">

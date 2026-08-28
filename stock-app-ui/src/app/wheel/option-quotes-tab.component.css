@@ -18,19 +18,42 @@
   font-size: var(--text-sm);
 }
 
-.archive-meta strong {
-  color: var(--text-primary);
+.report-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 16px;
 }
 
-.caveat {
-  margin: 14px 0;
-  padding: 10px 13px;
-  border-left: 4px solid var(--warn);
+.report-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: var(--warn-soft);
+  background: var(--surface-card);
   color: var(--text-primary);
-  font-size: var(--text-sm);
-  line-height: 1.55;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.report-item strong,
+.report-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-item strong { font-family: var(--font-mono); font-size: var(--text-xs); }
+.report-item strong { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+.report-item span { color: var(--text-secondary); font-size: var(--text-xs); }
+.report-item:hover, .report-active { border-color: var(--primary); background: var(--info-soft); }
+.report-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.archive-meta strong {
+  color: var(--text-primary);
 }
 
 .quote-filters {
@@ -234,6 +257,7 @@
 @container (max-width: 800px) {
   .quote-sides { grid-template-columns: minmax(0, 1fr); }
   .expiry-count { margin-left: 0; }
+  .report-list { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Scope disclosure sits between the run metadata and the counts it qualifies. */

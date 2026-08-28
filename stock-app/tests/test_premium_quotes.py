@@ -73,6 +73,30 @@ def test_option_quotes_returns_validated_v3_latest(monkeypatch, tmp_path):
     assert body["rows"][0]["entryEligible"] is True
 
 
+def test_option_quote_reports_lists_four_newest_and_reads_one_named_run(monkeypatch, tmp_path):
+    _write_latest(tmp_path)
+    for second in range(1, 5):
+        run_id = f"2026072{second + 5}T043926199394Z"
+        run = tmp_path / "runs" / run_id
+        run.mkdir()
+        source = tmp_path / "runs" / "20260725T043926199394Z"
+        (run / "premiums.csv").write_text((source / "premiums.csv").read_text(), encoding="utf-8")
+        meta = json.loads((source / "run_meta.json").read_text())
+        meta.update({"run_id": run_id, "report_name": f"2026-07-{second + 5:02d}__horizon37_cushion5_filterholdings(T)_etfOnly(F)_rvRank40-80"})
+        (run / "run_meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    monkeypatch.setenv("SFP_PREMIUMS_DIR", str(tmp_path))
+
+    reports = client.get("/optionQuoteReports").json()["reports"]
+    selected = client.get("/optionQuotes", params={"runId": reports[0]["runId"]}).json()
+
+    assert len(reports) == 4
+    assert reports == sorted(reports, key=lambda report: report["runId"], reverse=True)
+    assert all("rows" not in report for report in reports)
+    assert reports[0]["reportName"].endswith("rvRank40-80")
+    assert selected["runId"] == reports[0]["runId"]
+    assert len(selected["rows"]) == 1
+
+
 def test_option_quotes_exposes_the_recorded_collection_scope(monkeypatch, tmp_path):
     """A narrowed archive must announce its scope so it is never read as a full sweep."""
     _write_latest(tmp_path, collection_scope={

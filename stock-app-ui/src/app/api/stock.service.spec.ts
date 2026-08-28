@@ -56,3 +56,27 @@ describe('StockService stock info refresh', () => {
     http.expectOne(url).flush(info(106));
   });
 });
+
+describe('StockService option quote reports', () => {
+  let service: StockService;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), { provide: API_BASE_URL, useValue: '' }],
+    });
+    service = TestBed.inject(StockService);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => http.verify());
+
+  it('lists report summaries before fetching one immutable run', () => {
+    service.getOptionQuoteReports().subscribe(reports => expect(reports.length).toBe(1));
+    http.expectOne('/optionQuoteReports').flush({ reports: [{ runId: '20260828T160000000000Z' }] });
+    service.getOptionQuotes('20260828T160000000000Z').subscribe(snapshot => expect(snapshot.runId).toBe('20260828T160000000000Z'));
+    http.expectOne('/optionQuotes?runId=20260828T160000000000Z').flush({
+      available: true, runId: '20260828T160000000000Z', rows: [],
+    });
+  });
+});

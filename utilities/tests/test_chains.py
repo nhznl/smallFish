@@ -586,7 +586,7 @@ def test_process_symbol_produces_put_and_call_rows_with_yields():
     assert put["moneyness"] == MONEYNESS_OTM and put["entry_eligible"]
 
 
-def test_itm_quotes_are_retained_but_entry_yield_is_suppressed():
+def test_side_wrong_strikes_are_not_collected():
     puts = _chain_df([
         {"strike": 105, "bid": 6.0, "ask": 6.2, "lastPrice": 6.1,
          "impliedVolatility": 0.35, "openInterest": 500, "volume": 100,
@@ -606,18 +606,7 @@ def test_itm_quotes_are_retained_but_entry_yield_is_suppressed():
         "XYZ", ticker, [7], "2026-07-16", pd.Timestamp("2026-07-16"),
         _ctx(), _process_cfg(), retrieved_at="2026-07-16T14:00:00Z")
 
-    assert len(rows) == 2
-    assert all(row["moneyness"] == MONEYNESS_ITM for row in rows)
-    assert all(row["mid"] is not None for row in rows)  # quote remains diagnostic
-    assert all(row["period_yield"] is None and row["simple_apr"] is None
-               for row in rows)
-    assert [row["intrinsic_value"] for row in rows] == [5.0, 5.0]
-    assert [row["extrinsic_value"] for row in rows] == [1.0, 1.5]
-    assert [row["analysis_view"] for row in rows] == [VIEW_ROLL_EXIT, VIEW_ROLL_EXIT]
-    assert [row["strategy_role"] for row in rows] == [
-        ROLE_PUT_ROLL_EXIT, ROLE_CALL_ROLL_EXIT]
-    assert all(not row["entry_eligible"] for row in rows)
-    assert all(row["entry_reason"] == ENTRY_ITM_EXCLUDED for row in rows)
+    assert rows == []
 
 
 def test_last_trade_timestamp_is_not_substituted_for_quote_timestamp():
@@ -1199,8 +1188,8 @@ def test_run_chains_cushion_marks_symbols_left_without_entry_strikes():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         _write_wheel_csv(root, "2026-07-16", [{"symbol": "AAA"}])
-        # 95 is 5% OTM; a 10% cushion removes it. The ITM 105 put stays as a
-        # ROLL_EXIT row, so the run still has rows but no entry candidate.
+        # 95 is 5% OTM; a 10% cushion removes it. The 105 put is side-wrong
+        # for collection and must never replace the missing entry contract.
         puts = _chain_df([
             {"strike": 95, "bid": 1.8, "ask": 2.0, "impliedVolatility": 0.4,
              "openInterest": 500, "volume": 100},
@@ -1211,8 +1200,7 @@ def test_run_chains_cushion_marks_symbols_left_without_entry_strikes():
         result = run_chains(root, _scope_strategy(), "2026-07-16",
                             lambda _s: ticker, horizon_dtes=[37],
                             min_otm_pct=0.10)
-        views = set(result.report["analysis_view"])
-        assert VIEW_ENTRY not in views and VIEW_ROLL_EXIT in views
+        assert result.report.empty
         scope = result.meta["collection_scope"]
         assert scope["min_otm_pct"] == 0.10
         assert scope["min_otm_applies_to"] == VIEW_ENTRY

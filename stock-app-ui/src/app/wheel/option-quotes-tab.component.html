@@ -1,7 +1,7 @@
 <section class="panel">
   <div class="panel-heading">
     <div>
-      <h3 class="panel-title">Latest Option Quotes</h3>
+      <h3 class="panel-title">Option Quote Reports</h3>
       <small>Archived option quotes with current Yahoo underlying prices (may be delayed). Opening or filtering this tab never calls Tastytrade.</small>
     </div>
     <button type="button" class="btn btn-ghost" [disabled]="loading" (click)="load()">
@@ -11,13 +11,25 @@
       @if (!loading) {
         <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 1 0 2 5.5"/><path d="M20 4v7h-7"/></svg>
       }
-      {{ loading ? 'Loading…' : 'Refresh archive & prices' }}
+      {{ loading ? 'Loading…' : 'Refresh reports & prices' }}
     </button>
   </div>
 
   <div class="panel-body">
     @if (error) {
       <p class="banner banner-neg">{{ error }}</p>
+    }
+
+    @if (!error && reports.length) {
+      <div class="report-list" aria-label="Latest four option quote reports">
+        @for (report of reports; track report.runId) {
+          <button type="button" class="report-item" [class.report-active]="report.runId === selectedRunId"
+            [attr.aria-expanded]="report.runId === selectedRunId" (click)="selectReport(report.runId)">
+            <strong>{{ reportTitle(report) }}</strong>
+            <span>{{ report.summary?.contracts ?? 0 | number }} contracts · {{ report.summary?.symbols ?? 0 | number }} symbols</span>
+          </button>
+        }
+      </div>
     }
 
     @if (!loading && !error && snapshot; as data) {
@@ -32,6 +44,7 @@
         @let filteredRows = rows();
         @let symbols = groupRows(filteredRows);
         <div class="archive-meta">
+          <span><strong>Report:</strong> {{ reportTitle(data) }}</span>
           <span><strong>Run:</strong> {{ data.runId }}</span>
           <span><strong>As of:</strong> {{ data.asOf }}</span>
           <span><strong>Retrieved:</strong> {{ providerValue('retrieved_at') || data.generatedAtUtc || '—' }}</span>
@@ -65,22 +78,6 @@
             <span class="stat-label">Underlyings</span>
             <span class="stat-value">{{ summary.symbols }}</span>
           </div>
-          <div class="stat-card">
-            <span class="stat-label">ENTRY view</span>
-            <span class="stat-value">{{ summary.entryViewContracts }}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">ROLL_EXIT view</span>
-            <span class="stat-value">{{ summary.rollExitViewContracts }}</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Entry eligible</span>
-            <span class="stat-value">{{ summary.entryEligibleContracts }}</span>
-          </div>
-        </div>
-        <div class="caveat">
-          <strong>ENTRY view</strong> means the contract was selected for the entry-analysis view; it does not mean it is trade-eligible.
-          Eligibility also requires quote quality, liquidity, event, and other gate checks.
         </div>
         <div class="quote-filters">
           <label class="control">

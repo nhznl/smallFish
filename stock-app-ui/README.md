@@ -86,9 +86,22 @@ principal endpoints are:
 
 ## Wheel option quotes
 
-The Option Quotes tab reads the latest immutable archive through
-`GET /optionQuotes`; opening, filtering, or refreshing the tab never collects
-new option quotes. A successful collection refreshes the archive automatically.
+The Wheel scan can be narrowed by an optional RV Rank range (0–100); symbols
+without RV Rank are excluded only when a bound is supplied. The former
+**Show stale/unknown** filter is intentionally absent, so data-quality state no
+longer changes the collection scope. Its Trend picker defaults to **Show
+Bullish** and can instead show Bearish or All rows. Every collection uses the currently shown
+Wheel rows and stores a readable immutable report name such as
+`2026-08-28__horizon37_cushion5_filterholdings(T)_etfOnly(F)_rvRank40-80_trendBULLISH`.
+It records the scan date, horizon, cushion, Holdings and ETF filters, and RV
+Rank range, and Trend mode alongside the exact requested symbols. The report
+picker renders this metadata as a wrapping, readable description.
+
+The Option Quotes tab reads the four newest immutable report summaries through
+`GET /optionQuoteReports`. Selecting a report fetches that run only through
+`GET /optionQuotes?runId=…`; it never substitutes the latest archive for a
+selected report. Opening, filtering, or refreshing the tab never collects new
+option quotes. A successful collection refreshes the report list automatically.
 Each symbol header separately loads Yahoo's latest regular-session market price
 through the existing Stock Detail info endpoint. Opening the tab or choosing
 **Refresh archive & prices** bypasses the UI's cached stock info; filtering does
@@ -112,6 +125,8 @@ Contracts are grouped alphabetically by symbol, then by actual expiry date.
 Each expiry has separate Put and Call tables with independent strikes sorted
 numerically. The tables sit side by side on wide layouts and stack on narrow
 ones; a missing side is explicitly empty, never filled with an unrelated strike.
+New collections include only puts strictly below, and calls strictly above, the
+underlying price recorded for the scan; legacy report rows remain unchanged.
 The symbol filter applies before grouping. Observations for different requested horizons
 remain separate, with their target DTE shown when they share an expiry.
 

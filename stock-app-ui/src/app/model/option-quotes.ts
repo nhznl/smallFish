@@ -51,6 +51,11 @@ export interface CollectionScopeRequest {
   horizonDte?: number;
   symbols?: string[];
   minOtmPct?: number;
+  filterHoldings?: boolean;
+  etfsOnly?: boolean;
+  rvRankMin?: number | null;
+  rvRankMax?: number | null;
+  trendFilter?: 'ALL' | 'BULLISH' | 'BEARISH';
 }
 
 /** The scope a run actually applied, as recorded in its immutable manifest. */
@@ -71,6 +76,7 @@ export interface OptionQuoteSnapshot {
   available: boolean;
   reason?: string;
   runId?: string;
+  reportName?: string | null;
   schemaName?: string;
   schemaVersion?: number;
   asOf?: string;
@@ -81,3 +87,6 @@ export interface OptionQuoteSnapshot {
   summary?: OptionQuoteSummary;
   rows?: OptionQuoteRow[];
 }
+
+/** A bounded archive index entry; rows arrive only after the user opens it. */
+export type OptionQuoteReport = Omit<OptionQuoteSnapshot, 'rows'>;

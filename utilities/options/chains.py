@@ -702,6 +702,7 @@ def _base_meta(as_of, wheel_path, cfg, sl_meta, symbols, report, statuses,
                 "max_itm_strikes_per_side": cfg["roll_exit_max_itm_strikes"],
             },
         },
+        "contract_strike_constraint": "PUT strike < spot; CALL strike > spot",
         "exclude_earnings_in_window": cfg["exclude_earnings_in_window"],
         "pool_size": sl_meta.get("pool_size", 0),
         "symbols_after_limit": len(symbols),
@@ -746,6 +747,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="minimum OTM cushion in PERCENT (e.g. 5 for 5%%). "
                              "Narrows ENTRY strikes inside the configured sigma "
                              "band; ROLL_EXIT strikes are unaffected")
+    parser.add_argument("--report-name", default=None,
+                        help="immutable report label supplied by the calling view")
     args = parser.parse_args(argv)
     horizon_dtes = None
     if args.horizon_dte:
@@ -784,7 +787,8 @@ def main(argv: list[str] | None = None) -> int:
         result = run_chains(ROOT, strategy, args.as_of, fetch_fn,
                             quote_fetch_fn=quote_fetch_fn,
                             trend_exclude=trend_exclude, limit=args.limit,
-                            extra_meta=_runtime_metadata(),
+                            extra_meta={**_runtime_metadata(), **(
+                                {"report_name": args.report_name} if args.report_name else {})},
                             horizon_dtes=horizon_dtes, symbol_scope=symbol_scope,
                             min_otm_pct=min_otm_pct)
     except ValueError as exc:

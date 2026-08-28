@@ -228,9 +228,10 @@ def _side_rows(symbol: str, as_of: str, chain_dte: int, expiry: str, actual_dte:
                retrieved_at=None, min_otm_pct: float | None = None) -> list[dict]:
     """Build the premium rows for ONE side (puts or calls) of one expiry.
 
-    `min_otm_pct` narrows only the ENTRY view. ROLL_EXIT strikes are ITM by
-    definition, so an OTM cushion cannot describe them; they are collected
-    unchanged and stay entry-ineligible.
+    Quotes are collected only for the side-correct OTM entry set: put strikes
+    strictly below spot and call strikes strictly above it. Roll/exit strikes
+    are deliberately not collected in new runs because they are side-wrong
+    relative to the requested underlying price constraint.
     """
     out: list[dict] = []
     if chain_df is None or len(chain_df) == 0:
@@ -251,30 +252,21 @@ def _side_rows(symbol: str, as_of: str, chain_dte: int, expiry: str, actual_dte:
             f"{policy_prefix}_extra_strikes", DEFAULT_ENTRY_EXTRA_STRIKES)),
         min_otm_pct=min_otm_pct,
     ))
-    roll_exit_chosen = set(select_roll_exit_strikes(
-        side, clean_strikes, spot,
-        max_itm_strikes=int(cfg.get(
-            "roll_exit_max_itm_strikes", DEFAULT_ROLL_EXIT_STRIKES)),
-    ))
-    chosen = entry_chosen | roll_exit_chosen
+    chosen = entry_chosen
 
     for _, r in chain_df.iterrows():
         strike = _num(r.get("strike"))
         if strike is None or strike not in chosen:
             continue
-        analysis_view = VIEW_ENTRY if strike in entry_chosen else VIEW_ROLL_EXIT
+        analysis_view = VIEW_ENTRY
         if side == SIDE_PUT:
-            strategy_role = ROLE_CSP_ENTRY if analysis_view == VIEW_ENTRY else ROLE_PUT_ROLL_EXIT
+            strategy_role = ROLE_CSP_ENTRY
         else:
-            strategy_role = (ROLE_COVERED_CALL_ENTRY if analysis_view == VIEW_ENTRY
-                             else ROLE_CALL_ROLL_EXIT)
-        if analysis_view == VIEW_ENTRY:
-            # The row records the cushion narrowing so an archived strike set is
-            # readable without consulting the run manifest.
-            selection_policy = (f"{side}_OTM_SIGMA_BAND_MIN_OTM" if min_otm_pct
-                                else f"{side}_OTM_SIGMA_BAND")
-        else:
-            selection_policy = f"{side}_NEAREST_ITM"
+            strategy_role = ROLE_COVERED_CALL_ENTRY
+        # The row records the cushion narrowing so an archived strike set is
+        # readable without consulting the run manifest.
+        selection_policy = (f"{side}_OTM_SIGMA_BAND_MIN_OTM" if min_otm_pct
+                            else f"{side}_OTM_SIGMA_BAND")
         moneyness = option_moneyness(side, strike, spot)
         contract = canonical_contract(symbol, expiry, side, strike, r)
         quote_timestamp = r.get("quoteTimestamp")
@@ -396,14 +388,14 @@ def process_symbol_chains(symbol: str, chain_obj, chain_dtes: list[int],
         rows += _side_rows(symbol, as_of, dte, expiry, actual_dte, SIDE_CALL,
                            calls, ctx, cfg, retrieved_at, min_otm_pct)
 
+    if (min_otm_pct and status["expiries_used"] and
+            not any(row.get("analysis_view") == VIEW_ENTRY for row in rows)):
+        # The scoped cushion removed the otherwise side-correct entry set. This
+        # remains true when no ITM roll/exit rows are collected.
+        status["min_otm_excluded_all_entries"] = True
     if not rows and not status["reason"]:
         status["reason"] = (SKIP_NO_EXPIRY_WITHIN_TOLERANCE
                             if status["horizon_exclusions"] else SKIP_NO_ROWS)
-    elif min_otm_pct and not any(row.get("analysis_view") == VIEW_ENTRY
-                                 for row in rows):
-        # Chains were fetched and ROLL_EXIT rows may exist, but the cushion left
-        # no entry candidate. Attribute that to the scope, not to the market.
-        status["min_otm_excluded_all_entries"] = True
     return rows, status
 
 

@@ -195,10 +195,25 @@ def test_run_chains_post_body_forwards_a_large_view_scope(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert called["args"][4:] == [
+    assert called["args"][4:-2] == [
         "chains", "--horizon-dte", "37", "--symbols", ",".join(symbols),
         "--min-otm-pct", "5",
     ]
+    assert called["args"][-2] == "--report-name"
+    assert called["args"][-1].endswith("filterholdings(F)_etfOnly(F)_rvRankall-all_trendBULLISH")
+
+
+def test_run_chains_report_name_records_submitted_filters(monkeypatch):
+    called = _capture_chains(monkeypatch)
+
+    response = client.post("/runChains", json={
+        "horizonDte": 37, "symbols": ["AAPL"], "minOtmPct": 5,
+        "filterHoldings": True, "etfsOnly": True, "rvRankMin": 40, "rvRankMax": 80,
+    })
+
+    assert response.status_code == 200
+    assert called["args"][-1].endswith(
+        "__horizon37_cushion5_filterholdings(T)_etfOnly(T)_rvRank40-80_trendBULLISH")
 
 
 def test_run_chains_scope_arguments_cannot_extend_the_command(monkeypatch):

@@ -78,6 +78,7 @@ describe('OptionQuotesTabComponent', () => {
 
   function mount(rows: OptionQuoteRow[]): HTMLElement {
     service.getOptionQuotes.and.returnValue(of(snapshot(rows)));
+    service.getOptionQuoteReports.and.returnValue(of([snapshot(rows)]));
     fixture = TestBed.createComponent(OptionQuotesTabComponent);
     fixture.componentRef.setInput('refreshToken', 0);
     fixture.detectChanges();
@@ -85,7 +86,9 @@ describe('OptionQuotesTabComponent', () => {
   }
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<StockService>('StockService', ['getOptionQuotes', 'getStockInfo', 'runChains']);
+    service = jasmine.createSpyObj<StockService>('StockService', [
+      'getOptionQuotes', 'getOptionQuoteReports', 'getStockInfo', 'runChains',
+    ]);
     brokerageService = jasmine.createSpyObj<BrokerageService>('BrokerageService', ['getHoldings']);
     service.getStockInfo.and.returnValue(of(stockInfo()));
     brokerageService.getHoldings.and.returnValue(of(holdingsResponse()));
@@ -140,6 +143,24 @@ describe('OptionQuotesTabComponent', () => {
     expect(element.textContent).toContain('Roll/exit');
     expect(element.querySelector('.archive-meta')?.textContent).toContain('2026-07-16T14:00:00Z');
     expect(element.querySelector('.symbol-heading a')?.getAttribute('href')).toBe('/stockDetail/DEMO');
+    expect(element.textContent).not.toMatch(/ENTRY view|ROLL_EXIT view|Entry eligible|does not mean it is trade-eligible/i);
+  });
+
+  it('shows holdings and trend filters in both new report labels and scoped collection detail', () => {
+    const report = snapshot([quote()]);
+    report.reportName = '2026-08-28__horizon37_cushion5_filterholdings(T)_etfOnly(F)_rvRank40-80_trendBEARISH';
+    report.collectionScope = { scoped: true, requestedDtes: [37], symbolCount: 1, minOtmPct: 0.05 };
+    service.getOptionQuotes.and.returnValue(of(report));
+    service.getOptionQuoteReports.and.returnValue(of([report]));
+    fixture = TestBed.createComponent(OptionQuotesTabComponent);
+    fixture.componentRef.setInput('refreshToken', 0);
+    fixture.detectChanges();
+
+    const content = fixture.nativeElement.textContent;
+    expect(content).toContain('Holdings: Yes');
+    expect(content).toContain('Trend Bearish');
+    expect(content).toContain('Trend: Bearish');
+    expect(content).not.toContain('(configured:');
   });
 
   it('keeps a missing call side explicitly empty and never fabricates a paired contract', () => {
@@ -266,6 +287,25 @@ describe('OptionQuotesTabComponent', () => {
     expect(element.querySelectorAll('.quote-symbol').length).toBe(0);
     expect(service.getOptionQuotes).toHaveBeenCalledTimes(3);
     expect(service.runChains).not.toHaveBeenCalled();
+  });
+
+  it('shows the newest four reports and loads rows only for the opened report', () => {
+    const reports = ['20260828T160000000000Z', '20260828T150000000000Z', '20260828T140000000000Z', '20260828T130000000000Z']
+      .map((runId, index) => ({ ...snapshot([]), runId, reportName: `2026-08-28__horizon37_cushion5_filterholdings(${index ? 'F' : 'T'})_etfOnly(F)_rvRank40-80_trendBULLISH` }));
+    service.getOptionQuoteReports.and.returnValue(of(reports));
+    service.getOptionQuotes.and.callFake(runId => of(snapshot([quote({ symbol: runId === reports[1].runId ? 'OLDER' : 'NEWER' })])));
+    fixture = TestBed.createComponent(OptionQuotesTabComponent);
+    fixture.componentRef.setInput('refreshToken', 0);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelectorAll('.report-item').length).toBe(4);
+    expect(element.textContent).toContain('Aug 28, 2026 · 37 DTE · 5% OTM · Holdings: Yes · ETFs all · RV Rank 40-80 · Trend Bullish');
+    expect(service.getOptionQuotes).toHaveBeenCalledWith(reports[0].runId);
+    (element.querySelectorAll('.report-item')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(service.getOptionQuotes).toHaveBeenCalledWith(reports[1].runId);
+    expect(element.querySelector('.symbol-heading')?.textContent).toContain('OLDER');
   });
 
   it('shows combined open equity shares and a share-weighted average cost beside market price', () => {
