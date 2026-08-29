@@ -16,6 +16,9 @@ export interface OptionQuoteRow {
   bid: number | null;
   ask: number | null;
   mid: number | null;
+  impliedVolatility?: number | null;
+  impliedVolatilitySource?: string | null;
+  impliedVolatilityObservedAt?: string | null;
   openInterest: number | null;
   volume: number | null;
   spreadPct: number | null;

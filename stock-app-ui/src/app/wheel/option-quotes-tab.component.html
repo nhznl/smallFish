@@ -152,6 +152,7 @@
                               <thead><tr>
                                 <th scope="col" class="num col-sticky">Strike / view</th>
                                 <th scope="col" class="num">Bid / Ask</th>
+                                <th scope="col" class="num">IV</th>
                                 <th scope="col" class="num">OI / volume</th>
                                 <th scope="col" class="num">Spread</th>
                               </tr></thead>
@@ -169,6 +170,7 @@
                                       }
                                     </td>
                                     <td class="num">{{ row.bid != null ? ('$' + (row.bid | number:'1.2-2')) : '—' }} / {{ row.ask != null ? ('$' + (row.ask | number:'1.2-2')) : '—' }}</td>
+                                    <td class="num" [attr.title]="row.impliedVolatilitySource || null">{{ row.impliedVolatility != null ? ((row.impliedVolatility * 100) | number:'1.1-1') + '%' : '—' }}</td>
                                     <td class="num">{{ row.openInterest ?? '—' }} / {{ row.volume ?? '—' }}</td>
                                     <td class="num">{{ row.spreadPct != null ? ((row.spreadPct * 100) | number:'1.1-1') + '%' : '—' }}</td>
                                   </tr>

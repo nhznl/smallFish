@@ -52,6 +52,8 @@ _CAMEL_CASE = {
     "actual_dte": "actualDte", "dte_deviation": "dteDeviation",
     "analysis_view": "analysisView", "strategy_role": "strategyRole",
     "last_price": "lastPrice", "implied_volatility": "impliedVolatility",
+    "implied_volatility_source": "impliedVolatilitySource",
+    "implied_volatility_observed_at": "impliedVolatilityObservedAt",
     "open_interest": "openInterest", "spread_abs": "spreadAbs", "spread_pct": "spreadPct",
     "quote_source": "quoteSource", "quote_provider_status": "quoteProviderStatus",
     "quote_streamer_symbol": "quoteStreamerSymbol", "bid_timestamp": "bidTimestamp",

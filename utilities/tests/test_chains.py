@@ -650,6 +650,8 @@ def test_tastytrade_quote_enrichment_recomputes_executable_economics():
         requested=1, received=1, retrieved_at="2026-07-16T14:00:00Z",
         quotes={"XYZ260724P00095000": {
             "bid": 1.85, "ask": 1.95, "bid_size": 12, "ask_size": 8,
+            "implied_volatility": 0.42,
+            "implied_volatility_observed_at": "2026-07-16T13:56:00Z",
             "bid_timestamp": "2026-07-16T13:55:00Z",
             "ask_timestamp": "2026-07-16T13:56:00Z",
             "quote_timestamp": "2026-07-16T13:55:00Z",
@@ -666,6 +668,9 @@ def test_tastytrade_quote_enrichment_recomputes_executable_economics():
     assert row["bid_timestamp"] == "2026-07-16T13:55:00+00:00"
     assert row["ask_timestamp"] == "2026-07-16T13:56:00+00:00"
     assert row["bid_size"] == 12 and row["ask_size"] == 8
+    assert _approx(row["implied_volatility"], 0.42)
+    assert row["implied_volatility_source"] == "TASTYTRADE_DXLINK"
+    assert row["implied_volatility_observed_at"] == "2026-07-16T13:56:00Z"
     assert _approx(row["gross_premium_yield"], 1.85 / 95)
     assert bool(row["entry_eligible"])
 

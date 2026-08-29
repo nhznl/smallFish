@@ -39,6 +39,20 @@ def test_fetch_quotes_async_delegates_to_options_market(monkeypatch):
         )
 
     monkeypatch.setattr(market_quotes.options_market, "fetch_quotes_async", provider)
+    monkeypatch.setattr(
+        market_quotes.options_market, "fetch_greeks",
+        lambda contracts, **kwargs: market_quotes.options_market.GreeksResult((
+            market_quotes.options_market.GreekObservation(
+                contract_symbol="ABC   260821P00050000",
+                provider_symbol=".ABC260821P50",
+                implied_volatility="0.42",
+                option_price=None, delta=None, gamma=None, theta=None, rho=None, vega=None,
+                observed_at="2025-06-15T12:26:42+00:00",
+                event_time_ms=1_750_000_002_000,
+                provenance=market_quotes.SOURCE_TASTYTRADE_DXLINK,
+            ),
+        )),
+    )
 
     result = asyncio.run(market_quotes.fetch_quotes_async(
         ["ABC   260821P00050000", "invalid"],
@@ -58,6 +72,8 @@ def test_fetch_quotes_async_delegates_to_options_market(monkeypatch):
     assert result.received == 1
     assert result.quotes["ABC   260821P00050000"]["bid"] == "1.00"
     assert result.quotes["ABC   260821P00050000"]["streamer_symbol"] == ".ABC260821P50"
+    assert result.quotes["ABC   260821P00050000"]["implied_volatility"] == "0.42"
+    assert result.iv_received == 1
     assert result.errors == [
         "1 contract symbol(s) could not be converted to dxFeed"
     ]

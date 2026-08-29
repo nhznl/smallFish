@@ -224,7 +224,9 @@ PREMIUM_COLUMNS = [
     "ask",
     "mid",                  # (bid+ask)/2; NULL for a missing/one-sided/crossed quote
     "last_price",
-    "implied_volatility",   # Yahoo IV -- unreliable, reported not gated on
+    "implied_volatility",   # Tastytrade Greeks IV when available; Yahoo fallback otherwise
+    "implied_volatility_source",
+    "implied_volatility_observed_at",
     "open_interest",
     "volume",
     "spread_abs",           # ask - bid (NULL when mid NULL)

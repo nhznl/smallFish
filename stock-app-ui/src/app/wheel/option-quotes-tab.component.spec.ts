@@ -133,7 +133,7 @@ describe('OptionQuotesTabComponent', () => {
     })]);
     for (const table of Array.from(element.querySelectorAll('table'))) {
       const headers = Array.from(table.querySelectorAll('thead th')).map(node => node.textContent?.trim());
-      expect(headers).toEqual(['Strike / view', 'Bid / Ask', 'OI / volume', 'Spread']);
+      expect(headers).toEqual(['Strike / view', 'Bid / Ask', 'IV', 'OI / volume', 'Spread']);
       expect(table.textContent).not.toMatch(/Timestamp|Liquidity|Reasons|Quote quality|Entry status|Not eligible/i);
     }
     const put = element.querySelector('.quote-side')!;

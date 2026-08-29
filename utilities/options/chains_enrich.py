@@ -303,6 +303,8 @@ def _side_rows(symbol: str, as_of: str, chain_dte: int, expiry: str, actual_dte:
             "selection_policy": selection_policy,
             "last_price": _num(r.get("lastPrice")),
             "implied_volatility": iv,
+            "implied_volatility_source": QUOTE_SOURCE_YAHOO if iv is not None else None,
+            "implied_volatility_observed_at": None,
             "open_interest": oi,
             "volume": vol,
             "last_trade_timestamp": _timestamp_text(r.get("lastTradeDate")),
@@ -427,6 +429,13 @@ def enrich_tastytrade_quotes(report: pd.DataFrame, cfg: dict,
             )
             enriched.append(row)
             continue
+        iv = _num(observation.get("implied_volatility"))
+        if iv is not None:
+            row["implied_volatility"] = iv
+            row["implied_volatility_source"] = SOURCE_TASTYTRADE_DXLINK
+            row["implied_volatility_observed_at"] = observation.get("implied_volatility_observed_at")
+            row["iv_vs_rv_ratio"], row["iv_vs_rv_diff"] = iv_vs_rv(
+                iv, _num(row.get("annualized_rv")))
         enriched.append(apply_quote_observation(
             row, cfg,
             bid=observation.get("bid"), ask=observation.get("ask"),

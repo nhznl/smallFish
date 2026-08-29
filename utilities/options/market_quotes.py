@@ -27,6 +27,8 @@ class QuoteBatch:
     received: int = 0
     retrieved_at: str | None = None
     quotes: dict[str, dict[str, Any]] = field(default_factory=dict)
+    iv_received: int = 0
+    iv_errors: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     batches: int = 0
 
@@ -50,6 +52,9 @@ class QuoteBatch:
             "missing_contracts": max(self.requested - self.received, 0),
             "retrieved_at": self.retrieved_at,
             "batches": self.batches,
+            "iv_received_contracts": self.iv_received,
+            "iv_missing_contracts": max(self.requested - self.iv_received, 0),
+            "iv_errors": self.iv_errors,
             "errors": self.errors,
         }
 
@@ -96,12 +101,31 @@ async def fetch_quotes_async(
         batch_size=batch_size,
         credentials=credentials,
     )
-    batch.environment = result.environment
-    batch.batches = result.batches
     batch.quotes.update({
         observation.contract_symbol: _observation_dict(observation)
         for observation in result.observations
     })
+    # IV is delivered on DXLink's separate Greeks stream. Its absence must
+    # not make an otherwise usable bid/ask collection fail.
+    try:
+        greeks = await asyncio.to_thread(
+            options_market.fetch_greeks, unique, timeout_seconds=timeout_seconds,
+            credentials=credentials,
+        )
+        for observation in greeks.observations:
+            quote = batch.quotes.get(observation.contract_symbol)
+            if quote is None:
+                continue
+            quote['implied_volatility'] = observation.implied_volatility
+            quote['implied_volatility_observed_at'] = observation.observed_at
+            quote['implied_volatility_streamer_symbol'] = observation.provider_symbol
+            batch.iv_received += 1
+        if greeks.error:
+            batch.iv_errors.append(greeks.error)
+    except Exception as exc:  # Quote delivery remains authoritative.
+        batch.iv_errors.append(f'Greek IV collection failed: {exc}')
+    batch.environment = result.environment
+    batch.batches = result.batches
     batch.errors.extend(result.errors)
     batch.received = len(batch.quotes)
     batch.retrieved_at = datetime.now(timezone.utc).isoformat()
