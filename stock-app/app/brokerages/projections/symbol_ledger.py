@@ -405,12 +405,26 @@ class SymbolLedger:
         risk = open_contract_risk.build_open_contract_risk(
             self.components, symbol=self.symbol,
         )
+        # A cash-secured put requires its full strike obligation, not its
+        # current option mark. Contract multipliers remain position facts so
+        # adjusted and non-standard contracts are not assumed to be 100 shares.
+        put_cash_required = ZERO if risk["strategy"] in {
+            open_contract_risk.STRATEGY_PUT_CREDIT_SPREAD,
+            open_contract_risk.STRATEGY_PUT_DEBIT_SPREAD,
+        } else sum((
+            abs(row.quantity) * row.strike * row.multiplier
+            for row in components
+            if (row.instrument == "OPTION" and row.state == "OPEN"
+                and row.side == "SHORT" and row.option_type == "PUT"
+                and row.strike is not None)
+        ), ZERO)
         return {
             "symbol": self.symbol,
             "state": view["state"],
             "reconciliation_status": view["reconciliation_status"],
             "pnl_completeness": view["pnl_completeness"],
             "accounts": sorted({row.account for row in components}),
+            "put_cash_required": _number(put_cash_required),
             "exposure": "OPTIONS" if options_only else _exposure(components),
             "current_period": view["current_period"],
             "archived_period_count": len(view["archives"]),

@@ -28,7 +28,7 @@ type StateFilter = 'active' | 'closed';
 type SortColumn = 'symbol' | 'dte' | 'total_pnl';
 
 const ACTIVE_COLUMN_COUNT = 14;
-const CLOSED_COLUMN_COUNT = 11;
+const CLOSED_COLUMN_COUNT = 10;
 
 /**
  * One durable row per underlying symbol — the replacement for Trade Groups.
@@ -480,6 +480,11 @@ export class SymbolLedgerComponent implements OnChanges {
       const bv = typeof b === 'number' ? b : Number.NEGATIVE_INFINITY;
       return this.sortAscending ? av - bv : bv - av;
     });
+  }
+
+  /** Sum full strike obligations for all open short puts in this ledger view. */
+  totalPutCashRequired(): number {
+    return this.optionItems().reduce((total, row) => total + row.put_cash_required, 0);
   }
 
   sortBy(column: SortColumn): void {

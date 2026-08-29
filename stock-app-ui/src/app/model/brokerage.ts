@@ -280,6 +280,7 @@ export interface SymbolLedgerSummary {
   reconciliation_status: ReconciliationStatus;
   pnl_completeness: PnlCompleteness;
   accounts: string[];
+  put_cash_required: number;
   exposure: Exposure;
   current_period: LedgerPeriod;
   archived_period_count: number;

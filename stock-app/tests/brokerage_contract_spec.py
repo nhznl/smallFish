@@ -86,6 +86,7 @@ EVENT_ORDER_KEY = ("executed_at", "provider_event_id")
 
 SYMBOL_LEDGER_LIST_ITEM_KEYS = frozenset({
     "symbol", "state", "reconciliation_status", "pnl_completeness", "accounts",
+    "put_cash_required",
     "exposure", "current_period", "archived_period_count", "archived_pnl",
     "lifetime_pnl", "notes", "warnings",
 })

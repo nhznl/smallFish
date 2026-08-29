@@ -29,6 +29,7 @@ function summary(overrides: Partial<SymbolLedgerSummary> = {}): SymbolLedgerSumm
     reconciliation_status: 'RECONCILED',
     pnl_completeness: 'INDICATIVE',
     accounts: ['Main'],
+    put_cash_required: 5000,
     exposure: 'OPTIONS',
     current_period: {
       period_version: 'v1:abc', started_at: '2026-01-15T15:30:00Z', event_count: 6,
@@ -235,6 +236,9 @@ describe('SymbolLedgerComponent', () => {
         expect(fixture.nativeElement.querySelector('.range-column .range-cell')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('.symbol-cell a')?.textContent?.trim()).toBe('DEMO');
         expect(body).toContain('Options');
+        expect(body).toContain('Put cash required');
+        expect(body).toContain('$5,000.00');
+        expect(body).not.toContain('Accounts');
         expect(body).not.toContain('Equity + options');
         // The concepts the migration removes must not reappear in the UI.
         expect(body).not.toContain('Trade Groups');

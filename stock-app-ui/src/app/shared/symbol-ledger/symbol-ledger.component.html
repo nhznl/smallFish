@@ -70,6 +70,13 @@
             Since {{ ledger.coverage.history_start || 'the first imported event' }}
           </span>
         </div>
+        @if (state === 'active') {
+          <div class="stat-card">
+            <span class="stat-label">Put cash required</span>
+            <span class="stat-value">{{ money(totalPutCashRequired()) }}</span>
+            <span class="stat-delta">Open short puts at strike × multiplier</span>
+          </div>
+        }
         @if (ledger.summary.needs_review_count) {
           <div class="stat-card stat-card-warn">
             <span class="stat-label">Needs review</span>
@@ -146,10 +153,12 @@
                   </th>
                   <th scope="col">Breakeven</th>
                 }
-                <th scope="col">Accounts</th>
                 <th scope="col" class="num">Events</th>
                 <th scope="col" class="num">Net cash</th>
                 <th scope="col" class="num">Open value</th>
+                @if (state === 'active') {
+                  <th scope="col" class="num">Put cash required</th>
+                }
                 <th scope="col" class="num sortable" [attr.aria-sort]="ariaSort('total_pnl')">
                   <button type="button" class="sort-button" (click)="sortBy('total_pnl')"
                     matTooltip="Option net cash plus the signed value of open option contracts; shares are excluded"
@@ -226,7 +235,6 @@
                       }
                     </td>
                   }
-                  <td class="accounts-cell">{{ row.accounts.join(', ') || '—' }}</td>
                   <td class="num">{{ row.current_period.event_count }}</td>
                   <td [class]="'num ' + pnlClass(row.current_period.net_cash_flow)">
                     {{ money(row.current_period.net_cash_flow, true) }}
@@ -234,6 +242,9 @@
                   <td [class]="'num ' + pnlClass(row.current_period.open_market_value)">
                     {{ money(row.current_period.open_market_value, true) }}
                   </td>
+                  @if (state === 'active') {
+                    <td class="num">{{ money(row.put_cash_required) }}</td>
+                  }
                   <td [class]="'num ' + pnlClass(row.current_period.total_pnl)">
                     {{ money(row.current_period.total_pnl, true) }}
                     <small [class]="completenessClass(row.pnl_completeness)">

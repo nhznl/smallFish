@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from app import config, options_activity
 from app.brokerages import registry, store
+from app.brokerages.projections import open_contract_risk
 from app.main import app
 from tests.test_brokerage_adapters import (CONTRACT, _write_snaptrade,  # noqa: F401
                                            _write_tastytrade, adapter_env,
@@ -127,6 +128,29 @@ def _archive(brokerage_id, symbol="ABC", *, version=None, request_id=None,
 
 
 # ------------------------------------------------------------- identity ---
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_open_short_put_reports_full_cash_requirement(adapter_env, brokerage_id):
+    """Cash security is strike × contract multiplier, never the option mark."""
+    write_covered_put(brokerage_id)
+    item = _symbols(brokerage_id, state="active", exposure="options")["items"][0]
+    assert item["put_cash_required"] == pytest.approx(5000)
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+@pytest.mark.parametrize("strategy", ("PUT CREDIT SPREAD", "PUT DEBIT SPREAD"))
+def test_put_spread_does_not_add_to_cash_requirement(
+    adapter_env, monkeypatch, brokerage_id, strategy,
+):
+    write_covered_put(brokerage_id)
+    monkeypatch.setattr(
+        open_contract_risk, "classify_open_strategy",
+        lambda components: strategy,
+    )
+    item = _symbols(brokerage_id, state="active", exposure="options")["items"][0]
+    assert item["strategy"] == strategy
+    assert item["put_cash_required"] == pytest.approx(0)
+
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
 def test_one_ledger_per_symbol_no_matter_how_many_contracts(adapter_env,
