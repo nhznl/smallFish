@@ -90,12 +90,16 @@ specific artifact.
 | `SFP_RETIRED_SYMBOLS_CSV` | `$SFP_DATA_DIR/retired_symbols.csv` |
 | `SFP_OPTIONS_ACTIVITY` | `$SFP_DATA_DIR/ledger_trading/options_activity.csv` |
 | `SFP_TASTYTRADE_POSITIONS` | `$SFP_DATA_DIR/ledger_trading/positions.csv` |
+| `SFP_TRADING_ACCOUNT_CAPITAL` | `$SFP_DATA_DIR/ledger_trading/account_capital.csv` |
 | `SFP_TRADING_HOLDINGS_ENRICHMENT` | `$SFP_DATA_DIR/ledger_trading/holdings_enrichment.csv` |
 | `SFP_TRADING_HOLDINGS_SETTINGS` | `$SFP_DATA_DIR/ledger_trading/holdings_settings.csv` |
 | `SFP_TRADING_HOLDINGS_TREND` | `$SFP_DATA_DIR/ledger_trading/holdings_trend.csv` |
 | `SFP_OPTIONS_GREEKS` | `$SFP_DATA_DIR/ledger_trading/options_greeks.csv` |
 | `SFP_OPTIONS_BETAS` | `$SFP_DATA_DIR/ledger_trading/options_betas.csv` |
 | `SFP_SNAPTRADE_HOLDINGS` | `$SFP_DATA_DIR/ledger_retirement/positions.csv` |
+| `SFP_RETIREMENT_ACCOUNT_CAPITAL` | `$SFP_DATA_DIR/ledger_retirement/account_capital.csv` |
+| `SFP_PORTFOLIO_ANALYSIS_PROFILES` | `$SFP_DATA_DIR/portfolio_analysis/profiles.json` |
+| `SFP_PORTFOLIO_ANALYSIS_CLASSIFICATIONS` | `$SFP_DATA_DIR/portfolio_analysis/classifications.csv` |
 | `SFP_HOLDINGS_SETTINGS` | `$SFP_DATA_DIR/ledger_retirement/holdings_settings.csv` |
 | `SFP_RETIREMENT_OPTION_EVENTS` | `$SFP_DATA_DIR/ledger_retirement/options_activity.csv` |
 | `SFP_SYMBOL_LEDGER_METADATA` | `$SFP_DATA_DIR/ledger_symbols/symbol_ledger_metadata.csv` |

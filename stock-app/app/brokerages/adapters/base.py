@@ -14,12 +14,14 @@ strike scalings. Coverage status does not, so each adapter declares its own.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from ... import options_activity
+from .. import account_capital as account_capital_artifact
 from ..contracts import (ACTIONS, PROVIDER_BOUNDARY_UNKNOWN,
                          UNCONFIRMED_PROVIDER_LIFECYCLE,
-                         UNMAPPED_PROVIDER_ACTION, ActivityFact,
+                         UNMAPPED_PROVIDER_ACTION, AccountCapitalFact, ActivityFact,
                          BrokerageCapabilities, BrokerageCoverage,
                          BrokerageDescriptor, BrokerageSnapshot,
                          MarketObservation, OptionContract, PositionFact,
@@ -116,6 +118,7 @@ class BrokerageAdapter(Protocol):
     def positions(self) -> list[PositionFact]: ...
     def activity(self) -> list[ActivityFact]: ...
     def market_observations(self) -> list[MarketObservation]: ...
+    def account_capital(self) -> list[AccountCapitalFact]: ...
 
 
 class ArtifactAdapter:
@@ -136,9 +139,11 @@ class ArtifactAdapter:
     COVERAGE_REASONS: tuple[str, ...] = ()
 
     def __init__(self, descriptor: BrokerageDescriptor,
-                 capabilities: BrokerageCapabilities | None = None) -> None:
+                 capabilities: BrokerageCapabilities | None = None,
+                 account_capital_path: Path | None = None) -> None:
         self._descriptor = descriptor
         self._capabilities = capabilities or BrokerageCapabilities()
+        self._account_capital_path = account_capital_path
 
     # ------------------------------------------------------------ interface --
 
@@ -156,6 +161,15 @@ class ArtifactAdapter:
 
     def market_observations(self) -> list[MarketObservation]:
         raise NotImplementedError
+
+    def account_capital(self) -> list[AccountCapitalFact]:
+        if self._account_capital_path is None:
+            return []
+        return account_capital_artifact.read_facts(
+            self._account_capital_path,
+            brokerage_id=self.brokerage_id,
+            source=self.source,
+        )
 
     def coverage(self) -> BrokerageCoverage:
         activity = self.activity()
@@ -186,6 +200,7 @@ class ArtifactAdapter:
             positions=tuple(self.positions()),
             activity=tuple(self.activity()),
             market_observations=tuple(self.market_observations()),
+            account_capital=tuple(self.account_capital()),
             availability=tuple(self.availability_reasons()),
         )
 

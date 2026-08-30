@@ -47,11 +47,15 @@ Everything here works with **no account and no API key**:
        alt="The Wheel screen ranking cash-secured put candidates from the local price cache">
 </p>
 
-With a brokerage connected, Trading and Retirement share the same three tabs:
+With a brokerage connected, Trading and Retirement share the same four tabs:
 **Holdings** (open equities), **Options** (the Symbol Ledger — one durable
 record per underlying with immutable event history), and **Option-Adjusted
 Basis** (combined equity and option economics for symbols that still hold
-shares). Trade groups and portfolio-risk dashboards are retired. Both frames
+shares), plus **Portfolio Analysis** (account-role profile fit, concentration,
+capital deployment, stress evidence, and a non-persistent stock/ETF What-if
+preview). Analysis percentages require provider-supplied net liquidating value;
+missing capital or owner limits remain explicitly unavailable rather than being
+estimated. Trade groups and the former portfolio-risk dashboard are retired. Both frames
 below use **synthetic demonstration data** — no real account or position:
 
 <p align="center">

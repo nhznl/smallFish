@@ -55,6 +55,9 @@ class AccountData:
     account: Any
     transactions: tuple[Any, ...]
     positions: tuple[Any, ...]
+    balance: Any | None = None
+    balance_error: str | None = None
+    balance_currency: str = "USD"
 
 
 @dataclass(frozen=True)
@@ -85,6 +88,7 @@ class QuotesResult:
 SessionFactory = Callable[[TastytradeCredentials], Any]
 AccountGetter = Callable[[Any], Any]
 AccountSelector = Callable[[tuple[Any, ...]], Any]
+BalanceGetter = Callable[[Any, Any], Any]
 MetricsFetcher = Callable[[Any, list[str]], Any]
 StreamerFactory = Callable[[Any], Any]
 
@@ -157,6 +161,7 @@ def fetch_account_data(
     session_factory: SessionFactory | None = None,
     account_getter: AccountGetter | None = None,
     account_selector: AccountSelector,
+    balance_getter: BalanceGetter | None = None,
 ) -> AccountData:
     """Fetch raw accounts, transactions, and marked positions in one session."""
     creds = credentials or load_credentials()
@@ -174,12 +179,24 @@ def fetch_account_data(
                 page_offset=None, sort="Asc",
             )
             positions = await account.get_positions(session, include_marks=True)
+            try:
+                balance = await (
+                    balance_getter(account, session)
+                    if balance_getter is not None
+                    else account.get_balances(session)
+                )
+                balance_error = None
+            except Exception as exc:  # Capital absence must not erase positions.
+                balance = None
+                balance_error = _safe_optional_error("account balances", exc)
             return AccountData(
                 environment=creds.environment,
                 accounts=accounts,
                 account=account,
                 transactions=tuple(transactions),
                 positions=tuple(positions),
+                balance=balance,
+                balance_error=balance_error,
             )
         except Exception as exc:
             raise TastytradeServiceError("account data retrieval", exc) from exc

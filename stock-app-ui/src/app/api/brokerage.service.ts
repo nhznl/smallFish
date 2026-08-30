@@ -13,6 +13,13 @@ import {
   HoldingsSettingsResponse,
   LedgerEventsResponse,
   OptionsResponse,
+  PortfolioAllocationBucket,
+  PortfolioAnalysisProfileUpdate,
+  PortfolioAnalysisResponse,
+  PortfolioClassificationResponse,
+  PortfolioPreviewRequest,
+  PortfolioPreviewResponse,
+  PortfolioProfileResponse,
   SymbolLedgerDetailResponse,
   SymbolLedgerListResponse,
 } from '../model/brokerage';
@@ -165,6 +172,49 @@ export class BrokerageService {
 
   runSync(brokerageId: BrokerageId): Observable<BrokerageSyncResponse> {
     return this.http.post<BrokerageSyncResponse>(`${this.base(brokerageId)}/sync`, {});
+  }
+
+  // ------------------------------------------------ portfolio analysis ---
+
+  getPortfolioAnalysis(brokerageId: BrokerageId): Observable<PortfolioAnalysisResponse> {
+    return this.http.get<PortfolioAnalysisResponse>(
+      `${this.base(brokerageId)}/portfolio-analysis`
+    );
+  }
+
+  getPortfolioAnalysisProfile(brokerageId: BrokerageId): Observable<PortfolioProfileResponse> {
+    return this.http.get<PortfolioProfileResponse>(
+      `${this.base(brokerageId)}/portfolio-analysis/profile`
+    );
+  }
+
+  updatePortfolioAnalysisProfile(
+    brokerageId: BrokerageId,
+    body: PortfolioAnalysisProfileUpdate,
+  ): Observable<PortfolioProfileResponse> {
+    return this.http.patch<PortfolioProfileResponse>(
+      `${this.base(brokerageId)}/portfolio-analysis/profile`, body
+    );
+  }
+
+  updatePortfolioClassification(
+    brokerageId: BrokerageId,
+    symbol: string,
+    body: { account_id: string; allocation_bucket: PortfolioAllocationBucket | null },
+  ): Observable<PortfolioClassificationResponse> {
+    return this.http.patch<PortfolioClassificationResponse>(
+      `${this.base(brokerageId)}/portfolio-analysis/classifications/${encodeSymbolPath(symbol)}`,
+      body,
+    );
+  }
+
+  previewPortfolioChange(
+    brokerageId: BrokerageId,
+    body: PortfolioPreviewRequest,
+  ): Observable<PortfolioPreviewResponse> {
+    return this.http.post<PortfolioPreviewResponse>(
+      `${this.base(brokerageId)}/portfolio-analysis/preview`, body
+    );
   }
 
   private symbolUrl(brokerageId: BrokerageId, symbol: string): string {

@@ -44,8 +44,9 @@ Light theme, the application's only theme.
 Both Wheel screens are included because they communicate different things: the
 scan output, and the methodology behind it.
 
-Trading and Retirement share three tabs — Holdings, Options (Symbol Ledger), and
-Combined Adjusted Basis. The connected set shows all three on the Trading ledger;
+Trading and Retirement share four tabs — Holdings, Options (Symbol Ledger),
+Combined Adjusted Basis, and Portfolio Analysis. The connected set predates the
+Portfolio Analysis implementation and shows the first three on the Trading ledger;
 retirement connected frames show Holdings and the Symbol Ledger.
 Combined Adjusted Basis is documented in
 [`../../stock-app-ui/docs/UX_GUIDANCE.md`](../../stock-app-ui/docs/UX_GUIDANCE.md).
@@ -80,8 +81,8 @@ Combined Adjusted Basis is documented in
    `SFP_DATA_DIR` (never the maintainer's real ledgers). Use invented account
    names (`Demo Trading`, `Demo Retirement Account`), starter-universe ETFs, and
    notes that say the rows are synthetic. Serve that data root on a separate port
-   so the live checkout is untouched. Click the Options or Combined Adjusted Basis
-   tab (and Holdings where needed) before capturing — those tabs are not URL routes
+   so the live checkout is untouched. Click the Options, Combined Adjusted Basis,
+   or Portfolio Analysis tab (and Holdings where needed) before capturing — those tabs are not URL routes
    of their own.
 
 6. `portfolio-detail-defensive-broad.png` needs a click, because the detail view

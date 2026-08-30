@@ -102,6 +102,59 @@ def post_sync(brokerage_id: str,
         raise _fail(exc) from exc
 
 
+# ------------------------------------------------------ portfolio analysis --
+
+@router.get("/{brokerage_id}/portfolio-analysis")
+def get_portfolio_analysis(brokerage_id: str) -> dict:
+    try:
+        return service.brokerage_portfolio_analysis(brokerage_id)
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.get("/{brokerage_id}/portfolio-analysis/profile")
+def get_portfolio_analysis_profile(brokerage_id: str) -> dict:
+    try:
+        return service.get_portfolio_analysis_profile(brokerage_id)
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.patch("/{brokerage_id}/portfolio-analysis/profile")
+def patch_portfolio_analysis_profile(
+        brokerage_id: str,
+        request: schemas.PortfolioAnalysisProfilePatchRequest | None = None) -> dict:
+    try:
+        return service.update_portfolio_analysis_profile(
+            brokerage_id, schemas.request_payload(request)
+        )
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.patch("/{brokerage_id}/portfolio-analysis/classifications/{symbol:path}")
+def patch_portfolio_analysis_classification(
+        brokerage_id: str, symbol: str,
+        request: schemas.PortfolioClassificationPatchRequest | None = None) -> dict:
+    try:
+        return service.update_portfolio_analysis_classification(
+            brokerage_id, symbol, schemas.request_payload(request)
+        )
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
+@router.post("/{brokerage_id}/portfolio-analysis/preview")
+def post_portfolio_analysis_preview(
+        brokerage_id: str, request: schemas.PortfolioPreviewRequest) -> dict:
+    try:
+        return service.preview_portfolio_analysis(
+            brokerage_id, schemas.request_payload(request)
+        )
+    except service.BrokerageRequestError as exc:
+        raise _fail(exc) from exc
+
+
 # ------------------------------------------------ manual reconciliation ---
 
 @router.post("/{brokerage_id}/activity/manual")

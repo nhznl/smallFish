@@ -90,8 +90,52 @@ class SyncRequest(BaseModel):
 
     resources: list[str] | None = Field(
         default=None,
-        description="Optional HOLDINGS / ACTIVITY / MARKET_DATA subset.",
+        description="Optional HOLDINGS / ACTIVITY / MARKET_DATA / ACCOUNT_CAPITAL subset.",
     )
+
+
+class PortfolioAnalysisProfilePatchRequest(BaseModel):
+    """Owner-reviewed limits. Service validation remains role-aware."""
+
+    model_config = ConfigDict(extra="allow")
+
+    objective: Any = None
+    max_single_issuer_pct: Any = None
+    max_speculative_pct: Any = None
+    max_put_assignment_commitment_pct: Any = None
+    max_stress_loss_pct: Any = None
+    minimum_liquid_pct: Any = None
+    max_gross_exposure_pct: Any = None
+    deployment_min_pct: Any = None
+    deployment_max_pct: Any = None
+    max_sector_pct: Any = None
+    growth_min_pct: Any = None
+    growth_max_pct: Any = None
+    cash_min_pct: Any = None
+    cash_max_pct: Any = None
+    max_top_five_pct: Any = None
+    first_expected_withdrawal_date: Any = None
+    notes: Any = None
+
+
+class PortfolioClassificationPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    account_id: Any = None
+    allocation_bucket: Any = None
+
+
+class PortfolioPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    account_id: Any = None
+    side: Any = None
+    symbol: Any = None
+    quantity: Any = None
+    notional: Any = None
+    assumed_price: Any = None
+    funding_source: Any = None
+    allocation_bucket: Any = None
 
 
 class ManualActivityCreateRequest(BaseModel):

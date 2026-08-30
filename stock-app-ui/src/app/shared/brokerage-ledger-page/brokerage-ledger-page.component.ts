@@ -6,8 +6,9 @@ import { BrokerageId } from '../../model/brokerage';
 import { BrokerageLedgerCombinedComponent } from '../brokerage-ledger-combined/brokerage-ledger-combined.component';
 import { BrokerageHoldingsComponent } from '../brokerage-holdings/brokerage-holdings.component';
 import { SymbolLedgerComponent } from '../symbol-ledger/symbol-ledger.component';
+import { PortfolioAnalysisComponent } from '../portfolio-analysis/portfolio-analysis.component';
 
-type LedgerTab = 'holdings' | 'options' | 'basis';
+type LedgerTab = 'holdings' | 'options' | 'basis' | 'analysis';
 
 /**
  * Common brokerage shell. Every tab is now driven by the public brokerage id
@@ -18,7 +19,7 @@ type LedgerTab = 'holdings' | 'options' | 'basis';
   standalone: true,
   imports: [
     CommonModule, BrokerageHoldingsComponent, BrokerageLedgerCombinedComponent,
-    SymbolLedgerComponent,
+    SymbolLedgerComponent, PortfolioAnalysisComponent,
   ],
   templateUrl: './brokerage-ledger-page.component.html',
   styleUrl: './brokerage-ledger-page.component.css',

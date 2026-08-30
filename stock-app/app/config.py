@@ -55,6 +55,24 @@ def logs_dir() -> Path:
     return _resolve("SFP_LOG_DIR", "../logs")
 
 
+def portfolio_analysis_profiles_json() -> Path:
+    """Owner-reviewed portfolio-analysis limits, keyed by brokerage id."""
+    return _under(
+        "SFP_PORTFOLIO_ANALYSIS_PROFILES",
+        data_dir(),
+        "portfolio_analysis/profiles.json",
+    )
+
+
+def portfolio_analysis_classifications_csv() -> Path:
+    """App-owned account/symbol allocation-bucket overrides."""
+    return _under(
+        "SFP_PORTFOLIO_ANALYSIS_CLASSIFICATIONS",
+        data_dir(),
+        "portfolio_analysis/classifications.csv",
+    )
+
+
 def price_cache_root() -> Path:
     return _under("SFP_PRICE_CACHE", data_dir(), ".")
 
@@ -116,6 +134,15 @@ def tastytrade_positions_csv() -> Path:
     )
 
 
+def trading_account_capital_csv() -> Path:
+    """Latest provider account-capital facts for the Trading ledger."""
+    return _under(
+        "SFP_TRADING_ACCOUNT_CAPITAL",
+        data_dir(),
+        "ledger_trading/account_capital.csv",
+    )
+
+
 def trading_holdings_trend_csv() -> Path:
     """Per-holding adverse-move state for Tastytrade equity positions."""
     return _under(
@@ -157,6 +184,15 @@ def snaptrade_holdings_csv() -> Path:
     """Normalized brokerage holdings imported from SnapTrade (Fidelity, etc.)."""
     return _under(
         "SFP_SNAPTRADE_HOLDINGS", data_dir(), "ledger_retirement/positions.csv"
+    )
+
+
+def retirement_account_capital_csv() -> Path:
+    """Latest provider account-capital facts for the Retirement ledger."""
+    return _under(
+        "SFP_RETIREMENT_ACCOUNT_CAPITAL",
+        data_dir(),
+        "ledger_retirement/account_capital.csv",
     )
 
 

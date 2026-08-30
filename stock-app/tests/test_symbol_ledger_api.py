@@ -862,7 +862,10 @@ def test_sync_takes_common_resource_names(adapter_env, brokerage_id, monkeypatch
     # for this brokerage and says so rather than failing the request.
     everything = client.post(f"/api/brokerages/{brokerage_id}/sync", json={}).json()
     statuses = {row["resource"]: row["status"] for row in everything["results"]}
-    assert statuses == {"HOLDINGS": "OK", "ACTIVITY": "OK", "MARKET_DATA": "UNSUPPORTED"}
+    assert statuses == {
+        "HOLDINGS": "OK", "ACCOUNT_CAPITAL": "UNSUPPORTED",
+        "ACTIVITY": "OK", "MARKET_DATA": "UNSUPPORTED",
+    }
 
 
 def test_a_failing_sync_reports_the_type_and_keeps_the_detail_in_the_log(adapter_env,

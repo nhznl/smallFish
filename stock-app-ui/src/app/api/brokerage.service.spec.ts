@@ -45,6 +45,11 @@ describe('BrokerageService', () => {
       const symbols = http.expectOne(`${base}/api/brokerages/${id}/symbols`);
       expect(symbols.request.method).toBe('GET');
       symbols.flush({});
+
+      service.getPortfolioAnalysis(id).subscribe();
+      const analysis = http.expectOne(`${base}/api/brokerages/${id}/portfolio-analysis`);
+      expect(analysis.request.method).toBe('GET');
+      analysis.flush({});
     });
   }
 
@@ -120,5 +125,49 @@ describe('BrokerageService', () => {
       request_id: 'req-1', expected_period_version: 'v1:abc', note: 'done',
     });
     request.flush({});
+  });
+
+  it('uses the portfolio profile, classification, and read-only preview routes', () => {
+    service.getPortfolioAnalysisProfile('fidelity').subscribe();
+    const profile = http.expectOne(
+      `${base}/api/brokerages/fidelity/portfolio-analysis/profile`
+    );
+    expect(profile.request.method).toBe('GET');
+    profile.flush({});
+
+    service.updatePortfolioAnalysisProfile('fidelity', {
+      growth_min_pct: 80, growth_max_pct: 100,
+    }).subscribe();
+    const profileUpdate = http.expectOne(
+      `${base}/api/brokerages/fidelity/portfolio-analysis/profile`
+    );
+    expect(profileUpdate.request.method).toBe('PATCH');
+    expect(profileUpdate.request.body).toEqual({ growth_min_pct: 80, growth_max_pct: 100 });
+    profileUpdate.flush({});
+
+    service.updatePortfolioClassification('fidelity', 'BRK.B', {
+      account_id: 'synthetic-account', allocation_bucket: 'GROWTH',
+    }).subscribe();
+    const classification = http.expectOne(
+      `${base}/api/brokerages/fidelity/portfolio-analysis/classifications/BRK.B`
+    );
+    expect(classification.request.method).toBe('PATCH');
+    expect(classification.request.body).toEqual({
+      account_id: 'synthetic-account', allocation_bucket: 'GROWTH',
+    });
+    classification.flush({});
+
+    const previewBody = {
+      account_id: 'synthetic-account', side: 'BUY' as const, symbol: 'SYNTH',
+      quantity: 10, notional: null, assumed_price: 100,
+      funding_source: 'ACCOUNT_CASH' as const, allocation_bucket: null,
+    };
+    service.previewPortfolioChange('fidelity', previewBody).subscribe();
+    const preview = http.expectOne(
+      `${base}/api/brokerages/fidelity/portfolio-analysis/preview`
+    );
+    expect(preview.request.method).toBe('POST');
+    expect(preview.request.body).toEqual(previewBody);
+    preview.flush({});
   });
 });

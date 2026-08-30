@@ -1,0 +1,453 @@
+<section class="portfolio-analysis" aria-label="Portfolio Analysis">
+  @if (loading) {
+    <div class="analysis-loading" aria-busy="true" aria-label="Loading Portfolio Analysis">
+      @for (card of skeletonCards; track $index) {
+        <div class="skeleton skeleton-verdict"></div>
+      }
+      <div class="skeleton skeleton-panel"></div>
+      <div class="skeleton skeleton-panel"></div>
+    </div>
+  } @else if (error && !data) {
+    <div class="empty-state" role="alert">
+      <span class="badge badge-neg">Unavailable</span>
+      <h3>Portfolio Analysis could not load</h3>
+      <p>{{ error }}</p>
+      <button type="button" class="btn" (click)="load()">Try again</button>
+    </div>
+  } @else if (data; as analysis) {
+    <div class="analysis-heading">
+      <div>
+        <p class="section-kicker">Portfolio Analysis</p>
+        <h2>{{ analysis.brokerage.label }} · {{ roleObjective() }}</h2>
+        <p>{{ roleDescription() }}</p>
+      </div>
+      <div class="analysis-heading-actions">
+        <span class="badge" [class.badge-pos]="analysis.summary.profile.status === 'COMPLETE'"
+          [class.badge-warn]="analysis.summary.profile.status === 'PARTIAL'"
+          [class.badge-neutral]="analysis.summary.profile.status === 'UNCONFIGURED'">
+          Profile {{ words(analysis.summary.profile.status) }}
+        </span>
+        <button type="button" class="btn btn-primary" (click)="openProfileEditor()">
+          {{ analysis.summary.profile.status === 'UNCONFIGURED' ? 'Set profile' : 'Edit profile' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="snapshot-row" aria-label="Analysis data dates">
+      <span class="snapshot-chip"><span>Positions</span><strong>{{ timestamp(analysis.as_of.positions) }}</strong></span>
+      <span class="snapshot-chip"><span>Account capital</span><strong>{{ timestamp(capitalAsOf()) }}</strong></span>
+      <span class="snapshot-chip"><span>Market marks</span><strong>{{ timestamp(analysis.as_of.market) }}</strong></span>
+      <span class="snapshot-chip"><span>Cached prices</span><strong>{{ timestamp(cachedPricesAsOf()) }}</strong></span>
+    </div>
+
+    @if (message) { <div class="banner banner-pos" role="status">{{ message }}</div> }
+    @if (analysis.availability.status !== 'AVAILABLE') {
+      <div class="banner banner-warn" role="status">
+        <strong>{{ analysis.availability.status === 'UNAVAILABLE' ? 'Analysis unavailable.' : 'Analysis is partial.' }}</strong>
+        <span>{{ analysis.availability.reasons.join(' ') }}</span>
+      </div>
+    }
+    @if (analysis.summary.profile.status === 'UNCONFIGURED') {
+      <div class="banner banner-warn" role="status">
+        <span><strong>No risk limits have been saved.</strong> Evidence can still render, but profile fit is not assessed.</span>
+        <button type="button" class="btn btn-sm" (click)="openProfileEditor()">Set profile</button>
+      </div>
+    } @else if (analysis.summary.profile.status === 'PARTIAL') {
+      <div class="banner banner-warn" role="status">
+        <span><strong>Profile incomplete.</strong> Missing limits: {{ profileMissingText() }}.</span>
+        <button type="button" class="btn btn-sm" (click)="openProfileEditor()">Complete profile</button>
+      </div>
+    }
+    @if (analysis.coverage.status !== 'COMPLETE') {
+      <div class="banner banner-warn" role="status">
+        <strong>{{ words(analysis.coverage.status) }} data.</strong>
+        <span>{{ analysis.coverage.reasons.join(' ') || 'Some conclusions cannot be assessed from the saved evidence.' }}</span>
+      </div>
+    }
+    @for (warning of analysis.warnings; track warning.code + ':' + (warning.symbol ?? '')) {
+      <div class="banner banner-warn" role="status">
+        <strong>{{ words(warning.code) }}.</strong><span>{{ warning.message }}</span>
+      </div>
+    }
+
+    <div class="stat-strip verdict-strip" aria-label="Portfolio verdicts">
+      <article class="stat-card verdict-card" [ngClass]="verdictClass(analysis.summary.verdicts.profile_fit)">
+        <span class="stat-label">Profile fit</span>
+        <strong class="stat-value">{{ words(analysis.summary.verdicts.profile_fit) }}</strong>
+        <span class="stat-delta">Against your saved {{ role === 'TRADING' ? 'risk budget' : 'aggressive-growth profile' }}</span>
+      </article>
+      <article class="stat-card verdict-card" [ngClass]="verdictClass(analysis.summary.verdicts.construction)">
+        <span class="stat-label">Construction</span>
+        <strong class="stat-value">{{ words(analysis.summary.verdicts.construction) }}</strong>
+        <span class="stat-delta">Concentration and portfolio structure</span>
+      </article>
+      <article class="stat-card verdict-card" [ngClass]="verdictClass(analysis.summary.verdicts.capital_deployment)">
+        <span class="stat-label">Capital deployment</span>
+        <strong class="stat-value">{{ words(analysis.summary.verdicts.capital_deployment) }}</strong>
+        <span class="stat-delta">Only assessed against limits you selected</span>
+      </article>
+      <article class="stat-card verdict-card" [ngClass]="verdictClass(analysis.summary.verdicts.data_confidence)">
+        <span class="stat-label">Data confidence</span>
+        <strong class="stat-value">{{ words(analysis.summary.verdicts.data_confidence) }}</strong>
+        <span class="stat-delta">Missing evidence cannot produce an aligned verdict</span>
+      </article>
+    </div>
+
+    <section class="panel findings-panel" aria-labelledby="priority-findings-heading">
+      <div class="panel-heading">
+        <div><h3 id="priority-findings-heading">Priority findings</h3><small>Highest-severity evidence appears first.</small></div>
+        <span class="badge badge-neutral">{{ findings().length }} {{ findings().length === 1 ? 'finding' : 'findings' }}</span>
+      </div>
+      <div class="panel-body">
+        @if (findings().length === 0) {
+          <div class="empty-state compact-empty">
+            <strong>No current limit breaches</strong>
+            <span>This is not an all-clear unless the profile and data confidence are complete.</span>
+          </div>
+        } @else {
+          <div class="finding-list">
+            @for (finding of findings(); track finding.code + ':' + (finding.symbol ?? finding.scope)) {
+              <article class="finding-card" [class.finding-critical]="finding.severity === 'CRITICAL'"
+                [class.finding-high]="finding.severity === 'HIGH'">
+                <div class="finding-heading">
+                  <span class="badge" [ngClass]="severityClass(finding.severity)">{{ finding.severity }}</span>
+                  <div><h4>{{ finding.title }}</h4><p>{{ finding.explanation }}</p></div>
+                </div>
+                <dl class="finding-metrics">
+                  <div><dt>Direction</dt><dd>{{ words(finding.direction) }}</dd></div>
+                  <div><dt>Actual</dt><dd>{{ metric(finding.actual, finding.unit) }}</dd></div>
+                  <div><dt>Selected limit</dt><dd>{{ metric(finding.limit, finding.unit) }}</dd></div>
+                  <div><dt>{{ finding.direction === 'UNDER' ? 'Shortfall' : 'Excess' }}</dt><dd>{{ money(finding.excess_amount) }}</dd></div>
+                  <div><dt>Evidence date</dt><dd>{{ timestamp(evidenceAt()) }}</dd></div>
+                </dl>
+                @if (finding.remediation.immediate_trim_amount != null
+                  || finding.remediation.new_outside_capital_to_dilute != null) {
+                  <div class="remediation">
+                    <strong>Limit-restoration math</strong>
+                    @if (finding.remediation.immediate_trim_amount != null) {
+                      <span>Immediate overage: {{ money(finding.remediation.immediate_trim_amount) }}</span>
+                    }
+                    @if (finding.remediation.approximate_units != null) {
+                      <span>Approximate shares above limit: {{ number(finding.remediation.approximate_units) }}</span>
+                    }
+                    @if (finding.remediation.new_outside_capital_to_dilute != null) {
+                      <span>Outside capital needed to dilute without selling: {{ money(finding.remediation.new_outside_capital_to_dilute) }}</span>
+                    }
+                    <span>Price evidence: {{ money(finding.remediation.price) }} · {{ finding.remediation.price_source || '—' }} · {{ timestamp(finding.remediation.price_as_of) }}</span>
+                    <small>Before taxes, fees, slippage, or tax-lot choices. This is not an order instruction.</small>
+                  </div>
+                }
+                @if (hasPreviewRemediation(finding)) {
+                  <button type="button" class="btn btn-sm" (click)="previewFinding(finding)">Preview this change</button>
+                }
+              </article>
+            }
+          </div>
+        }
+      </div>
+    </section>
+
+    <div class="analysis-grid">
+      <section class="panel" aria-labelledby="allocation-heading">
+        <div class="panel-heading">
+          <div><h3 id="allocation-heading">Allocation</h3><small>Long holdings by account-scoped classification.</small></div>
+          <span class="badge badge-neutral">{{ percent(classifiedAllocationPct()) }} classified</span>
+        </div>
+        <div class="panel-body">
+          <div class="allocation-list">
+            @for (row of allocationRows(); track row.bucket) {
+              <div class="allocation-row">
+                <div><strong>{{ words(row.bucket) }}</strong><span>{{ money(row.value.market_value) }}</span></div>
+                <div class="allocation-track" role="img" [attr.aria-label]="words(row.bucket) + ' ' + percent(row.value.pct_of_capital)">
+                  <span [style.width.%]="barWidth(row.value.pct_of_capital)"></span>
+                </div>
+                <strong>{{ percent(row.value.pct_of_capital) }}</strong>
+              </div>
+            }
+          </div>
+          <dl class="compact-metrics">
+            <div><dt>Growth + speculative</dt><dd>{{ percent(analysis.summary.allocation.growth_pct) }}</dd></div>
+            <div><dt>Deployment</dt><dd>{{ percent(analysis.summary.allocation.deployment_pct) }}</dd></div>
+            <div><dt>Liquid capital</dt><dd>{{ percent(analysis.summary.allocation.liquid_pct) }}</dd></div>
+            <div><dt>Account capital</dt><dd>{{ money(analysis.summary.capital.analyzed_capital) }}</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="concentration-heading">
+        <div class="panel-heading"><div><h3 id="concentration-heading">Concentration</h3><small>Issuer and known sector exposure.</small></div></div>
+        <div class="panel-body">
+          <dl class="compact-metrics concentration-metrics">
+            <div><dt>Largest issuer</dt><dd>{{ percent(analysis.summary.concentration.largest_issuer_pct) }}</dd></div>
+            <div><dt>Top five</dt><dd>{{ percent(analysis.summary.concentration.top_five_pct) }}</dd></div>
+            <div><dt>Effective positions</dt><dd>{{ number(analysis.summary.concentration.effective_position_count) }}</dd></div>
+            <div><dt>Gross marked exposure</dt><dd>{{ percent(analysis.summary.allocation.gross_marked_exposure_pct) }}</dd></div>
+          </dl>
+          @if (analysis.summary.concentration.sectors.length) {
+            <h4 class="subsection-title">Known sectors</h4>
+            <div class="contributor-list">
+              @for (sector of analysis.summary.concentration.sectors; track sector.sector) {
+                <span><strong>{{ sector.sector }}</strong><span>{{ percent(sector.pct_of_capital) }}</span></span>
+              }
+            </div>
+          } @else {
+            <p class="missing-copy">Sector concentration is unavailable.</p>
+          }
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="risk-evidence-heading">
+      <div class="panel-heading">
+        <div>
+          <h3 id="risk-evidence-heading">Risk evidence</h3>
+          <small>Current-holdings replay and transparent hypothetical shocks—not realized history or a forecast.</small>
+        </div>
+        <span class="badge" [class.badge-pos]="analysis.summary.historical_risk.status === 'COMPLETE'"
+          [class.badge-warn]="analysis.summary.historical_risk.status === 'INDICATIVE'"
+          [class.badge-neg]="analysis.summary.historical_risk.status === 'UNAVAILABLE'">
+          {{ words(analysis.summary.historical_risk.status) }}
+        </span>
+      </div>
+      <div class="panel-body risk-layout">
+        <div>
+          <h4>Current-holdings replay</h4>
+          <dl class="compact-metrics">
+            <div><dt>Period</dt><dd>{{ dateRange(analysis.summary.historical_risk.date_start ?? null, analysis.summary.historical_risk.date_end ?? null) }}</dd></div>
+            <div><dt>Aligned sessions</dt><dd>{{ number(analysis.summary.historical_risk.aligned_sessions) }}</dd></div>
+            <div><dt>Annualized volatility</dt><dd>{{ percent(analysis.summary.historical_risk.annualized_volatility_pct) }}</dd></div>
+            <div><dt>Beta vs SPY</dt><dd>{{ number(analysis.summary.historical_risk.beta_vs_spy) }}</dd></div>
+            <div><dt>Correlation vs SPY</dt><dd>{{ number(analysis.summary.historical_risk.correlation_vs_spy) }}</dd></div>
+            <div><dt>Maximum drawdown</dt><dd>{{ percent(analysis.summary.historical_risk.maximum_drawdown_pct) }}</dd></div>
+            <div><dt>Excluded</dt><dd>{{ percent(analysis.summary.historical_risk.excluded_pct) }}</dd></div>
+          </dl>
+          @if (analysis.summary.historical_risk.excluded_symbols.length) {
+            <p class="missing-copy">Excluded symbols: {{ analysis.summary.historical_risk.excluded_symbols.join(', ') }}</p>
+          }
+        </div>
+        <div>
+          <h4>Uniform equity shocks</h4>
+          <div class="table-shell">
+            <table class="data-table stress-table">
+              <thead><tr><th>Scenario</th><th class="num">Shock</th><th class="num">Loss</th><th class="num">Loss %</th><th class="num">Coverage</th></tr></thead>
+              <tbody>
+                @for (scenario of analysis.summary.stress.scenarios; track scenario.shock_pct) {
+                  <tr>
+                    <td><strong>{{ stressLabel(scenario.shock_pct) }}</strong><small>{{ analysis.summary.stress.classification }}</small></td>
+                    <td class="num">{{ percent(scenario.shock_pct) }}</td>
+                    <td class="num neg-value">{{ money(scenario.estimated_loss) }}</td>
+                    <td class="num neg-value">{{ percent(scenario.estimated_loss_pct) }}</td>
+                    <td class="num">{{ analysis.summary.stress.status === 'UNAVAILABLE' ? '—' : words(analysis.summary.stress.status) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="5">Stress evidence is unavailable.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="option-commitments-heading">
+      <div class="panel-heading">
+        <div><h3 id="option-commitments-heading">Option commitments</h3><small>Obligations are kept separate from small marked option values.</small></div>
+      </div>
+      <div class="panel-body">
+        <div class="stat-strip option-stats">
+          <div class="stat-card"><span class="stat-label">Short-put commitment</span><strong class="stat-value">{{ money(analysis.summary.option_commitments.put_assignment_commitment) }}</strong><span class="stat-delta">{{ percent(analysis.summary.option_commitments.put_assignment_commitment_pct) }} of capital</span></div>
+          <div class="stat-card"><span class="stat-label">Long-option premium at risk</span><strong class="stat-value">{{ money(analysis.summary.option_commitments.long_option_premium_at_risk) }}</strong><span class="stat-delta">{{ percent(analysis.summary.option_commitments.long_option_premium_at_risk_pct) }} of capital</span></div>
+          <div class="stat-card"><span class="stat-label">Uncovered short calls</span><strong class="stat-value">{{ number(analysis.summary.option_commitments.uncovered_short_calls.length) }}</strong><span class="stat-delta">Any known uncovered call is critical</span></div>
+          <div class="stat-card"><span class="stat-label">Open option contracts</span><strong class="stat-value">{{ number(analysis.summary.option_commitments.open_contract_count) }}</strong><span class="stat-delta">Spread commitment can be zero without being zero risk</span></div>
+          <div class="stat-card"><span class="stat-label">Incomplete option risk</span><strong class="stat-value">{{ number(analysis.summary.option_commitments.missing.length) }}</strong><span class="stat-delta">{{ words(analysis.summary.option_commitments.risk_completeness) }}</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="analyzed-holdings-heading">
+      <div class="panel-heading">
+        <div><h3 id="analyzed-holdings-heading">Analyzed holdings</h3><small>Issuer identity remains pinned when this table scrolls.</small></div>
+      </div>
+      <div class="table-shell analyzed-table-shell">
+        <table class="data-table analyzed-table">
+          <thead><tr>
+            <th class="col-sticky" [attr.aria-sort]="ariaSort('symbol')"><button type="button" (click)="sortItems('symbol')">Symbol {{ sortIcon('symbol') }}</button></th>
+            <th [attr.aria-sort]="ariaSort('account')"><button type="button" (click)="sortItems('account')">Account {{ sortIcon('account') }}</button></th>
+            <th class="num" [attr.aria-sort]="ariaSort('market_value')"><button type="button" (click)="sortItems('market_value')">Market value {{ sortIcon('market_value') }}</button></th>
+            <th class="num" [attr.aria-sort]="ariaSort('weight_pct')"><button type="button" (click)="sortItems('weight_pct')">Weight {{ sortIcon('weight_pct') }}</button></th>
+            <th [attr.aria-sort]="ariaSort('allocation_bucket')"><button type="button" (click)="sortItems('allocation_bucket')">Bucket {{ sortIcon('allocation_bucket') }}</button></th>
+            <th [attr.aria-sort]="ariaSort('sector')"><button type="button" (click)="sortItems('sector')">Sector {{ sortIcon('sector') }}</button></th>
+            <th class="num">Quantity</th><th>Price evidence</th><th>Edit</th>
+          </tr></thead>
+          <tbody>
+            @for (item of sortedItems(); track item.account_id + ':' + item.symbol) {
+              <tr>
+                <td class="col-sticky symbol-cell"><strong>{{ item.symbol }}</strong><small>{{ item.security_type || item.instrument }}</small></td>
+                <td>{{ item.account }}</td>
+                <td class="num">{{ money(item.market_value) }}</td>
+                <td class="num">{{ percent(item.weight_pct) }}</td>
+                <td><span class="badge" [class.badge-warn]="item.allocation_bucket === 'UNKNOWN'">{{ words(item.allocation_bucket) }}</span><small>{{ words(item.classification_source) }}</small></td>
+                <td>{{ item.sector || '—' }}</td>
+                <td class="num">{{ number(item.quantity) }}</td>
+                <td>{{ money(item.mark_per_unit) }}<small>{{ item.price_source || '—' }} · {{ timestamp(item.price_as_of) }}</small></td>
+                <td><button type="button" class="btn btn-sm" (click)="openClassificationEditor(item)">Classify</button></td>
+              </tr>
+            } @empty {
+              <tr><td colspan="9">No holdings were available to analyze.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="portfolio-what-if" class="panel what-if-panel" aria-labelledby="what-if-heading">
+      <div class="panel-heading">
+        <div><h3 id="what-if-heading">What-if investment preview</h3><small>Recalculates saved evidence without placing an order or changing any artifact.</small></div>
+        @if (preview) { <button type="button" class="btn btn-sm" (click)="clearPreview()">Clear preview</button> }
+      </div>
+      <div class="panel-body">
+        <form class="preview-form" (ngSubmit)="submitPreview()" [attr.aria-busy]="previewing">
+          <label><span>Account</span><select name="previewAccount" [(ngModel)]="previewForm.accountId" required>
+            <option value="" disabled>Choose account</option>
+            @for (account of accounts(); track account.id) { <option [value]="account.id">{{ account.label }}</option> }
+          </select></label>
+          <label><span>Action</span><select name="previewSide" [(ngModel)]="previewForm.side"><option value="BUY">Buy</option><option value="SELL">Sell</option></select></label>
+          <label><span>Symbol</span><input name="previewSymbol" [(ngModel)]="previewForm.symbol" autocomplete="off" placeholder="SYMBOL" required></label>
+          <label><span>Amount type</span><select name="previewAmountMode" [(ngModel)]="previewForm.amountMode"><option value="NOTIONAL">Dollar amount</option><option value="QUANTITY">Quantity</option></select></label>
+          <label><span>{{ previewForm.amountMode === 'NOTIONAL' ? 'Dollar amount' : 'Quantity' }}</span><input name="previewAmount" type="number" min="0" step="any" [(ngModel)]="previewForm.amount" required></label>
+          <label><span>Assumed price (optional)</span><input name="previewPrice" type="number" min="0" step="0.01" [(ngModel)]="previewForm.assumedPrice" placeholder="Use saved mark"></label>
+          @if (previewForm.side === 'BUY') {
+            <label><span>Funding</span><select name="previewFunding" [(ngModel)]="previewForm.fundingSource"><option value="ACCOUNT_CASH">Account cash</option><option value="NEW_CONTRIBUTION">New contribution</option></select></label>
+          }
+          <label><span>Bucket (optional)</span><select name="previewBucket" [(ngModel)]="previewForm.allocationBucket"><option value="">Use current classification</option>@for (bucket of previewAllocationBuckets; track bucket) { <option [value]="bucket">{{ words(bucket) }}</option> }</select></label>
+          <button type="submit" class="btn btn-primary" [disabled]="previewing">
+            @if (previewing) { <span class="btn-spinner" aria-hidden="true"></span> }
+            {{ previewing ? 'Calculating…' : 'Preview impact' }}
+          </button>
+        </form>
+        <p class="preview-caveat">Stocks and ETFs only. No options, short stock, margin, tax, fee, slippage, or execution modeling.</p>
+        @if (previewError) { <div class="banner banner-neg" role="alert">{{ previewError }}</div> }
+        @if (previewStatus) { <div class="banner banner-pos" role="status" aria-live="polite">{{ previewStatus }}</div> }
+        @if (preview; as result) {
+          <div class="preview-price"><strong>Assumed price {{ money(result.proposal.assumed_price) }}</strong><span>{{ result.proposal.price_source }} · {{ timestamp(result.proposal.price_as_of) }}</span><span class="badge badge-info">Not persisted</span></div>
+          <div class="preview-verdicts" aria-label="Before and after verdicts">
+            <article><span class="stat-label">Before</span><strong>{{ words(result.before.verdicts.profile_fit) }}</strong><small>{{ words(result.before.verdicts.construction) }} construction</small></article>
+            <article><span class="stat-label">After</span><strong>{{ words(result.after.verdicts.profile_fit) }}</strong><small>{{ words(result.after.verdicts.construction) }} construction</small></article>
+            <article><span class="stat-label">Change</span><strong>{{ result.new_findings.length }} new · {{ result.resolved_findings.length }} resolved</strong><small>{{ result.worsened_findings.length }} worsened · {{ result.improved_findings.length }} improved</small></article>
+          </div>
+          <div class="table-shell preview-table-shell">
+            <table class="data-table"><thead><tr><th>Metric</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr></thead>
+              <tbody>@for (delta of result.metric_deltas; track delta.metric) {
+                <tr><td>{{ words(delta.metric) }}</td><td class="num">{{ metric(delta.before, 'PERCENT_OF_CAPITAL') }}</td><td class="num">{{ metric(delta.after, 'PERCENT_OF_CAPITAL') }}</td><td class="num">{{ metric(delta.change, 'PERCENT_OF_CAPITAL') }}</td></tr>
+              } @empty { <tr><td colspan="4">No comparable metric changed.</td></tr> }</tbody>
+            </table>
+          </div>
+          @if (result.new_findings.length || result.worsened_findings.length) {
+            <div class="banner banner-warn" role="status">
+              <strong>New or worsened findings.</strong>
+              <span>{{ previewWarningText(result) }}</span>
+            </div>
+          }
+        }
+      </div>
+    </section>
+
+    <p class="analysis-caveat">Portfolio Analysis applies your selected limits to saved brokerage evidence. It is descriptive analysis, not a suitability certification, forecast, or trade recommendation.</p>
+  }
+</section>
+
+@if (profileEditorOpen) {
+  <app-modal [title]="'Edit ' + roleObjective() + ' profile'" width="min(760px, 94vw)"
+    subtitle="Limits are app-owned metadata; imported brokerage facts remain unchanged."
+    (closed)="closeProfileEditor()">
+    @if (profileLoading) {
+      <div class="profile-loading" aria-busy="true" aria-label="Loading saved profile"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>
+    } @else {
+      <p class="profile-help">There are no hidden default limits. Leave a field blank only when you want that rule to remain unassessed.</p>
+      <fieldset class="profile-fields"><legend>Common limits</legend>
+        <label><span class="profile-label">Maximum single issuer % <button type="button" class="profile-info"
+          matTooltip="Largest permitted current long position in one normalized underlying, measured as a percentage of net liquidating value."
+          matTooltipPosition="above" aria-label="Explain maximum single issuer percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.max_single_issuer_pct"></label>
+        <label><span class="profile-label">Maximum speculative % <button type="button" class="profile-info"
+          matTooltip="Largest permitted share of the account in holdings you classified as Speculative."
+          matTooltipPosition="above" aria-label="Explain maximum speculative percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.max_speculative_pct"></label>
+        <label><span class="profile-label">Maximum short-put commitment % <button type="button" class="profile-info"
+          matTooltip="Largest permitted cash obligation if unspread short puts are assigned, divided by net liquidating value. Put spreads contribute zero to this cash-commitment measure, not zero risk."
+          matTooltipPosition="above" aria-label="Explain maximum short-put commitment percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.max_put_assignment_commitment_pct"></label>
+        <label><span class="profile-label">Maximum stress loss % <button type="button" class="profile-info"
+          matTooltip="Largest portfolio-level loss you accept under the hypothetical severe equity shock. It is a personal loss limit, not a forecast, historical drawdown, or the market-shock percentage itself."
+          matTooltipPosition="above" aria-label="Explain maximum stress loss percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.max_stress_loss_pct"></label>
+        <label><span class="profile-label">Minimum liquid % <button type="button" class="profile-info"
+          matTooltip="Minimum provider-reported cash balance divided by net liquidating value. It excludes buying power, margin borrowing, and securities that would need to be sold."
+          matTooltipPosition="above" aria-label="Explain minimum liquid percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.minimum_liquid_pct"></label>
+        <label><span class="profile-label">Maximum sector % <button type="button" class="profile-info"
+          matTooltip="Largest permitted current long exposure to one known sector, measured as a percentage of net liquidating value. Unclassified exposure is reported separately."
+          matTooltipPosition="above" aria-label="Explain maximum sector percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.max_sector_pct"></label>
+      </fieldset>
+      @if (role === 'TRADING') {
+        <fieldset class="profile-fields"><legend>Trading risk budget</legend>
+          <label><span class="profile-label">Maximum gross exposure % <button type="button" class="profile-info"
+            matTooltip="Largest permitted sum of absolute marked non-cash position values divided by net liquidating value. Long and short exposure do not cancel in this measure."
+            matTooltipPosition="above" aria-label="Explain maximum gross exposure percentage">i</button></span><input type="number" min="0" step="0.1" [(ngModel)]="profileForm.max_gross_exposure_pct"></label>
+          <label><span class="profile-label">Deployment minimum % (optional) <button type="button" class="profile-info"
+            matTooltip="Optional minimum share of account capital deployed outside provider-reported cash. Trading is not called underinvested when this is blank."
+            matTooltipPosition="above" aria-label="Explain deployment minimum percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.deployment_min_pct"></label>
+          <label><span class="profile-label">Deployment maximum % (optional) <button type="button" class="profile-info"
+            matTooltip="Optional maximum share of account capital deployed outside provider-reported cash."
+            matTooltipPosition="above" aria-label="Explain deployment maximum percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.deployment_max_pct"></label>
+        </fieldset>
+        <p class="profile-help">Trading is never called underinvested unless you save a deployment minimum.</p>
+      } @else {
+        <fieldset class="profile-fields"><legend>Retirement aggressive growth</legend>
+          <label><span class="profile-label">Growth minimum % <button type="button" class="profile-info"
+            matTooltip="Minimum combined allocation to Growth and Speculative holdings for the selected aggressive-growth profile."
+            matTooltipPosition="above" aria-label="Explain growth minimum percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.growth_min_pct"></label>
+          <label><span class="profile-label">Growth maximum % <button type="button" class="profile-info"
+            matTooltip="Maximum combined allocation to Growth and Speculative holdings for the selected aggressive-growth profile."
+            matTooltipPosition="above" aria-label="Explain growth maximum percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.growth_max_pct"></label>
+          <label><span class="profile-label">Cash minimum % <button type="button" class="profile-info"
+            matTooltip="Minimum provider-reported cash balance as a percentage of net liquidating value. When Minimum liquid % is also set, the stricter minimum applies."
+            matTooltipPosition="above" aria-label="Explain cash minimum percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.cash_min_pct"></label>
+          <label><span class="profile-label">Cash maximum % <button type="button" class="profile-info"
+            matTooltip="Maximum provider-reported cash balance as a percentage of net liquidating value before Retirement is considered above its selected cash range."
+            matTooltipPosition="above" aria-label="Explain cash maximum percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.cash_max_pct"></label>
+          <label><span class="profile-label">Maximum top-five % <button type="button" class="profile-info"
+            matTooltip="Largest permitted combined current value of the five biggest issuers, measured as a percentage of net liquidating value."
+            matTooltipPosition="above" aria-label="Explain maximum top-five percentage">i</button></span><input type="number" min="0" max="100" step="0.1" [(ngModel)]="profileForm.max_top_five_pct"></label>
+          <label><span class="profile-label">First expected withdrawal <button type="button" class="profile-info"
+            matTooltip="The first date you expect to draw from this Retirement account. It records time-horizon context and does not silently change your saved limits."
+            matTooltipPosition="above" aria-label="Explain first expected withdrawal date">i</button></span><input type="date" [(ngModel)]="profileForm.first_expected_withdrawal_date"></label>
+        </fieldset>
+      }
+      <label class="profile-notes"><span>Notes (optional)</span><textarea rows="3" [(ngModel)]="profileForm.notes" placeholder="Why these limits fit this account…"></textarea></label>
+      @if (profileError) { <div class="banner banner-neg" role="alert">{{ profileError }}</div> }
+    }
+    <ng-container modalActions>
+      <button type="button" class="btn" (click)="closeProfileEditor()" [disabled]="profileSaving">Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="saveProfile()" [disabled]="profileLoading || profileSaving">
+        @if (profileSaving) { <span class="btn-spinner" aria-hidden="true"></span> }
+        {{ profileSaving ? 'Saving…' : 'Save profile' }}
+      </button>
+    </ng-container>
+  </app-modal>
+}
+
+@if (classificationEditor; as item) {
+  <app-modal [title]="'Classify ' + item.symbol" width="min(480px, 92vw)"
+    subtitle="This account-scoped override does not rewrite the broker instrument or holdings category."
+    (closed)="closeClassificationEditor()">
+    <label class="classification-field"><span>Allocation bucket</span><select [(ngModel)]="classificationBucket">
+      <option value="">Clear override / use automatic classification</option>
+      @for (bucket of ownerAllocationBuckets; track bucket) { <option [value]="bucket">{{ words(bucket) }}</option> }
+    </select></label>
+    <p class="profile-help">Account: {{ item.account }}. Ambiguous holdings remain Unknown until there is defensible evidence or an owner override.</p>
+    @if (classificationError) { <div class="banner banner-neg" role="alert">{{ classificationError }}</div> }
+    <ng-container modalActions>
+      <button type="button" class="btn" (click)="closeClassificationEditor()" [disabled]="classificationSaving">Cancel</button>
+      <button type="button" class="btn btn-primary" (click)="saveClassification()" [disabled]="classificationSaving">
+        @if (classificationSaving) { <span class="btn-spinner" aria-hidden="true"></span> }
+        {{ classificationSaving ? 'Saving…' : 'Save classification' }}
+      </button>
+    </ng-container>
+  </app-modal>
+}

@@ -195,6 +195,13 @@ def _install_providers(monkeypatch, counter: _CallCounter, *,
             return command()
         return wrapped
 
+    wrapped_by_command = {}
+    wrapped_commands = {}
+    for name, command in originals.items():
+        wrapped_commands[name] = wrapped_by_command.setdefault(
+            id(command), wrap(name, command)
+        )
+
     monkeypatch.setitem(
         registry.REGISTRY, "fidelity",
         type(entry)(
@@ -203,9 +210,7 @@ def _install_providers(monkeypatch, counter: _CallCounter, *,
             factory=entry.factory,
             holdings_metadata_path=entry.holdings_metadata_path,
             holdings_trend_path=entry.holdings_trend_path,
-            sync_commands={
-                name: wrap(name, originals[name]) for name in originals
-            },
+            sync_commands=wrapped_commands,
         ),
     )
 
@@ -235,10 +240,11 @@ def test_empty_body_fidelity_sync_public_shape_and_no_duplicate_calls(
     assert body["schema_version"] == 1
     assert body["brokerage_id"] == "fidelity"
     assert [row["resource"] for row in body["results"]] == [
-        "HOLDINGS", "ACTIVITY", "MARKET_DATA",
+        "HOLDINGS", "ACCOUNT_CAPITAL", "ACTIVITY", "MARKET_DATA",
     ]
     assert _statuses(body) == {
-        "HOLDINGS": "OK", "ACTIVITY": "OK", "MARKET_DATA": "OK",
+        "HOLDINGS": "OK", "ACCOUNT_CAPITAL": "OK",
+        "ACTIVITY": "OK", "MARKET_DATA": "OK",
     }
     for row in body["results"]:
         assert row["warnings"] == []
@@ -254,6 +260,8 @@ def test_empty_body_fidelity_sync_public_shape_and_no_duplicate_calls(
                     "broker_transactions_read", "option_events_selected",
                     "greeks_observed", "greeks_retained", "greeks_missing",
                     "betas_observed", "betas_retained", "betas_missing",
+                    "capital_accounts",
+                    "capital_accounts_with_net_liquidating_value",
                 }
 
     assert counter.resource_commands == ["HOLDINGS", "ACTIVITY", "MARKET_DATA"]
@@ -271,10 +279,12 @@ def test_all_resources_explicit_list_matches_empty_body_order_and_counts(
     counter = _CallCounter()
     _install_providers(monkeypatch, counter)
 
-    body = _post_sync(["HOLDINGS", "ACTIVITY", "MARKET_DATA"])
+    body = _post_sync([
+        "HOLDINGS", "ACCOUNT_CAPITAL", "ACTIVITY", "MARKET_DATA",
+    ])
 
     assert [row["resource"] for row in body["results"]] == [
-        "HOLDINGS", "ACTIVITY", "MARKET_DATA",
+        "HOLDINGS", "ACCOUNT_CAPITAL", "ACTIVITY", "MARKET_DATA",
     ]
     assert counter.as_dict() == {
         "positions": 1,
@@ -324,6 +334,23 @@ def test_activity_resource_requests_activities_once_without_positions_or_market_
         "betas": 0,
         "greeks": 0,
         "resource_commands": ["ACTIVITY"],
+    }
+
+
+def test_capital_resource_reuses_the_positions_call(fidelity_sync_env, monkeypatch):
+    counter = _CallCounter()
+    _install_providers(monkeypatch, counter)
+
+    body = _post_sync(["ACCOUNT_CAPITAL"])
+
+    assert [row["resource"] for row in body["results"]] == ["ACCOUNT_CAPITAL"]
+    assert body["results"][0]["status"] == "OK"
+    assert counter.as_dict() == {
+        "positions": 1,
+        "activities": 0,
+        "betas": 0,
+        "greeks": 0,
+        "resource_commands": ["HOLDINGS"],
     }
 
 

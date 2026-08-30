@@ -31,6 +31,16 @@ from typing import Any, Callable
 from services.snaptrade import io as snaptrade_io
 
 from ... import config, options_activity
+from .. import account_capital
+from ..contracts import (
+    MISSING_BUYING_POWER,
+    MISSING_CASH_BALANCE,
+    MISSING_MAINTENANCE_REQUIREMENT,
+    MISSING_NET_LIQUIDATING_VALUE,
+    AccountCapitalFact,
+    AccountRef,
+    Provenance,
+)
 
 SNAPTRADE_HOLDINGS_SCHEMA_VERSION = 1
 SUPPORTED_SNAPTRADE_HOLDINGS_SCHEMA_VERSIONS = frozenset(
@@ -234,6 +244,38 @@ def _account_context(account: Any) -> dict[str, str]:
         "account_number": text(value(account, "number")),
         "institution": text(value(account, "institution_name")),
     }
+
+
+def _account_capital_fact(account: Any, *, brokerage_id: str,
+                          retrieved_at: str) -> AccountCapitalFact:
+    """Normalize only capital fields proven by the account-list payload.
+
+    The characterized payload exposes ``balance.total`` as total account value.
+    It does not expose provider cash, buying power, or maintenance requirement,
+    so those values deliberately remain unavailable even when positions include
+    a cash-equivalent fund.
+    """
+    balance = value(account, "balance")
+    total = value(balance, "total")
+    net_liquidating_value = _optional_decimal(value(total, "amount"))
+    currency = text(value(value(total, "currency"), "code")).strip().upper()
+    missing = [MISSING_CASH_BALANCE, MISSING_BUYING_POWER,
+               MISSING_MAINTENANCE_REQUIREMENT]
+    if net_liquidating_value is None:
+        missing.insert(0, MISSING_NET_LIQUIDATING_VALUE)
+    account_id = text(value(account, "id"))
+    account_name = text(value(account, "name")) or account_id
+    return AccountCapitalFact(
+        brokerage_id=brokerage_id,
+        account=AccountRef(account_id=account_id, label=account_name),
+        currency=currency,
+        net_liquidating_value=net_liquidating_value,
+        cash_balance=None,
+        buying_power=None,
+        maintenance_requirement=None,
+        provenance=Provenance(source=SOURCE, retrieved_at=retrieved_at),
+        missing=tuple(missing),
+    )
 
 
 def _base_row(ctx: dict[str, str], retrieved_at: str) -> dict[str, Any]:
@@ -499,7 +541,8 @@ def _update_trend(ledger_rows: list[dict[str, Any]], *, now: str) -> dict[tuple[
 # HOLDINGS resource command                                                    #
 # --------------------------------------------------------------------------- #
 
-def sync_holdings(provider: HoldingsProvider | None = None) -> dict[str, Any]:
+def sync_holdings(provider: HoldingsProvider | None = None, *,
+                  brokerage_id: str = "fidelity") -> dict[str, Any]:
     """Pull holdings only: normalize, write the ledger, advance trend, summarize.
 
     Does not fetch activity or market data. The registry decides which sibling
@@ -510,6 +553,12 @@ def sync_holdings(provider: HoldingsProvider | None = None) -> dict[str, Any]:
     retrieved_at = _now()
     rows: list[dict[str, Any]] = []
     accounts_and_holdings = provider()
+    capital_facts = [
+        _account_capital_fact(
+            account, brokerage_id=brokerage_id, retrieved_at=retrieved_at
+        )
+        for account, _holdings in accounts_and_holdings
+    ]
     accounts_synced = {
         text(value(account, "id"))
         for account, _holdings in accounts_and_holdings
@@ -522,6 +571,9 @@ def sync_holdings(provider: HoldingsProvider | None = None) -> dict[str, Any]:
     for row in rows:
         row["imported_at"] = imported_at
     atomic_write(config.snaptrade_holdings_csv(), HOLDINGS_HEADERS, rows)
+    account_capital.write_facts(
+        config.retirement_account_capital_csv(), capital_facts
+    )
 
     # Advance each holding's gain/loss trend once per sync (peak high-water mark
     # plus adverse-move alerts). Best-effort: never fail the holdings sync over it.
@@ -538,6 +590,10 @@ def sync_holdings(provider: HoldingsProvider | None = None) -> dict[str, Any]:
         # Activity owns reactivation counting; holdings alone always reports 0.
         "groups_reactivated": 0,
     }
+    summary["capital_accounts"] = len(capital_facts)
+    summary["capital_accounts_with_net_liquidating_value"] = sum(
+        fact.net_liquidating_value is not None for fact in capital_facts
+    )
     return summary
 
 

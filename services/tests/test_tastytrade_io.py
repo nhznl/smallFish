@@ -37,6 +37,14 @@ class FakeAccount:
         assert include_marks is True
         return [SimpleNamespace(symbol="ABC")]
 
+    async def get_balances(self, session):
+        return SimpleNamespace(
+            net_liquidating_value="25000.50",
+            cash_balance="1500",
+            equity_buying_power="4500",
+            maintenance_requirement="3200",
+        )
+
 
 def _credentials(environment="sandbox"):
     return io.TastytradeCredentials("client-secret", "refresh-token", environment)
@@ -90,9 +98,36 @@ def test_account_data_uses_selected_account_and_closes_session(environment, is_t
     assert result.account is account
     assert result.transactions[0].id == "tx-1"
     assert result.positions[0].symbol == "ABC"
+    assert result.balance.net_liquidating_value == "25000.50"
+    assert result.balance_error is None
+    assert result.balance_currency == "USD"
     assert sessions[0].credentials.environment == environment
     assert (sessions[0].credentials.environment != "live") is is_test
     assert sessions[0].entered and sessions[0].closed
+
+
+def test_account_balance_failure_is_optional_and_safe():
+    class Account(FakeAccount):
+        async def get_balances(self, session):
+            raise RuntimeError("provider secret account-id")
+
+    account = Account()
+    result = io.fetch_account_data(
+        date(2026, 1, 1), date(2026, 1, 2),
+        credentials=_credentials(),
+        session_factory=FakeSession,
+        account_getter=lambda _session: _async_result([account]),
+        account_selector=lambda accounts: accounts[0],
+    )
+
+    assert result.transactions
+    assert result.positions
+    assert result.balance is None
+    assert result.balance_error == (
+        "RuntimeError: Tastytrade account balances is unavailable; "
+        "check the brokerage setup and retry the sync."
+    )
+    assert "secret" not in result.balance_error
 
 
 async def _async_result(value):

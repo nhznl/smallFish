@@ -1,7 +1,8 @@
 """Brokerage-neutral sync.
 
-A caller asks for common resource names — ``HOLDINGS``, ``ACTIVITY``,
-``MARKET_DATA`` — and the registry decides which provider commands that means.
+A caller asks for common resource names — ``HOLDINGS``, ``ACCOUNT_CAPITAL``,
+``ACTIVITY``, ``MARKET_DATA`` — and the registry decides which provider
+commands that means.
 One brokerage may serve all three in a single call and another may need three;
 that is the adapter's problem, not the caller's.
 
@@ -19,7 +20,7 @@ from .contracts import BrokerageCapabilities
 
 logger = logging.getLogger(__name__)
 
-RESOURCES = ("HOLDINGS", "ACTIVITY", "MARKET_DATA")
+RESOURCES = ("HOLDINGS", "ACCOUNT_CAPITAL", "ACTIVITY", "MARKET_DATA")
 
 SyncCommand = Callable[[], dict[str, Any]]
 
@@ -107,6 +108,7 @@ _SAFE_DETAIL_FIELDS = frozenset({
     "capturedAt", "replaced", "snapshotCount", "broker_transactions_read",
     "option_events_selected", "greeks_observed", "greeks_retained",
     "greeks_missing", "betas_observed", "betas_retained", "betas_missing",
+    "capital_accounts", "capital_accounts_with_net_liquidating_value",
 })
 
 

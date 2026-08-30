@@ -10,7 +10,8 @@ registry may branch on which brokerage it is looking at.
 """
 
 from .contracts import (ACTIONS, COVERAGE_STATUSES, INSTRUMENTS,
-                        MISSING_REASONS, OPTION_TYPES, AccountRef, ActivityFact,
+                        MISSING_REASONS, OPTION_TYPES, AccountCapitalFact,
+                        AccountRef, ActivityFact,
                         BrokerageCapabilities, BrokerageCoverage,
                         BrokerageDescriptor, BrokerageSnapshot,
                         MarketObservation, OptionContract, PositionFact,
@@ -20,7 +21,7 @@ from .registry import (REGISTRY, UnknownBrokerageError, brokerage_ids,
 
 __all__ = [
     "ACTIONS", "COVERAGE_STATUSES", "INSTRUMENTS", "MISSING_REASONS",
-    "OPTION_TYPES", "REGISTRY", "AccountRef", "ActivityFact",
+    "OPTION_TYPES", "REGISTRY", "AccountCapitalFact", "AccountRef", "ActivityFact",
     "BrokerageCapabilities", "BrokerageCoverage", "BrokerageDescriptor",
     "BrokerageSnapshot", "MarketObservation", "OptionContract", "PositionFact",
     "Provenance", "UnknownBrokerageError", "brokerage_ids", "descriptors",

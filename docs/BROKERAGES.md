@@ -175,13 +175,14 @@ linked accounts means the credentials work but no brokerage is connected yet.
 
 ## Ledger views
 
-Trading (`/options`) and Retirement (`/retirement`) share one three-tab shell:
+Trading (`/options`) and Retirement (`/retirement`) share one four-tab shell:
 
 | Tab | What it shows |
 |---|---|
 | **Holdings** | Open equity and cash-equivalent positions with an Edit dialog for category, industry, note, and any missing cost basis. Options are excluded. |
 | **Options** | The Symbol Ledger: one durable record per underlying, derived Active/Closed lifecycle, option-only positions and P/L, immutable event history, and optional archived-period detail. |
 | **Combined Adjusted Basis** | Combined equity and option P/L for each symbol that still holds long shares, plus the basis adjusted by its option history. |
+| **Portfolio Analysis** | Account-role profile fit, construction, deployment, concentration, current-holdings replay, hypothetical shocks, option commitments, and a non-persistent stock/ETF What-if preview. |
 
 Some employer-plan holdings arrive without provider cost basis. Those rows show
 an em dash for cost and gain/loss values, and affected portfolio totals remain
@@ -192,7 +193,12 @@ survives brokerage sync; broker-supplied basis takes precedence if it later
 appears. Captured gain/loss comparisons are withheld until a basis is known.
 
 Trade groups and the former portfolio-risk dashboard are retired. Sync
-materializes provider artifacts (positions, activity, marks, Greeks, beta).
+materializes provider artifacts (positions, account capital, activity, marks,
+Greeks, beta). Portfolio Analysis is a new provider-neutral projection rather
+than a restoration of that dashboard. It refuses percentage conclusions when
+net liquidating value is unavailable, never invents profile limits, and labels
+its historical output as a current-holdings replay rather than realized account
+history. Preview recalculation writes no ledger, metadata artifact, or order.
 Symbol Ledger and related projections read positions and activity for P/L and
 lifecycle; call-coverage accounting selects which held option legs to fetch for
 market sync. Greek and beta **values** are retained provider evidence (and feed

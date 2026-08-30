@@ -40,7 +40,7 @@ fake-provider contract tests.
 
 ## Tastytrade
 
-`services.tastytrade` supplies lazy, read-only account/history/position,
+`services.tastytrade` supplies lazy, read-only account/balance/history/position,
 market-metric, DXLink Greek and quote transport calls, plus session
 verification. It plays two independent roles:
 

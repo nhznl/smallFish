@@ -44,6 +44,10 @@ MISSING_MARKET_VALUE = "CURRENT_MARKET_VALUE_UNAVAILABLE"
 MISSING_POSITION_DELTA = "POSITION_DELTA_UNAVAILABLE"
 MISSING_NET_CASH_FLOW = "NET_CASH_FLOW_UNAVAILABLE"
 MISSING_CONTRACT_TERMS = "OPTION_CONTRACT_TERMS_UNAVAILABLE"
+MISSING_NET_LIQUIDATING_VALUE = "NET_LIQUIDATING_VALUE_UNAVAILABLE"
+MISSING_CASH_BALANCE = "CASH_BALANCE_UNAVAILABLE"
+MISSING_BUYING_POWER = "BUYING_POWER_UNAVAILABLE"
+MISSING_MAINTENANCE_REQUIREMENT = "MAINTENANCE_REQUIREMENT_UNAVAILABLE"
 UNMAPPED_PROVIDER_ACTION = "UNMAPPED_PROVIDER_ACTION"
 UNCONFIRMED_PROVIDER_LIFECYCLE = "UNCONFIRMED_PROVIDER_LIFECYCLE"
 PROVIDER_BOUNDARY_UNKNOWN = "PROVIDER_HISTORY_BOUNDARY_UNKNOWN"
@@ -51,12 +55,30 @@ PROVIDER_BOUNDARY_UNKNOWN = "PROVIDER_HISTORY_BOUNDARY_UNKNOWN"
 MISSING_REASONS = frozenset({
     MISSING_OPEN_CASH_FLOW, MISSING_MARK, MISSING_MARKET_VALUE,
     MISSING_POSITION_DELTA, MISSING_NET_CASH_FLOW, MISSING_CONTRACT_TERMS,
+    MISSING_NET_LIQUIDATING_VALUE, MISSING_CASH_BALANCE,
+    MISSING_BUYING_POWER, MISSING_MAINTENANCE_REQUIREMENT,
     UNMAPPED_PROVIDER_ACTION, UNCONFIRMED_PROVIDER_LIFECYCLE,
     PROVIDER_BOUNDARY_UNKNOWN,
 })
 
 
 # ---------------------------------------------------------------- descriptor ---
+
+@dataclass(frozen=True, slots=True)
+class PortfolioAnalysisPolicy:
+    """Role-owned vocabulary and applicable profile fields.
+
+    The registry supplies this policy once. Common projections therefore apply
+    capabilities rather than selecting behavior from a brokerage or role name.
+    """
+
+    objective: str
+    required_fields: tuple[str, ...]
+    optional_fields: tuple[str, ...] = ()
+    assesses_growth_range: bool = False
+    assesses_gross_exposure: bool = False
+    assesses_top_five: bool = False
+
 
 @dataclass(frozen=True, slots=True)
 class BrokerageDescriptor:
@@ -73,6 +95,7 @@ class BrokerageDescriptor:
     institution: str
     portfolio_role: str
     adapter: str
+    analysis_policy: PortfolioAnalysisPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +214,26 @@ class MarketObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class AccountCapitalFact:
+    """One provider account's capital facts from the latest materialized sync.
+
+    Values are nullable independently. In particular, a known cash balance or
+    buying-power figure never licenses a projection to invent net liquidation.
+    ``missing`` names every unavailable field with a stable contract code.
+    """
+
+    brokerage_id: str
+    account: AccountRef
+    currency: str
+    provenance: Provenance
+    net_liquidating_value: Decimal | None = None
+    cash_balance: Decimal | None = None
+    buying_power: Decimal | None = None
+    maintenance_requirement: Decimal | None = None
+    missing: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class BrokerageCoverage:
     """What the retained history actually proves.
 
@@ -216,4 +259,5 @@ class BrokerageSnapshot:
     positions: tuple[PositionFact, ...] = ()
     activity: tuple[ActivityFact, ...] = ()
     market_observations: tuple[MarketObservation, ...] = ()
+    account_capital: tuple[AccountCapitalFact, ...] = ()
     availability: tuple[str, ...] = field(default=())

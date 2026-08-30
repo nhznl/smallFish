@@ -209,9 +209,11 @@ other textual state.
 
 ### Ledgers and portfolio risk
 
-- Trading and Retirement expose the same three brokerage tabs in the same
-  order: Holdings, Options, and Combined Adjusted Basis. Holdings contain
-  equity and cash-equivalent positions; Options contain option information only.
+- Trading and Retirement expose the same four brokerage tabs in the same
+  order: Holdings, Options, Combined Adjusted Basis, and Portfolio Analysis.
+  Holdings contain equity and cash-equivalent positions; Options contain option
+  information only. Portfolio Analysis derives its objective and vocabulary
+  from the returned `portfolio_role`, never from provider identity.
 - Holdings uses one shared, chart-free table on both brokerage pages. Show the
   Category or Account selector only when that field has more than one choice;
   always retain search, Declining only, Snapshot G/L %, Copy Symbols, sortable
@@ -225,7 +227,7 @@ other textual state.
   is missing, the same dialog accepts either total cost basis or cost per
   share/unit. Treat that value as account-scoped app metadata that survives
   sync, and stop using it if the provider later supplies basis.
-- The three brokerage tables place the cached-universe 52-week range band
+- The three brokerage position tables place the cached-universe 52-week range band
   immediately after Price. Symbols in that universe link to Stock Detail in a
   new tab; provider-only symbols, such as Fidelity plan funds, leave both the
   range and symbol link absent rather than implying stock-universe coverage.
@@ -258,6 +260,18 @@ other textual state.
   include equity P/L. Show the `Basis unavailable` summary only when it counts
   one or more genuinely unavailable calculations; normal indicative live marks
   do not count as unavailable.
+- Portfolio Analysis keeps profile fit, construction, capital deployment, and
+  data confidence as separate textual verdicts. It shows account-capital and
+  price dates, owner-selected limits, known breaches, and missing evidence near
+  the affected conclusion. Unconfigured and partial profiles are valid states;
+  neither may render as aligned. Trading is never described as underinvested
+  unless an owner-reviewed deployment minimum exists.
+- Portfolio Analysis remediation is limit-restoration math, not an order
+  instruction. Show actual value, selected limit, overage/shortfall, dated price
+  evidence, approximate trim units where defensible, and outside capital needed
+  to dilute. The What-if form supports long stock/ETF buys and non-short sales,
+  visibly excludes tax/fee/slippage/execution modeling, announces completion,
+  and labels every result non-persistent.
 - Symbol Ledger history is immutable broker evidence. Show current-period
   events directly, and let each archived-period summary expand its own events;
   only one archived period is expanded at a time. Surface a changed-archive

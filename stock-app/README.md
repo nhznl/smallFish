@@ -158,9 +158,13 @@ that a cache has been refreshed today.
 | `GET /api/brokerages/{id}/symbols` | Brokerage-agnostic Symbol Ledger list with derived lifecycle and retained-history P/L. |
 | `GET /api/brokerages/{id}/symbols/{symbol}/events` | Immutable, cursor-paginated current, all, or archived event history. |
 | `POST /api/brokerages/{id}/symbols/{symbol}/archives` | Idempotently archive an eligible completed period. |
-| `POST /api/brokerages/{id}/sync` | Sync common holdings, activity, and market-data resources without creating group state. |
+| `POST /api/brokerages/{id}/sync` | Sync common holdings, account-capital, activity, and market-data resources without creating group state. |
 | `POST /api/brokerages/{id}/activity/manual`, `PUT`/`DELETE /api/brokerages/{id}/activity/manual/{event_id}` | Create, edit, or remove a manual reconciliation event in the selected brokerage ledger. |
 | `GET /api/brokerages/{id}/holdings` | Current equity positions with editable classifications, captured G/L comparison columns, and declining-trend state. |
+| `GET /api/brokerages/{id}/portfolio-analysis` | Account-role profile fit, construction, deployment, current-holdings replay, stress evidence, option commitments, and traceable findings. |
+| `GET`/`PATCH /api/brokerages/{id}/portfolio-analysis/profile` | Read or atomically update owner-reviewed limits; no numeric defaults are supplied. |
+| `PATCH /api/brokerages/{id}/portfolio-analysis/classifications/{symbol}` | Save or clear one account-scoped allocation-bucket override without changing broker facts. |
+| `POST /api/brokerages/{id}/portfolio-analysis/preview` | Recalculate a proposed long stock/ETF buy or non-short sale without persisting it or contacting a provider. |
 | `GET`/`POST /runWheel`, `/runChains` | Run the wheel job (with best-effort upcoming-earnings refresh) and manual prospective option-quote collection. `POST /runChains` accepts the Wheel view's horizon, OTM cushion, and symbol list in its JSON body. |
 | `GET /runEarningsScan` | Refresh the shared upcoming-earnings calendar (Finnhub, only when stale), then report how many scanner symbols have an upcoming report. |
 
@@ -191,6 +195,23 @@ install may still have them on disk, but nothing reads or writes them.
 Tastytrade sync is read-only at the broker and idempotent by transaction ID. It
 retains timestamped Greeks, beta, and marks as broker evidence. Grouping is
 retired, so no sync path can create or change group state.
+
+Each sync also replaces the selected ledger's `account_capital.csv` with one
+nullable provider-fact row per account. Net liquidating value is the future
+Portfolio Analysis denominator; when the provider omits it, the value stays
+blank with `NET_LIQUIDATING_VALUE_UNAVAILABLE` rather than being reconstructed
+from visible positions. Cash, buying power, and maintenance requirement follow
+the same fail-closed rule independently.
+
+Portfolio Analysis stores app-owned limits in
+`portfolio_analysis/profiles.json` and account/symbol allocation overrides in
+`portfolio_analysis/classifications.csv`. Its preferred denominator is the sum
+of known account net liquidating values. If any included account lacks that
+fact, percentage fit, trim/dilution math, and deployment verdicts remain
+unavailable; visible positions, cost basis, and contributions are never used as
+substitutes. Historical figures are labeled **Current-holdings replay** and use
+current long-equity weights against aligned cached adjusted closes. The −20%
+and −35% equity shocks are transparent hypothetical calculations, not forecasts.
 
 ### SnapTrade holdings (Fidelity retirement, etc.)
 

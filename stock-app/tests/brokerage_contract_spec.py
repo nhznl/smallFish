@@ -144,8 +144,11 @@ ARCHIVE_FAILURE_STATUSES = frozenset({404, 409, 422})
 
 ADAPTER_PROTOCOL_METHODS = (
     "descriptor", "capabilities", "positions", "activity", "market_observations",
+    "account_capital",
 )
-SYNC_RESOURCES = frozenset({"HOLDINGS", "ACTIVITY", "MARKET_DATA"})
+SYNC_RESOURCES = frozenset({
+    "HOLDINGS", "ACCOUNT_CAPITAL", "ACTIVITY", "MARKET_DATA",
+})
 
 # -------------------------------------------------------------- new routes ---
 
@@ -163,6 +166,11 @@ NEW_ROUTES = (
     ("POST", "/api/brokerages/{brokerage_id}/holdings/gain-loss-snapshots"),
     ("GET", "/api/brokerages/{brokerage_id}/options"),
     ("GET", "/api/brokerages/{brokerage_id}/option-adjusted-basis"),
+    ("GET", "/api/brokerages/{brokerage_id}/portfolio-analysis"),
+    ("GET", "/api/brokerages/{brokerage_id}/portfolio-analysis/profile"),
+    ("PATCH", "/api/brokerages/{brokerage_id}/portfolio-analysis/profile"),
+    ("PATCH", "/api/brokerages/{brokerage_id}/portfolio-analysis/classifications/{symbol}"),
+    ("POST", "/api/brokerages/{brokerage_id}/portfolio-analysis/preview"),
     ("GET", "/api/brokerages/{brokerage_id}/symbols"),
     ("GET", "/api/brokerages/{brokerage_id}/symbols/{symbol}"),
     ("PATCH", "/api/brokerages/{brokerage_id}/symbols/{symbol}"),

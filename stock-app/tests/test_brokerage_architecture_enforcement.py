@@ -369,6 +369,7 @@ def test_fidelity_resource_commands_are_the_owning_modules_themselves():
 
     commands = registry.REGISTRY["fidelity"].sync_commands
     assert commands["HOLDINGS"] is snaptrade_importer.sync_holdings
+    assert commands["ACCOUNT_CAPITAL"] is snaptrade_importer.sync_holdings
     assert commands["MARKET_DATA"] is (
         held_option_market_data.sync_held_option_market_data)
     assert len({id(command) for command in commands.values()}) == 3

@@ -146,18 +146,27 @@ Each brokerage has its own artifact namespace; there is no global
 `positions.csv`. The common projections load one brokerage snapshot at a time.
 In particular, **Combined Adjusted Basis** combines the current equity and option
 facts for the same symbol within the requested Trading or Retirement ledger. It
-never mixes positions across the two brokerages.
+never mixes positions across the two brokerages. **Portfolio Analysis** is also
+brokerage-scoped: it applies the registry-owned account-role policy to canonical
+facts and owner-reviewed metadata without branching on provider identity.
 
 | Immutable provider facts | Editable app-owned metadata |
 |---|---|
-| Trading: `ledger_trading/options_activity.csv` contains broker transactions; `ledger_trading/positions.csv` contains current Trading equity and option positions used by its Holdings, Symbol Ledger reconciliation, and Combined Adjusted Basis projections | Trading holding enrichment, including account-scoped missing-basis overrides, and user-captured G/L snapshots; brokerage-scoped Symbol Ledger notes and archive boundaries |
-| Retirement: `ledger_retirement/options_activity.csv` contains option transaction events; `ledger_retirement/positions.csv` contains current Fidelity equity, option, and cash positions used by its Holdings, Symbol Ledger reconciliation, and Combined Adjusted Basis projections | Retirement holding enrichment, including account-scoped missing-basis overrides, and user-captured G/L snapshots; brokerage-scoped Symbol Ledger notes and archive boundaries |
+| Trading: `ledger_trading/options_activity.csv` contains broker transactions; `ledger_trading/positions.csv` contains current equity/options; `ledger_trading/account_capital.csv` contains nullable provider capital facts | Trading holding enrichment, including account-scoped missing-basis overrides, and user-captured G/L snapshots; brokerage-scoped Symbol Ledger notes and archive boundaries |
+| Retirement: `ledger_retirement/options_activity.csv` contains option transaction events; `ledger_retirement/positions.csv` contains current Fidelity equity/options/cash; `ledger_retirement/account_capital.csv` contains nullable provider capital facts | Retirement holding enrichment, including account-scoped missing-basis overrides, and user-captured G/L snapshots; brokerage-scoped Symbol Ledger notes and archive boundaries |
 | Per-ledger Greek, IV, beta, and mark artifacts contain timestamped market observations | Not directly editable; sync refreshes provider observations while retaining the applicable prior-on-miss evidence |
+| — | `portfolio_analysis/profiles.json` holds owner-reviewed limits; `portfolio_analysis/classifications.csv` holds account/symbol allocation overrides |
 
 Broker facts are never edited in place; syncs upsert by provider id. Symbol
 Ledger archives and notes live in separate app-owned files, so a resync never
 destroys evidence or rewrites history. Legacy group files are retained only for
 rollback; production sync no longer mutates them.
+
+Net liquidating value is the Portfolio Analysis denominator. A blank capital
+fact remains null with a stable missing reason; projections never replace it
+with visible-position value, contributions, cost basis, or buying power. The
+analysis profile/classification stores are independently atomic and editable,
+while `account_capital.csv` is replaceable only by brokerage sync.
 
 The Options tab requests the Symbol Ledger's `exposure=options` projection.
 That projection calculates current, archived, and lifetime P/L from option

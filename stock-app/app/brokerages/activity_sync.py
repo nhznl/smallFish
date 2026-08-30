@@ -11,6 +11,7 @@ from services.options_market.providers.tastytrade import occ_to_dxfeed_symbol
 from services.tastytrade import io as tastytrade_io
 
 from .. import config
+from . import account_capital
 from .activity_normalize import (
     _contract_key,
     _decimal,
@@ -36,6 +37,15 @@ from .activity_store import (
     _atomic_write,
     _lock,
     _read_csv,
+)
+from .contracts import (
+    MISSING_BUYING_POWER,
+    MISSING_CASH_BALANCE,
+    MISSING_MAINTENANCE_REQUIREMENT,
+    MISSING_NET_LIQUIDATING_VALUE,
+    AccountCapitalFact,
+    AccountRef,
+    Provenance,
 )
 
 BrokerProvider = Callable[[date, date], tuple[list[Any], list[Any], dict[str, Any]]]
@@ -111,6 +121,9 @@ def fetch_tastytrade(start_date: date, end_date: date) -> tuple[list[Any], list[
         "greeks_error": greeks_error,
         "betas": betas,
         "betas_error": betas_error,
+        "account_capital": data.balance,
+        "account_capital_error": data.balance_error,
+        "account_capital_currency": data.balance_currency,
     }
     return list(data.transactions), list(data.positions), metadata
 
@@ -144,9 +157,44 @@ def _trend_observations(positions: list[dict[str, Any]]) -> list[Any]:
     return observations
 
 
+def _capital_fact(raw: Any, *, brokerage_id: str, account: str,
+                  retrieved_at: str, currency: str = "") -> AccountCapitalFact:
+    raw_buying_power = _value(raw, "buying_power")
+    if raw_buying_power in (None, ""):
+        raw_buying_power = _value(raw, "equity_buying_power")
+    values = {
+        "net_liquidating_value": account_capital.optional_decimal(
+            _value(raw, "net_liquidating_value")
+        ),
+        "cash_balance": account_capital.optional_decimal(_value(raw, "cash_balance")),
+        "buying_power": account_capital.optional_decimal(raw_buying_power),
+        "maintenance_requirement": account_capital.optional_decimal(
+            _value(raw, "maintenance_requirement")
+        ),
+    }
+    reasons = {
+        "net_liquidating_value": MISSING_NET_LIQUIDATING_VALUE,
+        "cash_balance": MISSING_CASH_BALANCE,
+        "buying_power": MISSING_BUYING_POWER,
+        "maintenance_requirement": MISSING_MAINTENANCE_REQUIREMENT,
+    }
+    return AccountCapitalFact(
+        brokerage_id=brokerage_id,
+        account=AccountRef(account_id=account, label=account),
+        currency=(
+            _text(_value(raw, "currency")).strip().upper()
+            or _text(currency).strip().upper()
+        ),
+        provenance=Provenance(source=SOURCE, retrieved_at=retrieved_at),
+        missing=tuple(reasons[field] for field, value in values.items() if value is None),
+        **values,
+    )
+
+
 def sync(start_date: date | None = None,
          end_date: date | None = None,
-         *, provider: BrokerProvider | None = None) -> dict[str, Any]:
+         *, provider: BrokerProvider | None = None,
+         brokerage_id: str = "") -> dict[str, Any]:
     end_date = end_date or date.today()
     start_date = start_date or date(end_date.year, 1, 1)
     if start_date > end_date:
@@ -156,7 +204,17 @@ def sync(start_date: date | None = None,
     metadata = dict(metadata)
     raw_greeks = list(metadata.pop("greeks", []) or [])
     raw_betas = list(metadata.pop("betas", []) or [])
+    raw_capital = metadata.pop("account_capital", None)
+    metadata.pop("account_capital_error", None)
+    capital_currency = metadata.pop("account_capital_currency", "")
     retrieved_at = _now()
+    capital_fact = _capital_fact(
+        raw_capital,
+        brokerage_id=brokerage_id,
+        account=_text(metadata.get("nickname")) or account,
+        retrieved_at=retrieved_at,
+        currency=capital_currency,
+    )
     selected, option_underlyings = _select_transactions(transactions)
     with _lock:
         existing = _read_csv(config.options_activity_csv(), ACTIVITY_HEADERS)
@@ -231,6 +289,9 @@ def sync(start_date: date | None = None,
         _atomic_write(config.options_position_marks_csv(), MARK_HEADERS, marks)
         _atomic_write(config.options_greeks_csv(), GREEKS_HEADERS, persisted_greeks)
         _atomic_write(config.options_betas_csv(), BETA_HEADERS, persisted_betas)
+        account_capital.write_facts(
+            config.trading_account_capital_csv(), [capital_fact]
+        )
 
         # Grouping is retired. The Symbol Ledger derives lifecycle from the
         # events themselves, so nothing here creates or mutates group state;
@@ -280,4 +341,8 @@ def sync(start_date: date | None = None,
             if symbol not in newest_betas and symbol not in previous_betas
         ),
         "betas_error": metadata.get("betas_error"),
+        "capital_accounts": 1,
+        "capital_accounts_with_net_liquidating_value": int(
+            capital_fact.net_liquidating_value is not None
+        ),
     }

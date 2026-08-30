@@ -11,11 +11,14 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from . import activity_manual, registry, store, sync
+from .. import config
+from . import (activity_manual, portfolio_analysis_profile, registry, store,
+               sync)
 from .activity_store import ActivityValidationError
 from .contracts import BrokerageSnapshot
 from .projections import (components as component_projection, envelope, events,
-                          holdings, option_adjusted_basis, options, symbol_ledger)
+                          holdings, option_adjusted_basis, options,
+                          portfolio_analysis, portfolio_preview, symbol_ledger)
 
 CATALOG_SCHEMA_NAME = "smallfish.brokerage-catalog"
 MAX_NOTE_LENGTH = 2000
@@ -45,7 +48,9 @@ def _snapshot(brokerage_id: str) -> tuple[BrokerageSnapshot, registry.BrokerageR
         raise BrokerageRequestError(
             "UNKNOWN_BROKERAGE", "That brokerage is not configured.", 404
         ) from exc
-    adapter = entry.factory(entry.descriptor, entry.capabilities)
+    adapter = entry.factory(
+        entry.descriptor, entry.capabilities, entry.account_capital_path()
+    )
     return adapter.snapshot(), entry
 
 
@@ -54,7 +59,9 @@ def catalog() -> dict[str, Any]:
     it must never branch on the identity itself to interpret data."""
     brokerages = []
     for entry in registry.REGISTRY.values():
-        adapter = entry.factory(entry.descriptor, entry.capabilities)
+        adapter = entry.factory(
+            entry.descriptor, entry.capabilities, entry.account_capital_path()
+        )
         brokerages.append({
             "id": entry.descriptor.id,
             "label": entry.descriptor.label,
@@ -100,6 +107,101 @@ def brokerage_option_adjusted_basis(brokerage_id: str, *,
                                     account_id: str | None = None) -> dict[str, Any]:
     snapshot, _entry = _snapshot(brokerage_id)
     return option_adjusted_basis.build(snapshot, account_id=account_id)
+
+
+# ------------------------------------------------------ portfolio analysis --
+
+def brokerage_portfolio_analysis(brokerage_id: str) -> dict[str, Any]:
+    snapshot, _entry = _snapshot(brokerage_id)
+    try:
+        return portfolio_analysis.build(
+            snapshot,
+            profile_path=config.portfolio_analysis_profiles_json(),
+            classifications_path=config.portfolio_analysis_classifications_csv(),
+        )
+    except portfolio_analysis_profile.ProfileValidationError as exc:
+        raise BrokerageRequestError(exc.code, exc.message, 409) from exc
+
+
+def get_portfolio_analysis_profile(brokerage_id: str) -> dict[str, Any]:
+    snapshot, _entry = _snapshot(brokerage_id)
+    try:
+        profile = portfolio_analysis_profile.read_profile(
+            config.portfolio_analysis_profiles_json(), brokerage_id,
+            snapshot.descriptor.analysis_policy,
+        )
+    except portfolio_analysis_profile.ProfileValidationError as exc:
+        raise BrokerageRequestError(exc.code, exc.message, 409) from exc
+    return {
+        "schema_name": "smallfish.portfolio-analysis-profile",
+        "schema_version": envelope.SCHEMA_VERSION,
+        "brokerage": envelope.brokerage_block(snapshot),
+        "profile": profile,
+    }
+
+
+def update_portfolio_analysis_profile(brokerage_id: str,
+                                      payload: dict[str, Any]) -> dict[str, Any]:
+    snapshot, _entry = _snapshot(brokerage_id)
+    try:
+        profile = portfolio_analysis_profile.update_profile(
+            config.portfolio_analysis_profiles_json(), brokerage_id,
+            snapshot.descriptor.analysis_policy, payload,
+        )
+    except portfolio_analysis_profile.ProfileValidationError as exc:
+        raise BrokerageRequestError(exc.code, exc.message, 422) from exc
+    return {
+        "schema_name": "smallfish.portfolio-analysis-profile",
+        "schema_version": envelope.SCHEMA_VERSION,
+        "brokerage": envelope.brokerage_block(snapshot),
+        "profile": profile,
+    }
+
+
+def update_portfolio_analysis_classification(
+        brokerage_id: str, symbol: str, payload: dict[str, Any]) -> dict[str, Any]:
+    snapshot, _entry = _snapshot(brokerage_id)
+    unknown = set(payload) - {"account_id", "allocation_bucket"}
+    if unknown:
+        raise BrokerageRequestError(
+            "UNSUPPORTED_FIELD", f"Cannot update {', '.join(sorted(unknown))}.", 422
+        )
+    account_id = str(payload.get("account_id") or "").strip()
+    if not any(
+        row.account.account_id == account_id and row.symbol == str(symbol).strip().upper()
+        and row.instrument != "OPTION" for row in snapshot.positions
+    ):
+        raise BrokerageRequestError(
+            "UNKNOWN_HOLDING", "That account does not hold this symbol.", 404,
+        )
+    try:
+        result = portfolio_analysis_profile.set_classification(
+            config.portfolio_analysis_classifications_csv(),
+            brokerage_id=brokerage_id, account_id=account_id, symbol=symbol,
+            bucket=payload.get("allocation_bucket"),
+        )
+    except portfolio_analysis_profile.ProfileValidationError as exc:
+        raise BrokerageRequestError(exc.code, exc.message, 422) from exc
+    return {
+        "schema_name": "smallfish.portfolio-analysis-classification",
+        "schema_version": envelope.SCHEMA_VERSION,
+        "brokerage": envelope.brokerage_block(snapshot), **result,
+    }
+
+
+def preview_portfolio_analysis(brokerage_id: str,
+                               payload: dict[str, Any]) -> dict[str, Any]:
+    snapshot, _entry = _snapshot(brokerage_id)
+    try:
+        return portfolio_preview.build(
+            snapshot, payload=payload,
+            profile_path=config.portfolio_analysis_profiles_json(),
+            classifications_path=config.portfolio_analysis_classifications_csv(),
+        )
+    except portfolio_preview.PreviewValidationError as exc:
+        raise BrokerageRequestError(exc.code, exc.message, 422) from exc
+    except portfolio_analysis_profile.ProfileValidationError as exc:
+        raise BrokerageRequestError(exc.code, exc.message, 409) from exc
 
 
 # --------------------------------------------------------------- symbols ---

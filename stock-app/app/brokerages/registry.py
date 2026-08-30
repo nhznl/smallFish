@@ -16,7 +16,8 @@ from .. import config, options_activity
 from .adapters.base import ArtifactAdapter, BrokerageAdapter
 from .adapters.snaptrade import SnapTradeAdapter
 from .adapters.tastytrade import TastytradeAdapter
-from .contracts import BrokerageCapabilities, BrokerageDescriptor
+from .contracts import (BrokerageCapabilities, BrokerageDescriptor,
+                        PortfolioAnalysisPolicy)
 from .importers import held_option_market_data
 from .importers import snaptrade as snaptrade_importer
 
@@ -45,6 +46,8 @@ class BrokerageRegistration:
     #: Ledger-level contribution and year-start baselines for alternate return
     #: views on the shared Holdings page.
     holdings_settings_path: Callable[[], Path] = config.holdings_settings_csv
+    #: Immutable capital facts replaced only by the brokerage sync command.
+    account_capital_path: Callable[[], Path] = config.trading_account_capital_csv
     #: Common resource name -> the provider command that satisfies it. One
     #: command may serve several resources; the sync runner calls it once.
     sync_commands: dict[str, Callable[[], dict]] = field(default_factory=dict)
@@ -55,10 +58,12 @@ class BrokerageRegistration:
 
 def _registration(*, brokerage_id: str, label: str, institution: str,
                   portfolio_role: str, adapter: str,
+                  analysis_policy: PortfolioAnalysisPolicy,
                   factory: Callable[..., ArtifactAdapter],
                   holdings_metadata_path: Callable[[], Path],
                   holdings_trend_path: Callable[[], Path],
                   holdings_settings_path: Callable[[], Path],
+                  account_capital_path: Callable[[], Path],
                   sync_commands: dict[str, Callable[[], dict]],
                   activity_path: Callable[[], Path],
                   capabilities: BrokerageCapabilities | None = None,
@@ -67,12 +72,14 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
         descriptor=BrokerageDescriptor(
             id=brokerage_id, label=label, institution=institution,
             portfolio_role=portfolio_role, adapter=adapter,
+            analysis_policy=analysis_policy,
         ),
         capabilities=capabilities or BrokerageCapabilities(),
         factory=factory,
         holdings_metadata_path=holdings_metadata_path,
         holdings_trend_path=holdings_trend_path,
         holdings_settings_path=holdings_settings_path,
+        account_capital_path=account_capital_path,
         sync_commands=sync_commands,
         activity_path=activity_path,
     )
@@ -80,7 +87,7 @@ def _registration(*, brokerage_id: str, label: str, institution: str,
 
 def _tastytrade_sync() -> dict:
     """One provider call materializes positions, activity, and market data."""
-    return options_activity.sync()
+    return options_activity.sync(brokerage_id="tastytrade")
 
 
 def _fidelity_activity_sync() -> dict:
@@ -93,12 +100,26 @@ REGISTRY: dict[str, BrokerageRegistration] = {
     "tastytrade": _registration(
         brokerage_id="tastytrade", label="Tastytrade", institution="TASTYTRADE",
         portfolio_role="TRADING", adapter="TASTYTRADE", factory=TastytradeAdapter,
+        analysis_policy=PortfolioAnalysisPolicy(
+            objective="SPECULATIVE_TRADING",
+            required_fields=(
+                "max_single_issuer_pct", "max_speculative_pct",
+                "max_put_assignment_commitment_pct", "max_stress_loss_pct",
+                "minimum_liquid_pct", "max_gross_exposure_pct",
+            ),
+            optional_fields=(
+                "deployment_min_pct", "deployment_max_pct", "max_sector_pct",
+            ),
+            assesses_gross_exposure=True,
+        ),
         holdings_metadata_path=config.trading_holdings_enrichment_csv,
         holdings_trend_path=config.trading_holdings_trend_csv,
         holdings_settings_path=config.trading_holdings_settings_csv,
+        account_capital_path=config.trading_account_capital_csv,
         activity_path=config.options_activity_csv,
         sync_commands={
             "HOLDINGS": _tastytrade_sync,
+            "ACCOUNT_CAPITAL": _tastytrade_sync,
             "ACTIVITY": _tastytrade_sync,
             "MARKET_DATA": _tastytrade_sync,
         },
@@ -108,12 +129,26 @@ REGISTRY: dict[str, BrokerageRegistration] = {
     "fidelity": _registration(
         brokerage_id="fidelity", label="Fidelity", institution="FIDELITY",
         portfolio_role="RETIREMENT", adapter="SNAPTRADE", factory=SnapTradeAdapter,
+        analysis_policy=PortfolioAnalysisPolicy(
+            objective="LONG_TERM_AGGRESSIVE_GROWTH",
+            required_fields=(
+                "max_single_issuer_pct", "max_speculative_pct",
+                "max_put_assignment_commitment_pct", "max_stress_loss_pct",
+                "minimum_liquid_pct", "growth_min_pct", "growth_max_pct",
+                "cash_min_pct", "cash_max_pct", "max_sector_pct",
+                "max_top_five_pct", "first_expected_withdrawal_date",
+            ),
+            assesses_growth_range=True,
+            assesses_top_five=True,
+        ),
         holdings_metadata_path=config.holdings_enrichment_csv,
         holdings_trend_path=config.holdings_trend_csv,
         holdings_settings_path=config.holdings_settings_csv,
+        account_capital_path=config.retirement_account_capital_csv,
         activity_path=config.retirement_option_events_csv,
         sync_commands={
             "HOLDINGS": snaptrade_importer.sync_holdings,
+            "ACCOUNT_CAPITAL": snaptrade_importer.sync_holdings,
             "ACTIVITY": _fidelity_activity_sync,
             "MARKET_DATA": held_option_market_data.sync_held_option_market_data,
         },
@@ -143,4 +178,6 @@ def resolve(brokerage_id: str) -> BrokerageAdapter:
     is a client error, not an empty brokerage.
     """
     entry = registration(brokerage_id)
-    return entry.factory(entry.descriptor, entry.capabilities)
+    return entry.factory(
+        entry.descriptor, entry.capabilities, entry.account_capital_path()
+    )

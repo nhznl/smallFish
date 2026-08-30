@@ -3,7 +3,7 @@
     <div>
       <p class="page-eyebrow">Brokerage ledger</p>
       <h1 class="page-title">{{ title }}</h1>
-      <p class="page-subtitle">Equity holdings, symbol-level option history, and combined equity-plus-option P/L.</p>
+      <p class="page-subtitle">Equity holdings, option history, adjusted basis, and profile-aware portfolio risk analysis.</p>
     </div>
     <div class="page-actions">
       <button type="button" class="btn btn-primary" (click)="sync()"
@@ -27,6 +27,8 @@
       [attr.aria-selected]="tab === 'options'" (click)="tab = 'options'">Options</button>
     <button type="button" class="tab" role="tab" [class.active]="tab === 'basis'"
       [attr.aria-selected]="tab === 'basis'" (click)="tab = 'basis'">Combined Adjusted Basis</button>
+    <button type="button" class="tab" role="tab" [class.active]="tab === 'analysis'"
+      [attr.aria-selected]="tab === 'analysis'" (click)="tab = 'analysis'">Portfolio Analysis</button>
   </div>
 
   @if (tab === 'holdings') {
@@ -34,7 +36,9 @@
       (countChange)="holdingsCount = $event" />
   } @else if (tab === 'options') {
     <app-symbol-ledger [brokerageId]="brokerageId" [refreshToken]="refreshToken" />
-  } @else {
+  } @else if (tab === 'basis') {
     <app-brokerage-ledger-combined [brokerageId]="brokerageId" [refreshToken]="refreshToken" />
+  } @else {
+    <app-portfolio-analysis [brokerageId]="brokerageId" [refreshToken]="refreshToken" />
   }
 </div>

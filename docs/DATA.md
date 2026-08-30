@@ -113,6 +113,8 @@ never touches another symbol's cache.
 | `data/earnings_history.csv` | Multi-year realized earnings dates; not refreshed in the live scan path | `earnings-history` (Yahoo/yfinance) |
 | `data/backtest/`, `data/sector_rotation_study/` | Study runs and pinned evidence | study commands |
 | `data/ledger_trading/`, `data/ledger_retirement/` | Broker data. **Real positions.** | brokerage syncs |
+| `data/portfolio_analysis/profiles.json` | Owner-reviewed account-role limits; no product numeric defaults | Portfolio Analysis profile editor |
+| `data/portfolio_analysis/classifications.csv` | Account/symbol allocation-bucket overrides, separate from broker instruments | Portfolio Analysis classification editor |
 | `data/studies/` | Materialized Research Studies JSON | `studies build` |
 | `logs/` | Scraper, audit, and server logs | various |
 
@@ -187,6 +189,9 @@ run's failures.
 
 - **Symbol Ledger metadata and archive CSVs** — your notes and completed-period
   boundaries. Not recoverable from a provider. Back them up.
+- **Portfolio Analysis profile and classification metadata** — your selected
+  limits and account-scoped overrides. Not recoverable from a provider. Back
+  them up.
 - **Long price history.** Regenerable, but a full multi-year backfill is slow
   and rate-limited.
 

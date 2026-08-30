@@ -2,7 +2,8 @@
 
 Angular 22 single-page application for the smallFish FastAPI backend. It
 visualizes stock analysis, research studies, wheel candidates, and the shared
-brokerage ledgers (Holdings, Symbol Ledger, and Combined Adjusted Basis).
+brokerage ledgers (Holdings, Symbol Ledger, Combined Adjusted Basis, and
+Portfolio Analysis).
 
 ## Setup and run
 
@@ -58,8 +59,8 @@ it unconditionally. A new route colliding with an API path must be added to
 | `/studies/:studyId` | Study Detail | Evidence, methodology, variations, provenance, and optional candidate scan. |
 | `/wheel` | Wheel | Wheel candidates, probability context, and archived option quotes. |
 | `/wheelExplainer` | Wheel Explainer | Wheel methodology and field definitions. |
-| `/options` | Trading Ledger | Shared brokerage shell for Tastytrade: Holdings, Options (Symbol Ledger), and Combined Adjusted Basis. |
-| `/retirement` | Retirement Ledger | Same three tabs for SnapTrade/Fidelity retirement holdings and option history. |
+| `/options` | Trading Ledger | Shared brokerage shell for Tastytrade: Holdings, Options (Symbol Ledger), Combined Adjusted Basis, and Portfolio Analysis. |
+| `/retirement` | Retirement Ledger | Same four tabs for SnapTrade/Fidelity retirement holdings, option history, and long-term aggressive-growth analysis. |
 | `/portfolios` | Portfolios | Named symbol lists with returns, sector exposure, and SPY comparison. |
 | `/stockDetail/:symbol` | Stock Detail | Company and momentum snapshot, weekly-close chart, and slope heatmap. |
 | `/` | — | Redirects to `/momentum`. |
@@ -81,8 +82,9 @@ principal endpoints are:
 - `POST /api/studies/{studyId}/scan` for explicitly allowlisted scan execution.
 - `GET /wheelCandidates?horizon=37` for wheel candidates.
 - `GET /stocks/{symbol}/info` for live company information.
-- `GET`/`POST` `/api/brokerages/{id}/*` for Holdings, Symbol Ledger, and
-  Combined Adjusted Basis, including brokerage-scoped manual reconciliation.
+- `GET`/`POST` `/api/brokerages/{id}/*` for Holdings, Symbol Ledger, Combined
+  Adjusted Basis, and Portfolio Analysis, including account-capital evidence,
+  owner-reviewed profiles/classifications, and non-persistent stock/ETF previews.
 
 ## Wheel option quotes
 
@@ -175,7 +177,7 @@ snapshot in the reusable sortable table without changing the study verdict.
 
 ## Brokerage ledgers
 
-Trading and Retirement are thin route shells over the same three tabs:
+Trading and Retirement are thin route shells over the same four tabs:
 
 1. **Holdings** — open equity positions with an Edit dialog for
    category/industry/note and any missing cost basis, snapshot G/L comparison
@@ -186,6 +188,19 @@ Trading and Retirement are thin route shells over the same three tabs:
    archived-period detail, and deliberate archive confirmation.
 3. **Combined Adjusted Basis** — combined equity and option P/L for symbols
    that still hold long shares, plus the basis adjusted by option history.
+4. **Portfolio Analysis** — role-specific profile fit, construction, capital
+   deployment, concentration, current-holdings historical replay, hypothetical
+   stress evidence, and option commitments. The shared component follows the
+   returned `portfolio_role`; it does not branch on provider identity. Profile
+   and allocation-classification edits are app-owned metadata. The What-if form
+   recalculates a proposed long stock/ETF buy or sale and explicitly reports
+   `persisted: false`; it does not place an order or mutate saved holdings.
+
+Portfolio Analysis never invents a missing limit or capital denominator.
+Unconfigured/partial profiles and unavailable marks, capital, classifications,
+or history remain visible, and missing values render as `—`. Preview prices
+identify whether they came from an owner assumption, saved provider mark, or
+cached adjusted close.
 
 Trade groups, event reassignment, and the former portfolio-risk dashboard are
 not part of the UI.
