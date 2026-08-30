@@ -188,3 +188,5 @@ manual_pins:
   ISSC: {type: STOCK, notes: "INNOVATIVE SOLTNS & SUPP INC"}
   KSPI: {type: STOCK, notes: "Kaspi"}
   VIST: {type: STOCK, notes: "Vista Energy"}
+  TENX: {type: STOCK, notes: "Tenax Therapeutics"}
+  BBW: {type: STOCK, notes: "Build a bear workshop"}
