@@ -17,6 +17,19 @@ plans and phase documents have been retired.
 
 ## Active
 
+**Market-regime stock research.** A frozen, unpublished SPY/VIX framework uses
+1999–2004 initial training and annual 2005–2020 expanding walk-forward model
+comparison. It includes the fixed rule baseline, volatility targeting,
+K-means, Gaussian mixtures, and causally filtered 2/3/4-state Gaussian HMMs,
+plus rule and rolling-window sensitivities. Cash exposure uses a lagged
+three-month Treasury-bill proxy. The frozen candidate is the original expanding
+two-state K-means model; a three-session confirmation variant looked better
+only in a post-selection sensitivity and is not holdout eligible. The owner
+approved the unfiltered candidate on 2026-08-29. Its 2021–2025 historical
+holdout may be calculated once from the clean frozen commit. Walk-forward
+results remain model-selection evidence, not confirmatory evidence. See
+[`studies/market_regime/market_regime_study_spec.md`](studies/market_regime/market_regime_study_spec.md).
+
 **Prospective RTH quote evidence.** Collect ordinary regular-trading-hours
 option-quote observations across several calendar dates, then inspect their
 side-specific timestamps, freshness, quality distribution, and eligibility

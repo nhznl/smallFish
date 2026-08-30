@@ -125,16 +125,23 @@ studies/
     ├── config/
     ├── study_v1.py             frozen legacy-nine study
     └── study_v2.py             frozen full-period exploration
-└── rsi_supertrend/
+├── rsi_supertrend/
     ├── rsi_supertrend_study_spec.md   frozen protocol (do not edit)
     ├── source.pine                    pasted executable Pine source
     ├── config/study.yaml              frozen parameters and cohorts
     ├── pine.py / emulator.py / comparison.py / study.py
     └── README.md                      operational runner notes
+└── market_regime/
+    ├── market_regime_study_spec.md    frozen protocol; one-shot holdout approved
+    ├── config/baseline.yaml           transparent baseline parameters
+    └── data/features/models/...       development and validation framework
 ```
 
 The closed RSI/SuperTrend implementation remains as a reproducibility and audit
 record. Its 2022–2025 holdout was never opened and must remain unrun.
+
+The market-regime study has a frozen stock-only candidate. Its 2021–2025
+historical holdout is approved for one execution from the clean frozen commit.
 
 Studies share the `utilities/.venv` environment and may import `models/` and
 `utilities/`. Nothing in `stock-app/` may import them.

@@ -1,0 +1,102 @@
+schema_name: smallfish.market-regime-study
+schema_version: 1
+study_id: market-regime-baseline-v1
+protocol_status: FROZEN
+protocol_frozen_date: '2026-08-29'
+
+frozen_candidate:
+  model_id: kmeans_2
+  family: kmeans
+  state_count: 2
+  training_window: expanding
+  refit_frequency: annual
+  stability_filter: none
+  selected_at_cost_bps: 5
+  selection_artifact_sha256: f37f80b80630e10de1560f6ad3dd28b9b18a0f6dfe588ebb36477a571c607336
+
+data_start: '1998-01-02'
+research_start: '1999-01-01'
+initial_training_end: '2004-12-31'
+walk_forward_start: '2005-01-01'
+walk_forward_end: '2020-12-31'
+# Retained only to reproduce the already-inspected rule-baseline milestone.
+development_start: '1999-01-01'
+development_end: '2014-12-31'
+validation_start: '2015-01-01'
+validation_end: '2020-12-31'
+holdout_start: '2021-01-01'
+holdout_end: '2025-12-31'
+live_start: '2026-01-01'
+
+features:
+  return_windows: [20, 50]
+  realized_volatility_windows: [20, 60]
+  sma_windows: [50, 180, 190, 200, 210, 220]
+  annualization_sessions: 252
+
+rule_model:
+  long_sma: 200
+  short_sma: 50
+  vix_elevated: 25.0
+  realized_volatility_elevated: 0.25
+
+model_comparison:
+  features: [return_20, distance_sma_200, log_rv_20, log_vix]
+  state_counts: [2, 3, 4]
+  primary_training_window: expanding
+  rolling_sensitivity_years: 10
+  random_seeds: [20260829, 20260830, 20260831]
+  max_iterations: 50
+  tolerance: 0.0001
+  minimum_variance: 0.001
+
+volatility_target:
+  target_annualized_volatility: 0.10
+  maximum_exposure: 1.0
+
+selection:
+  primary_cost_bps: 5
+  minimum_average_exposure: 0.25
+  maximum_cagr_shortfall_vs_sma_200: 0.01
+  require_calmar_above_sma_200: true
+  require_drawdown_no_worse_than_sma_200: true
+  ranking: [calmar, sortino_zero_cash_rate, maximum_drawdown]
+
+rule_robustness:
+  long_sma_windows: [180, 190, 200, 210, 220]
+  stress_thresholds:
+    - {vix: 20.0, realized_volatility: 0.20}
+    - {vix: 22.5, realized_volatility: 0.225}
+    - {vix: 25.0, realized_volatility: 0.25}
+    - {vix: 27.5, realized_volatility: 0.275}
+    - {vix: 30.0, realized_volatility: 0.30}
+
+stability_sensitivity:
+  confirmation_sessions: [2, 3]
+  minimum_duration_sessions: [5, 10]
+
+forward_horizons: [1, 5, 10, 21, 63]
+persistence_horizons: [1, 5, 10]
+
+exposure:
+  BULL_LOW_VOL: 1.0
+  BULL_HIGH_VOL: 0.75
+  NEUTRAL_TRANSITION: 0.5
+  BEAR_LOW_VOL: 0.25
+  BEAR_HIGH_VOL: 0.0
+  UNAVAILABLE: 0.0
+
+costs_bps: [0, 1, 5, 10]
+primary_cost_bps: 5
+random_seed: 20260829
+
+sources:
+  spy: repository validated auto-adjusted OHLCV cache
+  vix: https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv
+  cash: https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTB3
+
+cash_proxy:
+  series: DTB3
+  maturity_days: 91
+  discount_basis_days: 360
+  availability_lag_spy_sessions: 1
