@@ -133,15 +133,16 @@ studies/
     └── README.md                      operational runner notes
 └── market_regime/
     ├── market_regime_study_spec.md    frozen protocol; one-shot holdout approved
-    ├── config/baseline.yaml           transparent baseline parameters
+    ├── config/baseline.yaml           frozen published parameters
+    ├── evidence/holdout_result.json   immutable failed holdout summary
     └── data/features/models/...       development and validation framework
 ```
 
 The closed RSI/SuperTrend implementation remains as a reproducibility and audit
 record. Its 2022–2025 holdout was never opened and must remain unrun.
 
-The market-regime study has a frozen stock-only candidate. Its 2021–2025
-historical holdout is approved for one execution from the clean frozen commit.
+The market-regime study is published with a failed verdict. Its one-shot
+2021–2025 holdout is spent and must never be rerun or retuned.
 
 Studies share the `utilities/.venv` environment and may import `models/` and
 `utilities/`. Nothing in `stock-app/` may import them.

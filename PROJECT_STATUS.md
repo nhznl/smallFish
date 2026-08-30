@@ -17,19 +17,6 @@ plans and phase documents have been retired.
 
 ## Active
 
-**Market-regime stock research.** A frozen, unpublished SPY/VIX framework uses
-1999–2004 initial training and annual 2005–2020 expanding walk-forward model
-comparison. It includes the fixed rule baseline, volatility targeting,
-K-means, Gaussian mixtures, and causally filtered 2/3/4-state Gaussian HMMs,
-plus rule and rolling-window sensitivities. Cash exposure uses a lagged
-three-month Treasury-bill proxy. The frozen candidate is the original expanding
-two-state K-means model; a three-session confirmation variant looked better
-only in a post-selection sensitivity and is not holdout eligible. The owner
-approved the unfiltered candidate on 2026-08-29. Its 2021–2025 historical
-holdout may be calculated once from the clean frozen commit. Walk-forward
-results remain model-selection evidence, not confirmatory evidence. See
-[`studies/market_regime/market_regime_study_spec.md`](studies/market_regime/market_regime_study_spec.md).
-
 **Prospective RTH quote evidence.** Collect ordinary regular-trading-hours
 option-quote observations across several calendar dates, then inspect their
 side-specific timestamps, freshness, quality distribution, and eligibility
@@ -51,6 +38,16 @@ when the first one arrives rather than assuming the generic path is right.
 ## Standing decisions
 
 These are settled. Treat them as constraints, not open questions.
+
+**The market-regime stock study is published as failed** (2026-08-29). The
+frozen expanding two-state K-means candidate returned 10.95% CAGR with -19.54%
+maximum drawdown and 0.56 Calmar in the one-shot 2021–2025 holdout at 5 bps.
+SMA200 returned 12.24%, -17.85%, and 0.69. The candidate failed the CAGR,
+Calmar, and drawdown checks. The holdout is spent: do not rerun it, promote the
+post-selection confirmation variant, retune this study, or present the
+2005–2020 selection result as the final finding. A revised regime method needs
+a new study ID and new prospective evidence. See
+[`studies/market_regime/market_regime_study_spec.md`](studies/market_regime/market_regime_study_spec.md).
 
 **The RSI/SuperTrend study is permanently closed without a holdout**
 (2026-08-25). The complete 1999–2021 development run was technically valid but

@@ -1,22 +1,22 @@
-# Market regime stock study — frozen research protocol
+# Market regime stock study — published failed result
 
 **Study ID:** `market-regime-baseline-v1`
 
-**Protocol status:** `FROZEN — HOLDOUT APPROVED, NOT YET OPENED`
+**Protocol status:** `PUBLISHED — HOLDOUT SPENT — FAILED`
 
 **Design opened:** 2026-08-29
 
-This document is the frozen design for a market-regime research framework. It is
-not evidence that regimes predict returns or improve a stock portfolio. The
-baseline exists to test those claims and is
-allowed to fail.
+This document records the frozen design and its one-shot result. The study does
+not establish that the selected regime model improves a stock portfolio beyond
+the SMA200 benchmark.
 
 No code calculated, visualized, or summarized a 2021–2025 outcome while this
 protocol was `DRAFT`. On 2026-08-29, the owner approved freezing the original
 expanding two-state K-means selection, without a confirmation or minimum-state
-duration filter. The 2021–2025 window may now be opened once from the clean
-commit containing this protocol. The 2026 partial year is reserved for
-live/incomplete monitoring and is never part of the historical holdout.
+duration filter. It was executed once from clean commit `6d6b5fd`. The
+2021–2025 holdout failed three of four predeclared checks and is now spent. It
+must never be rerun or used for retuning under this study ID. The 2026 partial
+year remains outside the historical holdout.
 
 ## 1. Question and priorities
 
@@ -312,3 +312,19 @@ holdout, and there is no reselection using holdout outcomes.
 
 The frozen selection artifact SHA-256 is
 `f37f80b80630e10de1560f6ad3dd28b9b18a0f6dfe588ebb36477a571c607336`.
+
+## 14. Published holdout result
+
+The one-shot 2021–2025 run at the primary 5 bps cost produced:
+
+| Strategy | CAGR | Annualized volatility | Maximum drawdown | Calmar |
+|---|---:|---:|---:|---:|
+| Buy and hold | 14.30% | 17.26% | -26.29% | 0.54 |
+| SMA200 | 12.24% | 11.62% | -17.85% | 0.69 |
+| Frozen `kmeans_2` | 10.95% | 11.14% | -19.54% | 0.56 |
+
+The candidate passed only the exposure floor. It failed the CAGR tolerance,
+Calmar, and maximum-drawdown checks against SMA200. The immutable verdict is
+`FAILED_FROZEN_HOLDOUT_CRITERIA`. This unfavorable result may not be softened,
+reselected, or repaired with the previously observed confirmation sensitivity.
+See [`evidence/holdout_result.json`](evidence/holdout_result.json).

@@ -1,0 +1,60 @@
+{
+  "schema_name": "smallfish.market-regime-holdout-result",
+  "schema_version": 1,
+  "study_id": "market-regime-baseline-v1",
+  "protocol_commit": "6d6b5fd",
+  "holdout_window": ["2021-01-01", "2025-12-31"],
+  "holdout_opened_once": true,
+  "generated_at_utc": "2026-08-30T04:49:48.215636+00:00",
+  "status": "FAILED_FROZEN_HOLDOUT_CRITERIA",
+  "candidate": {
+    "model_id": "kmeans_2",
+    "training_window": "expanding",
+    "refit_frequency": "annual",
+    "stability_filter": "none",
+    "cost_bps": 5,
+    "cagr": 0.1094876106200795,
+    "annualized_volatility": 0.11140552173571544,
+    "maximum_drawdown": -0.19536426548932084,
+    "calmar": 0.560428030918809,
+    "sortino_zero_cash_rate": 0.7975780759012947,
+    "average_exposure": 0.7593625498007968,
+    "turnover": 43.0,
+    "total_return": 0.677710404352734
+  },
+  "sma_200": {
+    "cagr": 0.12235867210914297,
+    "annualized_volatility": 0.11624681948736439,
+    "maximum_drawdown": -0.17848867156772508,
+    "calmar": 0.6855262635685854,
+    "sortino_zero_cash_rate": 0.8739591794346055,
+    "average_exposure": 0.7912350597609562,
+    "turnover": 29.0,
+    "total_return": 0.776902739475811
+  },
+  "buy_hold": {
+    "cagr": 0.14297009273783123,
+    "annualized_volatility": 0.17262460314003322,
+    "maximum_drawdown": -0.26286842163624713,
+    "calmar": 0.5438846242842772,
+    "total_return": 0.94546242839773
+  },
+  "checks": {
+    "average_exposure_at_least_floor": true,
+    "cagr_within_tolerance_of_sma_200": false,
+    "calmar_above_sma_200": false,
+    "maximum_drawdown_no_worse_than_sma_200": false
+  },
+  "provenance": {
+    "research_selection_sha256": "f37f80b80630e10de1560f6ad3dd28b9b18a0f6dfe588ebb36477a571c607336",
+    "holdout_experiment_sha256": "6ca262a1bc0abf7ba0a48715123600b138a6aea08522d62b98a2843bb57a14bf",
+    "vix_source_sha256": "64708533b190bf36070e96682388922339bfb10c9df680349b824dc9489e55f9",
+    "dtb3_source_sha256": "14ab610645f016fc81982a7b253730ba895b32fa5cd644897b4fe084506d3c28",
+    "verdict_artifact_sha256": "076155b46da1447cd648f1324385f861752b092269124e35e10d28fe97473407"
+  },
+  "integrity": {
+    "candidate_was_not_reselected_on_holdout": true,
+    "post_selection_stability_variants_evaluated": false,
+    "rerun_prohibited": true
+  }
+}

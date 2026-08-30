@@ -225,7 +225,7 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh rsi-supertrend-study` | Closed RSI/SuperTrend replication (archival; holdout permanently unrun) |
 | `./commands.sh market-regime-study` | SPY/VIX rule baseline (development/validation only) |
 | `./commands.sh market-regime-compare` | Stock-only 2005–2020 walk-forward regime-model comparison; holdout sealed |
-| `./commands.sh market-regime-holdout` | One-shot evaluation of the frozen stock-only candidate |
+| `./commands.sh market-regime-holdout` | Spent published holdout; retained only to fail closed against reruns |
 
 ## Testing
 

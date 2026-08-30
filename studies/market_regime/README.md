@@ -1,12 +1,12 @@
-# Market regime baseline
+# Market regime stock study
 
-Draft, leakage-resistant baseline for testing whether a transparent SPY/VIX
+Published, leakage-resistant study testing whether a transparent SPY/VIX
 regime framework adds risk information beyond buy-and-hold and a lagged 200-day
 moving-average rule.
 
 Read [`market_regime_study_spec.md`](market_regime_study_spec.md) before running
-it. The protocol is frozen. The older fixed-rule command is intentionally
-unable to calculate the 2021–2025 holdout.
+it. The protocol is published with a failed verdict. The 2021–2025 holdout has
+been spent and every runner is intentionally unable to calculate it again.
 
 ## Run the development and validation baseline
 
@@ -57,15 +57,11 @@ model is a pre-holdout research candidate, not a final verdict. Post-selection
 stability variants are explicitly marked holdout-ineligible unless the protocol
 is amended and frozen before the holdout is opened.
 
-## Run the frozen holdout once
+## Published holdout
 
-The approved candidate is the original expanding `kmeans_2` model without a
-stability filter. From the clean frozen commit, run exactly once:
-
-```bash
-./commands.sh market-regime-holdout --confirm-holdout
-```
-
-The runner evaluates only that candidate and the frozen benchmarks, refuses a
-dirty worktree, and refuses to run when a holdout output already exists. Never
-delete the output to make another run possible.
+The original expanding `kmeans_2` model without a stability filter was run once
+from clean commit `6d6b5fd`. At 5 bps it produced 10.95% CAGR, -19.54% maximum
+drawdown, and 0.56 Calmar, versus 12.24%, -17.85%, and 0.69 for SMA200. It
+failed the frozen criteria. The immutable summary is
+[`evidence/holdout_result.json`](evidence/holdout_result.json). Do not rerun the
+holdout or retune this study.

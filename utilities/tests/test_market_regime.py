@@ -23,6 +23,7 @@ from studies.market_regime.features import calculate_features
 from studies.market_regime.holdout import (
     holdout_folds,
     holdout_verdict,
+    run_holdout,
     selected_holdout_predictions,
 )
 from studies.market_regime.models import RuleBasedRegimeModel
@@ -187,11 +188,15 @@ def test_holdout_requires_frozen_protocol_explicit_confirmation_and_clean_git(co
     draft["protocol_status"] = "DRAFT"
     with pytest.raises(ValueError, match="protocol_status=FROZEN"):
         assert_holdout_allowed(draft, confirm_holdout=True, git_dirty=False)
+    frozen = dict(config)
+    frozen["protocol_status"] = "FROZEN"
     with pytest.raises(ValueError, match="explicit --confirm-holdout"):
-        assert_holdout_allowed(config, confirm_holdout=False, git_dirty=False)
+        assert_holdout_allowed(frozen, confirm_holdout=False, git_dirty=False)
     with pytest.raises(ValueError, match="clean committed worktree"):
-        assert_holdout_allowed(config, confirm_holdout=True, git_dirty=True)
-    assert_holdout_allowed(config, confirm_holdout=True, git_dirty=False)
+        assert_holdout_allowed(frozen, confirm_holdout=True, git_dirty=True)
+    assert_holdout_allowed(frozen, confirm_holdout=True, git_dirty=False)
+    with pytest.raises(ValueError, match="protocol_status=FROZEN"):
+        assert_holdout_allowed(config, confirm_holdout=True, git_dirty=False)
 
 
 def test_holdout_folds_are_annual_expanding_past_only(config):
@@ -245,6 +250,30 @@ def test_holdout_verdict_uses_frozen_checks_without_reselection(config):
     assert verdict["candidate"] == "kmeans_2"
     assert verdict["candidate_cagr_above_buy_hold"] is False
     assert verdict["candidate_was_not_reselected_on_holdout"] is True
+
+
+def test_published_protocol_and_evidence_permanently_close_holdout(config, tmp_path):
+    assert config["protocol_status"] == "PUBLISHED"
+    evidence = yaml.safe_load((
+        ROOT / "studies/market_regime/evidence/holdout_result.json"
+    ).read_text(encoding="utf-8"))
+    assert evidence["status"] == "FAILED_FROZEN_HOLDOUT_CRITERIA"
+    assert evidence["integrity"]["rerun_prohibited"] is True
+    assert evidence["checks"] == {
+        "average_exposure_at_least_floor": True,
+        "cagr_within_tolerance_of_sma_200": False,
+        "calmar_above_sma_200": False,
+        "maximum_drawdown_no_worse_than_sma_200": False,
+    }
+    with pytest.raises(ValueError, match="protocol_status=FROZEN"):
+        run_holdout(
+            config_path=ROOT / "studies/market_regime/config/baseline.yaml",
+            cache_root=tmp_path,
+            output_root=tmp_path,
+            vix_csv=None,
+            tbill_csv=None,
+            confirm_holdout=True,
+        )
 
 
 def test_visualization_writes_regime_shaded_svg(tmp_path, config):

@@ -36,7 +36,7 @@
 #   rsi-supertrend-study - closed RSI/SuperTrend study (holdout permanently unrun)
 #   market-regime-study - SPY/VIX development/validation rule baseline
 #   market-regime-compare - 2005-2020 stock-only walk-forward model comparison
-#   market-regime-holdout - one-shot frozen stock-only holdout
+#   market-regime-holdout - spent published holdout; reruns fail closed
 #   backtest [earnings]       - strategy walk-forward backtest
 #   event-backtest [earnings] - strategy event-study backtest
 #   earnings-history - fetch historical earnings dates (requires yfinance)

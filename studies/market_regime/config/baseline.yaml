@@ -1,8 +1,10 @@
 schema_name: smallfish.market-regime-study
 schema_version: 1
 study_id: market-regime-baseline-v1
-protocol_status: FROZEN
+protocol_status: PUBLISHED
 protocol_frozen_date: '2026-08-29'
+holdout_opened_date: '2026-08-29'
+published_verdict: FAILED_FROZEN_HOLDOUT_CRITERIA
 
 frozen_candidate:
   model_id: kmeans_2
