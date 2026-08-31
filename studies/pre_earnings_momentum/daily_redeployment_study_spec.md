@@ -2,9 +2,11 @@
 
 **Proposed study ID:** `pre-earnings-daily-redeployment-v1`
 
-**Status:** 2021 ENTRY-CADENCE SENSITIVITIES IN PROGRESS. The owner accepted the
+**Status:** 2021 ENTRY-CADENCE SENSITIVITIES COMPLETE. The owner accepted the
 $500 maximum entry price and authorized Monday/Thursday and Monday-only entry
-scan replays on 2026-08-31. No later historical year is authorized.
+scan replays on 2026-08-31. Both replays are complete; the daily $500 arm
+remains the accepted baseline pending owner review. No later historical year is
+authorized.
 
 **Prepared:** 2026-08-30
 
@@ -609,6 +611,14 @@ No live network access is permitted in tests.
   Monday-only slot. Held-position exits remain daily, off-cadence exit proceeds
   sweep into SPY, and all other rules remain unchanged. The earlier $300 and
   $1,000 results remain labeled development sensitivities.
+- 2026-08-31: The two authorized cadence replays completed from frozen commit
+  `158bf3e2405cac76559b0ec141c5c8babdb28c63`. In the primary equal arm,
+  Monday/Thursday reduced combined stock-plus-SPY turnover from 36.043x to
+  35.654x and Monday-only reduced it to 32.230x. Net return fell from 41.111%
+  daily to 31.488% and 31.065%, respectively. Transaction-cost drag fell only
+  from 3.604% to 3.565% and 3.223%; zero-cost returns also declined materially,
+  so the return difference is not explained by modeled costs. These are
+  development sensitivity results, not authorization for a later year.
 
 ## 18. Design-review approval gate
 

@@ -83,7 +83,10 @@ the original $300 run and do not authorize a later historical year.
 The owner-authorized churn sensitivities use
 `config/daily_redeployment_monday_thursday.yaml` and
 `config/daily_redeployment_monday.yaml`. They restrict new-candidate scans to
-holiday-adjusted weekly slots while retaining daily held-position exits.
+holiday-adjusted weekly slots while retaining daily held-position exits. The
+2021 replays are complete under run IDs `pilot-2021-mon-thu-158bf3e` and
+`pilot-2021-mon-158bf3e`; they remain development sensitivities and do not
+authorize any later year.
 
 ## Package map
 
