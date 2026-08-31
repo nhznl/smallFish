@@ -1,11 +1,12 @@
-# Pre-earnings daily redeployment — study design (draft)
+# Pre-earnings daily redeployment — frozen study design
 
-**Proposed study ID:** `pre-earnings-daily-redeployment-v1`
+**Study ID:** `pre-earnings-daily-redeployment-v1`
 
-**Status:** 2021 ENTRY-CADENCE SENSITIVITIES COMPLETE. The owner accepted the
-$500 maximum entry price and authorized Monday/Thursday and Monday-only entry
-scan replays on 2026-08-31. Both replays are complete; the daily $500 arm
-remains the accepted baseline pending owner review. No later historical year is
+**Status:** SELECTED RULE SET FROZEN. On 2026-08-31, after reviewing the 2021
+price-cap and entry-cadence sensitivities, the owner selected daily candidate
+scans and a $500 maximum decision-close entry price. Held-position exits remain
+daily. Monday/Thursday, Monday-only, $300, and $1,000 runs remain development
+sensitivities and are not selected rules. No later historical year is
 authorized.
 
 **Prepared:** 2026-08-30
@@ -619,6 +620,10 @@ No live network access is permitted in tests.
   from 3.604% to 3.565% and 3.223%; zero-cost returns also declined materially,
   so the return difference is not explained by modeled costs. These are
   development sensitivity results, not authorization for a later year.
+- 2026-08-31: Owner freezes daily new-candidate scans and a $500 maximum
+  decision-close entry price as the selected rule set. Daily held-position exit
+  evaluation is unchanged. The weekly-cadence and alternate-price results
+  remain development sensitivities only.
 
 ## 18. Design-review approval gate
 
@@ -626,7 +631,7 @@ The implementation passed independent review, and the owner subsequently
 authorized the 2021 development replays recorded in section 17. No later year
 is authorized by those approvals.
 
-Design review should reject the draft if any rule permits future data in a
+Design review should reject the methodology if any rule permits future data in a
 decision, silently changes predecessor evidence, imports across the runtime
 boundary, hides whole-share cash, compares scores with different meanings, or
 creates routine turnover without an exit or deployable SPY trigger.

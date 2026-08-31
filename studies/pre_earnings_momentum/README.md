@@ -74,8 +74,8 @@ In `decisions.csv`, `sector_open_plus_pending_count` and
 Selected entries and scheduled exits expose `order_id`, which is the explicit
 join key to the execution outcome or cancellation reason in `orders.csv`.
 
-The accepted daily baseline now uses a $500 maximum entry price. The earlier
-price-cap sensitivities use
+The owner-frozen rule set uses daily candidate scans and a $500 maximum entry
+price. The earlier price-cap sensitivities use
 `config/daily_redeployment_price_500.yaml` and
 `config/daily_redeployment_price_1000.yaml`. They change only `price_max` from
 the original $300 run and do not authorize a later historical year.
