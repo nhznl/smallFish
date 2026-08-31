@@ -2,9 +2,9 @@
 
 **Proposed study ID:** `pre-earnings-daily-redeployment-v1`
 
-**Status:** 2021 DEVELOPMENT PILOT IN PROGRESS. The owner authorized the baseline
-2021 pilot and the $500/$1,000 price-cap sensitivity replays on 2026-08-31.
-No later historical year is authorized.
+**Status:** 2021 DEVELOPMENT PILOT COMPLETE. The owner authorized and completed
+the baseline 2021 pilot and the $500/$1,000 price-cap sensitivity replays on
+2026-08-31. No later historical year is authorized.
 
 **Prepared:** 2026-08-30
 
