@@ -37,7 +37,7 @@
 #   market-regime-study - SPY/VIX development/validation rule baseline
 #   market-regime-compare - 2005-2020 stock-only walk-forward model comparison
 #   market-regime-holdout - spent published holdout; reruns fail closed
-#   pre-earnings-daily-study - UNRUN daily redeployment study (2021 gated)
+#   pre-earnings-daily-study - development daily redeployment study (2021 gated)
 #   backtest [earnings]       - strategy walk-forward backtest
 #   event-backtest [earnings] - strategy event-study backtest
 #   earnings-history - fetch historical earnings dates (requires yfinance)

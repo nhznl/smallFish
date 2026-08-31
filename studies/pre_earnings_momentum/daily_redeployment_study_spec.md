@@ -2,10 +2,9 @@
 
 **Proposed study ID:** `pre-earnings-daily-redeployment-v1`
 
-**Status:** APPROVED FOR IMPLEMENTATION HANDOFF. The owner authorized preparation
-for external implementation on 2026-08-30. Implementation and synthetic/offline
-verification are authorized; no historical study run, including 2021, is
-authorized.
+**Status:** 2021 DEVELOPMENT PILOT IN PROGRESS. The owner authorized the baseline
+2021 pilot and the $500/$1,000 price-cap sensitivity replays on 2026-08-31.
+No later historical year is authorized.
 
 **Prepared:** 2026-08-30
 
@@ -578,14 +577,18 @@ No live network access is permitted in tests.
 - 2026-08-30: Owner directed preparation of an external-agent implementation
   handoff. The design is approved for implementation and offline verification
   only. The first 2021 pilot run remains separately gated and unauthorized.
+- 2026-08-31: After accepting the independently reviewed implementation, the
+  owner authorized and ran the first 2021 development pilot with the original
+  $300 maximum decision-close entry price. The owner then authorized two full
+  2021 sensitivity replays with otherwise identical rules and maximum entry
+  prices of $500 and $1,000. The $300 result remains the baseline pending
+  comparison; these price-cap replays do not authorize any later year.
 
 ## 18. Design-review approval gate
 
-The owner's 2026-08-30 implementation-handoff direction satisfies the design
-approval gate for implementation and tests only. It does not authorize a 2021
-run. After implementation verification and independent review, the owner must
-inspect the effective configuration and explicitly authorize the first 2021
-pilot run.
+The implementation passed independent review, and the owner subsequently
+authorized the baseline 2021 pilot plus the two price-cap sensitivity replays
+recorded in section 17. No later year is authorized by that approval.
 
 Design review should reject the draft if any rule permits future data in a
 decision, silently changes predecessor evidence, imports across the runtime

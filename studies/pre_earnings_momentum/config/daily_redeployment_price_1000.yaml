@@ -1,7 +1,5 @@
-# Effective approved parameters for pre-earnings-daily-redeployment-v1.
-# This file is the live behavioural contract for the new study. Do not reuse or
-# edit frozen predecessor YAML. Implementation and synthetic tests are
-# authorized. Historical runs require separate owner authorization.
+# Owner-authorized 2021 development sensitivity replay.
+# Identical to daily_redeployment.yaml except for the $1,000 entry-price ceiling.
 study_id: pre-earnings-daily-redeployment-v1
 setup_score_version: momentum-v3
 phase: development
@@ -9,7 +7,7 @@ benchmark_symbol: SPY
 starting_equity: 50000
 cost_bps_per_side: 10
 price_min: 10.0
-price_max: 300.0
+price_max: 1000.0
 event_min_weeks: 2
 event_max_weeks: 5
 max_stale_sessions: 3

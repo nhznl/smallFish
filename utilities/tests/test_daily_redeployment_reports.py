@@ -30,7 +30,7 @@ def test_2021_guard_fails_closed_without_confirmation(tmp_path, monkeypatch):
     assert main(["--year", "1800"]) == 2
 
 
-def test_help_labels_unrun_development_tooling():
+def test_help_labels_guarded_development_tooling():
     import contextlib
     import io
 
@@ -40,8 +40,19 @@ def test_help_labels_unrun_development_tooling():
             parse_args(["--help"])
     assert exited.value.code == 0
     text = buf.getvalue()
-    assert "UNRUN" in text
+    assert "Development tooling" in text
     assert "2021" in text
+
+
+def test_price_cap_sensitivity_configs_change_only_price_max():
+    baseline = load_study_config()
+    for ceiling in (500, 1000):
+        variant = load_study_config(Path(
+            f"studies/pre_earnings_momentum/config/daily_redeployment_price_{ceiling}.yaml"
+        ))
+        expected = dict(baseline.raw)
+        expected["price_max"] = float(ceiling)
+        assert variant.raw == expected
 
 
 def test_invalid_config_and_output_collision(tmp_path):
@@ -113,6 +124,12 @@ def test_synthetic_run_reconciles_and_is_byte_for_byte(tmp_path):
     manifest = json.loads((left / "daily_equity.csv.meta.json").read_text(encoding="utf-8"))
     assert manifest["arms"] == list(cfg.arms)
     assert manifest["input_hashes"] == bundle.input_hashes
+    run_manifest = json.loads((left / "run_manifest.json").read_text(encoding="utf-8"))
+    assert isinstance(run_manifest["git_commit"], str)
+    assert isinstance(run_manifest["git_dirty"], bool)
+    assert "Each historical run requires owner authorization" in (
+        left / "report.md"
+    ).read_text(encoding="utf-8")
 
 
 def test_summary_contains_required_turnover_exposure_and_review_metrics():

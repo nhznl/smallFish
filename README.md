@@ -230,7 +230,7 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh market-regime-study` | SPY/VIX rule baseline (development/validation only) |
 | `./commands.sh market-regime-compare` | Stock-only 2005–2020 walk-forward regime-model comparison; holdout sealed |
 | `./commands.sh market-regime-holdout` | Spent published holdout; retained only to fail closed against reruns |
-| `./commands.sh pre-earnings-daily-study` | UNRUN daily pre-earnings redeployment study; 2021 requires owner confirmation and later years require the prior `--state-in` checkpoint |
+| `./commands.sh pre-earnings-daily-study` | Development daily pre-earnings redeployment study; every run requires owner authorization, 2021 is guarded, and later years require the prior `--state-in` checkpoint |
 
 ## Testing
 

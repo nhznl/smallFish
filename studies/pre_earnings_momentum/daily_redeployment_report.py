@@ -170,7 +170,7 @@ def _human_report(result: SimulationResult) -> str:
         f"# {result.cfg.study_id} — {result.year}",
         "",
         "Simulated research evidence only. This is not a prediction, recommendation,",
-        "or claim of a validated edge. No historical year has been authorized yet.",
+        "or claim of a validated edge. Each historical run requires owner authorization.",
         "",
         f"Setup-score version: `{result.cfg.setup_score_version}`",
         "",
@@ -306,7 +306,7 @@ def write_run(
                  "positions_year_end.csv", "positions_year_end.json",
                  "state_checkpoint.json", "summary.json", "report.md"):
         path = tmp / name
-        write_manifest(
+        manifest_path = write_manifest(
             path,
             command=command,
             args=args,
@@ -321,6 +321,13 @@ def write_run(
                 "quarantines": result.quarantines,
             },
         )
+        if "git_commit" not in extra:
+            artifact_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            for key in (
+                "command", "generated_at_utc", "git_commit", "git_dirty",
+                "dependencies", "local_timezone",
+            ):
+                extra[key] = artifact_manifest.get(key)
         extra["output_hashes"][name] = sha256_file(path)
     _write_json(tmp / "run_manifest.json", extra)
     os.replace(tmp, output_dir)

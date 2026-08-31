@@ -321,10 +321,19 @@ def test_scheduled_exit_proceeds_fund_replacement_at_the_same_next_open():
         assert replacement.status == "filled"
 
 
-def test_opening_shortfall_cancels_lowest_rank_before_higher_rank_for_both_arms():
+@pytest.mark.parametrize(
+    ("exit_open", "expected_low_status", "expected_low_shares", "expected_low_reason"),
+    [
+        (94.0, "filled", 1, "entry_reduced_affordability"),
+        (91.0, "cancelled", 10, "unaffordable"),
+    ],
+)
+def test_opening_shortfall_cancels_lowest_rank_before_higher_rank_for_both_arms(
+    exit_open, expected_low_status, expected_low_shares, expected_low_reason,
+):
     bundle, sessions = _market(tickers=("EXIT", "HIGH", "LOW"))
     execution = next(item for item in sessions if item.year == 2000)
-    for ticker, open_price in (("EXIT", 94.0), ("HIGH", 100.0), ("LOW", 100.0)):
+    for ticker, open_price in (("EXIT", exit_open), ("HIGH", 100.0), ("LOW", 100.0)):
         mask = bundle.stocks[ticker]["date"].dt.date == execution
         bundle.stocks[ticker].loc[mask, ["open", "high", "low", "close", "adj_close"]] = open_price
 
@@ -376,9 +385,9 @@ def test_opening_shortfall_cancels_lowest_rank_before_higher_rank_for_both_arms(
         low = next(order for order in result.orders if order.order_id == f"{arm}-low")
         assert high.status == "filled"
         assert high.shares == 45
-        assert low.status == "filled"
-        assert low.shares == 1
-        assert low.reason == "entry_reduced_affordability"
+        assert low.status == expected_low_status
+        assert low.shares == expected_low_shares
+        assert low.reason == expected_low_reason
         assert all(mark.cash >= -1e-8 for mark in result.marks if mark.arm == arm)
 
 

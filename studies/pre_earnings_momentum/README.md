@@ -55,25 +55,29 @@ The explicit `earnings` strategy selector is also accepted. Reports and study
 artifacts are written to the strategy's namespaced data directories.
 
 A separate daily-redeployment study (`pre-earnings-daily-redeployment-v1`) is
-implemented as unrun development tooling. Discover it with:
+implemented as development tooling. Discover it with:
 
 ```bash
 ./commands.sh pre-earnings-daily-study --help
 ```
 
-No historical year, including 2021, is authorized. The command fails closed for
-`--year 2021` unless `--confirm-2021-pilot` is present; do not pass that flag
-until the owner separately authorizes the pilot after independent review. This
-does not change the published `FAILED` predecessor study. Each completed annual
-run writes `state_checkpoint.json`. A separately authorized following year must
-pass the immediately prior checkpoint with `--state-in PATH`; the runner rejects
-a later year without it so cash, positions, pending orders, pins, SPY, benchmark,
+Every historical run requires explicit owner authorization. The command fails
+closed for `--year 2021` unless `--confirm-2021-pilot` is present. This does not
+change the published `FAILED` predecessor study. Each completed annual run
+writes `state_checkpoint.json`. A separately authorized following year must pass
+the immediately prior checkpoint with `--state-in PATH`; the runner rejects a
+later year without it so cash, positions, pending orders, pins, SPY, benchmark,
 and the zero-cost shadow cannot silently reset.
 
 In `decisions.csv`, `sector_open_plus_pending_count` and
 `sector_open_plus_pending_counts` record sector occupancy at the decision.
 Selected entries and scheduled exits expose `order_id`, which is the explicit
 join key to the execution outcome or cancellation reason in `orders.csv`.
+
+The owner-authorized 2021 price-cap sensitivities use
+`config/daily_redeployment_price_500.yaml` and
+`config/daily_redeployment_price_1000.yaml`. They change only `price_max` from
+the $300 baseline and do not authorize a later historical year.
 
 ## Package map
 
@@ -85,8 +89,10 @@ join key to the execution outcome or cancellation reason in `orders.csv`.
 | `event_forecast.py` | Causal naive-anniversary earnings-date forecast used by Study 1 |
 | `backtest.py` | Frozen portfolio study runner |
 | `event_backtest.py` | Event-study runner using completed decision bars |
-| `daily_redeployment.py` | Guarded CLI and annual-checkpoint restore for the unrun daily-redeployment study |
-| `config/daily_redeployment.yaml` | Approved parameters for the unrun daily-redeployment study |
+| `daily_redeployment.py` | Guarded CLI and annual-checkpoint restore for the development daily-redeployment study |
+| `config/daily_redeployment.yaml` | Approved $300 baseline parameters for the daily-redeployment study |
+| `config/daily_redeployment_price_500.yaml` | 2021 development sensitivity with a $500 entry-price ceiling |
+| `config/daily_redeployment_price_1000.yaml` | 2021 development sensitivity with a $1,000 entry-price ceiling |
 | `config/scan.yaml` | Live behavioral strategy contract and candidate selection |
 | `config/backtest.yaml` | Frozen Study 1 execution, portfolio, split, and inference settings |
 | `backtest_spec.md` | Binding Study 1 protocol, amendments, and results |

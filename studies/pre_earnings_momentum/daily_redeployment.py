@@ -50,9 +50,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="pre-earnings-daily-study",
         description=(
-            "UNRUN development tooling for pre-earnings-daily-redeployment-v1. "
-            "Synthetic/offline tests are authorized. The 2021 pilot and every "
-            "other historical year remain unauthorized until the owner confirms."
+            "Development tooling for pre-earnings-daily-redeployment-v1. "
+            "Every historical run requires explicit owner authorization; 2021 "
+            "is guarded and later years require the prior annual checkpoint."
         ),
     )
     parser.add_argument("--year", type=int, required=True, help="Calendar year to simulate")
