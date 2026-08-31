@@ -54,6 +54,27 @@ The normal command paths are:
 The explicit `earnings` strategy selector is also accepted. Reports and study
 artifacts are written to the strategy's namespaced data directories.
 
+A separate daily-redeployment study (`pre-earnings-daily-redeployment-v1`) is
+implemented as unrun development tooling. Discover it with:
+
+```bash
+./commands.sh pre-earnings-daily-study --help
+```
+
+No historical year, including 2021, is authorized. The command fails closed for
+`--year 2021` unless `--confirm-2021-pilot` is present; do not pass that flag
+until the owner separately authorizes the pilot after independent review. This
+does not change the published `FAILED` predecessor study. Each completed annual
+run writes `state_checkpoint.json`. A separately authorized following year must
+pass the immediately prior checkpoint with `--state-in PATH`; the runner rejects
+a later year without it so cash, positions, pending orders, pins, SPY, benchmark,
+and the zero-cost shadow cannot silently reset.
+
+In `decisions.csv`, `sector_open_plus_pending_count` and
+`sector_open_plus_pending_counts` record sector occupancy at the decision.
+Selected entries and scheduled exits expose `order_id`, which is the explicit
+join key to the execution outcome or cancellation reason in `orders.csv`.
+
 ## Package map
 
 | Path | Responsibility |
@@ -64,6 +85,8 @@ artifacts are written to the strategy's namespaced data directories.
 | `event_forecast.py` | Causal naive-anniversary earnings-date forecast used by Study 1 |
 | `backtest.py` | Frozen portfolio study runner |
 | `event_backtest.py` | Event-study runner using completed decision bars |
+| `daily_redeployment.py` | Guarded CLI and annual-checkpoint restore for the unrun daily-redeployment study |
+| `config/daily_redeployment.yaml` | Approved parameters for the unrun daily-redeployment study |
 | `config/scan.yaml` | Live behavioral strategy contract and candidate selection |
 | `config/backtest.yaml` | Frozen Study 1 execution, portfolio, split, and inference settings |
 | `backtest_spec.md` | Binding Study 1 protocol, amendments, and results |

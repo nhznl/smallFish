@@ -1,0 +1,173 @@
+{
+  "source": "Canonical stock-app momentum-v3 characterization on 2026-08-30. Synthetic weekday series only; no market cache.",
+  "setup_score_version": "momentum-v3",
+  "recipes": {
+    "rising_80": {"kind": "rising", "n": 80, "start": "2021-01-04", "close0": 100.0, "step": 1.0, "volume0": 1000000},
+    "rising_10": {"kind": "rising", "n": 10, "start": "2021-01-04", "close0": 100.0, "step": 1.0, "volume0": 1000000},
+    "falling_80": {"kind": "falling", "n": 80, "start": "2021-01-04", "close0": 180.0, "step": 1.0, "volume0": 1000000},
+    "flat_80": {"kind": "flat", "n": 80, "start": "2021-01-04", "close0": 100.0, "step": 0.0, "volume0": 1000000}
+  },
+  "cases": {
+    "bullish_continuation": {
+      "recipe": "rising_80",
+      "context": "self",
+      "setup": "BULLISH_CONTINUATION",
+      "setup_score": 50.5,
+      "setup_score_components": {
+        "entryTiming": 6.0,
+        "multiHorizonMomentum": 15.2,
+        "participation": 2.6,
+        "relativeStrength": 0.0,
+        "tradability": 10.0,
+        "trendAlignment": 16.7
+      },
+      "raw_trend_direction": "UP",
+      "fully_aligned": false,
+      "strength": "MODERATE",
+      "reversal_signal": false,
+      "no_of_reversal_signals": 0,
+      "preliminary_reversal": null,
+      "freshness_status": "FRESH",
+      "relative_strength_spy_one_month": 0.0,
+      "five_day_gain_loss": 3,
+      "five_week_gain_loss": 15
+    },
+    "insufficient_history": {
+      "recipe": "rising_10",
+      "context": "self",
+      "setup": "NOT_EVALUATED",
+      "setup_score": 0.0,
+      "setup_score_components": {},
+      "raw_trend_direction": null,
+      "fully_aligned": null,
+      "strength": null,
+      "reversal_signal": null,
+      "no_of_reversal_signals": null,
+      "preliminary_reversal": null,
+      "freshness_status": "FRESH",
+      "relative_strength_spy_one_month": null
+    },
+    "sideways": {
+      "recipe": "flat_80",
+      "context": "self",
+      "setup": "WATCH",
+      "setup_score": 0.0,
+      "setup_score_components": {},
+      "raw_trend_direction": "SIDEWAYS",
+      "fully_aligned": false,
+      "strength": "WEAK",
+      "reversal_signal": false,
+      "preliminary_reversal": null,
+      "freshness_status": "FRESH",
+      "relative_strength_spy_one_month": 0.0
+    },
+    "bearish_continuation": {
+      "recipe": "falling_80",
+      "context": "self",
+      "setup": "BEARISH_CONTINUATION",
+      "setup_score": 57.1,
+      "setup_score_components": {
+        "entryTiming": 6.0,
+        "multiHorizonMomentum": 18.2,
+        "participation": 2.6,
+        "relativeStrength": 0.0,
+        "tradability": 10.0,
+        "trendAlignment": 20.3
+      },
+      "raw_trend_direction": "DOWN",
+      "fully_aligned": false,
+      "strength": "STRONG",
+      "reversal_signal": false,
+      "preliminary_reversal": null,
+      "freshness_status": "FRESH",
+      "relative_strength_spy_one_month": 0.0,
+      "five_day_gain_loss": -5,
+      "five_week_gain_loss": -19
+    },
+    "stale_data": {
+      "recipe": "rising_80",
+      "context": "stale",
+      "setup": "BULLISH_CONTINUATION",
+      "setup_score": 47.5,
+      "setup_score_components": {
+        "entryTiming": 6.0,
+        "multiHorizonMomentum": 15.2,
+        "participation": 2.6,
+        "relativeStrength": 0.0,
+        "tradability": 7.0,
+        "trendAlignment": 16.7
+      },
+      "raw_trend_direction": "UP",
+      "freshness_status": "STALE",
+      "relative_strength_spy_one_month": 0.0
+    },
+    "missing_spy": {
+      "recipe": "rising_80",
+      "context": "missing_spy",
+      "setup": "BULLISH_CONTINUATION",
+      "setup_score": 50.5,
+      "setup_score_components": {
+        "entryTiming": 6.0,
+        "multiHorizonMomentum": 15.2,
+        "participation": 2.6,
+        "relativeStrength": 0.0,
+        "tradability": 10.0,
+        "trendAlignment": 16.7
+      },
+      "raw_trend_direction": "UP",
+      "freshness_status": "FRESH",
+      "relative_strength_spy_one_month": null
+    },
+    "confirmed_bullish_reversal": {
+      "recipe": "rising_80",
+      "context": "mutation_bullish_reversal",
+      "setup": "BULLISH_REVERSAL",
+      "setup_score": 81.0,
+      "setup_score_components": {
+        "bearishTrigger": 26.0,
+        "bullishContext": 20.0,
+        "participation": 5.0,
+        "priceConfirmation": 25.0,
+        "riskAndRoom": 5.0
+      },
+      "raw_trend_direction": "UP",
+      "reversal_signal": true,
+      "preliminary_reversal": null
+    },
+    "preliminary_bearish_warning": {
+      "recipe": "rising_80",
+      "context": "mutation_preliminary_bearish",
+      "setup": "BEARISH_CONTINUATION",
+      "setup_score": 13.1,
+      "setup_score_components": {
+        "entryTiming": 0.0,
+        "multiHorizonMomentum": 0.0,
+        "participation": 2.4,
+        "preliminaryReversalPenalty": -16.0,
+        "relativeStrength": 0.0,
+        "tradability": 10.0,
+        "trendAlignment": 16.7
+      },
+      "raw_trend_direction": "DOWN",
+      "reversal_signal": true,
+      "preliminary_reversal": "Possible Bearish Reversal"
+    },
+    "as_of_bar_70": {
+      "recipe": "rising_80",
+      "context": "as_of_index_69",
+      "setup": "BULLISH_CONTINUATION",
+      "setup_score": 50.2,
+      "setup_score_components": {
+        "entryTiming": 6.0,
+        "multiHorizonMomentum": 14.8,
+        "participation": 2.6,
+        "relativeStrength": 0.0,
+        "tradability": 10.0,
+        "trendAlignment": 16.8
+      },
+      "raw_trend_direction": "UP",
+      "freshness_status": "FRESH",
+      "as_of": "2021-04-09"
+    }
+  }
+}
