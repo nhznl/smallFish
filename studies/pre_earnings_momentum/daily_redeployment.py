@@ -19,6 +19,7 @@ import pandas as pd
 
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
     MarketBundle,
+    StudyConfig,
     checkpoint_from_payload,
     load_study_config,
     run_simulation,
@@ -28,6 +29,9 @@ from utilities.price_reader import read_prices_validated
 from utilities.universe import get_sector, live_universe_symbols, load_registry, load_retired_symbols
 
 DEFAULT_CONFIG = Path(__file__).resolve().parent / "config" / "daily_redeployment.yaml"
+FROZEN_CONTINUATION_CONFIG_SHA256 = (
+    "b54bf152d61a55ed86c387cf5e48a4116a9e92d2baa37a04e9ef8944c4232c6c"
+)
 
 
 def _hash_frame(frame: pd.DataFrame) -> str:
@@ -44,6 +48,27 @@ def _hash_file(path: Path) -> str | None:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _effective_config_hash(raw: dict[str, object]) -> str:
+    encoded = json.dumps(
+        raw, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_continuation_config(config_path: Path, cfg: StudyConfig) -> None:
+    """Bind annual continuations to the owner-selected daily/$500 config."""
+    if Path(config_path).expanduser().resolve() != DEFAULT_CONFIG.resolve():
+        raise ValueError(
+            "continuation runs require the frozen selected configuration "
+            f"{DEFAULT_CONFIG}; sensitivity configurations are not accepted"
+        )
+    if _effective_config_hash(cfg.raw) != FROZEN_CONTINUATION_CONFIG_SHA256:
+        raise ValueError(
+            "effective continuation configuration does not match the frozen "
+            "daily/$500 selected rule set"
+        )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -164,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         cfg = load_study_config(args.config)
         checkpoint = None
         if args.state_in is not None:
+            _validate_continuation_config(args.config, cfg)
             payload = json.loads(args.state_in.read_text(encoding="utf-8"))
             checkpoint = checkpoint_from_payload(
                 payload, cfg, expected_source_year=args.year - 1)

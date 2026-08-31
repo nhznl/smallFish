@@ -1307,6 +1307,7 @@ def run_simulation(
     orders: list[OrderRecord] = []
     trades: list[TradeRecord] = []
     shadow_equity: dict[str, list[tuple[date, float]]] = {arm: [] for arm in cfg.arms}
+    shadow_reconciliation_verified = {arm: False for arm in cfg.arms}
 
     states: dict[str, ArmState] = {}
     shadows: dict[str, ArmState] = {}
@@ -1875,6 +1876,7 @@ def run_simulation(
                 )
                 if not math.isclose(shadow_value, expected_shadow, rel_tol=0.0, abs_tol=1e-6):
                     raise RuntimeError(f"{arm} zero-cost shadow cash-flow drift on {session}")
+                shadow_reconciliation_verified[arm] = True
             if state.cash < -1e-8:
                 raise RuntimeError(f"{arm} cash negative at close {session}")
 
@@ -1886,7 +1888,8 @@ def run_simulation(
         benchmark=copy.deepcopy(benchmark),
     )
     summary = _build_summary(
-        cfg, year, states, marks, decisions, orders, trades, shadow_equity, notes, market)
+        cfg, year, states, marks, decisions, orders, trades, shadow_equity,
+        shadow_reconciliation_verified, notes, market)
     return SimulationResult(
         cfg=cfg,
         year=year,
@@ -1913,6 +1916,7 @@ def _build_summary(
     orders: Sequence[OrderRecord],
     trades: Sequence[TradeRecord],
     shadow_equity: dict[str, list[tuple[date, float]]],
+    shadow_reconciliation_verified: dict[str, bool],
     notes: Sequence[str],
     market: MarketBundle,
 ) -> dict[str, Any]:
@@ -2061,6 +2065,7 @@ def _build_summary(
             "year_end_spy_shares": states[arm].spy_shares,
             "year_end_open_positions": len(states[arm].positions),
             "zero_cost_shadow_ending_equity": shadow_last,
-            "zero_cost_orders_identical": True,
+            "zero_cost_orders_identical": bool(
+                shadow_reconciliation_verified.get(arm, False)),
         }
     return payload

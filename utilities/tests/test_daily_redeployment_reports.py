@@ -11,7 +11,13 @@ import pandas as pd
 import pytest
 import yaml
 
-from studies.pre_earnings_momentum.daily_redeployment import main, parse_args
+import studies.pre_earnings_momentum.daily_redeployment as daily_redeployment_cli
+from studies.pre_earnings_momentum.daily_redeployment import (
+    DEFAULT_CONFIG,
+    _validate_continuation_config,
+    main,
+    parse_args,
+)
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
     checkpoint_payload,
     checkpoint_from_payload,
@@ -146,9 +152,9 @@ def test_synthetic_run_reconciles_and_is_byte_for_byte(tmp_path):
     run_manifest = json.loads((left / "run_manifest.json").read_text(encoding="utf-8"))
     assert isinstance(run_manifest["git_commit"], str)
     assert isinstance(run_manifest["git_dirty"], bool)
-    assert "Each historical run requires owner authorization" in (
-        left / "report.md"
-    ).read_text(encoding="utf-8")
+    report = (left / "report.md").read_text(encoding="utf-8")
+    assert "Each historical run requires owner authorization" in report
+    assert "not calendar-year returns" in report
 
 
 def test_summary_contains_required_turnover_exposure_and_review_metrics():
@@ -174,6 +180,84 @@ def test_summary_contains_required_turnover_exposure_and_review_metrics():
 
 def test_later_year_cli_requires_prior_checkpoint(tmp_path):
     assert main(["--year", "2022", "--cache-root", str(tmp_path)]) == 2
+
+
+def test_continuation_accepts_only_frozen_selected_config():
+    cfg = load_study_config(DEFAULT_CONFIG)
+    _validate_continuation_config(DEFAULT_CONFIG, cfg)
+    drifted_raw = dict(cfg.raw)
+    drifted_raw["cost_bps_per_side"] = 9
+    with pytest.raises(ValueError, match="does not match the frozen"):
+        _validate_continuation_config(
+            DEFAULT_CONFIG, replace(cfg, raw=drifted_raw),
+        )
+    for name in (
+        "daily_redeployment_price_500.yaml",
+        "daily_redeployment_price_1000.yaml",
+        "daily_redeployment_monday_thursday.yaml",
+        "daily_redeployment_monday.yaml",
+    ):
+        path = DEFAULT_CONFIG.parent / name
+        with pytest.raises(
+            ValueError, match="sensitivity configurations are not accepted",
+        ):
+            _validate_continuation_config(path, load_study_config(path))
+
+
+def test_schema_v1_checkpoint_with_continuation_fields_restores():
+    cfg = load_study_config(DEFAULT_CONFIG)
+    bundle, _ = _market(tickers=(), n=400)
+    first = run_simulation(cfg=cfg, market=bundle, year=2000)
+    payload = checkpoint_payload(first.checkpoint, cfg)
+    assert payload["schema_version"] == 1
+    for arm in cfg.arms:
+        payload["arms"][arm]["next_order_seq"] = 426
+        payload["arms"][arm]["scheduled_sweep_session"] = "2001-01-02"
+        payload["zero_cost_shadows"][arm]["next_order_seq"] = 426
+        payload["zero_cost_shadows"][arm]["scheduled_sweep_session"] = "2001-01-02"
+    restored = checkpoint_from_payload(payload, cfg, expected_source_year=2000)
+    for arm in cfg.arms:
+        assert restored.states[arm].next_order_seq == 426
+        assert (
+            restored.states[arm].scheduled_sweep_session.isoformat()
+            == "2001-01-02"
+        )
+        assert restored.shadows[arm].next_order_seq == 426
+        assert (
+            restored.shadows[arm].scheduled_sweep_session.isoformat()
+            == "2001-01-02"
+        )
+
+
+def test_continuation_runner_accepts_default_and_rejects_sensitivities(
+    tmp_path, monkeypatch,
+):
+    cfg = load_study_config(DEFAULT_CONFIG)
+    bundle, _ = _market(tickers=(), n=400)
+    first = run_simulation(cfg=cfg, market=bundle, year=2000)
+    state_path = tmp_path / "state_checkpoint.json"
+    state_path.write_text(
+        json.dumps(checkpoint_payload(first.checkpoint, cfg)), encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        daily_redeployment_cli, "load_market",
+        lambda _cfg, _year, _args: bundle,
+    )
+    assert main([
+        "--year", "2001", "--state-in", str(state_path),
+        "--output-root", str(tmp_path / "accepted"), "--run-id", "default",
+    ]) == 0
+    for name in (
+        "daily_redeployment_price_500.yaml",
+        "daily_redeployment_price_1000.yaml",
+        "daily_redeployment_monday_thursday.yaml",
+        "daily_redeployment_monday.yaml",
+    ):
+        assert main([
+            "--year", "2001", "--state-in", str(state_path),
+            "--config", str(DEFAULT_CONFIG.parent / name),
+            "--output-root", str(tmp_path / "rejected"), "--run-id", name,
+        ]) == 2
 
 
 def test_2021_cli_rejects_state_input_before_confirmation_guard(tmp_path, capsys):

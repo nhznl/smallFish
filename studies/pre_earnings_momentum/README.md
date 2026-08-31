@@ -69,6 +69,14 @@ the immediately prior checkpoint with `--state-in PATH`; the runner rejects a
 later year without it so cash, positions, pending orders, pins, SPY, benchmark,
 and the zero-cost shadow cannot silently reset.
 
+Continuation runs accept only the owner-selected
+`config/daily_redeployment.yaml`; sensitivity configurations fail closed even
+when their effective values happen to match the selected configuration. In
+`daily_equity.csv`, `summary.json`, and `report.md`, `strategy_return`,
+`benchmark_return`, and `excess_return` are cumulative since the original
+$50,000 strategy origin. They are not calendar-year returns in a continuation
+year.
+
 In `decisions.csv`, `sector_open_plus_pending_count` and
 `sector_open_plus_pending_counts` record sector occupancy at the decision.
 Selected entries and scheduled exits expose `order_id`, which is the explicit

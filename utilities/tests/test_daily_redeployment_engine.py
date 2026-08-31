@@ -460,6 +460,20 @@ def test_uniform_costs_and_zero_cost_shadow_uses_identical_shares():
         assert shadow_end >= cost_end - 1e-6
 
 
+def test_zero_cost_identity_summary_is_derived_from_reconciliation_path():
+    bundle, _ = _market(tickers=("AAA",))
+    cfg = _cfg()
+    initial = {
+        arm: ArmState(name=arm, cash=cfg.starting_equity)
+        for arm in cfg.arms
+    }
+    result = run_simulation(
+        cfg=cfg, market=bundle, year=2000, initial_states=initial,
+    )
+    for arm in cfg.arms:
+        assert result.summary["arms"][arm]["zero_cost_orders_identical"] is False
+
+
 def test_zero_cost_shadow_marks_open_positions_at_each_current_close():
     bundle, _ = _market(tickers=("AAA",), n=70, days_ahead=35)
     result = run_simulation(cfg=_cfg(), market=bundle, year=2000)
