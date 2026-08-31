@@ -30,6 +30,7 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
     evaluate_symbol,
     load_study_config,
     run_simulation,
+    scheduled_entry_scan_sessions,
     session_after,
 )
 from studies.pre_earnings_momentum.event_forecast import forecast_from_sorted, history_by_ticker
@@ -147,6 +148,24 @@ def test_event_window_boundaries_are_inclusive_for_two_and_five_weeks():
     payload_36, _ = decision(origin + timedelta(days=36))
     assert "event_window" in payload_36["rejection_reasons"]
     assert cand_14 is None or cand_14.days_to_event == 14
+
+
+def test_entry_scan_schedules_use_holiday_adjusted_weekly_slots():
+    sessions = [
+        date(2021, 1, 4), date(2021, 1, 5), date(2021, 1, 7), date(2021, 1, 8),
+        # Monday January 18 was closed; Tuesday is this week's first session.
+        date(2021, 1, 19), date(2021, 1, 20), date(2021, 1, 21), date(2021, 1, 22),
+    ]
+    assert scheduled_entry_scan_sessions(sessions, "monday") == frozenset({
+        date(2021, 1, 4), date(2021, 1, 19),
+    })
+    assert scheduled_entry_scan_sessions(
+        sessions, "monday_thursday",
+    ) == frozenset({
+        date(2021, 1, 4), date(2021, 1, 7),
+        date(2021, 1, 19), date(2021, 1, 21),
+    })
+    assert scheduled_entry_scan_sessions(sessions, "daily") == frozenset(sessions)
 
 
 def test_setup_score_gate_is_strictly_greater_than_fifty():
@@ -618,6 +637,72 @@ def test_raw_down_trend_schedules_next_open_exit_and_pins(monkeypatch):
         assert trade.primary_exit == PRIMARY_TREND
         assert trade.exit_triggers == (PRIMARY_TREND,)
         assert trade.pin_eligible_again == next_open + timedelta(days=30)
+
+
+def test_monday_only_entry_schedule_still_executes_midweek_bearish_exit(monkeypatch):
+    bundle, sessions = _market(tickers=("AAA",), n=90, days_ahead=35)
+    origin = next(item for item in sessions if item.year == 2000)
+    wednesday = session_after(sessions, session_after(sessions, origin))
+    thursday = session_after(sessions, wednesday)
+    bars = daily_engine.dailies_from_frame(bundle.stocks["AAA"])
+    spy_bars = daily_engine.dailies_from_frame(bundle.spy)
+    bullish = daily_engine.evaluate_as_of(
+        bars, as_of=origin, spy_bars=spy_bars, symbol="AAA"
+    )
+    bearish = replace(bullish, raw_trend_direction=DOWN)
+
+    def snapshot_for_day(*args, **kwargs):
+        return bearish if kwargs["as_of"] >= wednesday else bullish
+
+    monkeypatch.setattr(daily_engine, "evaluate_as_of", snapshot_for_day)
+    cfg = replace(
+        _cfg(), entry_scan_schedule="monday",
+        raw={**_cfg().raw, "entry_scan_schedule": "monday"},
+    )
+    initial = {}
+    for arm in cfg.arms:
+        position = OpenPosition(
+            ticker="AAA", shares=25, entry_fill_price=40.0, entry_principal=1_000.0,
+            allowed_drawdown=0.20, entry_decision_date=date(1999, 12, 29),
+            entry_execution_date=date(1999, 12, 30), setup_score=60.0, sector="Tech",
+            predicted_event_date=date(2000, 6, 1), cost_basis=1_001.0,
+            entry_limit=41.2, last_valid_close=40.0,
+            last_valid_close_date=date(1999, 12, 31),
+        )
+        initial[arm] = ArmState(
+            name=arm, cash=49_000.0, positions={"AAA": position},
+            origin_consumed=True, peak_equity=50_000.0,
+        )
+    result = run_simulation(cfg=cfg, market=bundle, year=2000, initial_states=initial)
+    for arm in cfg.arms:
+        trade = next(item for item in result.trades if item.arm == arm)
+        assert trade.exit_decision_date == wednesday
+        assert trade.exit_execution_date == thursday
+        assert trade.primary_exit == PRIMARY_TREND
+        wednesday_mark = next(
+            mark for mark in result.marks if mark.arm == arm and mark.date == wednesday
+        )
+        assert "entry_scan_off_schedule" in wednesday_mark.notes
+
+
+def test_candidate_scans_and_entries_only_use_configured_weekly_slots():
+    bundle, _ = _market(tickers=("AAA", "BBB"), n=100)
+    cfg = replace(
+        _cfg(), entry_scan_schedule="monday_thursday",
+        raw={**_cfg().raw, "entry_scan_schedule": "monday_thursday"},
+    )
+    result = run_simulation(cfg=cfg, market=bundle, year=2000)
+    allowed = scheduled_entry_scan_sessions(result.sessions, "monday_thursday")
+    scan_dates = {
+        date.fromisoformat(record.payload["decision_date"])
+        for record in result.decisions if record.payload["state"] != "held"
+    }
+    entry_decision_dates = {
+        order.decision_date for order in result.orders if order.kind == "stock_entry"
+    }
+    assert scan_dates
+    assert scan_dates <= allowed
+    assert entry_decision_dates <= allowed
 
 
 def test_truncated_calendar_does_not_turn_last_available_bar_into_false_t1():

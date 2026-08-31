@@ -74,10 +74,16 @@ In `decisions.csv`, `sector_open_plus_pending_count` and
 Selected entries and scheduled exits expose `order_id`, which is the explicit
 join key to the execution outcome or cancellation reason in `orders.csv`.
 
-The owner-authorized 2021 price-cap sensitivities use
+The accepted daily baseline now uses a $500 maximum entry price. The earlier
+price-cap sensitivities use
 `config/daily_redeployment_price_500.yaml` and
 `config/daily_redeployment_price_1000.yaml`. They change only `price_max` from
-the $300 baseline and do not authorize a later historical year.
+the original $300 run and do not authorize a later historical year.
+
+The owner-authorized churn sensitivities use
+`config/daily_redeployment_monday_thursday.yaml` and
+`config/daily_redeployment_monday.yaml`. They restrict new-candidate scans to
+holiday-adjusted weekly slots while retaining daily held-position exits.
 
 ## Package map
 
@@ -90,9 +96,11 @@ the $300 baseline and do not authorize a later historical year.
 | `backtest.py` | Frozen portfolio study runner |
 | `event_backtest.py` | Event-study runner using completed decision bars |
 | `daily_redeployment.py` | Guarded CLI and annual-checkpoint restore for the development daily-redeployment study |
-| `config/daily_redeployment.yaml` | Approved $300 baseline parameters for the daily-redeployment study |
+| `config/daily_redeployment.yaml` | Accepted $500 daily-scan parameters for the daily-redeployment study |
 | `config/daily_redeployment_price_500.yaml` | 2021 development sensitivity with a $500 entry-price ceiling |
 | `config/daily_redeployment_price_1000.yaml` | 2021 development sensitivity with a $1,000 entry-price ceiling |
+| `config/daily_redeployment_monday_thursday.yaml` | 2021 $500 sensitivity with holiday-adjusted Monday/Thursday entry scans |
+| `config/daily_redeployment_monday.yaml` | 2021 $500 sensitivity with a holiday-adjusted Monday entry scan |
 | `config/scan.yaml` | Live behavioral strategy contract and candidate selection |
 | `config/backtest.yaml` | Frozen Study 1 execution, portfolio, split, and inference settings |
 | `backtest_spec.md` | Binding Study 1 protocol, amendments, and results |

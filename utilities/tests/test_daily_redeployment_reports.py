@@ -55,12 +55,31 @@ def test_price_cap_sensitivity_configs_change_only_price_max():
         assert variant.raw == expected
 
 
+def test_entry_cadence_configs_change_only_the_scan_schedule():
+    baseline = load_study_config()
+    for name, schedule in (
+        ("daily_redeployment_monday_thursday.yaml", "monday_thursday"),
+        ("daily_redeployment_monday.yaml", "monday"),
+    ):
+        variant = load_study_config(
+            Path("studies/pre_earnings_momentum/config") / name
+        )
+        expected = dict(baseline.raw)
+        expected["entry_scan_schedule"] = schedule
+        assert variant.raw == expected
+
+
 def test_invalid_config_and_output_collision(tmp_path):
     cfg_path = tmp_path / "bad.yaml"
     raw = yaml.safe_load(Path("studies/pre_earnings_momentum/config/daily_redeployment.yaml").read_text())
     raw["unexpected"] = True
     cfg_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(ValueError, match="unknown configuration key"):
+        load_study_config(cfg_path)
+    raw.pop("unexpected")
+    raw["entry_scan_schedule"] = "friday"
+    cfg_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="unsupported entry_scan_schedule"):
         load_study_config(cfg_path)
     assert main(["--year", "2000", "--config", str(cfg_path)]) == 2
     bundle, _ = _market(tickers=("AAA",), n=80)

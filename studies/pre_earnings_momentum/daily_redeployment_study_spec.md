@@ -2,9 +2,9 @@
 
 **Proposed study ID:** `pre-earnings-daily-redeployment-v1`
 
-**Status:** 2021 DEVELOPMENT PILOT COMPLETE. The owner authorized and completed
-the baseline 2021 pilot and the $500/$1,000 price-cap sensitivity replays on
-2026-08-31. No later historical year is authorized.
+**Status:** 2021 ENTRY-CADENCE SENSITIVITIES IN PROGRESS. The owner accepted the
+$500 maximum entry price and authorized Monday/Thursday and Monday-only entry
+scan replays on 2026-08-31. No later historical year is authorized.
 
 **Prepared:** 2026-08-30
 
@@ -161,7 +161,7 @@ At decision close `D`, a new long candidate must pass every condition below:
 
 1. Symbol is not already open or pending in that portfolio arm.
 2. Symbol is not pinned on `D`.
-3. Decision close is from $10 through $300, inclusive.
+3. Decision close is from $10 through $500, inclusive.
 4. Twenty-session average volume is at least 4,000,000 shares.
 5. Twenty-session average dollar volume is at least $10,000,000.
 6. The latest bar is no more than three SPY sessions stale.
@@ -184,13 +184,28 @@ Eligible candidates are ordered by:
 The candidate report may retain at most ten candidates per sector before
 portfolio allocation. No score can rescue a failed hard gate.
 
-## 7. When the daily candidate scan may deploy capital
+## 7. When the candidate scan may deploy capital
 
 Held positions must be evaluated after every completed session because exits
 depend on their latest trend, score, price, and event schedule.
 
+The accepted $500 baseline evaluates new candidates daily. The two authorized
+2021 entry-cadence sensitivities restrict only the unheld-candidate scan:
+
+- **Monday/Thursday:** the first valid SPY session of each ISO week and the
+  first valid SPY session on or after Thursday in that week;
+- **Monday only:** the first valid SPY session of each ISO week.
+
+These are holiday-adjusted slots: a Monday market holiday moves the weekly slot
+to Tuesday, and a Thursday market holiday moves the second slot to Friday. The
+origin allocation remains an exception and occurs on the first decision session.
+Orders still execute no earlier than the next SPY session. Existing positions,
+including their bearish, price-decline, early-report, and T-1 signals, continue
+to be evaluated daily under every cadence.
+
 The full unheld-candidate selection and allocation pass is actionable only when
-at least one of these conditions holds:
+the session is an allowed entry-scan slot and at least one of these conditions
+holds:
 
 - this is the origin allocation of the all-cash $50,000 portfolio;
 - one or more existing stocks are scheduled to exit at the next open; or
@@ -200,6 +215,11 @@ at least one of these conditions holds:
 If neither condition holds, the portfolio submits no new stock or SPY order and
 does not resize any surviving position. The implementation may compute
 diagnostics, but computation alone must never create turnover.
+
+An exit scheduled on an off-cadence session still executes at the next open.
+Its proceeds are swept into SPY at that session's close and wait there until the
+next allowed entry scan. An exit that executes on a scheduled scan session may
+fund entries decided at that close for the following open.
 
 When the condition holds but no eligible unheld candidate exists, all sale
 proceeds remain destined for the SPY sleeve.
@@ -583,12 +603,18 @@ No live network access is permitted in tests.
   2021 sensitivity replays with otherwise identical rules and maximum entry
   prices of $500 and $1,000. The $300 result remains the baseline pending
   comparison; these price-cap replays do not authorize any later year.
+- 2026-08-31: Owner accepts $500 as the maximum decision-close entry price and
+  authorizes two 2021 churn-control sensitivities. New-candidate selection is
+  restricted to holiday-adjusted Monday/Thursday slots or a holiday-adjusted
+  Monday-only slot. Held-position exits remain daily, off-cadence exit proceeds
+  sweep into SPY, and all other rules remain unchanged. The earlier $300 and
+  $1,000 results remain labeled development sensitivities.
 
 ## 18. Design-review approval gate
 
 The implementation passed independent review, and the owner subsequently
-authorized the baseline 2021 pilot plus the two price-cap sensitivity replays
-recorded in section 17. No later year is authorized by that approval.
+authorized the 2021 development replays recorded in section 17. No later year
+is authorized by those approvals.
 
 Design review should reject the draft if any rule permits future data in a
 decision, silently changes predecessor evidence, imports across the runtime

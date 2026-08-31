@@ -68,6 +68,7 @@ _CONFIG_SCHEMA: dict[str, Any] = {
     "entry_limit_buffer_pct": (int, float),
     "pin_calendar_days": int,
     "warmup_calendar_years": int,
+    "entry_scan_schedule": str,
     "arms": list,
     "liquidity": {
         "min_avg_volume": int,
@@ -129,6 +130,7 @@ class StudyConfig:
     entry_limit_buffer_pct: float
     pin_calendar_days: int
     warmup_calendar_years: int
+    entry_scan_schedule: str
     arms: tuple[str, ...]
     min_avg_volume: int
     min_avg_dollar_volume: int
@@ -164,6 +166,8 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         raise ValueError("invalid price gate")
     if raw["event_min_weeks"] <= 0 or raw["event_max_weeks"] < raw["event_min_weeks"]:
         raise ValueError("invalid event window")
+    if raw["entry_scan_schedule"] not in {"daily", "monday_thursday", "monday"}:
+        raise ValueError("unsupported entry_scan_schedule")
     draw = raw["drawdown"]
     if draw["principal_high"] <= draw["principal_low"]:
         raise ValueError("drawdown principal range is inverted")
@@ -189,6 +193,7 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         entry_limit_buffer_pct=float(raw["entry_limit_buffer_pct"]),
         pin_calendar_days=int(raw["pin_calendar_days"]),
         warmup_calendar_years=int(raw["warmup_calendar_years"]),
+        entry_scan_schedule=str(raw["entry_scan_schedule"]),
         arms=arms,
         min_avg_volume=int(raw["liquidity"]["min_avg_volume"]),
         min_avg_dollar_volume=int(raw["liquidity"]["min_avg_dollar_volume"]),
@@ -219,6 +224,29 @@ def session_after(sessions: Sequence[date], day: date) -> date | None:
         if session > day:
             return session
     return None
+
+
+def scheduled_entry_scan_sessions(
+    sessions: Sequence[date], schedule: str,
+) -> frozenset[date]:
+    """Return holiday-adjusted entry-scan sessions for a configured cadence."""
+    ordered = sorted(set(sessions))
+    if schedule == "daily":
+        return frozenset(ordered)
+    if schedule not in {"monday", "monday_thursday"}:
+        raise ValueError(f"unsupported entry scan schedule: {schedule}")
+    first_by_week: dict[tuple[int, int], date] = {}
+    thursday_by_week: dict[tuple[int, int], date] = {}
+    for session in ordered:
+        iso = session.isocalendar()
+        week = (iso.year, iso.week)
+        first_by_week.setdefault(week, session)
+        if session.weekday() >= 3:
+            thursday_by_week.setdefault(week, session)
+    selected = set(first_by_week.values())
+    if schedule == "monday_thursday":
+        selected.update(thursday_by_week.values())
+    return frozenset(selected)
 
 
 def session_before(sessions: Sequence[date], day: date) -> date | None:
@@ -1262,6 +1290,9 @@ def run_simulation(
     decision_sessions = [session for session in all_sessions if session.year == year]
     if not decision_sessions:
         raise ValueError(f"no SPY sessions in {year}")
+    entry_scan_sessions = scheduled_entry_scan_sessions(
+        decision_sessions, cfg.entry_scan_schedule,
+    )
     spy_bars = dailies_from_frame(spy)
     stock_frames = {
         ticker: frame.sort_values("date").assign(date=lambda df: pd.to_datetime(df["date"]))
@@ -1639,7 +1670,11 @@ def run_simulation(
 
             origin = (not state.origin_consumed) and session == decision_sessions[0]
             deployable = _deployable(state, spy_c, cfg)
-            actionable = origin or scheduled_exit or _can_fund_min_target(deployable, cfg)
+            scan_scheduled = origin or session in entry_scan_sessions
+            funding_actionable = (
+                origin or scheduled_exit or _can_fund_min_target(deployable, cfg)
+            )
+            actionable = scan_scheduled and funding_actionable
             selected: list[AllocationIntent] = []
             eligible_count = 0
             if actionable:
@@ -1753,7 +1788,8 @@ def run_simulation(
                     record.payload.setdefault("order_id", None)
                 state.origin_consumed = True
             else:
-                notes.append(f"{arm}:no_turnover:{session.isoformat()}")
+                note = "no_turnover" if scan_scheduled else "entry_scan_off_schedule"
+                notes.append(f"{arm}:{note}:{session.isoformat()}")
 
             stock_mv = 0.0
             stock_basis = 0.0
@@ -1812,7 +1848,9 @@ def run_simulation(
                 stock_position_count=len(state.positions),
                 sector_position_counts=sector_counts,
                 notes=(("no_candidates",) if actionable and eligible_count == 0 else ())
-                + (() if actionable else ("no_turnover",)),
+                + (() if actionable else (
+                    "no_turnover" if scan_scheduled else "entry_scan_off_schedule",
+                )),
             ))
             shadow_mv = 0.0
             for position in shadows[arm].positions.values():
