@@ -13,6 +13,7 @@ import yaml
 
 import studies.pre_earnings_momentum.daily_redeployment as daily_redeployment_cli
 from studies.pre_earnings_momentum.daily_redeployment import (
+    CASH_STAGING_CONFIG,
     DEFAULT_CONFIG,
     _fail_closed_for_2021,
     _validate_continuation_config,
@@ -245,6 +246,38 @@ def test_series_report_rejects_broken_checkpoint_hash(tmp_path, monkeypatch):
         build_series_summary(artifact_root, "series", [2000, 2001])
 
 
+def test_series_report_supports_one_arm_study(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "utilities.manifest._git",
+        lambda *args: "test-commit" if args == ("rev-parse", "HEAD") else "",
+    )
+    cfg = load_study_config(CASH_STAGING_CONFIG)
+    bundle, _ = _market(tickers=("AAA",), n=400)
+    artifact_root = tmp_path / "cash-staging"
+    first = run_simulation(cfg=cfg, market=bundle, year=2000)
+    first_dir = artifact_root / "2000" / "series-2000"
+    write_run(first, first_dir, command="test", args={
+        "year": 2000, "origin_year": 2000, "state_in": None,
+    })
+    second = run_simulation(
+        cfg=cfg, market=bundle, year=2001, initial_checkpoint=first.checkpoint,
+    )
+    second.summary["input_hashes"] = {
+        **second.summary["input_hashes"],
+        "state_checkpoint": __import__("hashlib").sha256(
+            (first_dir / "state_checkpoint.json").read_bytes()
+        ).hexdigest(),
+    }
+    second_dir = artifact_root / "2001" / "series-2001"
+    write_run(second, second_dir, command="test", args={
+        "year": 2001, "origin_year": 2000,
+        "state_in": str(first_dir / "state_checkpoint.json"),
+    })
+    rows, evidence = build_series_summary(artifact_root, "series", [2000, 2001])
+    assert evidence["arms"] == ["equal"]
+    assert [row["Arm"] for row in rows] == ["equal", "equal"]
+
+
 def test_progress_callback_reports_every_completed_session():
     bundle, _ = _market(tickers=("AAA",), n=85)
     observed = []
@@ -291,6 +324,10 @@ def test_later_year_cli_requires_prior_checkpoint(tmp_path):
 def test_continuation_accepts_only_frozen_selected_config():
     cfg = load_study_config(DEFAULT_CONFIG)
     _validate_continuation_config(DEFAULT_CONFIG, cfg)
+    staging = load_study_config(CASH_STAGING_CONFIG)
+    _validate_continuation_config(CASH_STAGING_CONFIG, staging)
+    assert staging.arms == ("equal",)
+    assert staging.cash_staging_enabled is True
     drifted_raw = dict(cfg.raw)
     drifted_raw["cost_bps_per_side"] = 9
     with pytest.raises(ValueError, match="does not match the frozen"):
@@ -352,6 +389,17 @@ def test_continuation_runner_accepts_default_and_rejects_sensitivities(
     assert main([
         "--year", "2001", "--origin-year", "2000", "--state-in", str(state_path),
         "--output-root", str(tmp_path / "accepted"), "--run-id", "default",
+    ]) == 0
+    staging_cfg = load_study_config(CASH_STAGING_CONFIG)
+    staging_first = run_simulation(cfg=staging_cfg, market=bundle, year=2000)
+    staging_state_path = tmp_path / "cash-staging-state_checkpoint.json"
+    staging_state_path.write_text(
+        json.dumps(checkpoint_payload(staging_first.checkpoint, staging_cfg)), encoding="utf-8",
+    )
+    assert main([
+        "--year", "2001", "--origin-year", "2000", "--state-in", str(staging_state_path),
+        "--config", str(CASH_STAGING_CONFIG),
+        "--output-root", str(tmp_path / "cash-staging-accepted"), "--run-id", "cash-staging",
     ]) == 0
     for name in (
         "daily_redeployment_price_500.yaml",

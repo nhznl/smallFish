@@ -1,0 +1,36 @@
+# Independent equal-arm development study. Inherits the completed daily/$500
+# baseline except for the explicit next-session entry cash reserve below.
+study_id: pre-earnings-daily-redeployment-cash-staging-v1
+setup_score_version: momentum-v3
+phase: development
+benchmark_symbol: SPY
+starting_equity: 50000
+cost_bps_per_side: 10
+price_min: 10.0
+price_max: 500.0
+event_min_weeks: 2
+event_max_weeks: 5
+max_stale_sessions: 3
+required_setup: BULLISH_CONTINUATION
+setup_score_min_exclusive: 50.0
+max_candidates_per_sector_report: 10
+max_open_pending_per_sector: 3
+min_position_target: 1000.0
+max_position_principal: 5000.0
+entry_limit_buffer_pct: 0.03
+pin_calendar_days: 30
+warmup_calendar_years: 1
+entry_scan_schedule: daily
+cash_staging_enabled: true
+arms:
+  - equal
+liquidity:
+  min_avg_volume: 4000000
+  min_avg_dollar_volume: 10000000
+drawdown:
+  principal_low: 1000.0
+  principal_high: 5000.0
+  decline_at_low: 0.20
+  decline_at_high: 0.10
+output:
+  relative_root: backtest/pre_earnings_momentum/daily_redeployment_cash_staging

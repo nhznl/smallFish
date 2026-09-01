@@ -15,7 +15,7 @@ from typing import Any, Iterable
 from utilities.manifest import sha256_file, write_manifest
 
 
-ARMS = ("equal", "proportional")
+SUPPORTED_ARMS = {"equal", "proportional"}
 SUMMARY_COLUMNS = [
     "Year",
     "Arm",
@@ -35,6 +35,9 @@ SUMMARY_COLUMNS = [
     "SPY Max Drawdown",
     "Strategy Annualized Volatility",
     "SPY Annualized Volatility",
+    "Cash Staging Reserve Sessions",
+    "Cash Staging Reserved Dollars",
+    "Cash Staging Swept Dollars",
     "Comment",
 ]
 
@@ -120,7 +123,8 @@ def build_series_summary(
     if not ordered_years or ordered_years != list(range(ordered_years[0], ordered_years[-1] + 1)):
         raise SeriesValidationError("years must be one non-empty contiguous sequence")
 
-    beginning_equity = {arm: 50_000.0 for arm in ARMS}
+    arms: tuple[str, ...] | None = None
+    beginning_equity: dict[str, float] = {}
     spy_start = 50_000.0
     prior_checkpoint: Path | None = None
     frozen_config: dict[str, Any] | None = None
@@ -152,6 +156,14 @@ def build_series_summary(
             frozen_commit = manifest["git_commit"]
         elif manifest["config"] != frozen_config or manifest["git_commit"] != frozen_commit:
             raise SeriesValidationError(f"{year}: frozen config or implementation commit drifted")
+        manifest_arms = tuple(manifest.get("arms", ()))
+        if not manifest_arms or any(arm not in SUPPORTED_ARMS for arm in manifest_arms):
+            raise SeriesValidationError(f"{year}: unsupported or missing allocation arms")
+        if arms is None:
+            arms = manifest_arms
+            beginning_equity = {arm: 50_000.0 for arm in arms}
+        elif manifest_arms != arms:
+            raise SeriesValidationError(f"{year}: allocation arms drifted")
         if manifest["config"].get("price_max") != 500.0:
             raise SeriesValidationError(f"{year}: selected $500 price cap is absent")
         if manifest["config"].get("entry_scan_schedule") != "daily":
@@ -160,7 +172,7 @@ def build_series_summary(
             raise SeriesValidationError(f"{year}: sequence origin year mismatch")
 
         cap = int(manifest["config"]["max_open_pending_per_sector"])
-        for arm in ARMS:
+        for arm in arms:
             payload = checkpoint["arms"][arm]
             sector_counts: dict[str, int] = {}
             for position in payload["positions"]:
@@ -203,12 +215,12 @@ def build_series_summary(
         _validate_selected_decisions(paths["decisions.csv"], cap, year)
         orders = _read_csv(paths["orders.csv"])
         trades = _read_csv(paths["trades.csv"])
-        arm_marks = {arm: [item for item in equity if item["arm"] == arm] for arm in ARMS}
-        dates = [item["date"] for item in arm_marks[ARMS[0]]]
-        if not dates or any([item["date"] for item in arm_marks[arm]] != dates for arm in ARMS[1:]):
+        arm_marks = {arm: [item for item in equity if item["arm"] == arm] for arm in arms}
+        dates = [item["date"] for item in arm_marks[arms[0]]]
+        if not dates or any([item["date"] for item in arm_marks[arm]] != dates for arm in arms[1:]):
             raise SeriesValidationError(f"{year}: arm session calendars differ or are empty")
-        raw_benchmark_paths = [[item["benchmark_value"] for item in arm_marks[arm]] for arm in ARMS]
-        if raw_benchmark_paths[0] != raw_benchmark_paths[1]:
+        raw_benchmark_paths = [[item["benchmark_value"] for item in arm_marks[arm]] for arm in arms]
+        if any(path != raw_benchmark_paths[0] for path in raw_benchmark_paths[1:]):
             raise SeriesValidationError(f"{year}: arm benchmark paths differ")
         benchmark_paths: list[list[float]] = []
         for raw_path in raw_benchmark_paths:
@@ -225,7 +237,7 @@ def build_series_summary(
         spy_drawdown, spy_volatility = _path_stats(spy_start, benchmark_paths[0])
         regime = _regime(spy_growth, spy_drawdown, spy_volatility)
 
-        for arm in ARMS:
+        for arm in arms:
             marks = arm_marks[arm]
             if any(float(item["cash"]) < -1e-6 for item in marks):
                 raise SeriesValidationError(f"{year}/{arm}: negative cash")
@@ -293,6 +305,12 @@ def build_series_summary(
                 "SPY Max Drawdown": _number(spy_drawdown),
                 "Strategy Annualized Volatility": _number(strategy_volatility),
                 "SPY Annualized Volatility": _number(spy_volatility),
+                "Cash Staging Reserve Sessions": str(
+                    summary["arms"][arm].get("cash_staging_reserve_sessions", 0)),
+                "Cash Staging Reserved Dollars": _money(float(
+                    summary["arms"][arm].get("cash_staging_reserved_dollars", 0.0))),
+                "Cash Staging Swept Dollars": _money(float(
+                    summary["arms"][arm].get("cash_staging_swept_dollars", 0.0))),
                 "Comment": comment,
             })
             beginning_equity[arm] = ending_equity
@@ -306,6 +324,7 @@ def build_series_summary(
         "years": ordered_years,
         "source_git_commit": frozen_commit,
         "config": frozen_config,
+        "arms": list(arms or ()),
         "warnings": warnings,
         "rows": len(rows),
     }
@@ -345,7 +364,7 @@ def write_series_summary(
         },
         config=evidence["config"],
         extra={
-            "study_id": "pre-earnings-daily-redeployment-v1",
+            "study_id": evidence["config"]["study_id"],
             "phase": "development",
             "source_git_commit": evidence["source_git_commit"],
             "validation_status": evidence["status"],

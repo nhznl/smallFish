@@ -340,6 +340,98 @@ def test_scheduled_exit_proceeds_fund_replacement_at_the_same_next_open():
         assert replacement.status == "filled"
 
 
+def test_cash_staging_reserves_next_entry_and_avoids_one_night_spy_round_trip():
+    bundle, sessions = _market(tickers=("EXIT", "BBB"))
+    origin = next(item for item in sessions if item.year == 2000)
+    next_open = session_after(sessions, origin)
+
+    def initial_states():
+        position = OpenPosition(
+            ticker="EXIT", shares=50, entry_fill_price=100.0, entry_principal=5_000.0,
+            allowed_drawdown=0.10, entry_decision_date=date(1999, 12, 29),
+            entry_execution_date=date(1999, 12, 30), setup_score=60.0, sector="Other",
+            predicted_event_date=date(2000, 6, 1), cost_basis=5_005.0,
+            entry_limit=103.0, last_valid_close=100.0,
+            last_valid_close_date=date(1999, 12, 31), pending_exit=True,
+        )
+        pending = PendingOrder(
+            order_id="equal-exit", ticker="EXIT", side="sell", shares=50,
+            kind="stock_exit", decision_date=date(1999, 12, 31), execution_date=origin,
+            rank=None, limit_price=None, reference_price=100.0, reserved_cash=0.0,
+            setup_score=60.0, sector="Other", reason=PRIMARY_DRAWDOWN,
+            predicted_event_date=date(2000, 6, 1),
+            exit_triggers=(PRIMARY_DRAWDOWN,), primary_exit=PRIMARY_DRAWDOWN,
+        )
+        return {
+            "equal": ArmState(
+                name="equal", cash=0.0, positions={"EXIT": position}, pending=[pending],
+                origin_consumed=True, peak_equity=5_000.0,
+            )
+        }
+
+    legacy_cfg = replace(_cfg(), arms=("equal",))
+    staged_cfg = replace(legacy_cfg, cash_staging_enabled=True)
+    legacy = run_simulation(
+        cfg=legacy_cfg, market=bundle, year=2000, initial_states=initial_states())
+    staged = run_simulation(
+        cfg=staged_cfg, market=bundle, year=2000, initial_states=initial_states())
+
+    assert any(
+        order.kind == "spy_sweep" and order.execution_date == origin and order.status == "filled"
+        for order in legacy.orders
+    )
+    assert not any(
+        order.kind == "spy_sweep" and order.execution_date == origin and order.status == "filled"
+        for order in staged.orders
+    )
+    assert any(
+        order.kind == "spy_sell" and order.execution_date == next_open and order.status == "filled"
+        for order in legacy.orders
+    )
+    assert not any(
+        order.kind == "spy_sell" and order.execution_date == next_open and order.status == "filled"
+        for order in staged.orders
+    )
+    staged_entry = next(
+        order for order in staged.orders
+        if order.kind == "stock_entry" and order.ticker == "BBB"
+    )
+    assert staged_entry.status == "filled"
+    summary = staged.summary["arms"]["equal"]
+    assert summary["cash_staging_enabled"] is True
+    assert summary["cash_staging_reserve_sessions"] >= 1
+    assert summary["cash_staging_reserved_dollars"] >= staged_entry.principal + staged_entry.cost
+
+
+def test_cash_staging_sweeps_cancelled_entry_reserve_at_that_close():
+    bundle, sessions = _market(tickers=("BBB",))
+    origin = next(item for item in sessions if item.year == 2000)
+    row = bundle.stocks["BBB"]["date"].dt.date == origin
+    bundle.stocks["BBB"].loc[row, ["open", "high", "low", "close", "adj_close"]] = 600.0
+    cfg = replace(_cfg(), arms=("equal",), cash_staging_enabled=True)
+    pending = PendingOrder(
+        order_id="equal-bbb", ticker="BBB", side="buy", shares=50,
+        kind="stock_entry", decision_date=date(1999, 12, 31), execution_date=origin,
+        rank=1, limit_price=100.0, reference_price=95.0,
+        reserved_cash=5_005.0, setup_score=60.0, sector="Tech", reason="entry",
+        predicted_event_date=date(2000, 2, 1),
+    )
+    state = ArmState(
+        name="equal", cash=5_005.0, pending=[pending], origin_consumed=True,
+        peak_equity=5_005.0,
+    )
+    result = run_simulation(
+        cfg=cfg, market=bundle, year=2000, initial_states={"equal": state})
+    cancelled = next(order for order in result.orders if order.order_id == "equal-bbb")
+    assert cancelled.status == "cancelled"
+    assert cancelled.reason == "limit_exceeded"
+    assert any(
+        order.kind == "spy_sweep" and order.execution_date == origin
+        and order.reason == "cash_staging_excess" and order.status == "filled"
+        for order in result.orders
+    )
+
+
 @pytest.mark.parametrize(
     ("exit_open", "expected_low_status", "expected_low_shares", "expected_low_reason"),
     [

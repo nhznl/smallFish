@@ -69,6 +69,7 @@ _CONFIG_SCHEMA: dict[str, Any] = {
     "pin_calendar_days": int,
     "warmup_calendar_years": int,
     "entry_scan_schedule": str,
+    "cash_staging_enabled": bool,
     "arms": list,
     "liquidity": {
         "min_avg_volume": int,
@@ -85,6 +86,8 @@ _CONFIG_SCHEMA: dict[str, Any] = {
     },
 }
 
+_OPTIONAL_CONFIG_KEYS = {"cash_staging_enabled"}
+
 
 def _check_schema(value: Any, schema: Any, path: str) -> None:
     if isinstance(schema, dict):
@@ -93,10 +96,12 @@ def _check_schema(value: Any, schema: Any, path: str) -> None:
         extra = sorted(set(value) - set(schema))
         if extra:
             raise ValueError(f"unknown configuration key(s) at {path or 'root'}: {extra}")
-        missing = sorted(set(schema) - set(value))
+        missing = sorted(set(schema) - set(value) - _OPTIONAL_CONFIG_KEYS)
         if missing:
             raise ValueError(f"missing configuration key(s) at {path or 'root'}: {missing}")
         for key, sub in schema.items():
+            if key not in value and key in _OPTIONAL_CONFIG_KEYS:
+                continue
             _check_schema(value[key], sub, f"{path}.{key}" if path else key)
         return
     if schema is list:
@@ -131,6 +136,7 @@ class StudyConfig:
     pin_calendar_days: int
     warmup_calendar_years: int
     entry_scan_schedule: str
+    cash_staging_enabled: bool
     arms: tuple[str, ...]
     min_avg_volume: int
     min_avg_dollar_volume: int
@@ -194,6 +200,7 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         pin_calendar_days=int(raw["pin_calendar_days"]),
         warmup_calendar_years=int(raw["warmup_calendar_years"]),
         entry_scan_schedule=str(raw["entry_scan_schedule"]),
+        cash_staging_enabled=bool(raw.get("cash_staging_enabled", False)),
         arms=arms,
         min_avg_volume=int(raw["liquidity"]["min_avg_volume"]),
         min_avg_dollar_volume=int(raw["liquidity"]["min_avg_dollar_volume"]),
@@ -1309,6 +1316,10 @@ def run_simulation(
     trades: list[TradeRecord] = []
     shadow_equity: dict[str, list[tuple[date, float]]] = {arm: [] for arm in cfg.arms}
     shadow_reconciliation_verified = {arm: False for arm in cfg.arms}
+    cash_staging_metrics = {
+        arm: {"reserve_sessions": 0, "reserved_dollars": 0.0, "swept_dollars": 0.0}
+        for arm in cfg.arms
+    }
 
     states: dict[str, ArmState] = {}
     shadows: dict[str, ArmState] = {}
@@ -1557,7 +1568,8 @@ def run_simulation(
                 if first_strategy_entry[arm] is None:
                     first_strategy_entry[arm] = session
 
-            if processed_opens[arm] and spy_c is not None and state.cash > 0:
+            if (not cfg.cash_staging_enabled and processed_opens[arm]
+                    and spy_c is not None and state.cash > 0):
                 sweep_shares = int(math.floor(state.cash / (spy_c * (1.0 + cfg.cost_rate))))
                 if sweep_shares > 0:
                     cost = _spy_buy(state, sweep_shares, spy_c, cfg, False)
@@ -1569,7 +1581,7 @@ def run_simulation(
                         STATUS_FILLED, "sweep"))
                     if first_strategy_entry[arm] is None:
                         first_strategy_entry[arm] = session
-            elif processed_opens[arm] and spy_c is None:
+            elif not cfg.cash_staging_enabled and processed_opens[arm] and spy_c is None:
                 notes.append(f"{arm}:spy_sweep_failed:{session.isoformat()}")
 
             if first_strategy_entry[arm] == session and benchmark[arm]["shares"] == 0 and spy_o is not None:
@@ -1778,7 +1790,8 @@ def run_simulation(
                         )
                         state.pending.append(order)
                         records_by_ticker[intent.ticker].payload["order_id"] = order.order_id
-                    if not selected and state.cash > 0:
+                    if (not selected and state.cash > 0
+                            and not cfg.cash_staging_enabled):
                         state.scheduled_sweep_session = next_session
                         shadows[arm].scheduled_sweep_session = next_session
                 sector_usage = _sector_usage(state)
@@ -1792,6 +1805,46 @@ def run_simulation(
             else:
                 note = "no_turnover" if scan_scheduled else "entry_scan_off_schedule"
                 notes.append(f"{arm}:{note}:{session.isoformat()}")
+
+            if cfg.cash_staging_enabled:
+                reserve = sum(
+                    order.reserved_cash for order in state.pending
+                    if (order.side == "buy" and order.kind == "stock_entry"
+                        and order.execution_date == next_session)
+                )
+                if reserve > 0:
+                    cash_staging_metrics[arm]["reserve_sessions"] += 1
+                    cash_staging_metrics[arm]["reserved_dollars"] += reserve
+                sweepable_cash = max(0.0, state.cash - reserve)
+                if spy_c is not None and sweepable_cash > 0:
+                    sweep_shares = int(math.floor(
+                        sweepable_cash / (spy_c * (1.0 + cfg.cost_rate))))
+                    if sweep_shares > 0:
+                        principal = sweep_shares * spy_c
+                        cost = _spy_buy(state, sweep_shares, spy_c, cfg, False)
+                        _spy_buy(shadows[arm], sweep_shares, spy_c, cfg, True)
+                        cash_staging_metrics[arm]["swept_dollars"] += principal
+                        orders.append(OrderRecord(
+                            _order_id(state, session, cfg.benchmark_symbol, "spy_sweep"),
+                            arm, cfg.benchmark_symbol, "buy", "spy_sweep", sweep_shares,
+                            session, session, spy_c, None, spy_c, principal, cost,
+                            STATUS_FILLED, "cash_staging_excess"))
+                        if first_strategy_entry[arm] is None:
+                            first_strategy_entry[arm] = session
+                elif spy_c is None and sweepable_cash > 0:
+                    notes.append(f"{arm}:spy_sweep_failed:{session.isoformat()}")
+
+            if (first_strategy_entry[arm] == session and benchmark[arm]["shares"] == 0
+                    and spy_o is not None):
+                shares = int(math.floor(cfg.starting_equity / (spy_o * (1.0 + cfg.cost_rate))))
+                principal = shares * spy_o
+                cost = modeled_cost(principal, cfg)
+                benchmark[arm] = {
+                    "shares": float(shares),
+                    "cash": cfg.starting_equity - principal - cost,
+                    "cost": cost,
+                    "open": spy_o,
+                }
 
             stock_mv = 0.0
             stock_basis = 0.0
@@ -1892,6 +1945,7 @@ def run_simulation(
     )
     summary = _build_summary(
         cfg, year, states, marks, decisions, orders, trades, shadow_equity,
+        cash_staging_metrics,
         shadow_reconciliation_verified, notes, market)
     return SimulationResult(
         cfg=cfg,
@@ -1919,6 +1973,7 @@ def _build_summary(
     orders: Sequence[OrderRecord],
     trades: Sequence[TradeRecord],
     shadow_equity: dict[str, list[tuple[date, float]]],
+    cash_staging_metrics: dict[str, dict[str, float | int]],
     shadow_reconciliation_verified: dict[str, bool],
     notes: Sequence[str],
     market: MarketBundle,
@@ -2070,5 +2125,9 @@ def _build_summary(
             "zero_cost_shadow_ending_equity": shadow_last,
             "zero_cost_orders_identical": bool(
                 shadow_reconciliation_verified.get(arm, False)),
+            "cash_staging_enabled": cfg.cash_staging_enabled,
+            "cash_staging_reserve_sessions": cash_staging_metrics[arm]["reserve_sessions"],
+            "cash_staging_reserved_dollars": cash_staging_metrics[arm]["reserved_dollars"],
+            "cash_staging_swept_dollars": cash_staging_metrics[arm]["swept_dollars"],
         }
     return payload

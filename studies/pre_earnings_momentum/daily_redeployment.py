@@ -32,8 +32,14 @@ from utilities.price_reader import read_prices_validated
 from utilities.universe import get_sector, live_universe_symbols, load_registry, load_retired_symbols
 
 DEFAULT_CONFIG = Path(__file__).resolve().parent / "config" / "daily_redeployment.yaml"
+CASH_STAGING_CONFIG = (
+    Path(__file__).resolve().parent / "config" / "daily_redeployment_cash_staging.yaml"
+)
 FROZEN_CONTINUATION_CONFIG_SHA256 = (
     "b54bf152d61a55ed86c387cf5e48a4116a9e92d2baa37a04e9ef8944c4232c6c"
+)
+CASH_STAGING_CONTINUATION_CONFIG_SHA256 = (
+    "33b1cf2fbc3a634c7c848c1ae56ea66e051bb86c672d9b77b9f1d5a3a858ed12"
 )
 
 
@@ -61,16 +67,21 @@ def _effective_config_hash(raw: dict[str, object]) -> str:
 
 
 def _validate_continuation_config(config_path: Path, cfg: StudyConfig) -> None:
-    """Bind annual continuations to the owner-selected daily/$500 config."""
-    if Path(config_path).expanduser().resolve() != DEFAULT_CONFIG.resolve():
+    """Bind annual continuations to a specifically frozen study configuration."""
+    allowed = {
+        DEFAULT_CONFIG.resolve(): FROZEN_CONTINUATION_CONFIG_SHA256,
+        CASH_STAGING_CONFIG.resolve(): CASH_STAGING_CONTINUATION_CONFIG_SHA256,
+    }
+    resolved = Path(config_path).expanduser().resolve()
+    expected = allowed.get(resolved)
+    if expected is None:
         raise ValueError(
-            "continuation runs require the frozen selected configuration "
-            f"{DEFAULT_CONFIG}; sensitivity configurations are not accepted"
+            "continuation runs require an approved frozen study configuration; "
+            "sensitivity configurations are not accepted"
         )
-    if _effective_config_hash(cfg.raw) != FROZEN_CONTINUATION_CONFIG_SHA256:
+    if _effective_config_hash(cfg.raw) != expected:
         raise ValueError(
-            "effective continuation configuration does not match the frozen "
-            "daily/$500 selected rule set"
+            "effective continuation configuration does not match the frozen study rule set"
         )
 
 

@@ -71,10 +71,17 @@ pending orders, pins, SPY, benchmark, and the zero-cost shadow from silently
 resetting. The authorized 2010–2022 development sequence uses `--origin-year
 2010`; its 2021 continuation is distinct from the standalone pilot artifacts.
 
-Continuation runs accept only the owner-selected
-`config/daily_redeployment.yaml`; sensitivity configurations fail closed even
-when their effective values happen to match the selected configuration. In
-`daily_equity.csv`, `summary.json`, and `report.md`, `strategy_return`,
+Continuation runs accept only an explicitly frozen study configuration:
+`config/daily_redeployment.yaml` for the original two-arm daily/$500 sequence,
+or `config/daily_redeployment_cash_staging.yaml` for the separate equal-only
+cash-staging development study. Other sensitivity configurations fail closed
+even when their effective values happen to match a selected configuration. The
+cash-staging study reserves only the fully specified next-session stock-entry
+orders after each close, then sweeps the remaining whole-share-eligible cash to
+SPY. It exists to measure the avoided overnight SPY round trips; it does not
+alter the original study or its evidence. Its currently authorized initial
+window is 2010–2016, after which the owner reviews results before deciding on
+any later years. In `daily_equity.csv`, `summary.json`, and `report.md`, `strategy_return`,
 `benchmark_return`, and `excess_return` are cumulative since the original
 $50,000 strategy origin. They are not calendar-year returns in a continuation
 year.
@@ -137,6 +144,8 @@ authorize any later year.
 | `daily_redeployment.py` | Guarded CLI and annual-checkpoint restore for the development daily-redeployment study |
 | `daily_redeployment_series_report.py` | Fail-closed checkpoint-chain validation and annual comparison CSV |
 | `config/daily_redeployment.yaml` | Accepted $500 daily-scan parameters for the daily-redeployment study |
+| `config/daily_redeployment_cash_staging.yaml` | Separate equal-only development configuration with post-scan cash staging |
+| `cash_staging_study_spec.md` | Binding methodology for the independent cash-staging development study |
 | `config/daily_redeployment_price_500.yaml` | 2021 development sensitivity with a $500 entry-price ceiling |
 | `config/daily_redeployment_price_1000.yaml` | 2021 development sensitivity with a $1,000 entry-price ceiling |
 | `config/daily_redeployment_monday_thursday.yaml` | 2021 $500 sensitivity with holiday-adjusted Monday/Thursday entry scans |
