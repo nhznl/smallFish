@@ -162,6 +162,24 @@ def test_synthetic_run_reconciles_and_is_byte_for_byte(tmp_path):
     assert "not calendar-year returns" in report
 
 
+def test_progress_callback_reports_every_completed_session():
+    bundle, _ = _market(tickers=("AAA",), n=85)
+    observed = []
+    result = run_simulation(
+        cfg=load_study_config(),
+        market=bundle,
+        year=2000,
+        progress_callback=lambda completed, total, session: observed.append(
+            (completed, total, session)
+        ),
+    )
+    assert len(observed) == len(result.sessions)
+    assert observed[0] == (1, len(result.sessions), result.sessions[0])
+    assert observed[-1] == (
+        len(result.sessions), len(result.sessions), result.sessions[-1],
+    )
+
+
 def test_summary_contains_required_turnover_exposure_and_review_metrics():
     bundle, _ = _market(tickers=("AAA", "BBB"), n=85)
     result = run_simulation(cfg=load_study_config(), market=bundle, year=2000)

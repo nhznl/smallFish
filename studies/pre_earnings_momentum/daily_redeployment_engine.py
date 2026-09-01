@@ -12,7 +12,7 @@ import copy
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 import pandas as pd
@@ -1279,6 +1279,7 @@ def run_simulation(
     year: int,
     initial_states: dict[str, ArmState] | None = None,
     initial_checkpoint: SimulationCheckpoint | None = None,
+    progress_callback: Callable[[int, int, date], None] | None = None,
 ) -> SimulationResult:
     if initial_states is not None and initial_checkpoint is not None:
         raise ValueError("provide initial_states or initial_checkpoint, not both")
@@ -1879,6 +1880,8 @@ def run_simulation(
                 shadow_reconciliation_verified[arm] = True
             if state.cash < -1e-8:
                 raise RuntimeError(f"{arm} cash negative at close {session}")
+        if progress_callback is not None:
+            progress_callback(index + 1, len(decision_sessions), session)
 
     year_end = {arm: _arm_state_payload(states[arm]) for arm in cfg.arms}
     checkpoint = SimulationCheckpoint(

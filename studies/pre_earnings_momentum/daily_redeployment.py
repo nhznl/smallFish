@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -227,6 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         output_root = _data_root(None, "SFP_DATA_DIR") / cfg.output_relative_root / str(args.year)
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output_dir = Path(output_root) / run_id
+    started = time.monotonic()
     try:
         market = load_market(cfg, args.year, args)
         if args.state_in is not None:
@@ -237,8 +239,20 @@ def main(argv: list[str] | None = None) -> int:
                 market,
                 input_hashes={**market.input_hashes, "state_checkpoint": state_hash},
             )
+        def report_progress(completed: int, total: int, session) -> None:
+            print(
+                f"PROGRESS year={args.year} sessions={completed}/{total} "
+                f"date={session.isoformat()} elapsed_seconds={time.monotonic() - started:.1f}",
+                flush=True,
+            )
+
         result = run_simulation(
-            cfg=cfg, market=market, year=args.year, initial_checkpoint=checkpoint)
+            cfg=cfg,
+            market=market,
+            year=args.year,
+            initial_checkpoint=checkpoint,
+            progress_callback=report_progress,
+        )
         write_run(
             result,
             output_dir,
@@ -259,7 +273,11 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # noqa: BLE001 - CLI fail-closed
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
-    print(f"wrote {output_dir}")
+    print(
+        f"YEAR_COMPLETE year={args.year} sessions={len(result.sessions)} "
+        f"elapsed_seconds={time.monotonic() - started:.1f} output={output_dir}",
+        flush=True,
+    )
     return 0
 
 

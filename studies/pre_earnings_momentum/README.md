@@ -79,6 +79,11 @@ when their effective values happen to match the selected configuration. In
 $50,000 strategy origin. They are not calendar-year returns in a continuation
 year.
 
+Historical execution prints one flushed `PROGRESS` line after every completed
+SPY decision session and a final `YEAR_COMPLETE` line with session count,
+elapsed seconds, and output directory. Redirect or `tee` each annual command to
+a distinct log file for durable monitoring without changing the artifacts.
+
 In `decisions.csv`, `sector_open_plus_pending_count` and
 `sector_open_plus_pending_counts` record sector occupancy at the decision.
 Selected entries and scheduled exits expose `order_id`, which is the explicit
