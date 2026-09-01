@@ -6,8 +6,9 @@
 price-cap and entry-cadence sensitivities, the owner selected daily candidate
 scans and a $500 maximum decision-close entry price. Held-position exits remain
 daily. Monday/Thursday, Monday-only, $300, and $1,000 runs remain development
-sensitivities and are not selected rules. No later historical year is
-authorized.
+sensitivities and are not selected rules. The owner subsequently authorized a
+continuous 2010–2022 development sequence under the selected rules, with 2010
+as the $50,000 origin and annual checkpoint carry-forward through 2022.
 
 **Prepared:** 2026-08-30
 
@@ -72,6 +73,14 @@ The runner must support one calendar year at a time and stop after materializing
 that year's report. A later year does not run automatically. Portfolio state,
 open positions, pending orders, pins, cost basis, SPY shares, and cash carry
 across year boundaries when the next year is authorized.
+
+For the owner-authorized 2010–2022 development sequence, 2010 is the origin
+year and begins with $50,000 in each arm. Years 2011 through 2022 must each use
+the immediately preceding year's checkpoint. The previously completed 2021
+pilot and sensitivity artifacts are not spliced into this chain; 2021 is rerun
+only as the continuation of the 2010-origin state. Each annual artifact remains
+separately materialized and reports both its calendar-year beginning/ending
+equity context and the runner's cumulative-since-origin metrics.
 
 ### 2.3 Future validation
 
@@ -624,12 +633,21 @@ No live network access is permitted in tests.
   decision-close entry price as the selected rule set. Daily held-position exit
   evaluation is unchanged. The weekly-cadence and alternate-price results
   remain development sensitivities only.
+- 2026-08-31: Owner authorizes a continuous 2010–2022 development run using
+  the selected daily/$500 rule set and the static live universe minus retired
+  symbols. The backfilled realized-earnings cache begins in 2007 so the causal
+  anniversary forecaster has the required prior observations by 2010. The
+  sequence starts each arm at $50,000 in 2010 and carries the immediately prior
+  annual checkpoint through 2022. The existing standalone 2021 pilot and its
+  sensitivities remain separate development evidence and are not reused as
+  state in this sequence.
 
 ## 18. Design-review approval gate
 
 The implementation passed independent review, and the owner subsequently
-authorized the 2021 development replays recorded in section 17. No later year
-is authorized by those approvals.
+authorized the 2021 development replays and continuous 2010–2022 development
+sequence recorded in section 17. No year after 2022 is authorized by those
+approvals.
 
 Design review should reject the methodology if any rule permits future data in a
 decision, silently changes predecessor evidence, imports across the runtime

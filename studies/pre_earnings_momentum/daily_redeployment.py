@@ -1,7 +1,9 @@
 """CLI for pre-earnings-daily-redeployment-v1.
 
-Development tooling only. No historical year, including 2021, is authorized
-without a separate owner confirmation. This module never imports stock-app.
+Development tooling only. Historical years require owner authorization. The
+standalone 2021 pilot remains explicitly guarded, while an authorized
+multi-year development sequence names its origin year and carries the prior
+annual checkpoint forward. This module never imports stock-app.
 """
 
 from __future__ import annotations
@@ -76,11 +78,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         prog="pre-earnings-daily-study",
         description=(
             "Development tooling for pre-earnings-daily-redeployment-v1. "
-            "Every historical run requires explicit owner authorization; 2021 "
-            "is guarded and later years require the prior annual checkpoint."
+            "Every historical run requires explicit owner authorization; the "
+            "standalone 2021 pilot is guarded and continuation years require "
+            "the immediately prior annual checkpoint."
         ),
     )
     parser.add_argument("--year", type=int, required=True, help="Calendar year to simulate")
+    parser.add_argument(
+        "--origin-year",
+        type=int,
+        default=2021,
+        help=(
+            "First year of the authorized continuous development sequence "
+            "(default: 2021 for the standalone pilot)."
+        ),
+    )
     parser.add_argument(
         "--confirm-2021-pilot",
         action="store_true",
@@ -97,13 +109,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--state-in",
         type=Path,
         default=None,
-        help="Required for years after 2021; use the immediately prior state_checkpoint.json.",
+        help=(
+            "Required after --origin-year; use the immediately prior "
+            "state_checkpoint.json."
+        ),
     )
     return parser.parse_args(argv)
 
 
-def _fail_closed_for_2021(year: int, confirmed: bool) -> None:
-    if year == 2021 and not confirmed:
+def _fail_closed_for_2021(year: int, origin_year: int, confirmed: bool) -> None:
+    if year == 2021 and origin_year == 2021 and not confirmed:
         raise SystemExit(
             "2021 pilot is unauthorized. Refusing to run without --confirm-2021-pilot. "
             "Do not pass that flag unless the owner has separately authorized the pilot."
@@ -181,15 +196,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"invalid year {args.year}", file=sys.stderr)
         return 2
     try:
-        if args.year == 2021 and args.state_in is not None:
-            raise ValueError("2021 is the origin year and cannot accept a prior checkpoint")
-        if args.year != 2021 and args.state_in is None:
-            raise ValueError("years after the 2021 origin require --state-in from the prior year")
-        _fail_closed_for_2021(args.year, args.confirm_2021_pilot)
+        if args.origin_year < 1990 or args.origin_year > args.year:
+            raise ValueError(
+                f"origin year {args.origin_year} must be between 1990 and run year {args.year}"
+            )
+        if args.year == args.origin_year and args.state_in is not None:
+            raise ValueError(
+                f"origin year {args.origin_year} cannot accept a prior checkpoint"
+            )
+        if args.year > args.origin_year and args.state_in is None:
+            raise ValueError(
+                f"years after origin {args.origin_year} require --state-in from the prior year"
+            )
+        _fail_closed_for_2021(
+            args.year, args.origin_year, args.confirm_2021_pilot,
+        )
         cfg = load_study_config(args.config)
         checkpoint = None
-        if args.state_in is not None:
+        if args.origin_year != 2021 or args.state_in is not None:
             _validate_continuation_config(args.config, cfg)
+        if args.state_in is not None:
             payload = json.loads(args.state_in.read_text(encoding="utf-8"))
             checkpoint = checkpoint_from_payload(
                 payload, cfg, expected_source_year=args.year - 1)
@@ -219,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
             command="pre-earnings-daily-study",
             args={
                 "year": args.year,
+                "origin_year": args.origin_year,
                 "confirm_2021_pilot": bool(args.confirm_2021_pilot),
                 "config": str(args.config),
                 "cache_root": None if args.cache_root is None else str(args.cache_root),

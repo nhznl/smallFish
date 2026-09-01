@@ -62,12 +62,14 @@ implemented as development tooling. Discover it with:
 ```
 
 Every historical run requires explicit owner authorization. The command fails
-closed for `--year 2021` unless `--confirm-2021-pilot` is present. This does not
-change the published `FAILED` predecessor study. Each completed annual run
-writes `state_checkpoint.json`. A separately authorized following year must pass
-the immediately prior checkpoint with `--state-in PATH`; the runner rejects a
-later year without it so cash, positions, pending orders, pins, SPY, benchmark,
-and the zero-cost shadow cannot silently reset.
+closed for a standalone `--year 2021` origin unless `--confirm-2021-pilot` is
+present. This does not change the published `FAILED` predecessor study. An
+authorized continuous sequence names `--origin-year`; its first year cannot
+accept prior state, and every following year must pass the immediately prior
+`state_checkpoint.json` with `--state-in PATH`. This prevents cash, positions,
+pending orders, pins, SPY, benchmark, and the zero-cost shadow from silently
+resetting. The authorized 2010–2022 development sequence uses `--origin-year
+2010`; its 2021 continuation is distinct from the standalone pilot artifacts.
 
 Continuation runs accept only the owner-selected
 `config/daily_redeployment.yaml`; sensitivity configurations fail closed even

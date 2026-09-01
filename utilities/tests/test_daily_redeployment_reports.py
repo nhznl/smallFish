@@ -14,6 +14,7 @@ import yaml
 import studies.pre_earnings_momentum.daily_redeployment as daily_redeployment_cli
 from studies.pre_earnings_momentum.daily_redeployment import (
     DEFAULT_CONFIG,
+    _fail_closed_for_2021,
     _validate_continuation_config,
     main,
     parse_args,
@@ -34,6 +35,10 @@ def test_2021_guard_fails_closed_without_confirmation(tmp_path, monkeypatch):
     monkeypatch.setenv("SFP_DATA_DIR", str(tmp_path / "real-data-should-not-be-touched"))
     assert main(["--year", "2021"]) == 2
     assert main(["--year", "1800"]) == 2
+
+
+def test_2021_continuation_from_earlier_authorized_origin_is_not_pilot_guarded():
+    _fail_closed_for_2021(2021, 2010, False)
 
 
 def test_help_labels_guarded_development_tooling():
@@ -244,7 +249,7 @@ def test_continuation_runner_accepts_default_and_rejects_sensitivities(
         lambda _cfg, _year, _args: bundle,
     )
     assert main([
-        "--year", "2001", "--state-in", str(state_path),
+        "--year", "2001", "--origin-year", "2000", "--state-in", str(state_path),
         "--output-root", str(tmp_path / "accepted"), "--run-id", "default",
     ]) == 0
     for name in (
@@ -254,17 +259,29 @@ def test_continuation_runner_accepts_default_and_rejects_sensitivities(
         "daily_redeployment_monday.yaml",
     ):
         assert main([
-            "--year", "2001", "--state-in", str(state_path),
+            "--year", "2001", "--origin-year", "2000",
+            "--state-in", str(state_path),
             "--config", str(DEFAULT_CONFIG.parent / name),
             "--output-root", str(tmp_path / "rejected"), "--run-id", name,
         ]) == 2
 
 
-def test_2021_cli_rejects_state_input_before_confirmation_guard(tmp_path, capsys):
+def test_standalone_2021_cli_rejects_state_input_before_confirmation_guard(tmp_path, capsys):
     state_path = tmp_path / "state.json"
     state_path.write_text("{}\n", encoding="utf-8")
     assert main(["--year", "2021", "--state-in", str(state_path)]) == 2
-    assert "cannot accept a prior checkpoint" in capsys.readouterr().err
+    assert "origin year 2021 cannot accept a prior checkpoint" in capsys.readouterr().err
+
+
+def test_earlier_origin_requires_selected_config_and_prior_checkpoint(tmp_path, capsys):
+    sensitivity = DEFAULT_CONFIG.parent / "daily_redeployment_monday.yaml"
+    assert main([
+        "--year", "2010", "--origin-year", "2010",
+        "--config", str(sensitivity),
+    ]) == 2
+    assert "sensitivity configurations are not accepted" in capsys.readouterr().err
+    assert main(["--year", "2011", "--origin-year", "2010"]) == 2
+    assert "require --state-in" in capsys.readouterr().err
 
 
 def test_later_year_cli_rejects_checkpoint_from_wrong_year(tmp_path, capsys):
@@ -276,7 +293,7 @@ def test_later_year_cli_rejects_checkpoint_from_wrong_year(tmp_path, capsys):
         json.dumps(checkpoint_payload(first.checkpoint, cfg)), encoding="utf-8"
     )
     assert main([
-        "--year", "2002", "--state-in", str(state_path),
+        "--year", "2002", "--origin-year", "2000", "--state-in", str(state_path),
         "--cache-root", str(tmp_path / "must-not-be-read"),
     ]) == 2
     assert "source year 2000 does not match required 2001" in capsys.readouterr().err
