@@ -167,6 +167,28 @@ def test_risk_on_gate_blocks_stocks_and_sweeps_cash_to_spy(monkeypatch):
     assert any(order.kind == "stock_entry" for order in baseline.orders)
 
 
+def test_entry_approved_risk_on_still_fills_when_execution_day_is_risk_off(monkeypatch):
+    bundle, sessions = _market(tickers=("AAA",), n=85)
+    origin = next(item for item in sessions if item.year == 2000)
+    execution = engine.session_after(sessions, origin)
+    assert execution is not None
+
+    def regime_for_session(_spy, session, **kwargs):
+        return REGIME_RISK_ON if session == origin else REGIME_RISK_OFF
+
+    monkeypatch.setattr(engine, "market_regime_at_close", regime_for_session)
+    result = run_simulation(cfg=_post_cfg("risk-on"), market=bundle, year=2000)
+    entry = next(
+        order for order in result.orders
+        if order.kind == "stock_entry" and order.status == "filled"
+    )
+    assert entry.decision_date == origin
+    assert entry.execution_date == execution
+    execution_mark = next(mark for mark in result.marks if mark.date == execution)
+    assert execution_mark.market_regime == REGIME_RISK_OFF
+    assert execution_mark.entry_regime_allowed is False
+
+
 def test_realized_event_sets_floor_and_t_plus_seven_open_trigger_without_t1():
     sessions = list(pd.bdate_range("2020-01-02", periods=20).date)
     event = sessions[3]
@@ -307,6 +329,29 @@ def test_future_realized_date_cannot_change_pre_event_state_and_fallback_is_visi
     assert position.realized_event_date == predicted
     assert position.event_date_source == "predicted_fallback"
     assert position.post_event_floor == 43.0
+
+
+def test_weekend_realized_event_anchors_on_first_following_spy_session():
+    sessions = list(pd.bdate_range("2020-01-02", periods=20).date)
+    friday = next(item for item in sessions if item.weekday() == 4)
+    event = friday + timedelta(days=1)
+    monday = engine.session_after(sessions, event)
+    assert event.weekday() == 5 and monday is not None
+    position = _position(predicted=event)
+    _update_post_event_state(
+        position,
+        session=monday,
+        close=48.0,
+        stale=False,
+        sessions=sessions,
+        realized_history=np.array([np.datetime64(event)]),
+        hold_sessions=7,
+    )
+    assert position.realized_event_date == event
+    assert position.post_event_anchor_session == monday
+    assert position.post_event_anchor_close == 48.0
+    assert position.post_event_floor == 48.0
+    assert position.post_event_target_session == nth_session_after(sessions, event, 7)
 
 
 def test_full_simulation_exits_at_seventh_post_event_session_open_without_pin(tmp_path):
@@ -485,6 +530,38 @@ def test_checkpoint_round_trip_preserves_post_event_state():
     assert actual.event_date_source == "realized"
     assert actual.post_event_floor == 50.0
     assert actual.post_event_target_session == date(2020, 2, 12)
+
+
+def test_pre_policy_legacy_checkpoint_still_loads_without_new_metadata():
+    cfg = load_study_config()
+    bundle, _ = _market(tickers=(), n=85)
+    result = run_simulation(cfg=cfg, market=bundle, year=2000)
+    payload = checkpoint_payload(result.checkpoint, cfg)
+    for key in (
+        "exit_policy", "market_regime_gate", "post_event_hold_sessions",
+    ):
+        payload.pop(key)
+    restored = checkpoint_from_payload(payload, cfg, expected_source_year=2000)
+    assert restored.source_year == 2000
+    assert set(restored.states) == set(cfg.arms)
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("exit_policy", "planned_t1", "exit policy"),
+        ("market_regime_gate", "risk_on", "market-regime gate"),
+        ("post_event_hold_sessions", 8, "post-event hold"),
+    ],
+)
+def test_post_event_checkpoint_rejects_policy_or_gate_mismatch(key, value, message):
+    cfg = _post_cfg("baseline")
+    bundle, _ = _market(tickers=(), n=85)
+    result = run_simulation(cfg=cfg, market=bundle, year=2000)
+    payload = checkpoint_payload(result.checkpoint, cfg)
+    payload[key] = value
+    with pytest.raises(ValueError, match=message):
+        checkpoint_from_payload(payload, cfg, expected_source_year=2000)
 
 
 def test_post_event_command_help_and_historical_guard(monkeypatch, capsys):
