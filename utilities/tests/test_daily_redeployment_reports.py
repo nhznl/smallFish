@@ -26,6 +26,11 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
     run_simulation,
 )
 from studies.pre_earnings_momentum.daily_redeployment_report import write_run
+from studies.pre_earnings_momentum.daily_redeployment_series_report import (
+    SeriesValidationError,
+    build_series_summary,
+    write_series_summary,
+)
 from studies.pre_earnings_momentum.momentum_v3_replay import SETUP_SCORE_VERSION
 
 from utilities.tests.test_daily_redeployment_engine import _market
@@ -160,6 +165,84 @@ def test_synthetic_run_reconciles_and_is_byte_for_byte(tmp_path):
     report = (left / "report.md").read_text(encoding="utf-8")
     assert "Each historical run requires owner authorization" in report
     assert "not calendar-year returns" in report
+
+
+def test_series_report_validates_checkpoint_chain_and_calculates_calendar_years(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setattr(
+        "utilities.manifest._git",
+        lambda *args: "test-commit" if args == ("rev-parse", "HEAD") else "",
+    )
+    cfg = load_study_config()
+    bundle, _ = _market(tickers=("AAA", "BBB"), n=400)
+    artifact_root = tmp_path / "daily"
+    first = run_simulation(cfg=cfg, market=bundle, year=2000)
+    first_dir = artifact_root / "2000" / "series-2000"
+    write_run(first, first_dir, command="test", args={
+        "year": 2000, "origin_year": 2000, "state_in": None,
+    })
+    second = run_simulation(
+        cfg=cfg,
+        market=bundle,
+        year=2001,
+        initial_checkpoint=first.checkpoint,
+    )
+    second.summary["input_hashes"] = {
+        **second.summary["input_hashes"],
+        "state_checkpoint": __import__("hashlib").sha256(
+            (first_dir / "state_checkpoint.json").read_bytes()
+        ).hexdigest(),
+    }
+    second_dir = artifact_root / "2001" / "series-2001"
+    write_run(second, second_dir, command="test", args={
+        "year": 2001,
+        "origin_year": 2000,
+        "state_in": str(first_dir / "state_checkpoint.json"),
+    })
+
+    rows, evidence = build_series_summary(artifact_root, "series", [2000, 2001])
+    assert evidence["status"] == "PASS"
+    assert len(rows) == 4
+    assert [row["Year"] for row in rows] == ["2000", "2000", "2001", "2001"]
+    for arm in ("equal", "proportional"):
+        arm_rows = [row for row in rows if row["Arm"] == arm]
+        assert float(arm_rows[0]["Beginning Equity"]) == 50_000.0
+        assert float(arm_rows[1]["Beginning Equity"]) == pytest.approx(
+            float(arm_rows[0]["Ending Equity"]), abs=0.01,
+        )
+        assert int(arm_rows[0]["No Of Transactions"]) == (
+            int(arm_rows[0]["Stock Transactions"]) + int(arm_rows[0]["SPY Transactions"])
+        )
+    output = tmp_path / "annual_summary.csv"
+    write_series_summary(output, rows, evidence, artifact_root=artifact_root)
+    assert output.is_file()
+    assert output.with_name("annual_summary.validation.json").is_file()
+    assert output.with_name("annual_summary.csv.meta.json").is_file()
+
+
+def test_series_report_rejects_broken_checkpoint_hash(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "utilities.manifest._git",
+        lambda *args: "test-commit" if args == ("rev-parse", "HEAD") else "",
+    )
+    cfg = load_study_config()
+    bundle, _ = _market(tickers=(), n=400)
+    artifact_root = tmp_path / "daily"
+    first = run_simulation(cfg=cfg, market=bundle, year=2000)
+    first_dir = artifact_root / "2000" / "series-2000"
+    write_run(first, first_dir, command="test", args={
+        "year": 2000, "origin_year": 2000, "state_in": None,
+    })
+    second = run_simulation(cfg=cfg, market=bundle, year=2001, initial_checkpoint=first.checkpoint)
+    second_dir = artifact_root / "2001" / "series-2001"
+    write_run(second, second_dir, command="test", args={
+        "year": 2001,
+        "origin_year": 2000,
+        "state_in": str(first_dir / "state_checkpoint.json"),
+    })
+    with pytest.raises(SeriesValidationError, match="checkpoint hash"):
+        build_series_summary(artifact_root, "series", [2000, 2001])
 
 
 def test_progress_callback_reports_every_completed_session():

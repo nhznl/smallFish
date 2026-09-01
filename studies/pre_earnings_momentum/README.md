@@ -84,6 +84,27 @@ SPY decision session and a final `YEAR_COMPLETE` line with session count,
 elapsed seconds, and output directory. Redirect or `tee` each annual command to
 a distinct log file for durable monitoring without changing the artifacts.
 
+After an authorized continuous sequence finishes, validate its output hashes,
+checkpoint chain, frozen commit/config, accounting constraints, sector caps,
+whole-share fills, uniform costs, and zero-cost order identity while producing
+calendar-year comparison rows with:
+
+```bash
+utilities/.venv/bin/python -m \
+  studies.pre_earnings_momentum.daily_redeployment_series_report \
+  --artifact-root data/backtest/pre_earnings_momentum/daily_redeployment \
+  --series-tag SERIES_TAG --start-year START --end-year END \
+  --output PATH/annual_summary.csv
+```
+
+`Equity Growth`, `SPY Growth`, `Excess Growth`, drawdown, and volatility fields
+are numeric decimal returns (for example, `0.10` means 10%). `No Of
+Transactions` counts every filled stock or SPY order side; cancelled orders are
+excluded. `Completed Stock Trades` remains separate. Regime comments are
+mechanically classified from that calendar year's local SPY return, maximum
+drawdown, and annualized daily volatility. The report writes validation and
+reproducibility sidecars beside the CSV.
+
 In `decisions.csv`, `sector_open_plus_pending_count` and
 `sector_open_plus_pending_counts` record sector occupancy at the decision.
 Selected entries and scheduled exits expose `order_id`, which is the explicit
@@ -114,6 +135,7 @@ authorize any later year.
 | `backtest.py` | Frozen portfolio study runner |
 | `event_backtest.py` | Event-study runner using completed decision bars |
 | `daily_redeployment.py` | Guarded CLI and annual-checkpoint restore for the development daily-redeployment study |
+| `daily_redeployment_series_report.py` | Fail-closed checkpoint-chain validation and annual comparison CSV |
 | `config/daily_redeployment.yaml` | Accepted $500 daily-scan parameters for the daily-redeployment study |
 | `config/daily_redeployment_price_500.yaml` | 2021 development sensitivity with a $500 entry-price ceiling |
 | `config/daily_redeployment_price_1000.yaml` | 2021 development sensitivity with a $1,000 entry-price ceiling |
