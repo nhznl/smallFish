@@ -21,6 +21,7 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
     EXIT_POLICY_POST_EVENT,
     PRIMARY_POST_EVENT_FLOOR,
     PRIMARY_POST_EVENT_MAX,
+    POST_EVENT_MAX_LATE,
     REGIME_GATE_ALL,
     REGIME_GATE_RISK_ON,
     REGIME_GATE_RISK_ON_NEUTRAL,
@@ -194,6 +195,30 @@ def test_realized_event_sets_floor_and_t_plus_seven_open_trigger_without_t1():
     )
     assert triggers == (PRIMARY_POST_EVENT_MAX,)
     assert "T1_PLANNED" not in triggers
+
+
+def test_post_event_maximum_trigger_catches_up_and_records_lateness():
+    sessions = list(pd.bdate_range("2020-01-02", periods=20).date)
+    target = sessions[10]
+    position = _position(predicted=sessions[3])
+    position.realized_event_date = sessions[3]
+    position.event_date_source = "realized"
+    position.post_event_anchor_session = sessions[3]
+    position.post_event_anchor_close = 45.0
+    position.post_event_floor = 45.0
+    position.post_event_target_session = target
+    triggers = _position_triggers(
+        position,
+        None,
+        46.0,
+        sessions[11],
+        sessions[12],
+        sessions,
+        False,
+        exit_policy=EXIT_POLICY_POST_EVENT,
+    )
+    assert PRIMARY_POST_EVENT_MAX in triggers
+    assert POST_EVENT_MAX_LATE in triggers
 
 
 def test_post_event_floor_activates_after_anchor_and_is_strictly_below():
@@ -387,6 +412,54 @@ def test_missing_t_plus_seven_open_delays_to_next_valid_open_without_pin():
     assert trade.primary_exit == PRIMARY_POST_EVENT_MAX
     assert trade.pin_eligible_again is None
     assert result.summary["arms"]["equal"]["delayed_exits"] == 1
+
+
+def test_t_plus_seven_target_crosses_year_checkpoint_and_exits_at_correct_open():
+    bundle, sessions = _market(tickers=("AAA",), n=400, days_ahead=35)
+    sessions_2000 = [item for item in sessions if item.year == 2000]
+    event = sessions_2000[-3]
+    target = nth_session_after(sessions, event, 7)
+    assert target is not None and target.year == 2001
+    bundle = replace(
+        bundle,
+        earnings=pd.concat([
+            bundle.earnings,
+            pd.DataFrame([{
+                "ticker": "AAA", "event_date": pd.Timestamp(event),
+                "event_type": "earnings",
+            }]),
+        ], ignore_index=True),
+    )
+    position = _position(predicted=event)
+    position.entry_decision_date = date(2000, 6, 1)
+    position.entry_execution_date = date(2000, 6, 2)
+    first = run_simulation(
+        cfg=_post_cfg("baseline"),
+        market=bundle,
+        year=2000,
+        initial_states={
+            "equal": ArmState(
+                name="equal",
+                cash=49_000.0,
+                positions={"AAA": position},
+                origin_consumed=True,
+                peak_equity=50_000.0,
+            ),
+        },
+    )
+    carried = first.checkpoint.states["equal"].positions["AAA"]
+    assert carried.post_event_target_session == target
+    second = run_simulation(
+        cfg=_post_cfg("baseline"),
+        market=bundle,
+        year=2001,
+        initial_checkpoint=first.checkpoint,
+    )
+    trade = next(item for item in second.trades if item.ticker == "AAA")
+    assert trade.exit_execution_date == target
+    assert trade.primary_exit == PRIMARY_POST_EVENT_MAX
+    assert POST_EVENT_MAX_LATE not in trade.exit_triggers
+    assert trade.pin_eligible_again is None
 
 
 def test_checkpoint_round_trip_preserves_post_event_state():

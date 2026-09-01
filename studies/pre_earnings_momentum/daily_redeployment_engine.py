@@ -50,6 +50,7 @@ PRIMARY_TREND = "TREND_BEARISH"
 PRIMARY_DRAWDOWN = "CAPITAL_SCALED_CLOSE_DECLINE"
 PRIMARY_POST_EVENT_FLOOR = "POST_EVENT_FLOOR"
 PRIMARY_POST_EVENT_MAX = "POST_EVENT_MAX_HOLD"
+POST_EVENT_MAX_LATE = "POST_EVENT_MAX_HOLD_LATE"
 EXIT_POLICY_T1 = "planned_t1"
 EXIT_POLICY_POST_EVENT = "post_event_hold"
 REGIME_RISK_ON = "RISK_ON"
@@ -1468,9 +1469,12 @@ def _position_triggers(
     elif exit_policy == EXIT_POLICY_POST_EVENT:
         if (
             position.post_event_target_session is not None
-            and next_session == position.post_event_target_session
+            and next_session is not None
+            and next_session >= position.post_event_target_session
         ):
             triggers.append(PRIMARY_POST_EVENT_MAX)
+            if next_session > position.post_event_target_session:
+                triggers.append(POST_EVENT_MAX_LATE)
         if (
             not stale
             and close is not None
