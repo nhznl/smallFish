@@ -103,7 +103,9 @@ date.
 
 Implementation and synthetic verification are complete, but this study is
 unrun. The command refuses every historical invocation unless the owner has
-separately authorized it and the caller supplies `--confirm-historical-run`:
+separately authorized it and the caller supplies `--confirm-historical-run`.
+The shared daily-study runner enforces the same guard if a post-event config is
+passed directly, so the wrapper cannot be bypassed through the legacy command:
 
 ```bash
 ./commands.sh pre-earnings-post-event-study --help

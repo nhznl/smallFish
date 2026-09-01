@@ -21,6 +21,7 @@ from pathlib import Path
 import pandas as pd
 
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
+    EXIT_POLICY_POST_EVENT,
     MarketBundle,
     StudyConfig,
     checkpoint_from_payload,
@@ -126,6 +127,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--confirm-2021-pilot",
         action="store_true",
         help="Required to run 2021. Do not pass this flag unless the owner has authorized the pilot.",
+    )
+    parser.add_argument(
+        "--confirm-historical-run",
+        action="store_true",
+        help=(
+            "Required for every post-event study run. Do not pass this flag "
+            "without separate owner authorization."
+        ),
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--cache-root", type=Path, default=None)
@@ -245,6 +254,11 @@ def main(
             args.year, args.origin_year, args.confirm_2021_pilot,
         )
         cfg = load_study_config(args.config)
+        if cfg.exit_policy == EXIT_POLICY_POST_EVENT and not args.confirm_historical_run:
+            raise ValueError(
+                "Historical post-earnings study run is unauthorized. Refusing to run "
+                "without --confirm-historical-run."
+            )
         checkpoint = None
         if args.origin_year != 2021 or args.state_in is not None:
             _validate_continuation_config(args.config, cfg)
@@ -293,6 +307,7 @@ def main(
                 "year": args.year,
                 "origin_year": args.origin_year,
                 "confirm_2021_pilot": bool(args.confirm_2021_pilot),
+                "confirm_historical_run": bool(args.confirm_historical_run),
                 "config": str(args.config),
                 "cache_root": None if args.cache_root is None else str(args.cache_root),
                 "run_id": run_id,

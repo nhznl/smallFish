@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 import studies.pre_earnings_momentum.daily_redeployment_engine as engine
+import studies.pre_earnings_momentum.daily_redeployment as daily_cli
 import studies.pre_earnings_momentum.post_earnings_hold as post_cli
 from studies.pre_earnings_momentum.daily_redeployment import (
     POST_EVENT_CONFIGS,
@@ -380,6 +381,44 @@ def test_post_event_command_help_and_historical_guard(monkeypatch, capsys):
     ]) == 0
     assert observed["command_name"] == "pre-earnings-post-event-study"
     assert str(POST_EVENT_CONFIGS["risk-on-neutral"]) in observed["argv"]
+    assert "--confirm-historical-run" in observed["argv"]
+
+
+@pytest.mark.parametrize("config_path", tuple(POST_EVENT_CONFIGS.values()))
+def test_shared_daily_cli_refuses_post_event_configs_before_data_loading(
+    config_path, tmp_path, monkeypatch, capsys,
+):
+    reached_data_loading = False
+
+    def forbidden_load(*args, **kwargs):
+        nonlocal reached_data_loading
+        reached_data_loading = True
+        raise AssertionError("post-event guard reached market loading")
+
+    monkeypatch.setattr(daily_cli, "load_market", forbidden_load)
+    result = daily_cli.main([
+        "--year", "2000",
+        "--origin-year", "2000",
+        "--config", str(config_path),
+        "--output-root", str(tmp_path),
+        "--run-id", "must-not-run",
+    ])
+    assert result == 2
+    assert reached_data_loading is False
+    assert "unauthorized" in capsys.readouterr().err
+
+
+def test_shared_daily_cli_legacy_config_does_not_require_post_event_confirmation(
+    tmp_path, monkeypatch,
+):
+    bundle, _ = _market(tickers=(), n=85)
+    monkeypatch.setattr(daily_cli, "load_market", lambda *args, **kwargs: bundle)
+    assert daily_cli.main([
+        "--year", "2000",
+        "--origin-year", "2000",
+        "--output-root", str(tmp_path),
+        "--run-id", "legacy-synthetic",
+    ]) == 0
 
 
 def test_comparison_joins_equal_rows_and_rejects_spy_drift(tmp_path):

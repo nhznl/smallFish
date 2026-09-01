@@ -63,7 +63,12 @@ def main(argv: list[str] | None = None) -> int:
         print("--config is not accepted; --variant selects a frozen config", file=sys.stderr)
         return 2
     return run_daily_study(
-        [*remainder, "--config", str(POST_EVENT_CONFIGS[args.variant])],
+        [
+            *remainder,
+            "--confirm-historical-run",
+            "--config",
+            str(POST_EVENT_CONFIGS[args.variant]),
+        ],
         command_name="pre-earnings-post-event-study",
     )
 
