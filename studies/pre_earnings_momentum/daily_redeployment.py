@@ -35,12 +35,25 @@ DEFAULT_CONFIG = Path(__file__).resolve().parent / "config" / "daily_redeploymen
 CASH_STAGING_CONFIG = (
     Path(__file__).resolve().parent / "config" / "daily_redeployment_cash_staging.yaml"
 )
+POST_EVENT_CONFIGS = {
+    "baseline": Path(__file__).resolve().parent / "config" / "post_earnings_hold_baseline.yaml",
+    "risk-on": Path(__file__).resolve().parent / "config" / "post_earnings_hold_risk_on.yaml",
+    "risk-on-neutral": (
+        Path(__file__).resolve().parent
+        / "config" / "post_earnings_hold_risk_on_neutral.yaml"
+    ),
+}
 FROZEN_CONTINUATION_CONFIG_SHA256 = (
     "b54bf152d61a55ed86c387cf5e48a4116a9e92d2baa37a04e9ef8944c4232c6c"
 )
 CASH_STAGING_CONTINUATION_CONFIG_SHA256 = (
     "33b1cf2fbc3a634c7c848c1ae56ea66e051bb86c672d9b77b9f1d5a3a858ed12"
 )
+POST_EVENT_CONFIG_SHA256 = {
+    "baseline": "a3c3b35e1378891dbf2d6225a9960f556488537b07eb67353e704dc486e298f5",
+    "risk-on": "447107607255b2fa56cd28b31b178ac9330d301784ab07b43ef580cbd90f5411",
+    "risk-on-neutral": "6260d71c299ae506f5b1401f70b68418a45a5a1fde8054d3deb71750b78dd1b7",
+}
 
 
 def _hash_frame(frame: pd.DataFrame) -> str:
@@ -71,6 +84,10 @@ def _validate_continuation_config(config_path: Path, cfg: StudyConfig) -> None:
     allowed = {
         DEFAULT_CONFIG.resolve(): FROZEN_CONTINUATION_CONFIG_SHA256,
         CASH_STAGING_CONFIG.resolve(): CASH_STAGING_CONTINUATION_CONFIG_SHA256,
+        **{
+            POST_EVENT_CONFIGS[variant].resolve(): digest
+            for variant, digest in POST_EVENT_CONFIG_SHA256.items()
+        },
     }
     resolved = Path(config_path).expanduser().resolve()
     expected = allowed.get(resolved)
@@ -202,7 +219,11 @@ def load_market(cfg, year: int, args: argparse.Namespace) -> MarketBundle:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    command_name: str = "pre-earnings-daily-study",
+) -> int:
     args = parse_args(argv)
     if args.year < 1990 or args.year > 2100:
         print(f"invalid year {args.year}", file=sys.stderr)
@@ -267,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
         write_run(
             result,
             output_dir,
-            command="pre-earnings-daily-study",
+            command=command_name,
             args={
                 "year": args.year,
                 "origin_year": args.origin_year,

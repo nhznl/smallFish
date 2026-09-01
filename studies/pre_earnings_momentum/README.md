@@ -91,6 +91,53 @@ SPY decision session and a final `YEAR_COMPLETE` line with session count,
 elapsed seconds, and output directory. Redirect or `tee` each annual command to
 a distinct log file for durable monitoring without changing the artifacts.
 
+### Unrun post-earnings T+7 study
+
+The separate [`post_earnings_hold_study_spec.md`](post_earnings_hold_study_spec.md)
+defines an equal-allocation post-event development study with three independent
+variants: unrestricted entries, Risk-On-only entries, and Risk-On-or-Neutral
+entries. All three preserve the approved cash-staging rule. They replace T-1
+with a floor-protected hold that exits no later than the **open of the seventh
+SPY session strictly after** the realized or visibly labelled fallback event
+date.
+
+Implementation and synthetic verification are complete, but this study is
+unrun. The command refuses every historical invocation unless the owner has
+separately authorized it and the caller supplies `--confirm-historical-run`:
+
+```bash
+./commands.sh pre-earnings-post-event-study --help
+./commands.sh pre-earnings-post-event-study \
+  --variant baseline --year 2010 --origin-year 2010 \
+  --run-id SERIES-baseline-2010 --confirm-historical-run
+```
+
+The other variant names are `risk-on` and `risk-on-neutral`. Continuation years
+must supply the immediately prior variant-specific checkpoint, for example:
+
+```bash
+./commands.sh pre-earnings-post-event-study \
+  --variant baseline --year 2011 --origin-year 2010 \
+  --state-in "$SFP_DATA_DIR/backtest/pre_earnings_momentum/post_earnings_hold/baseline/2010/SERIES-baseline-2010/state_checkpoint.json" \
+  --run-id SERIES-baseline-2011 --confirm-historical-run
+```
+
+Use a distinct durable `tee` log for every variant-year. After all three
+sequences have been validated with `daily_redeployment_series_report`, join
+their annual equal-arm rows with:
+
+```bash
+utilities/.venv/bin/python -m \
+  studies.pre_earnings_momentum.post_earnings_hold_comparison \
+  --artifact-root "$SFP_DATA_DIR/backtest/pre_earnings_momentum/post_earnings_hold" \
+  --baseline-tag BASELINE_TAG --risk-on-tag RISK_ON_TAG \
+  --risk-on-neutral-tag RISK_ON_NEUTRAL_TAG \
+  --start-year 2010 --end-year 2016 --output PATH/post_event_comparison.csv
+```
+
+The comparison tool fails if the variants do not cover identical years, do not
+contain only the equal arm, or disagree on the passive SPY benchmark.
+
 After an authorized continuous sequence finishes, validate its output hashes,
 checkpoint chain, frozen commit/config, accounting constraints, sector caps,
 whole-share fills, uniform costs, and zero-cost order identity while producing
@@ -143,9 +190,13 @@ authorize any later year.
 | `event_backtest.py` | Event-study runner using completed decision bars |
 | `daily_redeployment.py` | Guarded CLI and annual-checkpoint restore for the development daily-redeployment study |
 | `daily_redeployment_series_report.py` | Fail-closed checkpoint-chain validation and annual comparison CSV |
+| `post_earnings_hold.py` | Guarded variant-selecting runner for the unrun post-event study |
+| `post_earnings_hold_comparison.py` | Joins three validated equal-arm annual series with their common SPY benchmark |
 | `config/daily_redeployment.yaml` | Accepted $500 daily-scan parameters for the daily-redeployment study |
 | `config/daily_redeployment_cash_staging.yaml` | Separate equal-only development configuration with post-scan cash staging |
 | `cash_staging_study_spec.md` | Binding methodology for the independent cash-staging development study |
+| `post_earnings_hold_study_spec.md` | Binding unrun T+7 post-event and market-regime methodology |
+| `config/post_earnings_hold_*.yaml` | Separate baseline, Risk-On, and Risk-On-or-Neutral study contracts |
 | `config/daily_redeployment_price_500.yaml` | 2021 development sensitivity with a $500 entry-price ceiling |
 | `config/daily_redeployment_price_1000.yaml` | 2021 development sensitivity with a $1,000 entry-price ceiling |
 | `config/daily_redeployment_monday_thursday.yaml` | 2021 $500 sensitivity with holiday-adjusted Monday/Thursday entry scans |

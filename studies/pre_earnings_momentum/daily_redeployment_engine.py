@@ -18,6 +18,8 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from utilities.indicators.ta import sma_rising
+
 from studies.pre_earnings_momentum.event_forecast import (
     forecast_from_sorted,
     history_by_ticker,
@@ -46,6 +48,17 @@ PRIMARY_T1 = "T1_PLANNED"
 PRIMARY_EARLY = "EARLY_REPORT"
 PRIMARY_TREND = "TREND_BEARISH"
 PRIMARY_DRAWDOWN = "CAPITAL_SCALED_CLOSE_DECLINE"
+PRIMARY_POST_EVENT_FLOOR = "POST_EVENT_FLOOR"
+PRIMARY_POST_EVENT_MAX = "POST_EVENT_MAX_HOLD"
+EXIT_POLICY_T1 = "planned_t1"
+EXIT_POLICY_POST_EVENT = "post_event_hold"
+REGIME_RISK_ON = "RISK_ON"
+REGIME_NEUTRAL = "NEUTRAL"
+REGIME_RISK_OFF = "RISK_OFF"
+REGIME_UNKNOWN = "UNKNOWN"
+REGIME_GATE_ALL = "all"
+REGIME_GATE_RISK_ON = "risk_on"
+REGIME_GATE_RISK_ON_NEUTRAL = "risk_on_or_neutral"
 
 _CONFIG_SCHEMA: dict[str, Any] = {
     "study_id": str,
@@ -70,6 +83,13 @@ _CONFIG_SCHEMA: dict[str, Any] = {
     "warmup_calendar_years": int,
     "entry_scan_schedule": str,
     "cash_staging_enabled": bool,
+    "exit_policy": str,
+    "market_regime_gate": str,
+    "post_event_hold_sessions": int,
+    "market_regime": {
+        "sma_window": int,
+        "slope_sessions": int,
+    },
     "arms": list,
     "liquidity": {
         "min_avg_volume": int,
@@ -86,7 +106,13 @@ _CONFIG_SCHEMA: dict[str, Any] = {
     },
 }
 
-_OPTIONAL_CONFIG_KEYS = {"cash_staging_enabled"}
+_OPTIONAL_CONFIG_KEYS = {
+    "cash_staging_enabled",
+    "exit_policy",
+    "market_regime_gate",
+    "post_event_hold_sessions",
+    "market_regime",
+}
 
 
 def _check_schema(value: Any, schema: Any, path: str) -> None:
@@ -137,6 +163,11 @@ class StudyConfig:
     warmup_calendar_years: int
     entry_scan_schedule: str
     cash_staging_enabled: bool
+    exit_policy: str
+    market_regime_gate: str
+    post_event_hold_sessions: int
+    regime_sma_window: int
+    regime_slope_sessions: int
     arms: tuple[str, ...]
     min_avg_volume: int
     min_avg_dollar_volume: int
@@ -174,6 +205,29 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         raise ValueError("invalid event window")
     if raw["entry_scan_schedule"] not in {"daily", "monday_thursday", "monday"}:
         raise ValueError("unsupported entry_scan_schedule")
+    exit_policy = str(raw.get("exit_policy", EXIT_POLICY_T1))
+    if exit_policy not in {EXIT_POLICY_T1, EXIT_POLICY_POST_EVENT}:
+        raise ValueError("unsupported exit_policy")
+    market_regime_gate = str(raw.get("market_regime_gate", REGIME_GATE_ALL))
+    if market_regime_gate not in {
+        REGIME_GATE_ALL, REGIME_GATE_RISK_ON, REGIME_GATE_RISK_ON_NEUTRAL,
+    }:
+        raise ValueError("unsupported market_regime_gate")
+    post_event_hold_sessions = int(raw.get("post_event_hold_sessions", 7))
+    if post_event_hold_sessions <= 0:
+        raise ValueError("post_event_hold_sessions must be positive")
+    regime = raw.get("market_regime", {})
+    regime_sma_window = int(regime.get("sma_window", 50))
+    regime_slope_sessions = int(regime.get("slope_sessions", 5))
+    if regime_sma_window <= 0 or regime_slope_sessions <= 0:
+        raise ValueError("market-regime windows must be positive")
+    if exit_policy == EXIT_POLICY_POST_EVENT:
+        if arms != (ARM_EQUAL,):
+            raise ValueError("post-event hold study supports the equal arm only")
+        if not bool(raw.get("cash_staging_enabled", False)):
+            raise ValueError("post-event hold study requires cash staging")
+        if post_event_hold_sessions != 7:
+            raise ValueError("post-event hold study is frozen at seven sessions")
     draw = raw["drawdown"]
     if draw["principal_high"] <= draw["principal_low"]:
         raise ValueError("drawdown principal range is inverted")
@@ -201,6 +255,11 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         warmup_calendar_years=int(raw["warmup_calendar_years"]),
         entry_scan_schedule=str(raw["entry_scan_schedule"]),
         cash_staging_enabled=bool(raw.get("cash_staging_enabled", False)),
+        exit_policy=exit_policy,
+        market_regime_gate=market_regime_gate,
+        post_event_hold_sessions=post_event_hold_sessions,
+        regime_sma_window=regime_sma_window,
+        regime_slope_sessions=regime_slope_sessions,
         arms=arms,
         min_avg_volume=int(raw["liquidity"]["min_avg_volume"]),
         min_avg_dollar_volume=int(raw["liquidity"]["min_avg_dollar_volume"]),
@@ -269,6 +328,60 @@ def planned_t1_session(sessions: Sequence[date], predicted: date) -> date | None
     if not sessions or sessions[-1] < predicted:
         return None
     return session_before(sessions, predicted)
+
+
+def nth_session_after(
+    sessions: Sequence[date], day: date, count: int,
+) -> date | None:
+    """Return the ``count``-th trading session strictly after ``day``."""
+    if count <= 0:
+        raise ValueError("session count must be positive")
+    later = [session for session in sessions if session > day]
+    return later[count - 1] if len(later) >= count else None
+
+
+def session_on_or_after(sessions: Sequence[date], day: date) -> date | None:
+    for session in sessions:
+        if session >= day:
+            return session
+    return None
+
+
+def market_regime_at_close(
+    spy: pd.DataFrame,
+    session: date,
+    *,
+    sma_window: int = 50,
+    slope_sessions: int = 5,
+) -> str:
+    """Classify SPY causally using only completed bars through ``session``."""
+    if spy is None or spy.empty:
+        return REGIME_UNKNOWN
+    dates = pd.to_datetime(spy["date"])
+    causal = spy.loc[dates.dt.date <= session].sort_values("date")
+    closes = pd.to_numeric(causal.get("close"), errors="coerce").to_numpy(dtype=float)
+    if len(closes) < sma_window + slope_sessions or not np.isfinite(closes).all():
+        return REGIME_UNKNOWN
+    sma = pd.Series(closes).rolling(sma_window, min_periods=sma_window).mean().to_numpy()
+    current_sma = sma[-1]
+    if not np.isfinite(current_sma) or not np.isfinite(sma[-1 - slope_sessions]):
+        return REGIME_UNKNOWN
+    rising = bool(sma_rising(sma, sessions=slope_sessions)[-1])
+    if closes[-1] > current_sma and rising:
+        return REGIME_RISK_ON
+    if closes[-1] > current_sma:
+        return REGIME_NEUTRAL
+    return REGIME_RISK_OFF
+
+
+def regime_allows_entry(regime: str, gate: str) -> bool:
+    if gate == REGIME_GATE_ALL:
+        return True
+    if gate == REGIME_GATE_RISK_ON:
+        return regime == REGIME_RISK_ON
+    if gate == REGIME_GATE_RISK_ON_NEUTRAL:
+        return regime in {REGIME_RISK_ON, REGIME_NEUTRAL}
+    raise ValueError(f"unsupported market regime gate: {gate}")
 
 
 def entry_limit_price(decision_close: float, cfg: StudyConfig) -> float:
@@ -364,6 +477,11 @@ class OpenPosition:
     entry_limit: float
     realized_event_date: date | None = None
     forced_exit_session: date | None = None
+    event_date_source: str | None = None
+    post_event_anchor_session: date | None = None
+    post_event_anchor_close: float | None = None
+    post_event_floor: float | None = None
+    post_event_target_session: date | None = None
     last_valid_close: float | None = None
     last_valid_close_date: date | None = None
     pending_exit: bool = False
@@ -429,6 +547,11 @@ class TradeRecord:
     allowed_drawdown: float
     predicted_event_date: date | None
     realized_event_date: date | None
+    event_date_source: str | None
+    post_event_anchor_session: date | None
+    post_event_anchor_close: float | None
+    post_event_floor: float | None
+    post_event_target_session: date | None
     exit_triggers: tuple[str, ...]
     primary_exit: str
     pin_eligible_again: date | None
@@ -472,6 +595,8 @@ class DailyMark:
     cash_exposure_pct: float | None
     stock_position_count: int
     sector_position_counts: dict[str, int]
+    market_regime: str = REGIME_UNKNOWN
+    entry_regime_allowed: bool = True
     notes: tuple[str, ...] = ()
 
 
@@ -563,6 +688,11 @@ def _position_payload(position: OpenPosition) -> dict[str, Any]:
         "entry_limit": position.entry_limit,
         "realized_event_date": _date_text(position.realized_event_date),
         "forced_exit_session": _date_text(position.forced_exit_session),
+        "event_date_source": position.event_date_source,
+        "post_event_anchor_session": _date_text(position.post_event_anchor_session),
+        "post_event_anchor_close": position.post_event_anchor_close,
+        "post_event_floor": position.post_event_floor,
+        "post_event_target_session": _date_text(position.post_event_target_session),
         "last_valid_close": position.last_valid_close,
         "last_valid_close_date": _date_text(position.last_valid_close_date),
         "pending_exit": position.pending_exit,
@@ -585,6 +715,20 @@ def _position_from_payload(payload: dict[str, Any]) -> OpenPosition:
         entry_limit=float(payload["entry_limit"]),
         realized_event_date=_parse_date(payload.get("realized_event_date")),
         forced_exit_session=_parse_date(payload.get("forced_exit_session")),
+        event_date_source=(
+            None if payload.get("event_date_source") is None
+            else str(payload["event_date_source"])
+        ),
+        post_event_anchor_session=_parse_date(payload.get("post_event_anchor_session")),
+        post_event_anchor_close=(
+            None if payload.get("post_event_anchor_close") is None
+            else float(payload["post_event_anchor_close"])
+        ),
+        post_event_floor=(
+            None if payload.get("post_event_floor") is None
+            else float(payload["post_event_floor"])
+        ),
+        post_event_target_session=_parse_date(payload.get("post_event_target_session")),
         last_valid_close=(None if payload.get("last_valid_close") is None
                           else float(payload["last_valid_close"])),
         last_valid_close_date=_parse_date(payload.get("last_valid_close_date")),
@@ -699,6 +843,9 @@ def checkpoint_payload(
         "schema_version": 1,
         "study_id": cfg.study_id,
         "setup_score_version": cfg.setup_score_version,
+        "exit_policy": cfg.exit_policy,
+        "market_regime_gate": cfg.market_regime_gate,
+        "post_event_hold_sessions": cfg.post_event_hold_sessions,
         "source_year": checkpoint.source_year,
         "arms": {
             arm: _arm_state_payload(state) for arm, state in checkpoint.states.items()
@@ -719,6 +866,15 @@ def checkpoint_from_payload(
         raise ValueError("checkpoint study_id does not match configuration")
     if payload.get("setup_score_version") != cfg.setup_score_version:
         raise ValueError("checkpoint setup-score version does not match configuration")
+    checkpoint_policy = payload.get("exit_policy")
+    if checkpoint_policy is not None and checkpoint_policy != cfg.exit_policy:
+        raise ValueError("checkpoint exit policy does not match configuration")
+    checkpoint_gate = payload.get("market_regime_gate")
+    if checkpoint_gate is not None and checkpoint_gate != cfg.market_regime_gate:
+        raise ValueError("checkpoint market-regime gate does not match configuration")
+    checkpoint_hold = payload.get("post_event_hold_sessions")
+    if checkpoint_hold is not None and int(checkpoint_hold) != cfg.post_event_hold_sessions:
+        raise ValueError("checkpoint post-event hold does not match configuration")
     source_year = int(payload["source_year"])
     if expected_source_year is not None and source_year != expected_source_year:
         raise ValueError(
@@ -1209,6 +1365,7 @@ def _fill_stock_buy(
         entry_limit=float(intent.limit_price or fill_price),
         realized_event_date=realized_event,
         forced_exit_session=forced_exit,
+        event_date_source="realized" if realized_event is not None else None,
         last_valid_close=fill_price,
         last_valid_close_date=session,
     )
@@ -1244,6 +1401,52 @@ def _spy_buy(state: ArmState, shares: int, price: float, cfg: StudyConfig, zero_
     return cost
 
 
+def _update_post_event_state(
+    position: OpenPosition,
+    *,
+    session: date,
+    close: float | None,
+    stale: bool,
+    sessions: Sequence[date],
+    realized_history: np.ndarray,
+    hold_sessions: int,
+) -> None:
+    """Advance event state using only outcomes known by this session close."""
+    if position.realized_event_date is None:
+        realized = _next_realized_event(
+            realized_history, position.entry_decision_date, as_of=session,
+        )
+        if realized is not None:
+            position.realized_event_date = realized
+            position.event_date_source = "realized"
+        elif session >= position.predicted_event_date:
+            position.realized_event_date = position.predicted_event_date
+            position.event_date_source = "predicted_fallback"
+
+    event_date = position.realized_event_date
+    if event_date is None:
+        return
+    if position.post_event_target_session is None:
+        position.post_event_target_session = nth_session_after(
+            sessions, event_date, hold_sessions,
+        )
+    if position.post_event_anchor_session is not None:
+        return
+    anchor_session = session_on_or_after(sessions, event_date)
+    if anchor_session is None or session < anchor_session:
+        return
+    position.post_event_anchor_session = session
+    anchor_close = None if stale else close
+    position.post_event_anchor_close = anchor_close
+    position.post_event_floor = max(
+        position.entry_fill_price,
+        position.entry_fill_price if anchor_close is None else anchor_close,
+    )
+    if anchor_close is None:
+        suffix = "_missing_close"
+        position.event_date_source = f"{position.event_date_source or 'unknown'}{suffix}"
+
+
 def _position_triggers(
     position: OpenPosition,
     snapshot: MomentumSnapshot | None,
@@ -1252,13 +1455,33 @@ def _position_triggers(
     next_session: date | None,
     sessions: Sequence[date],
     stale: bool,
+    *,
+    exit_policy: str = EXIT_POLICY_T1,
 ) -> tuple[str, ...]:
     triggers: list[str] = []
-    t1 = planned_t1_session(sessions, position.predicted_event_date)
-    if position.forced_exit_session is not None and next_session == position.forced_exit_session:
-        triggers.append(PRIMARY_EARLY)
-    elif t1 is not None and next_session == t1:
-        triggers.append(PRIMARY_T1)
+    if exit_policy == EXIT_POLICY_T1:
+        t1 = planned_t1_session(sessions, position.predicted_event_date)
+        if position.forced_exit_session is not None and next_session == position.forced_exit_session:
+            triggers.append(PRIMARY_EARLY)
+        elif t1 is not None and next_session == t1:
+            triggers.append(PRIMARY_T1)
+    elif exit_policy == EXIT_POLICY_POST_EVENT:
+        if (
+            position.post_event_target_session is not None
+            and next_session == position.post_event_target_session
+        ):
+            triggers.append(PRIMARY_POST_EVENT_MAX)
+        if (
+            not stale
+            and close is not None
+            and position.post_event_floor is not None
+            and position.post_event_anchor_session is not None
+            and session > position.post_event_anchor_session
+            and close < position.post_event_floor
+        ):
+            triggers.append(PRIMARY_POST_EVENT_FLOOR)
+    else:
+        raise ValueError(f"unsupported exit policy: {exit_policy}")
     if not stale and snapshot is not None and snapshot.raw_trend_direction == DOWN:
         triggers.append(PRIMARY_TREND)
     if not stale and close is not None:
@@ -1269,7 +1492,14 @@ def _position_triggers(
 
 
 def _primary_exit(triggers: Sequence[str]) -> str | None:
-    for item in (PRIMARY_T1, PRIMARY_EARLY, PRIMARY_TREND, PRIMARY_DRAWDOWN):
+    for item in (
+        PRIMARY_POST_EVENT_MAX,
+        PRIMARY_POST_EVENT_FLOOR,
+        PRIMARY_T1,
+        PRIMARY_EARLY,
+        PRIMARY_TREND,
+        PRIMARY_DRAWDOWN,
+    ):
         if item in triggers:
             return item
     return None
@@ -1367,6 +1597,15 @@ def run_simulation(
     for index, session in enumerate(decision_sessions):
         next_session = decision_sessions[index + 1] if index + 1 < len(decision_sessions) else session_after(all_sessions, session)
         spy_o, spy_c = spy_open_close(session)
+        market_regime = market_regime_at_close(
+            spy,
+            session,
+            sma_window=cfg.regime_sma_window,
+            slope_sessions=cfg.regime_slope_sessions,
+        )
+        entry_regime_allowed = regime_allows_entry(
+            market_regime, cfg.market_regime_gate,
+        )
         for arm in cfg.arms:
             state = states[arm]
             shadow = shadows[arm]
@@ -1394,7 +1633,9 @@ def run_simulation(
                         0.0, STATUS_CANCELLED, "missing_position", order.rank))
                     continue
                 if missing or open_px is None:
-                    if PRIMARY_T1 in order.exit_triggers or PRIMARY_EARLY in order.exit_triggers:
+                    if any(item in order.exit_triggers for item in (
+                        PRIMARY_T1, PRIMARY_EARLY, PRIMARY_POST_EVENT_MAX,
+                    )):
                         delayed = session_after(all_sessions, session)
                         if delayed is not None:
                             order.execution_date = delayed
@@ -1448,6 +1689,11 @@ def run_simulation(
                     allowed_drawdown=position.allowed_drawdown,
                     predicted_event_date=position.predicted_event_date,
                     realized_event_date=position.realized_event_date,
+                    event_date_source=position.event_date_source,
+                    post_event_anchor_session=position.post_event_anchor_session,
+                    post_event_anchor_close=position.post_event_anchor_close,
+                    post_event_floor=position.post_event_floor,
+                    post_event_target_session=position.post_event_target_session,
                     exit_triggers=order.exit_triggers,
                     primary_exit=order.primary_exit or PRIMARY_T1,
                     pin_eligible_again=pin_date,
@@ -1550,11 +1796,17 @@ def run_simulation(
                         None, None, 0.0, STATUS_CANCELLED, "unaffordable", order.rank))
                     continue
                 history = histories.get(order.ticker, np.array([], dtype="datetime64[D]"))
-                realized = _next_realized_event(
-                    history, order.decision_date) if order.predicted_event_date else None
-                forced = _forced_exit_session(
-                    all_sessions, order.predicted_event_date, realized,
-                ) if order.predicted_event_date else None
+                if cfg.exit_policy == EXIT_POLICY_T1:
+                    realized = _next_realized_event(
+                        history, order.decision_date) if order.predicted_event_date else None
+                    forced = _forced_exit_session(
+                        all_sessions, order.predicted_event_date, realized,
+                    ) if order.predicted_event_date else None
+                else:
+                    # The post-event study discovers realized outcomes only as
+                    # their date is reached; future events are not stored at entry.
+                    realized = None
+                    forced = None
                 position = _fill_stock_buy(
                     state, order, open_px, cfg, False, realized, forced, session)
                 _fill_stock_buy(shadow, order, open_px, cfg, True, realized, forced, session)
@@ -1607,6 +1859,25 @@ def run_simulation(
                 if close_px is not None and not stale:
                     position.last_valid_close = close_px
                     position.last_valid_close_date = session
+                if cfg.exit_policy == EXIT_POLICY_POST_EVENT:
+                    history = histories.get(ticker, np.array([], dtype="datetime64[D]"))
+                    _update_post_event_state(
+                        position,
+                        session=session,
+                        close=None if stale else close_px,
+                        stale=stale,
+                        sessions=all_sessions,
+                        realized_history=history,
+                        hold_sessions=cfg.post_event_hold_sessions,
+                    )
+                    shadow_position = shadows[arm].positions.get(ticker)
+                    if shadow_position is not None:
+                        shadow_position.realized_event_date = position.realized_event_date
+                        shadow_position.event_date_source = position.event_date_source
+                        shadow_position.post_event_anchor_session = position.post_event_anchor_session
+                        shadow_position.post_event_anchor_close = position.post_event_anchor_close
+                        shadow_position.post_event_floor = position.post_event_floor
+                        shadow_position.post_event_target_session = position.post_event_target_session
                 pending_order = next((
                     order for order in state.pending
                     if order.kind == "stock_exit" and order.ticker == ticker
@@ -1618,7 +1889,7 @@ def run_simulation(
                 else:
                     triggers = _position_triggers(
                         position, snapshot, None if stale else close_px, session, next_session,
-                        all_sessions, stale)
+                        all_sessions, stale, exit_policy=cfg.exit_policy)
                     # Setup-score deterioration is diagnostic only and never an exit.
                     if snapshot is not None and snapshot.setup == BULLISH_REVERSAL:
                         if PRIMARY_TREND not in triggers and snapshot.raw_trend_direction != DOWN:
@@ -1660,6 +1931,14 @@ def run_simulation(
                     "rejection_reasons": "",
                     "predicted_event_date": position.predicted_event_date.isoformat(),
                     "realized_event_date": None if position.realized_event_date is None else position.realized_event_date.isoformat(),
+                    "event_date_source": position.event_date_source,
+                    "post_event_anchor_session": _date_text(position.post_event_anchor_session),
+                    "post_event_anchor_close": position.post_event_anchor_close,
+                    "post_event_floor": position.post_event_floor,
+                    "post_event_target_session": _date_text(position.post_event_target_session),
+                    "market_regime": market_regime,
+                    "entry_regime_allowed": entry_regime_allowed,
+                    "market_regime_gate": cfg.market_regime_gate,
                     "raw_trend_direction": None if snapshot is None else snapshot.raw_trend_direction,
                     "setup": None if snapshot is None else snapshot.setup,
                     "setup_score": None if snapshot is None else snapshot.setup_score,
@@ -1691,6 +1970,7 @@ def run_simulation(
             actionable = scan_scheduled and funding_actionable
             selected: list[AllocationIntent] = []
             eligible_count = 0
+            regime_blocked_count = 0
             if actionable:
                 eligible: list[Candidate] = []
                 scan_records: list[DecisionRecord] = []
@@ -1729,6 +2009,9 @@ def run_simulation(
                         quarantined=market.quarantines.get(ticker),
                     )
                     decision.payload["arm"] = arm
+                    decision.payload["market_regime"] = market_regime
+                    decision.payload["market_regime_gate"] = cfg.market_regime_gate
+                    decision.payload["entry_regime_allowed"] = entry_regime_allowed
                     if ticker in exited_today:
                         continue
                     decisions.append(decision)
@@ -1743,8 +2026,19 @@ def run_simulation(
                     if record.payload.get("ticker") in dropped_tickers:
                         record.payload["state"] = "rejected"
                         record.payload["rejection_reasons"] = "sector_report_cap"
+                allocation_candidates = kept
+                if not entry_regime_allowed:
+                    blocked_tickers = {item.ticker for item in kept}
+                    regime_blocked_count = len(blocked_tickers)
+                    allocation_candidates = []
+                    for record in scan_records:
+                        if record.payload.get("ticker") in blocked_tickers:
+                            record.payload["state"] = "regime_blocked"
+                            record.payload["rejection_reasons"] = "market_regime_gate"
                 allocator = allocate_equal if arm == ARM_EQUAL else allocate_proportional
-                selected = allocator(kept, deployable, _sector_usage(state), cfg)
+                selected = allocator(
+                    allocation_candidates, deployable, _sector_usage(state), cfg,
+                )
                 selected_tickers = {item.ticker for item in selected}
                 intents_by_ticker = {item.ticker: item for item in selected}
                 for record in scan_records:
@@ -1902,7 +2196,10 @@ def run_simulation(
                 cash_exposure_pct=None if equity in (None, 0) else state.cash / equity,
                 stock_position_count=len(state.positions),
                 sector_position_counts=sector_counts,
+                market_regime=market_regime,
+                entry_regime_allowed=entry_regime_allowed,
                 notes=(("no_candidates",) if actionable and eligible_count == 0 else ())
+                + (("market_regime_blocked",) if regime_blocked_count else ())
                 + (() if actionable else (
                     "no_turnover" if scan_scheduled else "entry_scan_off_schedule",
                 )),
@@ -1991,6 +2288,9 @@ def _build_summary(
     payload: dict[str, Any] = {
         "study_id": cfg.study_id,
         "setup_score_version": cfg.setup_score_version,
+        "exit_policy": cfg.exit_policy,
+        "market_regime_gate": cfg.market_regime_gate,
+        "post_event_hold_sessions": cfg.post_event_hold_sessions,
         "year": year,
         "starting_equity": cfg.starting_equity,
         "arms": {},
@@ -2129,5 +2429,20 @@ def _build_summary(
             "cash_staging_reserve_sessions": cash_staging_metrics[arm]["reserve_sessions"],
             "cash_staging_reserved_dollars": cash_staging_metrics[arm]["reserved_dollars"],
             "cash_staging_swept_dollars": cash_staging_metrics[arm]["swept_dollars"],
+            "regime_blocked_entry_candidates": len([
+                item for item in arm_decisions if item.get("state") == "regime_blocked"
+            ]),
+            "days_with_regime_blocked_candidates": len({
+                item.get("decision_date") for item in arm_decisions
+                if item.get("state") == "regime_blocked"
+            }),
+            "realized_event_positions_exited": len([
+                item for item in arm_trades
+                if (item.event_date_source or "").startswith("realized")
+            ]),
+            "predicted_event_fallback_positions_exited": len([
+                item for item in arm_trades
+                if (item.event_date_source or "").startswith("predicted_fallback")
+            ]),
         }
     return payload

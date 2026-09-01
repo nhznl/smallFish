@@ -27,6 +27,7 @@ DAILY_EQUITY_COLUMNS = [
     "strategy_return", "benchmark_value", "benchmark_return", "excess_return",
     "drawdown", "stock_exposure_pct", "spy_exposure_pct", "cash_exposure_pct",
     "stock_position_count", "sector_position_counts", "notes",
+    "market_regime", "entry_regime_allowed",
 ]
 ORDER_COLUMNS = [
     "order_id", "arm", "ticker", "side", "kind", "shares", "decision_date",
@@ -38,6 +39,8 @@ TRADE_COLUMNS = [
     "exit_decision_date", "exit_execution_date", "entry_fill_price", "exit_fill_price",
     "entry_setup_score", "entry_principal", "allowed_drawdown", "predicted_event_date",
     "realized_event_date", "exit_triggers", "primary_exit", "pin_eligible_again",
+    "event_date_source", "post_event_anchor_session", "post_event_anchor_close",
+    "post_event_floor", "post_event_target_session",
     "holding_sessions", "gross_return", "net_return", "realized_pl", "entry_cost",
     "exit_cost", "spy_return", "excess_return",
 ]
@@ -101,6 +104,8 @@ def _mark_row(mark: DailyMark) -> dict[str, str]:
         "stock_position_count": _num(mark.stock_position_count),
         "sector_position_counts": json.dumps(mark.sector_position_counts, sort_keys=True),
         "notes": "|".join(mark.notes),
+        "market_regime": mark.market_regime,
+        "entry_regime_allowed": _num(mark.entry_regime_allowed),
     }
 
 
@@ -151,6 +156,11 @@ def _trade_row(record: TradeRecord) -> dict[str, str]:
         "allowed_drawdown": _num(record.allowed_drawdown),
         "predicted_event_date": _iso(record.predicted_event_date),
         "realized_event_date": _iso(record.realized_event_date),
+        "event_date_source": record.event_date_source or "",
+        "post_event_anchor_session": _iso(record.post_event_anchor_session),
+        "post_event_anchor_close": _num(record.post_event_anchor_close),
+        "post_event_floor": _num(record.post_event_floor),
+        "post_event_target_session": _iso(record.post_event_target_session),
         "exit_triggers": "|".join(record.exit_triggers),
         "primary_exit": record.primary_exit,
         "pin_eligible_again": _iso(record.pin_eligible_again),
@@ -175,6 +185,8 @@ def _human_report(result: SimulationResult) -> str:
         "in continuation-year reports they are not calendar-year returns.",
         "",
         f"Setup-score version: `{result.cfg.setup_score_version}`",
+        f"Exit policy: `{result.cfg.exit_policy}`",
+        f"Market-regime entry gate: `{result.cfg.market_regime_gate}`",
         "",
     ]
     for arm, stats in result.summary.get("arms", {}).items():
@@ -211,6 +223,12 @@ def _human_report(result: SimulationResult) -> str:
             f"- Delayed exits: {stats.get('delayed_exits')}",
             f"- Stale holding observations: {stats.get('stale_holding_observations')}",
             f"- Cancelled orders: {stats.get('cancelled_orders')}",
+            f"- Regime-blocked entry candidates: "
+            f"{stats.get('regime_blocked_entry_candidates')}",
+            f"- Days with regime-blocked candidates: "
+            f"{stats.get('days_with_regime_blocked_candidates')}",
+            f"- Predicted-event fallbacks exited: "
+            f"{stats.get('predicted_event_fallback_positions_exited')}",
             f"- Year-end cash (visible residue): {stats.get('year_end_cash')}",
             f"- Year-end open positions: {stats.get('year_end_open_positions')}",
             f"- Zero-cost shadow ending equity: {stats.get('zero_cost_shadow_ending_equity')}",
