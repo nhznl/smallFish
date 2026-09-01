@@ -28,6 +28,7 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
     REGIME_RISK_OFF,
     REGIME_RISK_ON,
     REGIME_UNKNOWN,
+    STATUS_DELAYED,
     ArmState,
     OpenPosition,
     _position_triggers,
@@ -332,6 +333,60 @@ def test_full_simulation_exits_at_seventh_post_event_session_open_without_pin(tm
     assert {"market_regime", "entry_regime_allowed"} <= set(decisions.columns)
     assert {"market_regime", "entry_regime_allowed"} <= set(equity.columns)
     assert "POST_EVENT_MAX_HOLD" in set(trades["primary_exit"])
+
+
+def test_missing_t_plus_seven_open_delays_to_next_valid_open_without_pin():
+    bundle, sessions = _market(tickers=("AAA",), n=95, days_ahead=35)
+    year_sessions = [item for item in sessions if item.year == 2000]
+    event = year_sessions[3]
+    target = nth_session_after(sessions, event, 7)
+    assert target is not None
+    delayed_fill = engine.session_after(sessions, target)
+    assert delayed_fill is not None
+    bundle = replace(
+        bundle,
+        earnings=pd.concat([
+            bundle.earnings,
+            pd.DataFrame([{
+                "ticker": "AAA", "event_date": pd.Timestamp(event),
+                "event_type": "earnings",
+            }]),
+        ], ignore_index=True),
+        stocks={
+            **bundle.stocks,
+            "AAA": bundle.stocks["AAA"].loc[
+                bundle.stocks["AAA"]["date"].dt.date != target
+            ].copy(),
+        },
+    )
+    position = _position(predicted=event)
+    position.entry_decision_date = year_sessions[0] - timedelta(days=5)
+    position.entry_execution_date = year_sessions[0] - timedelta(days=4)
+    result = run_simulation(
+        cfg=_post_cfg("baseline"),
+        market=bundle,
+        year=2000,
+        initial_states={
+            "equal": ArmState(
+                name="equal",
+                cash=49_000.0,
+                positions={"AAA": position},
+                origin_consumed=True,
+                peak_equity=50_000.0,
+            ),
+        },
+    )
+    delayed = next(
+        order for order in result.orders
+        if order.ticker == "AAA" and order.status == STATUS_DELAYED
+    )
+    assert delayed.reason == "missing_open_bar"
+    assert delayed.execution_date == delayed_fill
+    trade = next(item for item in result.trades if item.ticker == "AAA")
+    assert trade.exit_execution_date == delayed_fill
+    assert trade.primary_exit == PRIMARY_POST_EVENT_MAX
+    assert trade.pin_eligible_again is None
+    assert result.summary["arms"]["equal"]["delayed_exits"] == 1
 
 
 def test_checkpoint_round_trip_preserves_post_event_state():
