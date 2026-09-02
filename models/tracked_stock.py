@@ -16,7 +16,8 @@ TRACKED_STOCK_CATEGORIES = (
     CATEGORY_READY_TO_TRADE,
 )
 
-#: ``tracked_stocks.csv`` — one row per symbol the user is monitoring.
+#: ``tracked_stocks.csv`` — one row per symbol the user is monitoring,
+#: including names a brokerage sync moved here after a full equity close.
 TRACKED_STOCK_HEADERS = [
     "symbol",
     "category",

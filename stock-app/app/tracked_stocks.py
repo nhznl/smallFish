@@ -1,8 +1,9 @@
 """User-authored sold and tracking stocks monitored for re-entry timing.
 
 Each row is a universe symbol plus the date coverage began (typically a sale
-or the day the user started watching it). Returns are computed from the shared
-OHLCV cache against SPY over two windows:
+or the day the user started watching it). A brokerage holdings sync also
+records long equities that disappeared from the previous snapshot. Returns are
+computed from the shared OHLCV cache against SPY over two windows:
 
 * **coverage** — since ``coverage_initiation_date``
 * **ytd** — since the prior year-end close
@@ -53,6 +54,7 @@ from .serializers import _fifty_two_week_range_dict
 
 _lock = threading.RLock()
 NOTES_MAX = 500
+SYNC_SOLD_NOTE = "updated to Sold Stock per sync on {date}"
 COVERAGE_SNAPSHOT_HEADERS = [
     "snapshot_date", "captured_at", "symbol", "coverage_vs_spy",
 ]
@@ -124,6 +126,23 @@ def _target_fields_for_category(category: str, target_date: str, target_amount: 
     if category != CATEGORY_READY_TO_TRADE:
         return "", ""
     return target_date, target_amount
+
+
+def _append_note(existing: str, addition: str) -> str:
+    """Append ``addition`` without dropping prior notes, capped at ``NOTES_MAX``."""
+    existing = str(existing or "").strip()
+    addition = str(addition or "").strip()
+    if not addition:
+        return existing[:NOTES_MAX]
+    if not existing:
+        return addition[:NOTES_MAX]
+    combined = f"{existing} {addition}"
+    if len(combined) <= NOTES_MAX:
+        return combined
+    budget = NOTES_MAX - len(addition) - 1
+    if budget <= 0:
+        return addition[:NOTES_MAX]
+    return f"{existing[:budget].rstrip()} {addition}"
 
 
 def _read_tracked() -> list[dict[str, str]]:
@@ -448,3 +467,75 @@ def remove_symbol(symbol: str, today: date | None = None) -> dict[str, Any]:
             raise PortfolioError(f"Unknown tracked symbol: {symbol}", status_code=404)
         _write_tracked(kept)
     return list_tracked(today=today)
+
+
+def record_sold_symbols(symbols: Any, today: date | None = None) -> dict[str, Any]:
+    """Move fully closed long equities onto Sold Stock coverage starting today.
+
+    Brokerage syncs call this after comparing the previous holdings snapshot
+    with the one just written. Unknown-universe symbols are skipped rather than
+    failing the sync. An already-tracked row in any category is recategorized
+    and its coverage window restarts from ``today``, so the initiation price is
+    the latest cached close. A note ``updated to Sold Stock per sync on DATE``
+    is appended to that existing row.
+    """
+    today = today or date.today()
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for raw in symbols or []:
+        symbol = str(raw or "").strip().upper()
+        if not symbol or symbol in seen:
+            continue
+        seen.add(symbol)
+        wanted.append(symbol)
+    if not wanted:
+        return {
+            "sold_tracked": 0, "sold_updated": 0, "sold_skipped": 0,
+            "sold_symbols": [],
+        }
+
+    registry = _registry()
+    in_universe = [symbol for symbol in wanted if symbol in registry]
+    skipped = len(wanted) - len(in_universe)
+    added = 0
+    updated = 0
+    recorded: list[str] = []
+    coverage = today.isoformat()
+
+    with _lock:
+        rows = _read_tracked()
+        by_symbol = {row["symbol"]: row for row in rows}
+        now = _now()
+        for symbol in in_universe:
+            existing = by_symbol.get(symbol)
+            if existing is None:
+                rows.append({
+                    "symbol": symbol,
+                    "category": CATEGORY_SOLD_STOCK,
+                    "coverage_initiation_date": coverage,
+                    "notes": "",
+                    "target_date": "",
+                    "target_amount": "",
+                    "created_at": now,
+                })
+                added += 1
+            else:
+                existing["category"] = CATEGORY_SOLD_STOCK
+                existing["coverage_initiation_date"] = coverage
+                existing["target_date"] = ""
+                existing["target_amount"] = ""
+                existing["notes"] = _append_note(
+                    existing.get("notes") or "",
+                    SYNC_SOLD_NOTE.format(date=coverage),
+                )
+                updated += 1
+            recorded.append(symbol)
+        if added or updated:
+            _write_tracked(rows)
+
+    return {
+        "sold_tracked": added,
+        "sold_updated": updated,
+        "sold_skipped": skipped,
+        "sold_symbols": recorded,
+    }

@@ -181,3 +181,46 @@ def test_http_round_trip(env):
     deleted = client.delete("/tracked-stocks/AAA")
     assert deleted.status_code == 200
     assert deleted.json()["stocks"] == []
+
+
+def test_record_sold_symbols_adds_and_resets_existing_rows(env):
+    tracked_stocks.add_symbols(
+        {"symbols": ["AAA"], "category": "Tracking"},
+        today=TODAY,
+    )
+    tracked_stocks.add_symbols(
+        {
+            "symbols": ["BBB"],
+            "category": "Ready to Trade",
+            "coverage_initiation_date": "2026-01-02",
+            "target_date": "2026-08-15",
+            "target_amount": 5000,
+            "notes": "waiting for pullback",
+        },
+        today=TODAY,
+    )
+    result = tracked_stocks.record_sold_symbols(["AAA", "BBB", "ZZZ"], today=TODAY)
+    assert result["sold_tracked"] == 0
+    assert result["sold_updated"] == 2
+    assert result["sold_skipped"] == 1
+    assert result["sold_symbols"] == ["AAA", "BBB"]
+
+    payload = tracked_stocks.list_tracked(today=TODAY)
+    by_symbol = {row["symbol"]: row for row in payload["stocks"]}
+    note = "updated to Sold Stock per sync on 2026-07-24"
+    assert by_symbol["AAA"]["category"] == "Sold Stock"
+    assert by_symbol["AAA"]["coverage_initiation_date"] == TODAY.isoformat()
+    assert by_symbol["AAA"]["notes"] == note
+    assert by_symbol["BBB"]["category"] == "Sold Stock"
+    assert by_symbol["BBB"]["coverage_initiation_date"] == TODAY.isoformat()
+    assert by_symbol["BBB"]["target_date"] is None
+    assert by_symbol["BBB"]["target_amount"] is None
+    assert by_symbol["BBB"]["notes"] == f"waiting for pullback {note}"
+    assert "ZZZ" not in by_symbol
+
+
+def test_record_sold_symbols_empty_is_a_no_op(env):
+    result = tracked_stocks.record_sold_symbols([], today=TODAY)
+    assert result == {
+        "sold_tracked": 0, "sold_updated": 0, "sold_skipped": 0, "sold_symbols": [],
+    }

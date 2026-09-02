@@ -109,6 +109,7 @@ _SAFE_DETAIL_FIELDS = frozenset({
     "option_events_selected", "greeks_observed", "greeks_retained",
     "greeks_missing", "betas_observed", "betas_retained", "betas_missing",
     "capital_accounts", "capital_accounts_with_net_liquidating_value",
+    "sold_tracked", "sold_updated", "sold_skipped", "sold_symbols",
 })
 
 

@@ -262,6 +262,8 @@ def test_empty_body_fidelity_sync_public_shape_and_no_duplicate_calls(
                     "betas_observed", "betas_retained", "betas_missing",
                     "capital_accounts",
                     "capital_accounts_with_net_liquidating_value",
+                    "sold_tracked", "sold_updated", "sold_skipped",
+                    "sold_symbols",
                 }
 
     assert counter.resource_commands == ["HOLDINGS", "ACTIVITY", "MARKET_DATA"]

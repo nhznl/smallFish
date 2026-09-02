@@ -194,7 +194,16 @@ appears. Captured gain/loss comparisons are withheld until a basis is known.
 
 Trade groups and the former portfolio-risk dashboard are retired. Sync
 materializes provider artifacts (positions, account capital, activity, marks,
-Greeks, beta). Portfolio Analysis is a new provider-neutral projection rather
+Greeks, beta). Providers return a **current position snapshot**, not a "this
+ticker was sold" event. After a successful holdings write, smallFish compares
+that snapshot with the previous open long-equity set for the same brokerage: a
+universe symbol that was a long equity and is now gone is added to Tracking
+under **Sold Stock**, or recategorized there if it was already tracked, with
+coverage initiation reset to today (so the initiation price is the latest
+cached close) and a note `updated to Sold Stock per sync on DATE` appended.
+Options, cash-equivalents, shorts, and partial quantity
+reductions are not treated as sales. A tracking failure never fails the
+brokerage sync. Portfolio Analysis is a new provider-neutral projection rather
 than a restoration of that dashboard. It refuses percentage conclusions when
 net liquidating value is unavailable, never invents profile limits, and labels
 its historical output as a current-holdings replay rather than realized account

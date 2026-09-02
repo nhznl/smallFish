@@ -169,6 +169,12 @@ Long notes do not widen the table or wrap into taller rows. Hover or keyboard
 focus reveals the full note in a tooltip; Edit retains the complete text.
 Truncation is display-only and never changes saved notes.
 
+A brokerage sync that finds a long equity missing from the previous snapshot
+adds that universe symbol here under **Sold Stock**, or moves an already-tracked
+row into that category, restarts coverage initiation from today, and appends
+`updated to Sold Stock per sync on DATE` to its notes. The ledger sync banner
+names those symbols.
+
 ## Studies
 
 The Studies shell presents curated historical evidence without importing or

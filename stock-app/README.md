@@ -153,12 +153,12 @@ that a cache has been refreshed today.
 | `GET /api/studies/{studyId}/scan` | Latest materialized candidate snapshot for a scan-capable study. |
 | `POST /api/studies/{studyId}/scan` | Verify/refresh upcoming earnings, then run an explicitly allowlisted study scan; fails closed when freshness is unavailable. |
 | `GET /wheelCandidates?horizon=37` | Wheel candidates with trend data. |
-| `GET /tracked-stocks`, `POST /tracked-stocks/coverage-vs-spy-snapshots` | Tracked-stock returns and up to three captured Coverage-vs-SPY comparison dates. |
+| `GET /tracked-stocks`, `POST /tracked-stocks/coverage-vs-spy-snapshots` | Tracked-stock returns and up to three captured Coverage-vs-SPY comparison dates. A holdings sync also records long equities that fully closed, under category `Sold Stock`, restarting coverage from today. Already-tracked rows get a note `updated to Sold Stock per sync on DATE`. |
 | `GET /stocks/{symbol}/info` | Live Yahoo company information for Stock Detail (see below). |
 | `GET /api/brokerages/{id}/symbols` | Brokerage-agnostic Symbol Ledger list with derived lifecycle and retained-history P/L. |
 | `GET /api/brokerages/{id}/symbols/{symbol}/events` | Immutable, cursor-paginated current, all, or archived event history. |
 | `POST /api/brokerages/{id}/symbols/{symbol}/archives` | Idempotently archive an eligible completed period. |
-| `POST /api/brokerages/{id}/sync` | Sync common holdings, account-capital, activity, and market-data resources without creating group state. |
+| `POST /api/brokerages/{id}/sync` | Sync common holdings, account-capital, activity, and market-data resources without creating group state. A successful holdings write also compares the previous open long-equity set with the new one and moves fully closed universe symbols onto Tracking as Sold Stock. |
 | `POST /api/brokerages/{id}/activity/manual`, `PUT`/`DELETE /api/brokerages/{id}/activity/manual/{event_id}` | Create, edit, or remove a manual reconciliation event in the selected brokerage ledger. |
 | `GET /api/brokerages/{id}/holdings` | Current equity positions with editable classifications, captured G/L comparison columns, and declining-trend state. |
 | `GET /api/brokerages/{id}/portfolio-analysis` | Account-role profile fit, construction, deployment, current-holdings replay, stress evidence, option commitments, and traceable findings. |

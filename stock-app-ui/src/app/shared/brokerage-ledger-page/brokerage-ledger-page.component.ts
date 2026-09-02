@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 import { BrokerageService } from '../../api/brokerage.service';
-import { BrokerageId } from '../../model/brokerage';
+import { BrokerageId, BrokerageSyncResponse } from '../../model/brokerage';
 import { BrokerageLedgerCombinedComponent } from '../brokerage-ledger-combined/brokerage-ledger-combined.component';
 import { BrokerageHoldingsComponent } from '../brokerage-holdings/brokerage-holdings.component';
 import { SymbolLedgerComponent } from '../symbol-ledger/symbol-ledger.component';
@@ -53,9 +53,13 @@ export class BrokerageLedgerPageComponent {
         this.syncing = false;
         const completed = report.results.filter(result => result.status === 'OK').length;
         const failed = report.results.filter(result => result.status === 'FAILED').length;
+        const sold = this.soldSymbols(report);
         this.syncMessage = failed
           ? `${completed} brokerage resource${completed === 1 ? '' : 's'} refreshed; ${failed} need attention.`
           : `${completed} brokerage resource${completed === 1 ? '' : 's'} refreshed.`;
+        if (sold.length) {
+          this.syncMessage += ` ${sold.join(', ')} moved to Tracking as Sold Stock.`;
+        }
         this.refresh();
       },
       error: err => {
@@ -63,6 +67,21 @@ export class BrokerageLedgerPageComponent {
         this.syncError = this.message(err);
       },
     });
+  }
+
+  private soldSymbols(report: BrokerageSyncResponse): string[] {
+    const seen = new Set<string>();
+    const symbols: string[] = [];
+    for (const result of report.results) {
+      const raw = result.detail?.['sold_symbols'];
+      if (!Array.isArray(raw)) continue;
+      for (const item of raw) {
+        if (typeof item !== 'string' || !item || seen.has(item)) continue;
+        seen.add(item);
+        symbols.push(item);
+      }
+    }
+    return symbols;
   }
 
   private message(err: unknown): string {

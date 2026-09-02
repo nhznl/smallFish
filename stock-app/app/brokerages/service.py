@@ -12,8 +12,8 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from .. import config
-from . import (activity_manual, portfolio_analysis_profile, registry, store,
-               sync)
+from . import (activity_manual, portfolio_analysis_profile, registry,
+               sold_tracking, store, sync)
 from .activity_store import ActivityValidationError
 from .contracts import BrokerageSnapshot
 from .projections import (components as component_projection, envelope, events,
@@ -776,5 +776,8 @@ def run_sync(brokerage_id: str, payload: dict[str, Any] | None = None) -> dict[s
         raise BrokerageRequestError("INVALID_RESOURCES", str(exc), 422) from exc
     return sync.run(
         brokerage_id=entry.descriptor.id, resources=resources,
-        commands=entry.sync_commands, capabilities=entry.capabilities,
+        commands=sold_tracking.wrap_holdings_commands(
+            entry.descriptor.id, dict(entry.sync_commands),
+        ),
+        capabilities=entry.capabilities,
     )
