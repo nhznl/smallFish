@@ -266,8 +266,11 @@ zero.
 
 The retirement UI reads `GET /api/brokerages/fidelity/holdings`, which merges the
 ledger with `data/ledger_retirement/holdings_enrichment.csv`. Category,
-industry, and note are editable symbol-wide metadata (originally seeded from
-the Google Sheet). A manually supplied missing cost basis is stored in the same
+industry, note, and display name are editable symbol-wide metadata (originally
+seeded from the Google Sheet). A display name is shown under the broker symbol
+for identifiers that are not readable tickers; it never replaces the symbol as
+the identity used for sync, copy, or links. A manually supplied missing cost
+basis is stored in the same
 app-owned file but scoped to symbol and account so accounts cannot overwrite
 one another. Broker rows stay immutable facts, and a sync only rewrites those
 broker artifacts. Cash-equivalents (for example SPAXX / FRGXX) classify

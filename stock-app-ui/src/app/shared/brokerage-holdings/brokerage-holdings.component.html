@@ -160,7 +160,7 @@
       }
       <label>
         <span>Search</span>
-        <input [(ngModel)]="search" type="search" placeholder="Symbol, industry, or note">
+        <input [(ngModel)]="search" type="search" placeholder="Symbol, name, industry, or note">
       </label>
       <label class="declining-toggle" [class.active]="decliningOnly">
         <input type="checkbox" [(ngModel)]="decliningOnly" [disabled]="decliningCount() === 0">
@@ -251,6 +251,10 @@
                   } @else {
                     <strong>{{ row.symbol }}</strong>
                   }
+                  @if (row.display_name) {
+                    <small class="display-name" [matTooltip]="row.display_name"
+                      matTooltipPosition="right">{{ row.display_name }}</small>
+                  }
                 </td>
                 <td><span class="badge badge-neutral">{{ row.category }}</span></td>
                 <td>{{ row.account }}</td>
@@ -288,7 +292,7 @@
                 }
                 <td class="note-cell">
                   <button type="button" class="note-button" (click)="openEditor(row)"
-                    [matTooltip]="row.note || 'Edit classification, note, or missing cost basis'" matTooltipPosition="above">
+                    [matTooltip]="row.note || 'Edit classification, display name, note, or missing cost basis'" matTooltipPosition="above">
                     {{ row.note || '＋ Add' }}
                   </button>
                 </td>
@@ -316,6 +320,10 @@
 @if (editing) {
   <app-modal [title]="'Edit ' + editing.symbol" width="min(480px, 92vw)"
     subtitle="Saved separately from imported brokerage facts." (closed)="closeEditor()">
+    <label class="modal-label">Display name <em>optional</em></label>
+    <input class="modal-input" [(ngModel)]="editing.displayName"
+      placeholder="Readable name for this holding">
+    <p class="modal-help">Shown under the broker symbol. Leave blank to show only the ticker.</p>
     <label class="modal-label">Category</label>
     <input class="modal-input" [(ngModel)]="editing.category" list="holding-category-options" placeholder="e.g. GROWTH">
     <datalist id="holding-category-options">

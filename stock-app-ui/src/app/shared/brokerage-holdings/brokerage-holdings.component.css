@@ -132,6 +132,17 @@
   white-space: nowrap;
 }
 .symbol-cell { font-family: var(--font-mono); }
+.symbol-cell .display-name {
+  display: block;
+  margin-top: 4px;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-weight: 500;
+}
 .symbol-link { color: var(--primary); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
 .range-column { min-width: 112px; }
 .sort-button { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; text-transform: inherit; letter-spacing: inherit; white-space: nowrap; cursor: pointer; }
@@ -148,6 +159,14 @@
 .note-button:hover { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
 .note-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .modal-label { display: block; margin: 10px 0 4px; color: var(--text-secondary); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; }
+.modal-label em {
+  font-style: normal;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+.modal-help { margin: 4px 0 0; color: var(--text-faint); font-size: var(--text-xs); }
 .modal-input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font: inherit; font-size: var(--text-sm); background: var(--surface-card); color: var(--text-primary); }
 .modal-note { resize: vertical; font-family: inherit; }
 .basis-editor { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }

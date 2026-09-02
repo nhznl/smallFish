@@ -186,7 +186,8 @@ snapshot in the reusable sortable table without changing the study verdict.
 Trading and Retirement are thin route shells over the same four tabs:
 
 1. **Holdings** — open equity positions with an Edit dialog for
-   category/industry/note and any missing cost basis, snapshot G/L comparison
+   category, industry, note, optional display name, and any missing cost basis,
+   snapshot G/L comparison
    columns, and declining-trend state. Manual basis is account-scoped and
    persists across brokerage sync; broker basis takes precedence.
 2. **Options** — the shared Symbol Ledger: one durable record per underlying

@@ -127,6 +127,7 @@ export interface HoldingItem extends BrokerageComponent {
   category: string;
   industry: string;
   note: string;
+  display_name: string;
   metadata_updated_at: string | null;
   cost_basis: number | null;
   cost_per_unit: number | null;

@@ -126,6 +126,7 @@ def test_holdings_are_open_equity_with_editable_classifications(adapter_env,
     assert holding["unrealized_pnl"] == pytest.approx(1000)
     assert holding["category"] == "UNCLASSIFIED"      # nothing classified yet
     assert holding["note"] == ""
+    assert holding["display_name"] == ""
     assert body["summary"]["total_market_value"] == pytest.approx(12000)
     assert body["summary"]["total_unrealized_pnl"] == pytest.approx(1000)
 
@@ -288,6 +289,7 @@ def test_holdings_merge_each_brokerages_own_metadata_store(adapter_env, brokerag
     assert mine["category"] == "GROWTH"
     assert mine["industry"] == "SOFTWARE"
     assert mine["note"] == "watch assignment"
+    assert mine["display_name"] == ""
     assert theirs["category"] == "UNCLASSIFIED"
     assert theirs["note"] == ""
 
@@ -513,13 +515,33 @@ def test_editing_one_classification_field_preserves_the_others(adapter_env,
     write_covered_put(brokerage_id)
     base = f"/api/brokerages/{brokerage_id}/holdings/ABC/metadata"
     client.patch(base, json={"category": "growth", "industry": "aviation",
-                             "note": "original note"})
+                             "note": "original note",
+                             "display_name": "Example Target Date Fund"})
     client.patch(base, json={"note": "revised note"})
 
     holding = _get(brokerage_id, "holdings")["items"][0]
     assert holding["note"] == "revised note"
     assert holding["category"] == "GROWTH"        # untouched by the second edit
     assert holding["industry"] == "AVIATION"
+    assert holding["display_name"] == "Example Target Date Fund"
+
+
+@pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)
+def test_holdings_display_name_is_symbol_wide_and_clearable(adapter_env,
+                                                            brokerage_id):
+    write_covered_put(brokerage_id)
+    base = f"/api/brokerages/{brokerage_id}/holdings/ABC/metadata"
+    saved = client.patch(base, json={"display_name": "  Example  Fund  "})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["metadata"]["display_name"] == "Example Fund"
+
+    holding = _get(brokerage_id, "holdings")["items"][0]
+    assert holding["display_name"] == "Example Fund"
+    assert holding["symbol"] == "ABC"
+
+    cleared = client.patch(base, json={"display_name": ""})
+    assert cleared.status_code == 200, cleared.text
+    assert _get(brokerage_id, "holdings")["items"][0]["display_name"] == ""
 
 
 @pytest.mark.parametrize("brokerage_id", BROKERAGE_IDS)

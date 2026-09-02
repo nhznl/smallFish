@@ -1,7 +1,7 @@
 """Holdings: current equity and cash positions, one contract for every brokerage.
 
-Options are excluded — they have their own resource. Category, industry, and
-note and missing-cost-basis overrides are app-owned metadata merged onto
+Options are excluded — they have their own resource. Category, industry, note,
+display name, and missing-cost-basis overrides are app-owned metadata merged onto
 immutable broker facts; the metadata file is chosen by the registry, so this
 projection never learns which brokerage it is rendering.
 
@@ -32,14 +32,14 @@ from .numbers import number as _number
 
 SCHEMA_NAME = "smallfish.brokerage-holdings"
 METADATA_HEADERS = (
-    "symbol", "account_id", "category", "industry", "note",
+    "symbol", "account_id", "category", "industry", "note", "display_name",
     "cost_basis_override", "cost_per_unit_override", "cost_basis_mode",
     "updated_at",
 )
 SETTINGS_HEADERS = (
     "total_contributions", "year_beginning_balance", "baseline_year", "updated_at",
 )
-TAG_FIELDS = ("category", "industry", "note")
+TAG_FIELDS = ("category", "industry", "note", "display_name")
 BASIS_FIELDS = (
     "cost_basis_override", "cost_per_unit_override", "cost_basis_mode",
 )
@@ -265,6 +265,7 @@ def build(snapshot: BrokerageSnapshot, *,
             ),
             "industry": (tags.get("industry") or "").upper() or UNCLASSIFIED,
             "note": tags.get("note", ""),
+            "display_name": tags.get("display_name", ""),
             "metadata_updated_at": max(
                 filter(None, (tags.get("updated_at"), override_updated_at)),
                 default=None,

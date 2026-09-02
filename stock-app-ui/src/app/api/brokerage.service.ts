@@ -55,6 +55,7 @@ export class BrokerageService {
       category?: string;
       industry?: string;
       note?: string;
+      display_name?: string;
       account_id?: string;
       cost_basis?: number | null;
       cost_per_unit?: number | null;

@@ -927,6 +927,7 @@ def test_holdings_metadata_patch_edits_only_the_app_owned_file(adapter_env,
     ).json()["items"][0]
     assert holding["category"] == "GROWTH"
     assert holding["note"] == "core position"
+    assert holding["display_name"] == ""
 
     rejected = client.patch(
         f"/api/brokerages/{brokerage_id}/holdings/ABC/metadata",

@@ -217,9 +217,12 @@ other textual state.
 - Holdings uses one shared, chart-free table on both brokerage pages. Show the
   Category or Account selector only when that field has more than one choice;
   always retain search, Declining only, Snapshot G/L %, Copy Symbols, sortable
-  columns, snapshot columns, and deliberate modal editing for classification
-  and notes. Keep a top Total row that sums Invested and Current for the
-  currently filtered rows (Category, Account, search, and Declining), and
+  columns, snapshot columns, and deliberate modal editing for classification,
+  notes, and an optional display name. Some provider symbols are opaque fund
+  identifiers; the display name is shown under the broker symbol and never
+  replaces it as the identity used for sync, copy, or links. Keep a top Total
+  row that sums Invested and Current for the currently filtered rows
+  (Category, Account, search, and Declining), and
   derives % Portfolio from the filtered Current over the full portfolio
   Current, plus G/L $ and G/L % from those totals. Fail closed to an em dash
   when any filtered row lacks cost basis. Label the

@@ -43,6 +43,8 @@ class HoldingsMetadataPatchRequest(BaseModel):
         default=None, json_schema_extra={"type": ["string", "null"]})
     note: Any = Field(
         default=None, json_schema_extra={"type": ["string", "null"]})
+    display_name: Any = Field(
+        default=None, json_schema_extra={"type": ["string", "null"]})
     account_id: Any = Field(
         default=None, json_schema_extra={"type": ["string", "null"]})
     cost_basis: Any = Field(

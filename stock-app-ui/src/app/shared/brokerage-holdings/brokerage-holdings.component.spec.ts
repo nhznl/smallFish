@@ -53,6 +53,7 @@ function holding(overrides: Partial<HoldingItem> = {}): HoldingItem {
     category: 'GROWTH',
     industry: 'SOFTWARE',
     note: LONG_NOTE,
+    display_name: '',
     metadata_updated_at: '2026-07-28T00:00:00Z',
     cost_basis: 1000,
     cost_per_unit: 100,
@@ -344,8 +345,49 @@ describe('BrokerageHoldingsComponent', () => {
 
     expect(api.updateHoldingsMetadata).toHaveBeenCalledWith(
       'tastytrade', 'DEMO',
-      { category: 'VALUE', industry: 'SOFTWARE', note: LONG_NOTE }
+      { category: 'VALUE', industry: 'SOFTWARE', note: LONG_NOTE, display_name: '' }
     );
+  });
+
+  it('shows a display name under the broker symbol and saves it', async () => {
+    const api = stub();
+    const named = holding({
+      symbol: 'FUND',
+      display_name: 'Example Target Date Fund',
+    });
+    api.getHoldings.and.returnValue(of(response(BROKERAGES[1], [named])));
+    api.updateHoldingsMetadata.and.returnValue(of({
+      schema_name: 'smallfish.brokerage-holdings-metadata', schema_version: 1,
+      brokerage_id: 'fidelity' as BrokerageId,
+      metadata: {
+        symbol: 'FUND', category: 'GROWTH', industry: 'SOFTWARE',
+        note: LONG_NOTE, display_name: 'Renamed Target Date Fund',
+      },
+    }));
+    const fixture = await mount(api, 'fidelity');
+
+    const label = fixture.nativeElement.querySelector('.display-name') as HTMLElement;
+    expect(label.textContent?.trim()).toBe('Example Target Date Fund');
+    expect(label.closest('.symbol-cell')?.textContent).toContain('FUND');
+
+    (fixture.nativeElement.querySelector('.note-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    fixture.componentInstance.editing!.displayName = 'Renamed Target Date Fund';
+    fixture.componentInstance.saveEnrichment();
+
+    expect(api.updateHoldingsMetadata).toHaveBeenCalledWith(
+      'fidelity', 'FUND', {
+        category: 'GROWTH', industry: 'SOFTWARE', note: LONG_NOTE,
+        display_name: 'Renamed Target Date Fund',
+      }
+    );
+  });
+
+  it('does not render a display-name label when none is saved', async () => {
+    const api = stub();
+    api.getHoldings.and.returnValue(of(response(BROKERAGES[0], [holding()])));
+    const fixture = await mount(api, 'tastytrade');
+    expect(fixture.nativeElement.querySelector('.display-name')).toBeNull();
   });
 
   it('saves an account-specific missing cost basis from either linked input', async () => {
@@ -373,7 +415,7 @@ describe('BrokerageHoldingsComponent', () => {
 
     expect(api.updateHoldingsMetadata).toHaveBeenCalledWith(
       'fidelity', 'DEMO', {
-        category: 'GROWTH', industry: 'SOFTWARE', note: LONG_NOTE,
+        category: 'GROWTH', industry: 'SOFTWARE', note: LONG_NOTE, display_name: '',
         account_id: 'acct-1', cost_basis: null, cost_per_unit: 25,
       }
     );

@@ -153,7 +153,8 @@ def trading_holdings_trend_csv() -> Path:
 
 
 def trading_holdings_enrichment_csv() -> Path:
-    """Editable Trading holding classifications and notes, separate from broker facts."""
+    """Editable Trading holding classifications, notes, and display names,
+    separate from broker facts."""
     return _under(
         "SFP_TRADING_HOLDINGS_ENRICHMENT",
         data_dir(),
@@ -209,9 +210,9 @@ def holdings_trend_csv() -> Path:
 
 
 def holdings_enrichment_csv() -> Path:
-    """Editable symbol classifications (category/industry/note) merged onto
-    imported broker holdings; kept separate from broker facts like the options
-    trade-group metadata."""
+    """Editable symbol classifications (category/industry/note/display name)
+    merged onto imported broker holdings; kept separate from broker facts like
+    the options trade-group metadata."""
     return _under(
         "SFP_HOLDINGS_ENRICHMENT", data_dir(), "ledger_retirement/holdings_enrichment.csv"
     )

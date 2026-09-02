@@ -494,7 +494,7 @@ def update_holdings_metadata(brokerage_id: str, symbol: str,
     if not normalized:
         raise BrokerageRequestError("INVALID_SYMBOL", "A symbol is required.", 422)
     updates: dict[str, str] = {}
-    for field in ("category", "industry", "note"):
+    for field in ("category", "industry", "note", "display_name"):
         if field in payload:
             value = payload[field]
             if value is not None and not isinstance(value, str):
@@ -502,7 +502,9 @@ def update_holdings_metadata(brokerage_id: str, symbol: str,
                     "INVALID_FIELD", f"{field} must be text.", 422
                 )
             value = (value or "").strip()
-            updates[field] = value if field == "note" else value.upper()
+            if field == "display_name":
+                value = " ".join(value.split())
+            updates[field] = value if field in {"note", "display_name"} else value.upper()
     basis_fields = {"cost_basis", "cost_per_unit"}
     basis_requested = bool(set(payload) & basis_fields)
     account_id: str | None = None
@@ -568,7 +570,9 @@ def update_holdings_metadata(brokerage_id: str, symbol: str,
                 updates["cost_per_unit_override"] = serialized
                 updates["cost_basis_mode"] = "PER_UNIT"
 
-    allowed = {"category", "industry", "note", "account_id", *basis_fields}
+    allowed = {
+        "category", "industry", "note", "display_name", "account_id", *basis_fields,
+    }
     unknown = set(payload) - allowed
     if unknown:
         raise BrokerageRequestError(
@@ -578,7 +582,8 @@ def update_holdings_metadata(brokerage_id: str, symbol: str,
     if not updates:
         raise BrokerageRequestError(
             "NOTHING_TO_UPDATE",
-            "Send a category, industry, note, or missing cost basis.", 422,
+            "Send a category, industry, note, display name, or missing cost basis.",
+            422,
         )
     row = holdings.write_metadata(
         entry.holdings_metadata_path(), normalized, updates,

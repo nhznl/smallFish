@@ -179,7 +179,7 @@ Trading (`/options`) and Retirement (`/retirement`) share one four-tab shell:
 
 | Tab | What it shows |
 |---|---|
-| **Holdings** | Open equity and cash-equivalent positions with an Edit dialog for category, industry, note, and any missing cost basis. Options are excluded. |
+| **Holdings** | Open equity and cash-equivalent positions with an Edit dialog for category, industry, note, optional display name, and any missing cost basis. Options are excluded. |
 | **Options** | The Symbol Ledger: one durable record per underlying, derived Active/Closed lifecycle, option-only positions and P/L, immutable event history, and optional archived-period detail. |
 | **Combined Adjusted Basis** | Combined equity and option P/L for each symbol that still holds long shares, plus the basis adjusted by its option history. |
 | **Portfolio Analysis** | Account-role profile fit, construction, deployment, concentration, current-holdings replay, hypothetical shocks, option commitments, and a non-persistent stock/ETF What-if preview. |

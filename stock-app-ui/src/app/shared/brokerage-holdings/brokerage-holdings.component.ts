@@ -58,6 +58,7 @@ export class BrokerageHoldingsComponent implements OnChanges {
     category: string;
     industry: string;
     note: string;
+    displayName: string;
     basisEditable: boolean;
     basisMode: 'TOTAL' | 'PER_UNIT' | null;
     costBasis: number | null;
@@ -164,7 +165,7 @@ export class BrokerageHoldingsComponent implements OnChanges {
       if (this.category && row.category !== this.category) return false;
       if (this.account && row.account !== this.account) return false;
       if (this.decliningOnly && !row.trend.alert) return false;
-      return !query || `${row.symbol} ${row.industry} ${row.note}`.toUpperCase().includes(query);
+      return !query || `${row.symbol} ${row.display_name ?? ''} ${row.industry} ${row.note}`.toUpperCase().includes(query);
     });
     return [...rows].sort((left, right) => {
       const a = left[this.sortColumn];
@@ -396,6 +397,7 @@ export class BrokerageHoldingsComponent implements OnChanges {
       category: row.category === 'UNCLASSIFIED' ? '' : row.category,
       industry: row.industry === 'UNCLASSIFIED' ? '' : row.industry,
       note: row.note,
+      displayName: row.display_name ?? '',
       basisEditable: row.cost_basis_source !== 'BROKER',
       basisMode: row.cost_basis_override_mode,
       costBasis: row.cost_basis,
@@ -412,17 +414,18 @@ export class BrokerageHoldingsComponent implements OnChanges {
   saveEnrichment(): void {
     if (!this.editing) return;
     const {
-      symbol, accountId, category, industry, note, basisEditable, basisMode,
+      symbol, accountId, category, industry, note, displayName, basisEditable, basisMode,
       costBasis, costPerUnit,
     } = this.editing;
     const payload: {
       category: string;
       industry: string;
       note: string;
+      display_name: string;
       account_id?: string;
       cost_basis?: number | null;
       cost_per_unit?: number | null;
-    } = { category, industry, note };
+    } = { category, industry, note, display_name: displayName };
     if (basisEditable) {
       payload.account_id = accountId;
       payload.cost_basis = basisMode === 'TOTAL' ? costBasis : null;
