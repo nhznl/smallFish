@@ -586,6 +586,7 @@ export interface PortfolioAnalysisItem {
   account_id: string;
   account: string;
   symbol: string;
+  display_name: string;
   instrument: string;
   quantity: number;
   market_value: number | null;

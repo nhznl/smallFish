@@ -351,6 +351,11 @@ findings but never replaces them.
 }
 ```
 
+`symbol` remains the broker identity. When a holdings display name is saved, the
+title uses that name instead (`Example Target Date Fund exceeds the selected
+issuer limit`); the Analyzed holdings table does the same. What-if and
+classification writes still use the broker symbol.
+
 Stable initial finding codes are:
 
 - `PROFILE_NOT_CONFIGURED`, `PROFILE_PARTIAL`;

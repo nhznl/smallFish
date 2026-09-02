@@ -15,7 +15,7 @@ from ... import config, data_reader, universe_read
 from ..contracts import BrokerageSnapshot
 from ..portfolio_analysis_profile import read_classifications, read_profile
 from . import components as component_projection
-from . import envelope, open_contract_risk
+from . import envelope, holdings, open_contract_risk
 from .numbers import number as _number
 
 SCHEMA_NAME = "smallfish.portfolio-analysis"
@@ -30,6 +30,24 @@ def _pct(value: Decimal | None, capital: Decimal | None) -> float | None:
     if value is None or capital is None or capital <= 0:
         return None
     return float(value / capital * HUNDRED)
+
+
+def _display_names(metadata_path: Path | None) -> dict[str, str]:
+    """Symbol-wide holdings display names; broker tickers stay the identity."""
+    if metadata_path is None:
+        return {}
+    names: dict[str, str] = {}
+    for (symbol, account_id), row in holdings.read_metadata(metadata_path).items():
+        if account_id:
+            continue
+        name = (row.get("display_name") or "").strip()
+        if name:
+            names[symbol] = name
+    return names
+
+
+def _issuer_label(symbol: str, names: dict[str, str]) -> str:
+    return names.get(symbol) or symbol
 
 
 def _finding(code: str, *, severity: str, direction: str, scope: str,
@@ -98,6 +116,7 @@ def _classification(component: Any, overrides: dict[tuple[str, str, str], dict[s
 def _current_rows(snapshot: BrokerageSnapshot, classifications_path: Path,
                   *, position_adjustments: dict[tuple[str, str], tuple[Decimal, Decimal]] | None = None,
                   temporary_classifications: dict[tuple[str, str], str] | None = None,
+                  display_names: dict[str, str] | None = None,
                   ) -> list[dict[str, Any]]:
     saved = read_classifications(classifications_path, snapshot.descriptor.id)
     overrides = {
@@ -163,6 +182,7 @@ def _current_rows(snapshot: BrokerageSnapshot, classifications_path: Path,
             "classification_source": source,
             "sector": str(record.get("sector") or "") or None,
             "security_type": str(record.get("type") or "") or None,
+            "display_name": (display_names or {}).get(row["symbol"], ""),
         })
     return sorted(rows, key=lambda row: (row["symbol"], row["account_id"]))
 
@@ -393,6 +413,7 @@ def _verdicts(findings: list[dict[str, Any]], *, profile_status: str,
 
 def build(snapshot: BrokerageSnapshot, *, profile_path: Path,
           classifications_path: Path,
+          metadata_path: Path | None = None,
           capital_delta: Decimal = ZERO, liquid_delta: Decimal = ZERO,
           position_adjustments: dict[tuple[str, str], tuple[Decimal, Decimal]] | None = None,
           temporary_classifications: dict[tuple[str, str], str] | None = None,
@@ -406,10 +427,12 @@ def build(snapshot: BrokerageSnapshot, *, profile_path: Path,
         capital += capital_delta
     if liquid is not None:
         liquid += liquid_delta
+    display_names = _display_names(metadata_path)
     rows = _current_rows(
         snapshot, classifications_path,
         position_adjustments=position_adjustments,
         temporary_classifications=temporary_classifications,
+        display_names=display_names,
     )
     marked_values = [row["market_value_exact"] for row in rows if not row["mark_missing"]]
     marked_total = sum(marked_values, ZERO)
@@ -575,10 +598,11 @@ def build(snapshot: BrokerageSnapshot, *, profile_path: Path,
             price_row = next((row for row in rows if row["symbol"] == symbol and row["mark_per_unit"]), None)
             price = price_row["mark_per_unit"] if price_row else None
             dilution = (value / (Decimal(str(limit)) / HUNDRED) - capital) if limit > 0 and capital else None
+            label = _issuer_label(symbol, display_names)
             findings.append(_finding(
                 "SINGLE_ISSUER_LIMIT", severity="HIGH", direction="OVER",
                 scope="ISSUER", symbol=symbol,
-                title=f"{symbol} exceeds the selected issuer limit",
+                title=f"{label} exceeds the selected issuer limit",
                 actual=actual, limit=limit, excess_amount=overage,
                 explanation="Current long value is above the selected issuer limit.",
                 remediation={

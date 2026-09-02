@@ -266,7 +266,10 @@ other textual state.
 - Portfolio Analysis keeps profile fit, construction, capital deployment, and
   data confidence as separate textual verdicts. It shows account-capital and
   price dates, owner-selected limits, known breaches, and missing evidence near
-  the affected conclusion. Unconfigured and partial profiles are valid states;
+  the affected conclusion. When a holdings display name is saved, findings and
+  the Analyzed holdings table use that name instead of the broker symbol; the
+  symbol remains the identity for What-if and classification writes.
+  Unconfigured and partial profiles are valid states;
   neither may render as aligned. Trading is never described as underinvested
   unless an owner-reviewed deployment minimum exists.
 - Portfolio Analysis remediation is limit-restoration math, not an order

@@ -108,6 +108,7 @@ function response(
     },
     items: [{
       account_id: 'synthetic-account', account: 'Synthetic Retirement', symbol: 'SYNTH',
+      display_name: '',
       instrument: 'EQUITY', quantity: 146.61, market_value: 18_400, weight_pct: 18.4,
       allocation_bucket: 'GROWTH', classification_source: 'PROVIDER_INSTRUMENT',
       sector: 'Technology', security_type: 'STOCK', mark_per_unit: 125.5,
@@ -186,6 +187,29 @@ describe('PortfolioAnalysisComponent', () => {
     expect(text).toContain('HYPOTHETICAL');
     expect(fixture.nativeElement.querySelector('.analyzed-table .col-sticky')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.analyzed-table th button')).toBeTruthy();
+  });
+
+  it('shows a holdings display name instead of the broker symbol', async () => {
+    const analysis = response('RETIREMENT');
+    analysis.summary.findings[0].title = 'Example Target Date Fund exceeds the selected issuer limit';
+    analysis.items[0].display_name = 'Example Target Date Fund';
+    const api = apiStub(analysis);
+    await TestBed.configureTestingModule({
+      imports: [PortfolioAnalysisComponent],
+      providers: [{ provide: BrokerageService, useValue: api }],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(PortfolioAnalysisComponent);
+    fixture.componentRef.setInput('brokerageId', 'fidelity');
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, ' ') ?? '';
+    expect(text).toContain('Example Target Date Fund exceeds the selected issuer limit');
+    expect(text).not.toContain('SYNTH exceeds the selected issuer limit');
+    expect(
+      (fixture.nativeElement.querySelector('.analyzed-table .symbol-cell strong') as HTMLElement)
+        .textContent?.trim()
+    ).toBe('Example Target Date Fund');
   });
 
   it('hides non-actionable cash-capital availability notices', async () => {

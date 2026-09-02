@@ -112,12 +112,13 @@ def brokerage_option_adjusted_basis(brokerage_id: str, *,
 # ------------------------------------------------------ portfolio analysis --
 
 def brokerage_portfolio_analysis(brokerage_id: str) -> dict[str, Any]:
-    snapshot, _entry = _snapshot(brokerage_id)
+    snapshot, entry = _snapshot(brokerage_id)
     try:
         return portfolio_analysis.build(
             snapshot,
             profile_path=config.portfolio_analysis_profiles_json(),
             classifications_path=config.portfolio_analysis_classifications_csv(),
+            metadata_path=entry.holdings_metadata_path(),
         )
     except portfolio_analysis_profile.ProfileValidationError as exc:
         raise BrokerageRequestError(exc.code, exc.message, 409) from exc
@@ -191,12 +192,13 @@ def update_portfolio_analysis_classification(
 
 def preview_portfolio_analysis(brokerage_id: str,
                                payload: dict[str, Any]) -> dict[str, Any]:
-    snapshot, _entry = _snapshot(brokerage_id)
+    snapshot, entry = _snapshot(brokerage_id)
     try:
         return portfolio_preview.build(
             snapshot, payload=payload,
             profile_path=config.portfolio_analysis_profiles_json(),
             classifications_path=config.portfolio_analysis_classifications_csv(),
+            metadata_path=entry.holdings_metadata_path(),
         )
     except portfolio_preview.PreviewValidationError as exc:
         raise BrokerageRequestError(exc.code, exc.message, 422) from exc

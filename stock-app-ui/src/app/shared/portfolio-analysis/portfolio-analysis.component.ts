@@ -148,12 +148,16 @@ export class PortfolioAnalysisComponent implements OnChanges {
 
   sortedItems(): PortfolioAnalysisItem[] {
     return [...(this.data?.items ?? [])].sort((left, right) => {
-      const a = left[this.itemSort];
-      const b = right[this.itemSort];
       let comparison: number;
-      if (typeof a === 'string' && typeof b === 'string') comparison = a.localeCompare(b);
-      else comparison = (typeof a === 'number' ? a : Number.NEGATIVE_INFINITY)
-        - (typeof b === 'number' ? b : Number.NEGATIVE_INFINITY);
+      if (this.itemSort === 'symbol') {
+        comparison = this.holdingLabel(left).localeCompare(this.holdingLabel(right));
+      } else {
+        const a = left[this.itemSort];
+        const b = right[this.itemSort];
+        if (typeof a === 'string' && typeof b === 'string') comparison = a.localeCompare(b);
+        else comparison = (typeof a === 'number' ? a : Number.NEGATIVE_INFINITY)
+          - (typeof b === 'number' ? b : Number.NEGATIVE_INFINITY);
+      }
       return this.itemSortAscending ? comparison : -comparison;
     });
   }
@@ -174,6 +178,19 @@ export class PortfolioAnalysisComponent implements OnChanges {
   sortIcon(column: ItemSort): string {
     if (column !== this.itemSort) return '';
     return this.itemSortAscending ? '▲' : '▼';
+  }
+
+  holdingLabel(item: Pick<PortfolioAnalysisItem, 'symbol' | 'display_name'>): string {
+    const name = (item.display_name ?? '').trim();
+    return name || item.symbol;
+  }
+
+  excludedLabels(): string[] {
+    const names = new Map(
+      (this.data?.items ?? []).map(item => [item.symbol, this.holdingLabel(item)])
+    );
+    return (this.data?.summary.historical_risk.excluded_symbols ?? [])
+      .map(symbol => names.get(symbol) ?? symbol);
   }
 
   accounts(): Array<{ id: string; label: string }> {

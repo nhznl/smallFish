@@ -81,7 +81,8 @@ def _finding_key(row: dict[str, Any]) -> tuple[str, str | None, str]:
 
 
 def build(snapshot: BrokerageSnapshot, *, payload: dict[str, Any],
-          profile_path: Path, classifications_path: Path) -> dict[str, Any]:
+          profile_path: Path, classifications_path: Path,
+          metadata_path: Path | None = None) -> dict[str, Any]:
     allowed = {
         "account_id", "side", "symbol", "quantity", "notional",
         "assumed_price", "funding_source", "allocation_bucket",
@@ -155,10 +156,11 @@ def build(snapshot: BrokerageSnapshot, *, payload: dict[str, Any],
     )
     before = portfolio_analysis.build(
         snapshot, profile_path=profile_path, classifications_path=classifications_path,
-        include_historical=False,
+        metadata_path=metadata_path, include_historical=False,
     )
     after = portfolio_analysis.build(
         snapshot, profile_path=profile_path, classifications_path=classifications_path,
+        metadata_path=metadata_path,
         capital_delta=capital_delta, liquid_delta=liquid_delta,
         position_adjustments={(account_id, symbol): (sign * quantity, sign * notional)},
         temporary_classifications=(

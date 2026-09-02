@@ -22,6 +22,7 @@ from app.brokerages.portfolio_analysis_profile import (
     set_classification,
     update_profile,
 )
+from app.brokerages.projections import holdings as holdings_projection
 from app.brokerages.projections import portfolio_analysis, portfolio_preview
 from app.main import app
 
@@ -152,9 +153,31 @@ def test_analysis_uses_net_liquidation_and_reports_traceable_trim_math(monkeypat
     issuer = next(row for row in result["summary"]["findings"]
                   if row["code"] == "SINGLE_ISSUER_LIMIT")
     assert issuer["symbol"] == "AAA"
+    assert issuer["title"] == "AAA exceeds the selected issuer limit"
     assert issuer["excess_amount"] == 100.0
     assert issuer["remediation"]["approximate_units"] == 10.0
     assert issuer["remediation"]["new_outside_capital_to_dilute"] == 200.0
+
+
+def test_issuer_finding_uses_holdings_display_name(monkeypatch, tmp_path):
+    profile_path, classifications_path = configure(monkeypatch, tmp_path)
+    metadata_path = tmp_path / "holdings_enrichment.csv"
+    holdings_projection.write_metadata(
+        metadata_path, "AAA", {"display_name": "Example Target Date Fund"},
+    )
+    result = portfolio_analysis.build(
+        snapshot(equity("AAA", "60", "10"), equity("BBB", "20", "10")),
+        profile_path=profile_path, classifications_path=classifications_path,
+        metadata_path=metadata_path, include_historical=False,
+    )
+    issuer = next(row for row in result["summary"]["findings"]
+                  if row["code"] == "SINGLE_ISSUER_LIMIT")
+    assert issuer["symbol"] == "AAA"
+    assert issuer["title"] == "Example Target Date Fund exceeds the selected issuer limit"
+    named = next(row for row in result["items"] if row["symbol"] == "AAA")
+    assert named["display_name"] == "Example Target Date Fund"
+    other = next(row for row in result["items"] if row["symbol"] == "BBB")
+    assert other["display_name"] == ""
 
 
 def test_missing_capital_fails_closed_without_hiding_known_critical_option_risk(

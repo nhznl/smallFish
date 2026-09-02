@@ -215,7 +215,7 @@
             <div><dt>Excluded</dt><dd>{{ percent(analysis.summary.historical_risk.excluded_pct) }}</dd></div>
           </dl>
           @if (analysis.summary.historical_risk.excluded_symbols.length) {
-            <p class="missing-copy">Excluded symbols: {{ analysis.summary.historical_risk.excluded_symbols.join(', ') }}</p>
+            <p class="missing-copy">Excluded symbols: {{ excludedLabels().join(', ') }}</p>
           }
         </div>
         <div>
@@ -275,7 +275,7 @@
           <tbody>
             @for (item of sortedItems(); track item.account_id + ':' + item.symbol) {
               <tr>
-                <td class="col-sticky symbol-cell"><strong>{{ item.symbol }}</strong><small>{{ item.security_type || item.instrument }}</small></td>
+                <td class="col-sticky symbol-cell"><strong>{{ holdingLabel(item) }}</strong><small>{{ item.security_type || item.instrument }}</small></td>
                 <td>{{ item.account }}</td>
                 <td class="num">{{ money(item.market_value) }}</td>
                 <td class="num">{{ percent(item.weight_pct) }}</td>
@@ -426,7 +426,7 @@
 }
 
 @if (classificationEditor; as item) {
-  <app-modal [title]="'Classify ' + item.symbol" width="min(480px, 92vw)"
+  <app-modal [title]="'Classify ' + holdingLabel(item)" width="min(480px, 92vw)"
     subtitle="This account-scoped override does not rewrite the broker instrument or holdings category."
     (closed)="closeClassificationEditor()">
     <label class="classification-field"><span>Allocation bucket</span><select [(ngModel)]="classificationBucket">

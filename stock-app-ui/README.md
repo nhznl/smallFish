@@ -197,7 +197,9 @@ Trading and Retirement are thin route shells over the same four tabs:
    that still hold long shares, plus the basis adjusted by option history.
 4. **Portfolio Analysis** — role-specific profile fit, construction, capital
    deployment, concentration, current-holdings historical replay, hypothetical
-   stress evidence, and option commitments. The shared component follows the
+   stress evidence, and option commitments. Saved holdings display names replace
+   the broker symbol in findings and the Analyzed holdings table; What-if still
+   uses the ticker. The shared component follows the
    returned `portfolio_role`; it does not branch on provider identity. Profile
    and allocation-classification edits are app-owned metadata. The What-if form
    recalculates a proposed long stock/ETF buy or sale and explicitly reports
