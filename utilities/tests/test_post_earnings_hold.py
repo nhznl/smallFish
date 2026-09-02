@@ -9,12 +9,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 
 import studies.pre_earnings_momentum.daily_redeployment_engine as engine
 import studies.pre_earnings_momentum.daily_redeployment as daily_cli
 import studies.pre_earnings_momentum.post_earnings_hold as post_cli
+import studies.pre_earnings_momentum.post_earnings_low_fee as low_fee_cli
 from studies.pre_earnings_momentum.daily_redeployment import (
     POST_EVENT_CONFIGS,
+    POST_EVENT_LOW_FEE_CONFIGS,
     _validate_continuation_config,
 )
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
@@ -42,10 +45,17 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
     regime_allows_entry,
     run_simulation,
 )
-from studies.pre_earnings_momentum.daily_redeployment_series_report import SeriesValidationError
+from studies.pre_earnings_momentum.daily_redeployment_series_report import (
+    SeriesValidationError,
+    build_series_summary,
+)
 from studies.pre_earnings_momentum.post_earnings_hold_comparison import (
     combine_variant_rows,
     write_comparison,
+)
+from studies.pre_earnings_momentum.post_earnings_low_fee_comparison import (
+    combine_variant_rows as combine_low_fee_rows,
+    write_comparison as write_low_fee_comparison,
 )
 from studies.pre_earnings_momentum.daily_redeployment_report import write_run
 from utilities.tests.test_daily_redeployment_engine import _market
@@ -53,6 +63,10 @@ from utilities.tests.test_daily_redeployment_engine import _market
 
 def _post_cfg(variant: str = "baseline"):
     return load_study_config(POST_EVENT_CONFIGS[variant])
+
+
+def _low_fee_cfg(variant: str = "baseline"):
+    return load_study_config(POST_EVENT_LOW_FEE_CONFIGS[variant])
 
 
 def _spy_frame(closes: list[float]) -> pd.DataFrame:
@@ -109,6 +123,98 @@ def test_post_event_configs_are_equal_only_cash_staged_and_policy_specific():
         output_roots.add(cfg.output_relative_root)
     assert len(study_ids) == 3
     assert len(output_roots) == 3
+
+
+def test_low_fee_configs_change_only_identity_output_gate_and_cost_model():
+    expected_gates = {"baseline": REGIME_GATE_ALL, "risk-on": REGIME_GATE_RISK_ON}
+    for variant, gate in expected_gates.items():
+        cfg = _low_fee_cfg(variant)
+        _validate_continuation_config(POST_EVENT_LOW_FEE_CONFIGS[variant], cfg)
+        assert cfg.cost_model == "per_share"
+        assert cfg.cost_rate == 0.0
+        assert cfg.cost_per_share == pytest.approx(0.0008)
+        assert "cost_bps_per_side" not in cfg.raw
+        assert cfg.market_regime_gate == gate
+        assert cfg.arms == ("equal",)
+        assert cfg.exit_policy == EXIT_POLICY_POST_EVENT
+        assert cfg.output_relative_root.startswith(
+            "backtest/pre_earnings_momentum/post_earnings_hold_low_fee/"
+        )
+        predecessor = dict(_post_cfg(variant).raw)
+        expected = dict(predecessor)
+        expected["study_id"] = cfg.study_id
+        expected["output"] = dict(cfg.raw["output"])
+        expected.pop("cost_bps_per_side")
+        expected["cost_model"] = "per_share"
+        expected["cost_per_share"] = 0.0008
+        assert cfg.raw == expected
+
+
+def test_low_fee_config_rejects_ambiguous_or_missing_fee(tmp_path):
+    raw = yaml.safe_load(POST_EVENT_LOW_FEE_CONFIGS["baseline"].read_text())
+    config = tmp_path / "low-fee.yaml"
+    raw["cost_bps_per_side"] = 10
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="requires only cost_per_share"):
+        load_study_config(config)
+    raw.pop("cost_bps_per_side")
+    raw.pop("cost_per_share")
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="requires only cost_per_share"):
+        load_study_config(config)
+
+
+def test_low_fee_simulation_charges_every_filled_side_per_share():
+    cfg = _low_fee_cfg()
+    bundle, _ = _market(tickers=("AAA", "BBB"), n=95)
+    result = run_simulation(cfg=cfg, market=bundle, year=2000)
+    filled = [order for order in result.orders if order.status == "filled"]
+    assert filled
+    for order in filled:
+        assert order.cost == pytest.approx(order.shares * 0.0008)
+    benchmark = result.checkpoint.benchmark["equal"]
+    assert benchmark["cost"] == pytest.approx(benchmark["shares"] * 0.0008)
+    final_mark = [mark for mark in result.marks if mark.arm == "equal"][-1]
+    final_spy_close = float(bundle.spy.loc[
+        bundle.spy["date"].dt.date == final_mark.date, "close"
+    ].iloc[0])
+    expected_benchmark = (
+        benchmark["cash"]
+        + benchmark["shares"] * final_spy_close
+        - benchmark["shares"] * 0.0008
+    )
+    assert final_mark.benchmark_value == pytest.approx(expected_benchmark)
+    summary = result.summary["arms"]["equal"]
+    assert summary["zero_cost_orders_identical"] is True
+    assert summary["zero_cost_shadow_ending_equity"] == pytest.approx(
+        summary["ending_equity"]
+        + summary["total_stock_costs"]
+        + summary["total_spy_costs"],
+        abs=1e-6,
+    )
+
+
+def test_low_fee_series_report_reconciles_costs(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "utilities.manifest._git",
+        lambda *args: "low-fee-test-commit" if args == ("rev-parse", "HEAD") else "",
+    )
+    cfg = _low_fee_cfg()
+    bundle, _ = _market(tickers=("AAA", "BBB"), n=95)
+    result = run_simulation(cfg=cfg, market=bundle, year=2000)
+    artifact_root = tmp_path / "baseline"
+    run_dir = artifact_root / "2000" / "low-fee-2000"
+    write_run(result, run_dir, command="test", args={
+        "year": 2000, "origin_year": 2000, "state_in": None,
+    })
+    rows, validation = build_series_summary(artifact_root, "low-fee", [2000])
+    assert validation["status"] == "PASS"
+    assert validation["config"]["cost_model"] == "per_share"
+    orders = pd.read_csv(run_dir / "orders.csv")
+    filled = orders.loc[orders["status"] == "filled"]
+    assert float(rows[0]["Transaction Costs"]) == pytest.approx(
+        float((filled["shares"] * 0.0008).sum()), abs=0.01,
+    )
 
 
 def test_market_regime_is_causal_and_uses_five_completed_sessions():
@@ -589,7 +695,59 @@ def test_post_event_command_help_and_historical_guard(monkeypatch, capsys):
     assert "--confirm-historical-run" in observed["argv"]
 
 
-@pytest.mark.parametrize("config_path", tuple(POST_EVENT_CONFIGS.values()))
+def test_low_fee_command_is_frozen_to_authorized_variants_and_years(
+    monkeypatch, capsys,
+):
+    assert low_fee_cli.main(["--help"]) == 0
+    help_text = capsys.readouterr().out
+    assert "$0.0008" in help_text
+    assert "2010-2022" in help_text
+    assert low_fee_cli.main([
+        "--variant", "baseline", "--year", "2010", "--origin-year", "2010",
+    ]) == 2
+    assert "unauthorized" in capsys.readouterr().err
+
+    observed = {}
+    monkeypatch.setattr(
+        low_fee_cli,
+        "run_daily_study",
+        lambda argv, command_name: observed.update(
+            {"argv": argv, "command_name": command_name}
+        ) or 0,
+    )
+    assert low_fee_cli.main([
+        "--variant", "risk-on",
+        "--year", "2010",
+        "--origin-year", "2010",
+        "--confirm-low-fee-development-run",
+    ]) == 0
+    assert observed["command_name"] == "pre-earnings-post-event-low-fee-study"
+    assert str(POST_EVENT_LOW_FEE_CONFIGS["risk-on"]) in observed["argv"]
+    assert "--confirm-historical-run" in observed["argv"]
+
+    observed.clear()
+    assert low_fee_cli.main([
+        "--variant", "baseline",
+        "--year", "2023",
+        "--origin-year", "2010",
+        "--confirm-low-fee-development-run",
+    ]) == 2
+    assert not observed
+    assert "2010-2022" in capsys.readouterr().err
+    assert low_fee_cli.main([
+        "--variant", "baseline",
+        "--year", "2010",
+        "--origin-year", "2010",
+        "--config", "unexpected.yaml",
+        "--confirm-low-fee-development-run",
+    ]) == 2
+    assert "not accepted" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "config_path",
+    (*POST_EVENT_CONFIGS.values(), *POST_EVENT_LOW_FEE_CONFIGS.values()),
+)
 def test_shared_daily_cli_refuses_post_event_configs_before_data_loading(
     config_path, tmp_path, monkeypatch, capsys,
 ):
@@ -663,10 +821,47 @@ def test_comparison_joins_equal_rows_and_rejects_spy_drift(tmp_path):
         })
 
 
+def test_low_fee_comparison_joins_two_variants_and_rejects_spy_drift(tmp_path):
+    def row(ending: str):
+        return {
+            "Year": "2010",
+            "Arm": "equal",
+            "Beginning Equity": "50000.00",
+            "Ending Equity": ending,
+            "Equity Growth": "0.1000000000",
+            "SPY Start": "50000.00",
+            "SPY End": "55000.00",
+            "SPY Growth": "0.1000000000",
+            "Excess Growth": "0.0000000000",
+            "No Of Transactions": "10",
+        }
+
+    rows = combine_low_fee_rows({
+        "baseline": [row("55000.00")],
+        "risk-on": [row("54000.00")],
+    })
+    assert rows[0]["Baseline Ending Equity"] == "55000.00"
+    assert rows[0]["Risk-On Ending Equity"] == "54000.00"
+    output = tmp_path / "low-fee-comparison.csv"
+    write_low_fee_comparison(output, rows, {"status": "PASS"})
+    assert output.is_file()
+    assert output.with_suffix(".csv.validation.json").is_file()
+
+    drift = row("54000.00")
+    drift["SPY End"] = "54000.00"
+    with pytest.raises(SeriesValidationError, match="benchmark differs"):
+        combine_low_fee_rows({
+            "baseline": [row("55000.00")],
+            "risk-on": [drift],
+        })
+
+
 def test_study_module_does_not_import_stock_app():
     for path in (
         Path("studies/pre_earnings_momentum/daily_redeployment_engine.py"),
         Path("studies/pre_earnings_momentum/post_earnings_hold.py"),
+        Path("studies/pre_earnings_momentum/post_earnings_low_fee.py"),
+        Path("studies/pre_earnings_momentum/post_earnings_low_fee_comparison.py"),
     ):
         source = path.read_text(encoding="utf-8")
         assert "stock-app" not in source
@@ -677,3 +872,5 @@ def test_commands_sh_exposes_post_event_runner():
     body = Path("commands.sh").read_text(encoding="utf-8")
     assert "pre-earnings-post-event-study)" in body
     assert "studies.pre_earnings_momentum.post_earnings_hold" in body
+    assert "pre-earnings-post-event-low-fee-study)" in body
+    assert "studies.pre_earnings_momentum.post_earnings_low_fee" in body

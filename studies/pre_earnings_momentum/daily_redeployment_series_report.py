@@ -112,6 +112,17 @@ def _money(value: float) -> str:
     return f"{value:.2f}"
 
 
+def _expected_order_cost(
+    config: dict[str, Any], *, principal: float, shares: float,
+) -> float:
+    model = str(config.get("cost_model", "notional_bps"))
+    if model == "notional_bps":
+        return principal * float(config["cost_bps_per_side"]) / 10_000.0
+    if model == "per_share":
+        return shares * float(config["cost_per_share"])
+    raise SeriesValidationError(f"unsupported transaction cost model: {model}")
+
+
 def build_series_summary(
     artifact_root: Path,
     series_tag: str,
@@ -229,7 +240,6 @@ def build_series_summary(
                 raise SeriesValidationError(f"{year}: benchmark path is unavailable after initialization")
             benchmark_paths.append([float(value) for value in raw_path[first_value:]])
 
-        cost_rate = float(manifest["config"]["cost_bps_per_side"]) / 10_000.0
         minimum_target = float(manifest["config"]["min_position_target"])
         maximum_principal = float(manifest["config"]["max_position_principal"])
         spy_end = benchmark_paths[0][-1]
@@ -257,7 +267,10 @@ def build_series_summary(
                 cost = float(order["cost"])
                 if shares <= 0 or not shares.is_integer():
                     raise SeriesValidationError(f"{year}/{arm}: non-whole filled shares")
-                if not math.isclose(cost, principal * cost_rate, abs_tol=1e-6):
+                expected_cost = _expected_order_cost(
+                    manifest["config"], principal=principal, shares=shares,
+                )
+                if not math.isclose(cost, expected_cost, abs_tol=1e-6):
                     raise SeriesValidationError(f"{year}/{arm}: non-uniform transaction cost")
                 if order["kind"] == "stock_entry":
                     target_at_decision = shares * float(order["reference_price"])

@@ -60,6 +60,8 @@ REGIME_UNKNOWN = "UNKNOWN"
 REGIME_GATE_ALL = "all"
 REGIME_GATE_RISK_ON = "risk_on"
 REGIME_GATE_RISK_ON_NEUTRAL = "risk_on_or_neutral"
+COST_MODEL_NOTIONAL_BPS = "notional_bps"
+COST_MODEL_PER_SHARE = "per_share"
 
 _CONFIG_SCHEMA: dict[str, Any] = {
     "study_id": str,
@@ -67,7 +69,9 @@ _CONFIG_SCHEMA: dict[str, Any] = {
     "phase": str,
     "benchmark_symbol": str,
     "starting_equity": (int, float),
+    "cost_model": str,
     "cost_bps_per_side": (int, float),
+    "cost_per_share": (int, float),
     "price_min": (int, float),
     "price_max": (int, float),
     "event_min_weeks": int,
@@ -108,6 +112,9 @@ _CONFIG_SCHEMA: dict[str, Any] = {
 }
 
 _OPTIONAL_CONFIG_KEYS = {
+    "cost_model",
+    "cost_bps_per_side",
+    "cost_per_share",
     "cash_staging_enabled",
     "exit_policy",
     "market_regime_gate",
@@ -147,7 +154,9 @@ class StudyConfig:
     phase: str
     benchmark_symbol: str
     starting_equity: float
+    cost_model: str
     cost_rate: float
+    cost_per_share: float
     price_min: float
     price_max: float
     event_min_weeks: int
@@ -198,7 +207,22 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
     arms = tuple(str(item) for item in raw["arms"])
     if any(arm not in {ARM_EQUAL, ARM_PROPORTIONAL} for arm in arms):
         raise ValueError(f"unsupported allocation arms: {arms}")
-    if raw["starting_equity"] <= 0 or raw["cost_bps_per_side"] < 0:
+    cost_model = str(raw.get("cost_model", COST_MODEL_NOTIONAL_BPS))
+    if cost_model not in {COST_MODEL_NOTIONAL_BPS, COST_MODEL_PER_SHARE}:
+        raise ValueError("unsupported cost_model")
+    if cost_model == COST_MODEL_NOTIONAL_BPS:
+        if "cost_bps_per_side" not in raw or "cost_per_share" in raw:
+            raise ValueError(
+                "notional_bps cost model requires only cost_bps_per_side"
+            )
+        cost_rate = float(raw["cost_bps_per_side"]) / 10000.0
+        cost_per_share = 0.0
+    else:
+        if "cost_per_share" not in raw or "cost_bps_per_side" in raw:
+            raise ValueError("per_share cost model requires only cost_per_share")
+        cost_rate = 0.0
+        cost_per_share = float(raw["cost_per_share"])
+    if raw["starting_equity"] <= 0 or cost_rate < 0 or cost_per_share < 0:
         raise ValueError("starting equity must be positive and costs nonnegative")
     if raw["price_min"] <= 0 or raw["price_max"] < raw["price_min"]:
         raise ValueError("invalid price gate")
@@ -239,7 +263,9 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         phase=str(raw["phase"]),
         benchmark_symbol=str(raw["benchmark_symbol"]).upper(),
         starting_equity=float(raw["starting_equity"]),
-        cost_rate=float(raw["cost_bps_per_side"]) / 10000.0,
+        cost_model=cost_model,
+        cost_rate=cost_rate,
+        cost_per_share=cost_per_share,
         price_min=float(raw["price_min"]),
         price_max=float(raw["price_max"]),
         event_min_weeks=int(raw["event_min_weeks"]),
@@ -389,8 +415,35 @@ def entry_limit_price(decision_close: float, cfg: StudyConfig) -> float:
     return decision_close * (1.0 + cfg.entry_limit_buffer_pct)
 
 
-def modeled_cost(principal: float, cfg: StudyConfig) -> float:
-    return principal * cfg.cost_rate
+def modeled_cost(
+    principal: float,
+    cfg: StudyConfig,
+    *,
+    shares: int | float | None = None,
+) -> float:
+    if cfg.cost_model == COST_MODEL_NOTIONAL_BPS:
+        return principal * cfg.cost_rate
+    if shares is None:
+        raise ValueError("per-share cost calculation requires shares")
+    return float(shares) * cfg.cost_per_share
+
+
+def purchase_cash(shares: int | float, price: float, cfg: StudyConfig) -> float:
+    principal = float(shares) * price
+    return principal + modeled_cost(principal, cfg, shares=shares)
+
+
+def sale_proceeds(shares: int | float, price: float, cfg: StudyConfig) -> float:
+    principal = float(shares) * price
+    return principal - modeled_cost(principal, cfg, shares=shares)
+
+
+def purchase_cash_per_share(price: float, cfg: StudyConfig) -> float:
+    return purchase_cash(1, price, cfg)
+
+
+def sale_proceeds_per_share(price: float, cfg: StudyConfig) -> float:
+    return sale_proceeds(1, price, cfg)
 
 
 def min_entry_shares(decision_close: float, cfg: StudyConfig) -> int:
@@ -406,7 +459,7 @@ def max_entry_shares(limit_price: float, cfg: StudyConfig) -> int:
 
 
 def reservation_cash(shares: int, limit_price: float, cfg: StudyConfig) -> float:
-    return shares * limit_price * (1.0 + cfg.cost_rate)
+    return purchase_cash(shares, limit_price, cfg)
 
 
 def shares_for_target(
@@ -1033,7 +1086,7 @@ def _add_residual_shares(
     while True:
         ranked: list[tuple[float, float, str, AllocationIntent]] = []
         for intent in updated.values():
-            extra = intent.limit_price * (1.0 + cfg.cost_rate)
+            extra = purchase_cash_per_share(intent.limit_price, cfg)
             if extra > remaining + 1e-9:
                 continue
             if (intent.shares + 1) * intent.limit_price > cfg.max_position_principal + 1e-9:
@@ -1050,7 +1103,7 @@ def _add_residual_shares(
         else:
             ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
         winner = ranked[0][3]
-        extra = winner.limit_price * (1.0 + cfg.cost_rate)
+        extra = purchase_cash_per_share(winner.limit_price, cfg)
         remaining -= extra
         updated[winner.ticker] = replace(
             winner,
@@ -1305,7 +1358,7 @@ def _sector_usage(state: ArmState) -> dict[str, int]:
 def _deployable(state: ArmState, spy_close: float | None, cfg: StudyConfig) -> float:
     spy_value = 0.0 if spy_close is None else state.spy_shares * spy_close
     pending_exit_value = sum(
-        position.shares * position.last_valid_close * (1.0 - cfg.cost_rate)
+        sale_proceeds(position.shares, position.last_valid_close, cfg)
         for position in state.positions.values()
         if position.pending_exit and position.last_valid_close is not None
     )
@@ -1313,12 +1366,22 @@ def _deployable(state: ArmState, spy_close: float | None, cfg: StudyConfig) -> f
 
 
 def _can_fund_min_target(deployable: float, cfg: StudyConfig) -> bool:
-    estimated = cfg.min_position_target * (1.0 + cfg.entry_limit_buffer_pct) * (1.0 + cfg.cost_rate)
+    buffered_target = cfg.min_position_target * (1.0 + cfg.entry_limit_buffer_pct)
+    estimated_shares = int(math.ceil(cfg.min_position_target / cfg.price_min))
+    estimated = buffered_target + modeled_cost(
+        buffered_target, cfg, shares=estimated_shares,
+    )
     return deployable + 1e-9 >= estimated
 
 
-def _apply_cash_cost(state: ArmState, principal: float, cfg: StudyConfig, kind: str) -> float:
-    cost = modeled_cost(principal, cfg)
+def _apply_cash_cost(
+    state: ArmState,
+    principal: float,
+    shares: int,
+    cfg: StudyConfig,
+    kind: str,
+) -> float:
+    cost = modeled_cost(principal, cfg, shares=shares)
     state.cash -= cost
     if kind.startswith("spy"):
         state.cumulative_spy_costs += cost
@@ -1331,7 +1394,9 @@ def _fill_stock_sell(
     state: ArmState, position: OpenPosition, fill_price: float, cfg: StudyConfig, zero_cost: bool,
 ) -> tuple[float, float]:
     principal = position.shares * fill_price
-    cost = 0.0 if zero_cost else modeled_cost(principal, cfg)
+    cost = 0.0 if zero_cost else modeled_cost(
+        principal, cfg, shares=position.shares,
+    )
     state.cash += principal - cost
     if not zero_cost:
         state.cumulative_stock_costs += cost
@@ -1346,7 +1411,9 @@ def _fill_stock_buy(
     realized_event: date | None, forced_exit: date | None, session: date,
 ) -> OpenPosition:
     principal = intent.shares * fill_price
-    cost = 0.0 if zero_cost else modeled_cost(principal, cfg)
+    cost = 0.0 if zero_cost else modeled_cost(
+        principal, cfg, shares=intent.shares,
+    )
     state.cash -= principal + cost
     if not zero_cost:
         state.cumulative_stock_costs += cost
@@ -1378,7 +1445,7 @@ def _spy_sell(state: ArmState, shares: int, price: float, cfg: StudyConfig, zero
     if shares <= 0:
         return 0.0
     principal = shares * price
-    cost = 0.0 if zero_cost else modeled_cost(principal, cfg)
+    cost = 0.0 if zero_cost else modeled_cost(principal, cfg, shares=shares)
     avg = 0.0 if state.spy_shares <= 0 else state.spy_cost_basis / state.spy_shares
     state.cash += principal - cost
     state.spy_shares -= shares
@@ -1393,7 +1460,7 @@ def _spy_buy(state: ArmState, shares: int, price: float, cfg: StudyConfig, zero_
     if shares <= 0:
         return 0.0
     principal = shares * price
-    cost = 0.0 if zero_cost else modeled_cost(principal, cfg)
+    cost = 0.0 if zero_cost else modeled_cost(principal, cfg, shares=shares)
     state.cash -= principal + cost
     state.spy_shares += shares
     state.spy_cost_basis += principal + cost
@@ -1660,8 +1727,9 @@ def run_simulation(
                 _fill_stock_sell(shadow, shadow.positions[order.ticker], open_px, cfg, True)
                 entry_cost = position.cost_basis - position.entry_principal
                 gross = open_px / position.entry_fill_price - 1.0
-                net = (open_px * (1.0 - cfg.cost_rate)) / (
-                    position.entry_fill_price * (1.0 + cfg.cost_rate)) - 1.0
+                net = (
+                    position.shares * open_px - cost
+                ) / position.cost_basis - 1.0
                 spy_entry = _bar_on(spy, position.entry_execution_date)
                 spy_exit = _bar_on(spy, session)
                 spy_ret = None
@@ -1738,7 +1806,7 @@ def run_simulation(
             need = sum(item.reserved_cash for item in accepted)
             if spy_o is not None and need > state.cash + 1e-9 and state.spy_shares > 0:
                 gap = need - state.cash
-                net_per_share = spy_o * (1.0 - cfg.cost_rate)
+                net_per_share = sale_proceeds_per_share(spy_o, cfg)
                 sell_shares = min(state.spy_shares, int(math.ceil(gap / net_per_share))) if net_per_share > 0 else 0
                 if sell_shares > 0:
                     cost = _spy_sell(state, sell_shares, spy_o, cfg, False)
@@ -1753,7 +1821,7 @@ def run_simulation(
 
             def actual_entry_requirement(item: PendingOrder) -> float:
                 open_price = stock_open_close(item.ticker, session)[0] or 0.0
-                return item.shares * open_price * (1.0 + cfg.cost_rate)
+                return purchase_cash(item.shares, open_price, cfg)
 
             while accepted and state.cash + 1e-9 < sum(
                 actual_entry_requirement(item) for item in accepted
@@ -1769,7 +1837,7 @@ def run_simulation(
                 affordable = (
                     int(math.floor(
                         remaining_after_higher_ranks
-                        / (open_px * (1.0 + cfg.cost_rate))
+                        / purchase_cash_per_share(open_px, cfg)
                     ))
                     if open_px > 0 else 0
                 )
@@ -1792,7 +1860,7 @@ def run_simulation(
                 open_px = stock_open_close(order.ticker, session)[0]
                 if open_px is None:
                     continue
-                required = order.shares * open_px * (1.0 + cfg.cost_rate)
+                required = purchase_cash(order.shares, open_px, cfg)
                 if required > state.cash + 1e-9:
                     orders.append(OrderRecord(
                         order.order_id, arm, order.ticker, "buy", order.kind, order.shares,
@@ -1819,14 +1887,16 @@ def run_simulation(
                 orders.append(OrderRecord(
                     order.order_id, arm, order.ticker, "buy", order.kind, order.shares,
                     order.decision_date, session, order.reference_price, order.limit_price,
-                    open_px, order.shares * open_px, modeled_cost(order.shares * open_px, cfg),
+                    open_px, order.shares * open_px, modeled_cost(
+                        order.shares * open_px, cfg, shares=order.shares),
                     STATUS_FILLED, order.reason, order.rank))
                 if first_strategy_entry[arm] is None:
                     first_strategy_entry[arm] = session
 
             if (not cfg.cash_staging_enabled and processed_opens[arm]
                     and spy_c is not None and state.cash > 0):
-                sweep_shares = int(math.floor(state.cash / (spy_c * (1.0 + cfg.cost_rate))))
+                sweep_shares = int(math.floor(
+                    state.cash / purchase_cash_per_share(spy_c, cfg)))
                 if sweep_shares > 0:
                     cost = _spy_buy(state, sweep_shares, spy_c, cfg, False)
                     _spy_buy(shadow, sweep_shares, spy_c, cfg, True)
@@ -1841,9 +1911,10 @@ def run_simulation(
                 notes.append(f"{arm}:spy_sweep_failed:{session.isoformat()}")
 
             if first_strategy_entry[arm] == session and benchmark[arm]["shares"] == 0 and spy_o is not None:
-                shares = int(math.floor(cfg.starting_equity / (spy_o * (1.0 + cfg.cost_rate))))
+                shares = int(math.floor(
+                    cfg.starting_equity / purchase_cash_per_share(spy_o, cfg)))
                 principal = shares * spy_o
-                cost = modeled_cost(principal, cfg)
+                cost = modeled_cost(principal, cfg, shares=shares)
                 benchmark[arm] = {
                     "shares": float(shares),
                     "cash": cfg.starting_equity - principal - cost,
@@ -2116,7 +2187,7 @@ def run_simulation(
                 sweepable_cash = max(0.0, state.cash - reserve)
                 if spy_c is not None and sweepable_cash > 0:
                     sweep_shares = int(math.floor(
-                        sweepable_cash / (spy_c * (1.0 + cfg.cost_rate))))
+                        sweepable_cash / purchase_cash_per_share(spy_c, cfg)))
                     if sweep_shares > 0:
                         principal = sweep_shares * spy_c
                         cost = _spy_buy(state, sweep_shares, spy_c, cfg, False)
@@ -2134,9 +2205,10 @@ def run_simulation(
 
             if (first_strategy_entry[arm] == session and benchmark[arm]["shares"] == 0
                     and spy_o is not None):
-                shares = int(math.floor(cfg.starting_equity / (spy_o * (1.0 + cfg.cost_rate))))
+                shares = int(math.floor(
+                    cfg.starting_equity / purchase_cash_per_share(spy_o, cfg)))
                 principal = shares * spy_o
-                cost = modeled_cost(principal, cfg)
+                cost = modeled_cost(principal, cfg, shares=shares)
                 benchmark[arm] = {
                     "shares": float(shares),
                     "cash": cfg.starting_equity - principal - cost,
@@ -2166,7 +2238,11 @@ def run_simulation(
             bench_value = None
             bench_ret = None
             if spy_c is not None and benchmark[arm]["shares"]:
-                liquidation = benchmark[arm]["shares"] * spy_c * cfg.cost_rate
+                liquidation = modeled_cost(
+                    benchmark[arm]["shares"] * spy_c,
+                    cfg,
+                    shares=benchmark[arm]["shares"],
+                )
                 bench_value = benchmark[arm]["cash"] + benchmark[arm]["shares"] * spy_c
                 # Terminal-style mark includes modeled liquidation cost without
                 # mutating the benchmark ledger.

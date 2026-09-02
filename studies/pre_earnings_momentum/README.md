@@ -91,7 +91,7 @@ SPY decision session and a final `YEAR_COMPLETE` line with session count,
 elapsed seconds, and output directory. Redirect or `tee` each annual command to
 a distinct log file for durable monitoring without changing the artifacts.
 
-### Unrun post-earnings T+7 study
+### Frozen 10-bps post-earnings T+7 study
 
 The separate [`post_earnings_hold_study_spec.md`](post_earnings_hold_study_spec.md)
 defines an equal-allocation post-event development study with three independent
@@ -101,9 +101,10 @@ with a floor-protected hold that exits no later than the **open of the seventh
 SPY session strictly after** the realized or visibly labelled fallback event
 date.
 
-Implementation and synthetic verification are complete, but this study is
-unrun. The command refuses every historical invocation unless the owner has
-separately authorized it and the caller supplies `--confirm-historical-run`.
+Implementation, synthetic verification, and the authorized 2010–2022
+development runs are complete and frozen. The command refuses every historical
+invocation unless the owner has separately authorized it and the caller
+supplies `--confirm-historical-run`.
 The shared daily-study runner enforces the same guard if a post-event config is
 passed directly, so the wrapper cannot be bypassed through the legacy command:
 
@@ -139,6 +140,36 @@ utilities/.venv/bin/python -m \
 
 The comparison tool fails if the variants do not cover identical years, do not
 contain only the equal arm, or disagree on the passive SPY benchmark.
+
+### Frozen-design per-share-fee rerun
+
+The separate
+[`post_earnings_hold_low_fee_study_spec.md`](post_earnings_hold_low_fee_study_spec.md)
+keeps the frozen post-event rules and changes only the transaction-cost model
+to `$0.0008 × filled shares` on every filled stock and SPY side. It has its own
+study IDs and artifact root, starts independent $50,000 baseline and Risk-On
+chains in 2010, continues them through 2022, and does not include the
+Risk-On-or-Neutral arm. The 2023–2025 period remains untouched.
+
+Each invocation is guarded independently of the predecessor command:
+
+```bash
+./commands.sh pre-earnings-post-event-low-fee-study --help
+./commands.sh pre-earnings-post-event-low-fee-study \
+  --variant baseline --year 2010 --origin-year 2010 \
+  --run-id SERIES-baseline-2010 --confirm-low-fee-development-run
+```
+
+Continuation years require the immediately prior low-fee checkpoint. The
+two-series comparison command is:
+
+```bash
+utilities/.venv/bin/python -m \
+  studies.pre_earnings_momentum.post_earnings_low_fee_comparison \
+  --artifact-root "$SFP_DATA_DIR/backtest/pre_earnings_momentum/post_earnings_hold_low_fee" \
+  --baseline-tag BASELINE_TAG --risk-on-tag RISK_ON_TAG \
+  --start-year 2010 --end-year 2022 --output PATH/low_fee_comparison.csv
+```
 
 After an authorized continuous sequence finishes, validate its output hashes,
 checkpoint chain, frozen commit/config, accounting constraints, sector caps,
@@ -192,13 +223,17 @@ authorize any later year.
 | `event_backtest.py` | Event-study runner using completed decision bars |
 | `daily_redeployment.py` | Guarded CLI and annual-checkpoint restore for the development daily-redeployment study |
 | `daily_redeployment_series_report.py` | Fail-closed checkpoint-chain validation and annual comparison CSV |
-| `post_earnings_hold.py` | Guarded variant-selecting runner for the unrun post-event study |
+| `post_earnings_hold.py` | Guarded variant-selecting runner for the frozen 10-bps post-event study |
 | `post_earnings_hold_comparison.py` | Joins three validated equal-arm annual series with their common SPY benchmark |
+| `post_earnings_low_fee.py` | Guarded baseline/Risk-On runner for the independent per-share-fee study |
+| `post_earnings_low_fee_comparison.py` | Joins the two validated low-fee annual series with their common SPY benchmark |
 | `config/daily_redeployment.yaml` | Accepted $500 daily-scan parameters for the daily-redeployment study |
 | `config/daily_redeployment_cash_staging.yaml` | Separate equal-only development configuration with post-scan cash staging |
 | `cash_staging_study_spec.md` | Binding methodology for the independent cash-staging development study |
-| `post_earnings_hold_study_spec.md` | Binding unrun T+7 post-event and market-regime methodology |
+| `post_earnings_hold_study_spec.md` | Binding frozen T+7 post-event and market-regime methodology |
 | `config/post_earnings_hold_*.yaml` | Separate baseline, Risk-On, and Risk-On-or-Neutral study contracts |
+| `post_earnings_hold_low_fee_study_spec.md` | Frozen-design per-share-fee development methodology |
+| `config/post_earnings_hold_low_fee_*.yaml` | Separate baseline and Risk-On low-fee study contracts |
 | `config/daily_redeployment_price_500.yaml` | 2021 development sensitivity with a $500 entry-price ceiling |
 | `config/daily_redeployment_price_1000.yaml` | 2021 development sensitivity with a $1,000 entry-price ceiling |
 | `config/daily_redeployment_monday_thursday.yaml` | 2021 $500 sensitivity with holiday-adjusted Monday/Thursday entry scans |

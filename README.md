@@ -231,7 +231,8 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh market-regime-compare` | Stock-only 2005–2020 walk-forward regime-model comparison; holdout sealed |
 | `./commands.sh market-regime-holdout` | Spent published holdout; retained only to fail closed against reruns |
 | `./commands.sh pre-earnings-daily-study` | Development daily pre-earnings redeployment study; every run requires owner authorization, 2021 is guarded, and later years require the prior `--state-in` checkpoint |
-| `./commands.sh pre-earnings-post-event-study` | Unrun equal-arm post-earnings T+7 development variants; every historical invocation is explicitly guarded |
+| `./commands.sh pre-earnings-post-event-study` | Frozen equal-arm post-earnings T+7 development variants; every historical invocation is explicitly guarded |
+| `./commands.sh pre-earnings-post-event-low-fee-study` | Separate 2010–2022 baseline/Risk-On rerun using $0.0008 per filled share per side; every invocation is explicitly guarded |
 
 ## Testing
 
