@@ -60,7 +60,7 @@ export class PortfolioAnalysisComponent implements OnChanges {
   readonly previewAllocationBuckets: PortfolioAllocationBucket[] = [
     'GROWTH', 'SPECULATIVE', 'DEFENSIVE',
   ];
-  readonly skeletonCards = Array.from({ length: 4 });
+  readonly skeletonCards = Array.from({ length: 3 });
 
   data: PortfolioAnalysisResponse | null = null;
   loading = false;
@@ -138,6 +138,14 @@ export class PortfolioAnalysisComponent implements OnChanges {
     );
   }
 
+  showWarning(code: string): boolean {
+    return ![
+      'CASH_BALANCE_UNAVAILABLE',
+      'BUYING_POWER_UNAVAILABLE',
+      'MAINTENANCE_REQUIREMENT_UNAVAILABLE',
+    ].includes(code);
+  }
+
   sortedItems(): PortfolioAnalysisItem[] {
     return [...(this.data?.items ?? [])].sort((left, right) => {
       const a = left[this.itemSort];
@@ -178,6 +186,12 @@ export class PortfolioAnalysisComponent implements OnChanges {
     }
     return [...accounts].map(([id, label]) => ({ id, label }))
       .sort((left, right) => left.label.localeCompare(right.label));
+  }
+
+  capitalAmount(field: 'cash_balance' | 'buying_power'): number | null {
+    const accounts = this.data?.summary.capital.accounts ?? [];
+    if (!accounts.length || accounts.some(account => account[field] === null)) return null;
+    return accounts.reduce((total, account) => total + (account[field] ?? 0), 0);
   }
 
   openProfileEditor(): void {

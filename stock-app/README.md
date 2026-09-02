@@ -200,8 +200,10 @@ Each sync also replaces the selected ledger's `account_capital.csv` with one
 nullable provider-fact row per account. Net liquidating value is the future
 Portfolio Analysis denominator; when the provider omits it, the value stays
 blank with `NET_LIQUIDATING_VALUE_UNAVAILABLE` rather than being reconstructed
-from visible positions. Cash, buying power, and maintenance requirement follow
-the same fail-closed rule independently.
+from visible positions. For SnapTrade retirement accounts, explicitly
+classified same-currency `CASH` holdings are also materialized as the cash
+balance and its cash-backed buying power; this does not infer any margin
+capacity. Maintenance requirement remains a provider-only fact.
 
 Portfolio Analysis stores app-owned limits in
 `portfolio_analysis/profiles.json` and account/symbol allocation overrides in

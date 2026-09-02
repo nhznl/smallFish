@@ -58,16 +58,12 @@
         <button type="button" class="btn btn-sm" (click)="openProfileEditor()">Complete profile</button>
       </div>
     }
-    @if (analysis.coverage.status !== 'COMPLETE') {
-      <div class="banner banner-warn" role="status">
-        <strong>{{ words(analysis.coverage.status) }} data.</strong>
-        <span>{{ analysis.coverage.reasons.join(' ') || 'Some conclusions cannot be assessed from the saved evidence.' }}</span>
-      </div>
-    }
     @for (warning of analysis.warnings; track warning.code + ':' + (warning.symbol ?? '')) {
-      <div class="banner banner-warn" role="status">
-        <strong>{{ words(warning.code) }}.</strong><span>{{ warning.message }}</span>
-      </div>
+      @if (showWarning(warning.code)) {
+        <div class="banner banner-warn" role="status">
+          <strong>{{ words(warning.code) }}.</strong><span>{{ warning.message }}</span>
+        </div>
+      }
     }
 
     <div class="stat-strip verdict-strip" aria-label="Portfolio verdicts">
@@ -85,11 +81,6 @@
         <span class="stat-label">Capital deployment</span>
         <strong class="stat-value">{{ words(analysis.summary.verdicts.capital_deployment) }}</strong>
         <span class="stat-delta">Only assessed against limits you selected</span>
-      </article>
-      <article class="stat-card verdict-card" [ngClass]="verdictClass(analysis.summary.verdicts.data_confidence)">
-        <span class="stat-label">Data confidence</span>
-        <strong class="stat-value">{{ words(analysis.summary.verdicts.data_confidence) }}</strong>
-        <span class="stat-delta">Missing evidence cannot produce an aligned verdict</span>
       </article>
     </div>
 
@@ -169,6 +160,8 @@
             <div><dt>Growth + speculative</dt><dd>{{ percent(analysis.summary.allocation.growth_pct) }}</dd></div>
             <div><dt>Deployment</dt><dd>{{ percent(analysis.summary.allocation.deployment_pct) }}</dd></div>
             <div><dt>Liquid capital</dt><dd>{{ percent(analysis.summary.allocation.liquid_pct) }}</dd></div>
+            <div><dt>Cash balance</dt><dd>{{ money(capitalAmount('cash_balance')) }}</dd></div>
+            <div><dt>Buying power</dt><dd>{{ money(capitalAmount('buying_power')) }}</dd></div>
             <div><dt>Account capital</dt><dd>{{ money(analysis.summary.capital.analyzed_capital) }}</dd></div>
           </dl>
         </div>

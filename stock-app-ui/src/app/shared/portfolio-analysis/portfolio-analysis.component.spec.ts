@@ -170,10 +170,14 @@ describe('PortfolioAnalysisComponent', () => {
     expect(api.getPortfolioAnalysis).toHaveBeenCalledWith('tastytrade');
     expect(text).toContain('Long-term aggressive growth');
     expect(text).not.toContain('Speculative trading risk budget');
+    expect(text).not.toContain('Data confidence');
     expect(text).toContain('SYNTH exceeds the selected issuer limit');
     expect(text).toContain('18.40%');
     expect(text).toContain('12.00%');
     expect(text).toContain('$6,400.00');
+    expect(text).toContain('Cash balance');
+    expect(text).toContain('Buying power');
+    expect(text).toContain('$10,000.00');
     const betaMetric = Array.from(
       fixture.nativeElement.querySelectorAll('.risk-layout .compact-metrics > div') as NodeListOf<HTMLElement>
     ).find(metric => metric.querySelector('dt')?.textContent?.includes('Beta vs SPY'));
@@ -182,6 +186,31 @@ describe('PortfolioAnalysisComponent', () => {
     expect(text).toContain('HYPOTHETICAL');
     expect(fixture.nativeElement.querySelector('.analyzed-table .col-sticky')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.analyzed-table th button')).toBeTruthy();
+  });
+
+  it('hides non-actionable cash-capital availability notices', async () => {
+    const analysis = response();
+    analysis.warnings = [
+      { code: 'CASH_BALANCE_UNAVAILABLE', scope: 'CAPITAL', symbol: null, component_id: null,
+        message: 'Cash balance unavailable.' },
+      { code: 'BUYING_POWER_UNAVAILABLE', scope: 'CAPITAL', symbol: null, component_id: null,
+        message: 'Buying power unavailable.' },
+      { code: 'MAINTENANCE_REQUIREMENT_UNAVAILABLE', scope: 'CAPITAL', symbol: null, component_id: null,
+        message: 'Maintenance requirement unavailable.' },
+    ];
+    const api = apiStub(analysis);
+    await TestBed.configureTestingModule({
+      imports: [PortfolioAnalysisComponent],
+      providers: [{ provide: BrokerageService, useValue: api }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PortfolioAnalysisComponent);
+    fixture.componentRef.setInput('brokerageId', 'tastytrade');
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).not.toContain('Cash balance unavailable');
+    expect(text).not.toContain('Buying power unavailable');
+    expect(text).not.toContain('Maintenance requirement unavailable');
   });
 
   it('renders an unconfigured profile as a valid not-assessed state with an action', async () => {

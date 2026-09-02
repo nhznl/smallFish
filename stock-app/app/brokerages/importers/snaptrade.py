@@ -23,6 +23,7 @@ import csv
 import os
 import tempfile
 import threading
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -251,9 +252,9 @@ def _account_capital_fact(account: Any, *, brokerage_id: str,
     """Normalize only capital fields proven by the account-list payload.
 
     The characterized payload exposes ``balance.total`` as total account value.
-    It does not expose provider cash, buying power, or maintenance requirement,
-    so those values deliberately remain unavailable even when positions include
-    a cash-equivalent fund.
+    It does not expose provider cash, buying power, or maintenance requirement.
+    ``_with_cash_holdings`` subsequently fills the first two only when the same
+    holdings response contains an explicitly classified cash-equivalent.
     """
     balance = value(account, "balance")
     total = value(balance, "total")
@@ -275,6 +276,39 @@ def _account_capital_fact(account: Any, *, brokerage_id: str,
         maintenance_requirement=None,
         provenance=Provenance(source=SOURCE, retrieved_at=retrieved_at),
         missing=tuple(missing),
+    )
+
+
+def _with_cash_holdings(fact: AccountCapitalFact,
+                        rows: list[dict[str, Any]]) -> AccountCapitalFact:
+    """Use explicit same-currency CASH holdings as cash-backed buying power.
+
+    SnapTrade does not supply broker-calculated margin buying power.  A visible
+    cash-equivalent position is nevertheless a provider-reported available
+    balance, so its marked value is materialized as both cash balance and the
+    cash-backed portion of buying power.  This deliberately does not infer any
+    additional margin capacity.
+    """
+    cash_rows = [
+        row for row in rows
+        if row.get("asset_class") == "CASH"
+        and (not row.get("currency") or row.get("currency", "").upper() == fact.currency)
+    ]
+    if not cash_rows:
+        return fact
+    cash_balance = sum(
+        (_optional_decimal(row.get("market_value")) or Decimal("0") for row in cash_rows),
+        Decimal("0"),
+    )
+    missing = tuple(
+        reason for reason in fact.missing
+        if reason not in {MISSING_CASH_BALANCE, MISSING_BUYING_POWER}
+    )
+    return replace(
+        fact,
+        cash_balance=cash_balance,
+        buying_power=max(cash_balance, Decimal("0")),
+        missing=missing,
     )
 
 
@@ -551,21 +585,23 @@ def sync_holdings(provider: HoldingsProvider | None = None, *,
     provider = provider or fetch_snaptrade
     previous_rows = read_holdings_ledger()
     retrieved_at = _now()
-    rows: list[dict[str, Any]] = []
     accounts_and_holdings = provider()
-    capital_facts = [
-        _account_capital_fact(
-            account, brokerage_id=brokerage_id, retrieved_at=retrieved_at
-        )
-        for account, _holdings in accounts_and_holdings
-    ]
+    rows: list[dict[str, Any]] = []
+    capital_facts: list[AccountCapitalFact] = []
     accounts_synced = {
         text(value(account, "id"))
         for account, _holdings in accounts_and_holdings
         if text(value(account, "id"))
     }
     for account, holdings in accounts_and_holdings:
-        rows.extend(_normalize_account(account, holdings, retrieved_at))
+        account_rows = _normalize_account(account, holdings, retrieved_at)
+        rows.extend(account_rows)
+        capital_facts.append(_with_cash_holdings(
+            _account_capital_fact(
+                account, brokerage_id=brokerage_id, retrieved_at=retrieved_at
+            ),
+            account_rows,
+        ))
 
     imported_at = _now()
     for row in rows:

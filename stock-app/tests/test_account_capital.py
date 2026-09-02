@@ -47,7 +47,7 @@ def test_config_paths_are_per_ledger(capital_env, monkeypatch):
     )
 
 
-def test_snaptrade_materializes_characterized_total_and_explicit_missing_fields(
+def test_snaptrade_materializes_characterized_total_and_cash_backed_buying_power(
         capital_env):
     positions = {"results": [{
         "instrument": {"kind": "mutualfund", "symbol": "CASHX"},
@@ -64,15 +64,12 @@ def test_snaptrade_materializes_characterized_total_and_explicit_missing_fields(
     assert fact.account.account_id == "synthetic-account"
     assert fact.currency == "USD"
     assert fact.net_liquidating_value == Decimal("184261.04")
-    # A visible money-market position is not a provider cash-balance fact.
-    assert fact.cash_balance is None
-    assert fact.buying_power is None
+    # An explicitly classified money-market holding is available cash and the
+    # cash-backed portion of buying power; this is not inferred margin capacity.
+    assert fact.cash_balance == Decimal("2500")
+    assert fact.buying_power == Decimal("2500")
     assert fact.maintenance_requirement is None
-    assert fact.missing == (
-        contracts.MISSING_CASH_BALANCE,
-        contracts.MISSING_BUYING_POWER,
-        contracts.MISSING_MAINTENANCE_REQUIREMENT,
-    )
+    assert fact.missing == (contracts.MISSING_MAINTENANCE_REQUIREMENT,)
     assert fact.provenance.source == "FIDELITY"
 
     [row] = account_capital.read_facts(
@@ -81,8 +78,9 @@ def test_snaptrade_materializes_characterized_total_and_explicit_missing_fields(
     )
     assert row.net_liquidating_value == Decimal("184261.04")
     csv_text = config.retirement_account_capital_csv().read_text(encoding="utf-8")
-    assert "CASH_BALANCE_UNAVAILABLE" in csv_text
-    assert "BUYING_POWER_UNAVAILABLE" in csv_text
+    assert "CASH_BALANCE_UNAVAILABLE" not in csv_text
+    assert "BUYING_POWER_UNAVAILABLE" not in csv_text
+    assert "MAINTENANCE_REQUIREMENT_UNAVAILABLE" in csv_text
 
 
 def test_missing_provider_total_stays_null_with_stable_reason(capital_env):
