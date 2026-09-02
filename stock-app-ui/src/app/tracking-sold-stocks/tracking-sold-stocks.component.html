@@ -105,10 +105,10 @@
               Coverage initiation<span class="sort-icon" aria-hidden="true">{{ sortIcon('coverage_initiation_date') }}</span>
             </button>
           </th>
-          <th>Momentum signal</th>
-          <th class="num sortable" [attr.aria-sort]="ariaSort('setup_score')">
+          <th>Trend</th>
+          <th class="num sortable col-setup-score" [attr.aria-sort]="ariaSort('setup_score')">
             <button type="button" class="sort-button" (click)="sortBy('setup_score')">
-              Setup score<span class="sort-icon" aria-hidden="true">{{ sortIcon('setup_score') }}</span>
+              Setup<br>score<span class="sort-icon" aria-hidden="true">{{ sortIcon('setup_score') }}</span>
             </button>
           </th>
           <th class="num">52-wk low · high</th>
@@ -129,18 +129,18 @@
               YTD vs SPY<span class="sort-icon" aria-hidden="true">{{ sortIcon('ytd_vs_spy') }}</span>
             </button>
           </th>
-          <th class="sortable" [attr.aria-sort]="ariaSort('target_date')">
+          <th class="sortable col-target-date" [attr.aria-sort]="ariaSort('target_date')">
             <button type="button" class="sort-button" (click)="sortBy('target_date')"
               matTooltip="Planned re-entry date for Ready to Trade rows."
               matTooltipPosition="above">
-              Target date<span class="sort-icon" aria-hidden="true">{{ sortIcon('target_date') }}</span>
+              Target<br>date<span class="sort-icon" aria-hidden="true">{{ sortIcon('target_date') }}</span>
             </button>
           </th>
-          <th class="num sortable" [attr.aria-sort]="ariaSort('target_amount')">
+          <th class="num sortable col-target-amt" [attr.aria-sort]="ariaSort('target_amount')">
             <button type="button" class="sort-button" (click)="sortBy('target_amount')"
               matTooltip="Planned dollar amount for Ready to Trade rows."
               matTooltipPosition="above">
-              Target amt<span class="sort-icon" aria-hidden="true">{{ sortIcon('target_amount') }}</span>
+              Target<br>amt<span class="sort-icon" aria-hidden="true">{{ sortIcon('target_amount') }}</span>
             </button>
           </th>
           <th class="actions-col"><span class="visually-hidden">Actions</span></th>
@@ -176,7 +176,7 @@
                 {{ setupIcon(row.setup) }} {{ setupLabel(row.setup) }}
               </span>
             </td>
-            <td class="num">{{ row.setup_score ?? '—' }}</td>
+            <td class="num col-setup-score">{{ row.setup_score ?? '—' }}</td>
             <td class="num">
               @if (row.fifty_two_week_low != null && row.fifty_two_week_high != null && row.range_position != null) {
                 <div class="range-cell" [matTooltip]="rangeTooltip(row)" matTooltipPosition="above">
@@ -206,8 +206,8 @@
               {{ pp(row.ytd_vs_spy) }}
               <small>{{ pct(row.ytd_return) }} · SPY {{ pct(snapshot?.spy_ytd_return) }}</small>
             </td>
-            <td>{{ isReady(row) ? date(row.target_date) : '—' }}</td>
-            <td class="num">{{ isReady(row) ? dollars(row.target_amount) : '—' }}</td>
+            <td class="col-target-date">{{ isReady(row) ? date(row.target_date) : '—' }}</td>
+            <td class="num col-target-amt">{{ isReady(row) ? dollars(row.target_amount) : '—' }}</td>
             <td class="actions-col">
               <button type="button" class="btn btn-sm btn-ghost" (click)="openEdit(row)">
                 Edit

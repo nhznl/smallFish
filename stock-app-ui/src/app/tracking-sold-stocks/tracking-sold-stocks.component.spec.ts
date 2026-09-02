@@ -76,7 +76,8 @@ describe('TrackingSoldStocksComponent', () => {
     const text = fixture.nativeElement.textContent ?? '';
     expect(text).toContain('AAA');
     expect(text).toContain('Copy symbols');
-    expect(text).toContain('Coverage vs SPY');
+    expect(text).toContain('Trend');
+    expect(text).not.toContain('Momentum signal');
     expect(text).toContain('Snapshot Coverage vs SPY');
   });
 
@@ -100,7 +101,7 @@ describe('TrackingSoldStocksComponent', () => {
       expect(styles.whiteSpace).toBe('nowrap');
       expect(styles.overflow).toBe('hidden');
       expect(styles.textOverflow).toBe('ellipsis');
-      expect(preview.getBoundingClientRect().width).toBe(160);
+      expect(preview.getBoundingClientRect().width).toBe(100);
       expect(preview.scrollWidth).toBeGreaterThan(preview.clientWidth);
       expect(table.getBoundingClientRect().width).toBeCloseTo(tableWidth, 1);
       expect(row.getBoundingClientRect().height).toBeCloseTo(rowHeight, 1);
