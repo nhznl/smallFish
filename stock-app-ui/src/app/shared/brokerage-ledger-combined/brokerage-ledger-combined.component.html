@@ -91,7 +91,7 @@
               <th class="column-group" colspan="2">Combined</th>
             </tr>
             <tr>
-              <th class="num">Share Qty</th>
+              <th class="num col-share-qty">Share Qty</th>
               <th class="num">Cost Price / Share</th>
               <th class="num">Cost Price</th>
               <th class="num">Current Equity</th>
@@ -119,7 +119,8 @@
                   } @else {
                     <strong>{{ row.symbol }}</strong>
                   }
-                  <small>{{ row.accounts.join(' · ') || 'Account unavailable' }}</small>
+                  <small [matTooltip]="row.accounts.join(' · ') || 'Account unavailable'"
+                    matTooltipPosition="right">{{ row.accounts.join(' · ') || 'Account unavailable' }}</small>
                 </td>
                 <td class="num">{{ money(currentPricePerShare(row)) }}</td>
                 <td class="range-column">
@@ -135,7 +136,7 @@
                     }
                   }
                 </td>
-                <td class="num share-block-start">{{ quantity(row.share_quantity) }}</td>
+                <td class="num share-block-start col-share-qty">{{ quantity(row.share_quantity) }}</td>
                 <td class="num">{{ money(row.equity_cost_per_share) }}</td>
                 <td class="num">{{ money(row.equity_cost) }}</td>
                 <td class="num">{{ money(row.current_equity) }}</td>

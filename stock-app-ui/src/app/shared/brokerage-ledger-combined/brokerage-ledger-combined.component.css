@@ -66,10 +66,27 @@
 .result-count { margin-left: auto; color: var(--text-secondary); font-size: var(--text-sm); }
 
 .combined-table-shell { max-height: min(68vh, 760px); }
-.combined-table { min-width: 1700px; }
+.combined-table { min-width: 1580px; }
 .combined-table th.num, .combined-table td.num,
 .component-table th.num, .component-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
-.combined-table .col-sticky { min-width: 142px; }
+.combined-table .col-sticky {
+  width: 7.25rem;
+  min-width: 7.25rem;
+  max-width: 7.25rem;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.combined-table .col-share-qty {
+  width: 4rem;
+  min-width: 4rem;
+  max-width: 4rem;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+.combined-table th.col-share-qty {
+  white-space: normal;
+  line-height: 1.2;
+}
 .combined-table thead .column-group {
   border-left: 2px solid var(--border-strong);
   text-align: center;
@@ -88,7 +105,15 @@
   letter-spacing: 0;
 }
 .symbol-row.expanded { background: var(--primary-soft); }
-.symbol-identity small { margin-left: 24px; }
+.symbol-identity {
+  overflow: hidden;
+}
+.symbol-identity small {
+  margin-left: 24px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .symbol-link { color: var(--primary); font-family: var(--font-mono); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
 .range-column { min-width: 112px; }
 
