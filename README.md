@@ -234,6 +234,8 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh pre-earnings-post-event-study` | Frozen equal-arm post-earnings T+7 development variants; every historical invocation is explicitly guarded |
 | `./commands.sh pre-earnings-post-event-low-fee-study` | Separate 2010–2022 baseline/Risk-On rerun using $0.0008 per filled share per side; every invocation is explicitly guarded |
 | `./commands.sh pre-earnings-post-event-low-fee-holdout` | One-shot 2023–2025 baseline/Risk-On holdout; requires the explicit holdout confirmation flag |
+| `./commands.sh pre-earnings-post-event-weekly-batch` | Separate, exploratory 2022–2025 Friday-only execution replay for the post-earnings baseline and Risk-On variants |
+| `./commands.sh pre-earnings-post-event-weekly-batch-comparison` | Joins the two Friday-only annual chains after their guarded runs complete |
 
 ## Testing
 

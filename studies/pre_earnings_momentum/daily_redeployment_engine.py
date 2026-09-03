@@ -62,6 +62,8 @@ REGIME_GATE_RISK_ON = "risk_on"
 REGIME_GATE_RISK_ON_NEUTRAL = "risk_on_or_neutral"
 COST_MODEL_NOTIONAL_BPS = "notional_bps"
 COST_MODEL_PER_SHARE = "per_share"
+EXECUTION_NEXT_SESSION = "next_session"
+EXECUTION_FRIDAY_OPEN = "friday_open"
 
 _CONFIG_SCHEMA: dict[str, Any] = {
     "study_id": str,
@@ -87,6 +89,7 @@ _CONFIG_SCHEMA: dict[str, Any] = {
     "pin_calendar_days": int,
     "warmup_calendar_years": int,
     "entry_scan_schedule": str,
+    "execution_schedule": str,
     "cash_staging_enabled": bool,
     "exit_policy": str,
     "market_regime_gate": str,
@@ -119,6 +122,7 @@ _OPTIONAL_CONFIG_KEYS = {
     "exit_policy",
     "market_regime_gate",
     "post_event_hold_sessions",
+    "execution_schedule",
     "market_regime",
 }
 
@@ -172,6 +176,7 @@ class StudyConfig:
     pin_calendar_days: int
     warmup_calendar_years: int
     entry_scan_schedule: str
+    execution_schedule: str
     cash_staging_enabled: bool
     exit_policy: str
     market_regime_gate: str
@@ -230,6 +235,9 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         raise ValueError("invalid event window")
     if raw["entry_scan_schedule"] not in {"daily", "monday_thursday", "monday"}:
         raise ValueError("unsupported entry_scan_schedule")
+    execution_schedule = str(raw.get("execution_schedule", EXECUTION_NEXT_SESSION))
+    if execution_schedule not in {EXECUTION_NEXT_SESSION, EXECUTION_FRIDAY_OPEN}:
+        raise ValueError("unsupported execution_schedule")
     exit_policy = str(raw.get("exit_policy", EXIT_POLICY_T1))
     if exit_policy not in {EXIT_POLICY_T1, EXIT_POLICY_POST_EVENT}:
         raise ValueError("unsupported exit_policy")
@@ -281,6 +289,7 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         pin_calendar_days=int(raw["pin_calendar_days"]),
         warmup_calendar_years=int(raw["warmup_calendar_years"]),
         entry_scan_schedule=str(raw["entry_scan_schedule"]),
+        execution_schedule=execution_schedule,
         cash_staging_enabled=bool(raw.get("cash_staging_enabled", False)),
         exit_policy=exit_policy,
         market_regime_gate=market_regime_gate,
@@ -340,6 +349,29 @@ def scheduled_entry_scan_sessions(
     if schedule == "monday_thursday":
         selected.update(thursday_by_week.values())
     return frozenset(selected)
+
+
+def friday_execution_plan(sessions: Sequence[date]) -> tuple[frozenset[date], dict[date, date]]:
+    """Return each week's final session and every prior session's batch fill.
+
+    A normal week executes at Friday's open.  When Friday is a market holiday,
+    the final available SPY session is the execution session instead, and the
+    immediately preceding session is the latest possible decision cutoff.
+    """
+    grouped: dict[tuple[int, int], list[date]] = {}
+    for session in sorted(set(sessions)):
+        if session.weekday() > 4:
+            continue
+        iso = session.isocalendar()
+        grouped.setdefault((iso.year, iso.week), []).append(session)
+    execution_sessions: set[date] = set()
+    execution_for_decision: dict[date, date] = {}
+    for weekly_sessions in grouped.values():
+        execution = weekly_sessions[-1]
+        execution_sessions.add(execution)
+        for session in weekly_sessions[:-1]:
+            execution_for_decision[session] = execution
+    return frozenset(execution_sessions), execution_for_decision
 
 
 def session_before(sessions: Sequence[date], day: date) -> date | None:
@@ -900,6 +932,7 @@ def checkpoint_payload(
         "exit_policy": cfg.exit_policy,
         "market_regime_gate": cfg.market_regime_gate,
         "post_event_hold_sessions": cfg.post_event_hold_sessions,
+        "execution_schedule": cfg.execution_schedule,
         "source_year": checkpoint.source_year,
         "arms": {
             arm: _arm_state_payload(state) for arm, state in checkpoint.states.items()
@@ -929,6 +962,9 @@ def checkpoint_from_payload(
     checkpoint_hold = payload.get("post_event_hold_sessions")
     if checkpoint_hold is not None and int(checkpoint_hold) != cfg.post_event_hold_sessions:
         raise ValueError("checkpoint post-event hold does not match configuration")
+    checkpoint_schedule = payload.get("execution_schedule", EXECUTION_NEXT_SESSION)
+    if checkpoint_schedule != cfg.execution_schedule:
+        raise ValueError("checkpoint execution schedule does not match configuration")
     source_year = int(payload["source_year"])
     if expected_source_year is not None and source_year != expected_source_year:
         raise ValueError(
@@ -1602,6 +1638,10 @@ def run_simulation(
     entry_scan_sessions = scheduled_entry_scan_sessions(
         decision_sessions, cfg.entry_scan_schedule,
     )
+    weekly_execution_sessions, weekly_execution_for_decision = friday_execution_plan(
+        all_sessions,
+    )
+    weekly_batch = cfg.execution_schedule == EXECUTION_FRIDAY_OPEN
     spy_bars = dailies_from_frame(spy)
     stock_frames = {
         ticker: frame.sort_values("date").assign(date=lambda df: pd.to_datetime(df["date"]))
@@ -1667,6 +1707,12 @@ def run_simulation(
 
     for index, session in enumerate(decision_sessions):
         next_session = decision_sessions[index + 1] if index + 1 < len(decision_sessions) else session_after(all_sessions, session)
+        batch_execution = weekly_execution_for_decision.get(session) if weekly_batch else None
+        is_batch_cutoff = (
+            batch_execution is not None
+            and session_after(all_sessions, session) == batch_execution
+        )
+        is_batch_execution_session = weekly_batch and session in weekly_execution_sessions
         spy_o, spy_c = spy_open_close(session)
         market_regime = market_regime_at_close(
             spy,
@@ -1893,7 +1939,24 @@ def run_simulation(
                 if first_strategy_entry[arm] is None:
                     first_strategy_entry[arm] = session
 
-            if (not cfg.cash_staging_enabled and processed_opens[arm]
+            if (weekly_batch and is_batch_execution_session
+                    and spy_o is not None and state.cash > 0):
+                sweep_shares = int(math.floor(
+                    state.cash / purchase_cash_per_share(spy_o, cfg)))
+                if sweep_shares > 0:
+                    principal = sweep_shares * spy_o
+                    cost = _spy_buy(state, sweep_shares, spy_o, cfg, False)
+                    _spy_buy(shadow, sweep_shares, spy_o, cfg, True)
+                    cash_staging_metrics[arm]["swept_dollars"] += principal
+                    orders.append(OrderRecord(
+                        _order_id(state, session, cfg.benchmark_symbol, "spy_sweep"),
+                        arm, cfg.benchmark_symbol, "buy", "spy_sweep", sweep_shares,
+                        session, session, spy_o, None, spy_o, principal, cost,
+                        STATUS_FILLED, "weekly_batch_residual"))
+                    if first_strategy_entry[arm] is None:
+                        first_strategy_entry[arm] = session
+
+            if (not weekly_batch and not cfg.cash_staging_enabled and processed_opens[arm]
                     and spy_c is not None and state.cash > 0):
                 sweep_shares = int(math.floor(
                     state.cash / purchase_cash_per_share(spy_c, cfg)))
@@ -1926,6 +1989,7 @@ def run_simulation(
         for arm in cfg.arms:
             state = states[arm]
             scheduled_exit = False
+            decision_execution = batch_execution or next_session
             for ticker, position in list(state.positions.items()):
                 open_px, close_px, stale = stock_open_close(ticker, session)
                 bars = [bar for bar in stock_bars.get(ticker, []) if _as_date(bar.date) <= session]
@@ -1934,6 +1998,10 @@ def run_simulation(
                 if close_px is not None and not stale:
                     position.last_valid_close = close_px
                     position.last_valid_close_date = session
+                # Friday is the batch fill day.  Mark its closing value, but
+                # do not create a new Friday-close signal after that open.
+                if weekly_batch and batch_execution is None:
+                    continue
                 if cfg.exit_policy == EXIT_POLICY_POST_EVENT:
                     history = histories.get(ticker, np.array([], dtype="datetime64[D]"))
                     _update_post_event_state(
@@ -1963,14 +2031,14 @@ def run_simulation(
                     scheduled_exit = True
                 else:
                     triggers = _position_triggers(
-                        position, snapshot, None if stale else close_px, session, next_session,
+                        position, snapshot, None if stale else close_px, session, decision_execution,
                         all_sessions, stale, exit_policy=cfg.exit_policy)
                     # Setup-score deterioration is diagnostic only and never an exit.
                     if snapshot is not None and snapshot.setup == BULLISH_REVERSAL:
                         if PRIMARY_TREND not in triggers and snapshot.raw_trend_direction != DOWN:
                             triggers = tuple(item for item in triggers if item != PRIMARY_TREND)
                     primary = _primary_exit(triggers)
-                    if triggers and next_session is not None:
+                    if triggers and decision_execution is not None:
                         exit_order = PendingOrder(
                             order_id=_order_id(state, session, ticker, "stock_exit"),
                             ticker=ticker,
@@ -1978,7 +2046,7 @@ def run_simulation(
                             shares=position.shares,
                             kind="stock_exit",
                             decision_date=session,
-                            execution_date=next_session,
+                            execution_date=decision_execution,
                             rank=None,
                             limit_price=None,
                             reference_price=position.last_valid_close,
@@ -2038,7 +2106,10 @@ def run_simulation(
 
             origin = (not state.origin_consumed) and session == decision_sessions[0]
             deployable = _deployable(state, spy_c, cfg)
-            scan_scheduled = origin or session in entry_scan_sessions
+            scan_scheduled = (
+                (origin or session in entry_scan_sessions)
+                and (not weekly_batch or batch_execution is not None)
+            )
             funding_actionable = (
                 origin or scheduled_exit or _can_fund_min_target(deployable, cfg)
             )
@@ -2067,7 +2138,7 @@ def run_simulation(
                     decision, candidate = evaluate_symbol(
                         ticker=ticker,
                         session=session,
-                        intended_execution=next_session,
+                        intended_execution=decision_execution,
                         cfg=cfg,
                         bars=stock_bars.get(ticker, []),
                         spy_bars=spy_bars,
@@ -2110,59 +2181,65 @@ def run_simulation(
                         if record.payload.get("ticker") in blocked_tickers:
                             record.payload["state"] = "regime_blocked"
                             record.payload["rejection_reasons"] = "market_regime_gate"
-                allocator = allocate_equal if arm == ARM_EQUAL else allocate_proportional
-                selected = allocator(
-                    allocation_candidates, deployable, _sector_usage(state), cfg,
-                )
-                selected_tickers = {item.ticker for item in selected}
-                intents_by_ticker = {item.ticker: item for item in selected}
-                for record in scan_records:
-                    ticker = record.payload.get("ticker")
-                    if ticker in selected_tickers:
-                        intent = intents_by_ticker[ticker]
-                        record.payload.update({
-                            "state": "selected",
-                            "rejection_reasons": "",
-                            "intended_dollar_target": intent.dollar_target,
-                            "shares": intent.shares,
-                            "limit_price": intent.limit_price,
-                            "reserved_cash": intent.reserved_cash,
-                            "setup": intent.snapshot.setup,
-                            "raw_trend_direction": intent.snapshot.raw_trend_direction,
-                            "preliminary_reversal": intent.snapshot.preliminary_reversal,
-                            "setup_score_components": intent.snapshot.setup_score_components,
-                        })
-                    elif record.payload.get("state") == "eligible":
-                        record.payload["rejection_reasons"] = "not_allocated"
-                if next_session is not None:
-                    records_by_ticker = {
-                        record.payload.get("ticker"): record for record in scan_records
-                    }
-                    for intent in selected:
-                        order = PendingOrder(
-                            order_id=_order_id(state, session, intent.ticker, "stock_entry"),
-                            ticker=intent.ticker,
-                            side="buy",
-                            shares=intent.shares,
-                            kind="stock_entry",
-                            decision_date=session,
-                            execution_date=next_session,
-                            rank=intent.rank,
-                            limit_price=intent.limit_price,
-                            reference_price=intent.decision_close,
-                            reserved_cash=intent.reserved_cash,
-                            setup_score=intent.setup_score,
-                            sector=intent.sector,
-                            reason="entry",
-                            predicted_event_date=intent.predicted_event_date,
-                            snapshot=intent.snapshot,
-                        )
-                        state.pending.append(order)
-                        records_by_ticker[intent.ticker].payload["order_id"] = order.order_id
-                    if (not selected and state.cash > 0
-                            and not cfg.cash_staging_enabled):
-                        state.scheduled_sweep_session = next_session
-                        shadows[arm].scheduled_sweep_session = next_session
+                if weekly_batch and not is_batch_cutoff:
+                    for record in scan_records:
+                        if record.payload.get("state") == "eligible":
+                            record.payload["state"] = "weekly_tracking"
+                            record.payload["rejection_reasons"] = "friday_batch_pending"
+                else:
+                    allocator = allocate_equal if arm == ARM_EQUAL else allocate_proportional
+                    selected = allocator(
+                        allocation_candidates, deployable, _sector_usage(state), cfg,
+                    )
+                    selected_tickers = {item.ticker for item in selected}
+                    intents_by_ticker = {item.ticker: item for item in selected}
+                    for record in scan_records:
+                        ticker = record.payload.get("ticker")
+                        if ticker in selected_tickers:
+                            intent = intents_by_ticker[ticker]
+                            record.payload.update({
+                                "state": "selected",
+                                "rejection_reasons": "",
+                                "intended_dollar_target": intent.dollar_target,
+                                "shares": intent.shares,
+                                "limit_price": intent.limit_price,
+                                "reserved_cash": intent.reserved_cash,
+                                "setup": intent.snapshot.setup,
+                                "raw_trend_direction": intent.snapshot.raw_trend_direction,
+                                "preliminary_reversal": intent.snapshot.preliminary_reversal,
+                                "setup_score_components": intent.snapshot.setup_score_components,
+                            })
+                        elif record.payload.get("state") == "eligible":
+                            record.payload["rejection_reasons"] = "not_allocated"
+                    if decision_execution is not None:
+                        records_by_ticker = {
+                            record.payload.get("ticker"): record for record in scan_records
+                        }
+                        for intent in selected:
+                            order = PendingOrder(
+                                order_id=_order_id(state, session, intent.ticker, "stock_entry"),
+                                ticker=intent.ticker,
+                                side="buy",
+                                shares=intent.shares,
+                                kind="stock_entry",
+                                decision_date=session,
+                                execution_date=decision_execution,
+                                rank=intent.rank,
+                                limit_price=intent.limit_price,
+                                reference_price=intent.decision_close,
+                                reserved_cash=intent.reserved_cash,
+                                setup_score=intent.setup_score,
+                                sector=intent.sector,
+                                reason="entry",
+                                predicted_event_date=intent.predicted_event_date,
+                                snapshot=intent.snapshot,
+                            )
+                            state.pending.append(order)
+                            records_by_ticker[intent.ticker].payload["order_id"] = order.order_id
+                        if (not selected and state.cash > 0
+                                and not cfg.cash_staging_enabled):
+                            state.scheduled_sweep_session = decision_execution
+                            shadows[arm].scheduled_sweep_session = decision_execution
                 sector_usage = _sector_usage(state)
                 for record in scan_records:
                     sector = allocation_sector(record.payload.get("sector"))
@@ -2172,10 +2249,13 @@ def run_simulation(
                     record.payload.setdefault("order_id", None)
                 state.origin_consumed = True
             else:
-                note = "no_turnover" if scan_scheduled else "entry_scan_off_schedule"
+                note = (
+                    "weekly_batch_tracking" if weekly_batch and scan_scheduled
+                    else "no_turnover" if scan_scheduled else "entry_scan_off_schedule"
+                )
                 notes.append(f"{arm}:{note}:{session.isoformat()}")
 
-            if cfg.cash_staging_enabled:
+            if cfg.cash_staging_enabled and not weekly_batch:
                 reserve = sum(
                     order.reserved_cash for order in state.pending
                     if (order.side == "buy" and order.kind == "stock_entry"
@@ -2371,6 +2451,7 @@ def _build_summary(
         "exit_policy": cfg.exit_policy,
         "market_regime_gate": cfg.market_regime_gate,
         "post_event_hold_sessions": cfg.post_event_hold_sessions,
+        "execution_schedule": cfg.execution_schedule,
         "year": year,
         "starting_equity": cfg.starting_equity,
         "arms": {},

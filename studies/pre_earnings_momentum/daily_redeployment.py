@@ -64,6 +64,16 @@ POST_EVENT_LOW_FEE_HOLDOUT_CONFIGS = {
         / "config" / "post_earnings_hold_low_fee_holdout_risk_on.yaml"
     ),
 }
+POST_EVENT_WEEKLY_BATCH_CONFIGS = {
+    "baseline": (
+        Path(__file__).resolve().parent
+        / "config" / "post_earnings_weekly_batch_baseline.yaml"
+    ),
+    "risk-on": (
+        Path(__file__).resolve().parent
+        / "config" / "post_earnings_weekly_batch_risk_on.yaml"
+    ),
+}
 FROZEN_CONTINUATION_CONFIG_SHA256 = (
     "b54bf152d61a55ed86c387cf5e48a4116a9e92d2baa37a04e9ef8944c4232c6c"
 )
@@ -82,6 +92,10 @@ POST_EVENT_LOW_FEE_CONFIG_SHA256 = {
 POST_EVENT_LOW_FEE_HOLDOUT_CONFIG_SHA256 = {
     "baseline": "bb5f69a15a8361a6ab87067d66fc7847f50dcf4a4010eadf4af1faa4a103fb13",
     "risk-on": "6ae8cb3bdf5dd19545ce1f533202c8be72d49b1724f0a3d47ffb3ba0a6c7e5fc",
+}
+POST_EVENT_WEEKLY_BATCH_CONFIG_SHA256 = {
+    "baseline": "8ad78bf818fd96424d9139055d3225b46205f7df54f4912052b3ac7afd0b1671",
+    "risk-on": "8ce51cbb714249682da5c97ff7a092e3fbf9940aab2375fccf83315ff01a102e",
 }
 
 
@@ -124,6 +138,10 @@ def _validate_continuation_config(config_path: Path, cfg: StudyConfig) -> None:
         **{
             POST_EVENT_LOW_FEE_HOLDOUT_CONFIGS[variant].resolve(): digest
             for variant, digest in POST_EVENT_LOW_FEE_HOLDOUT_CONFIG_SHA256.items()
+        },
+        **{
+            POST_EVENT_WEEKLY_BATCH_CONFIGS[variant].resolve(): digest
+            for variant, digest in POST_EVENT_WEEKLY_BATCH_CONFIG_SHA256.items()
         },
     }
     resolved = Path(config_path).expanduser().resolve()

@@ -187,6 +187,7 @@ def _human_report(result: SimulationResult) -> str:
         f"Setup-score version: `{result.cfg.setup_score_version}`",
         f"Exit policy: `{result.cfg.exit_policy}`",
         f"Market-regime entry gate: `{result.cfg.market_regime_gate}`",
+        f"Execution schedule: `{result.cfg.execution_schedule}`",
         "",
     ]
     for arm, stats in result.summary.get("arms", {}).items():

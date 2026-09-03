@@ -41,6 +41,8 @@
 #   pre-earnings-post-event-study - frozen post-earnings T+7 development variants
 #   pre-earnings-post-event-low-fee-study - authorized $0.0008/share development variants
 #   pre-earnings-post-event-low-fee-holdout - one-shot 2023-2025 holdout
+#   pre-earnings-post-event-weekly-batch - exploratory 2022-2025 Friday execution replay
+#   pre-earnings-post-event-weekly-batch-comparison - compare Friday execution annual chains
 #   backtest [earnings]       - strategy walk-forward backtest
 #   event-backtest [earnings] - strategy event-study backtest
 #   earnings-history - fetch historical earnings dates (requires yfinance)
@@ -256,6 +258,12 @@ case "$1" in
   pre-earnings-post-event-low-fee-holdout)
     cd "$ROOT" && "$UTILITIES_PYTHON" -m studies.pre_earnings_momentum.post_earnings_low_fee_holdout "${@:2}"
     ;;
+  pre-earnings-post-event-weekly-batch)
+    cd "$ROOT" && "$UTILITIES_PYTHON" -m studies.pre_earnings_momentum.post_earnings_weekly_batch "${@:2}"
+    ;;
+  pre-earnings-post-event-weekly-batch-comparison)
+    cd "$ROOT" && "$UTILITIES_PYTHON" -m studies.pre_earnings_momentum.post_earnings_weekly_batch_comparison "${@:2}"
+    ;;
   backtest)
     run_strategy_action backtest "${@:2}"
     ;;
@@ -266,7 +274,7 @@ case "$1" in
     cd "$ROOT" && "$UTILITIES_PYTHON" -m utilities.fetch_earnings_history "${@:2}"
     ;;
   *)
-    echo "Usage: $0 {doctor|bootstrap-data|server|build-ui|studies|fetch|ensure-events|scan|wheel|chains|verify-premiums|universe|scrape|scrape-history|scrape-retry|sector-rotation|sector-rotation-study|sector-rotation-study-v2|rsi-supertrend-study|market-regime-study|market-regime-compare|market-regime-holdout|pre-earnings-daily-study|pre-earnings-post-event-study|pre-earnings-post-event-low-fee-study|pre-earnings-post-event-low-fee-holdout|backtest|event-backtest|earnings-history}"
+    echo "Usage: $0 {doctor|bootstrap-data|server|build-ui|studies|fetch|ensure-events|scan|wheel|chains|verify-premiums|universe|scrape|scrape-history|scrape-retry|sector-rotation|sector-rotation-study|sector-rotation-study-v2|rsi-supertrend-study|market-regime-study|market-regime-compare|market-regime-holdout|pre-earnings-daily-study|pre-earnings-post-event-study|pre-earnings-post-event-low-fee-study|pre-earnings-post-event-low-fee-holdout|pre-earnings-post-event-weekly-batch|pre-earnings-post-event-weekly-batch-comparison|backtest|event-backtest|earnings-history}"
     exit 1
     ;;
 esac

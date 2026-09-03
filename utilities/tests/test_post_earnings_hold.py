@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -16,10 +17,12 @@ import studies.pre_earnings_momentum.daily_redeployment as daily_cli
 import studies.pre_earnings_momentum.post_earnings_hold as post_cli
 import studies.pre_earnings_momentum.post_earnings_low_fee as low_fee_cli
 import studies.pre_earnings_momentum.post_earnings_low_fee_holdout as holdout_cli
+import studies.pre_earnings_momentum.post_earnings_weekly_batch as weekly_batch_cli
 from studies.pre_earnings_momentum.daily_redeployment import (
     POST_EVENT_CONFIGS,
     POST_EVENT_LOW_FEE_CONFIGS,
     POST_EVENT_LOW_FEE_HOLDOUT_CONFIGS,
+    POST_EVENT_WEEKLY_BATCH_CONFIGS,
     _validate_continuation_config,
 )
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
@@ -59,6 +62,9 @@ from studies.pre_earnings_momentum.post_earnings_low_fee_comparison import (
     combine_variant_rows as combine_low_fee_rows,
     write_comparison as write_low_fee_comparison,
 )
+from studies.pre_earnings_momentum.post_earnings_weekly_batch_comparison import (
+    write_comparison as write_weekly_batch_comparison,
+)
 from studies.pre_earnings_momentum.daily_redeployment_report import write_run
 from utilities.tests.test_daily_redeployment_engine import _market
 
@@ -73,6 +79,10 @@ def _low_fee_cfg(variant: str = "baseline"):
 
 def _holdout_cfg(variant: str = "baseline"):
     return load_study_config(POST_EVENT_LOW_FEE_HOLDOUT_CONFIGS[variant])
+
+
+def _weekly_batch_cfg(variant: str = "baseline"):
+    return load_study_config(POST_EVENT_WEEKLY_BATCH_CONFIGS[variant])
 
 
 def _spy_frame(closes: list[float]) -> pd.DataFrame:
@@ -165,6 +175,21 @@ def test_low_fee_holdout_configs_change_only_identity_phase_and_output():
         expected["phase"] = "holdout"
         expected["output"] = dict(cfg.raw["output"])
         assert cfg.raw == expected
+
+
+def test_weekly_batch_configs_are_low_fee_post_event_development_variants():
+    for variant, gate in {"baseline": REGIME_GATE_ALL, "risk-on": REGIME_GATE_RISK_ON}.items():
+        cfg = _weekly_batch_cfg(variant)
+        _validate_continuation_config(POST_EVENT_WEEKLY_BATCH_CONFIGS[variant], cfg)
+        assert cfg.phase == "development"
+        assert cfg.execution_schedule == "friday_open"
+        assert cfg.market_regime_gate == gate
+        assert cfg.cost_model == "per_share"
+        assert cfg.cost_per_share == pytest.approx(0.0008)
+        assert cfg.exit_policy == EXIT_POLICY_POST_EVENT
+        assert cfg.output_relative_root.startswith(
+            "backtest/pre_earnings_momentum/post_earnings_weekly_batch/"
+        )
 
 
 def test_low_fee_config_rejects_ambiguous_or_missing_fee(tmp_path):
@@ -683,7 +708,7 @@ def test_pre_policy_legacy_checkpoint_still_loads_without_new_metadata():
     result = run_simulation(cfg=cfg, market=bundle, year=2000)
     payload = checkpoint_payload(result.checkpoint, cfg)
     for key in (
-        "exit_policy", "market_regime_gate", "post_event_hold_sessions",
+        "exit_policy", "market_regime_gate", "post_event_hold_sessions", "execution_schedule",
     ):
         payload.pop(key)
     restored = checkpoint_from_payload(payload, cfg, expected_source_year=2000)
@@ -697,6 +722,7 @@ def test_pre_policy_legacy_checkpoint_still_loads_without_new_metadata():
         ("exit_policy", "planned_t1", "exit policy"),
         ("market_regime_gate", "risk_on", "market-regime gate"),
         ("post_event_hold_sessions", 8, "post-event hold"),
+        ("execution_schedule", "friday_open", "execution schedule"),
     ],
 )
 def test_post_event_checkpoint_rejects_policy_or_gate_mismatch(key, value, message):
@@ -821,6 +847,41 @@ def test_low_fee_holdout_command_is_frozen_to_2023_2025(monkeypatch, capsys):
     assert "origin-year 2023" in capsys.readouterr().err
 
 
+def test_weekly_batch_command_is_frozen_to_authorized_variants_and_years(
+    monkeypatch, capsys,
+):
+    assert weekly_batch_cli.main(["--help"]) == 0
+    assert "2022-2025" in capsys.readouterr().out
+    assert weekly_batch_cli.main([
+        "--variant", "baseline", "--year", "2022", "--origin-year", "2022",
+    ]) == 2
+    assert "unauthorized" in capsys.readouterr().err
+
+    observed = {}
+    monkeypatch.setattr(
+        weekly_batch_cli,
+        "run_daily_study",
+        lambda argv, command_name: observed.update(
+            {"argv": argv, "command_name": command_name}
+        ) or 0,
+    )
+    assert weekly_batch_cli.main([
+        "--variant", "risk-on", "--year", "2022", "--origin-year", "2022",
+        "--confirm-weekly-batch-development-run",
+    ]) == 0
+    assert observed["command_name"] == "pre-earnings-post-event-weekly-batch"
+    assert str(POST_EVENT_WEEKLY_BATCH_CONFIGS["risk-on"]) in observed["argv"]
+    assert "--confirm-historical-run" in observed["argv"]
+
+    observed.clear()
+    assert weekly_batch_cli.main([
+        "--variant", "baseline", "--year", "2021", "--origin-year", "2022",
+        "--confirm-weekly-batch-development-run",
+    ]) == 2
+    assert not observed
+    assert "2022-2025" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize(
     "config_path",
     (
@@ -937,6 +998,18 @@ def test_low_fee_comparison_joins_two_variants_and_rejects_spy_drift(tmp_path):
         })
 
 
+def test_weekly_batch_comparison_writes_its_own_study_identity(tmp_path):
+    output = tmp_path / "weekly-batch-comparison.csv"
+    write_weekly_batch_comparison(
+        output,
+        [],
+        {"status": "PASS", "phase": "development", "years": [2022, 2023]},
+    )
+    manifest = json.loads(output.with_suffix(".csv.meta.json").read_text(encoding="utf-8"))
+    assert manifest["study_id"] == "pre-earnings-post-event-weekly-batch-v1"
+    assert manifest["phase"] == "development"
+
+
 def test_study_module_does_not_import_stock_app():
     for path in (
         Path("studies/pre_earnings_momentum/daily_redeployment_engine.py"),
@@ -944,6 +1017,8 @@ def test_study_module_does_not_import_stock_app():
         Path("studies/pre_earnings_momentum/post_earnings_low_fee.py"),
         Path("studies/pre_earnings_momentum/post_earnings_low_fee_holdout.py"),
         Path("studies/pre_earnings_momentum/post_earnings_low_fee_comparison.py"),
+        Path("studies/pre_earnings_momentum/post_earnings_weekly_batch.py"),
+        Path("studies/pre_earnings_momentum/post_earnings_weekly_batch_comparison.py"),
     ):
         source = path.read_text(encoding="utf-8")
         assert "stock-app" not in source
@@ -958,3 +1033,5 @@ def test_commands_sh_exposes_post_event_runner():
     assert "studies.pre_earnings_momentum.post_earnings_low_fee" in body
     assert "pre-earnings-post-event-low-fee-holdout)" in body
     assert "studies.pre_earnings_momentum.post_earnings_low_fee_holdout" in body
+    assert "pre-earnings-post-event-weekly-batch)" in body
+    assert "studies.pre_earnings_momentum.post_earnings_weekly_batch" in body

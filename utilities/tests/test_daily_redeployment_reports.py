@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 import studies.pre_earnings_momentum.daily_redeployment as daily_redeployment_cli
+import studies.pre_earnings_momentum.post_earnings_weekly_batch as weekly_batch_cli
 from studies.pre_earnings_momentum.daily_redeployment import (
     CASH_STAGING_CONFIG,
     DEFAULT_CONFIG,
@@ -111,6 +112,21 @@ def test_commands_sh_documents_the_guarded_entry_point():
     body = Path("commands.sh").read_text(encoding="utf-8")
     assert "pre-earnings-daily-study)" in body
     assert "pre-earnings-daily-study" in body.split("set -e", 1)[0]
+    assert "pre-earnings-post-event-weekly-batch)" in body
+
+
+def test_weekly_batch_wrapper_refuses_unconfirmed_or_out_of_window_runs():
+    assert weekly_batch_cli.main([
+        "--variant", "baseline", "--year", "2022", "--origin-year", "2022",
+    ]) == 2
+    assert weekly_batch_cli.main([
+        "--variant", "baseline", "--year", "2021", "--origin-year", "2022",
+        "--confirm-weekly-batch-development-run",
+    ]) == 2
+    assert weekly_batch_cli.main([
+        "--variant", "baseline", "--year", "2026", "--origin-year", "2022",
+        "--confirm-weekly-batch-development-run",
+    ]) == 2
 
 
 def test_synthetic_run_reconciles_and_is_byte_for_byte(tmp_path):

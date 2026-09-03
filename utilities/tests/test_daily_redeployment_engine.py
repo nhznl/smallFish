@@ -17,6 +17,7 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
     PRIMARY_EARLY,
     PRIMARY_T1,
     PRIMARY_TREND,
+    EXECUTION_FRIDAY_OPEN,
     ArmState,
     MarketBundle,
     OpenPosition,
@@ -30,6 +31,7 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
     evaluate_symbol,
     load_study_config,
     run_simulation,
+    friday_execution_plan,
     scheduled_entry_scan_sessions,
     session_after,
 )
@@ -166,6 +168,50 @@ def test_entry_scan_schedules_use_holiday_adjusted_weekly_slots():
         date(2021, 1, 19), date(2021, 1, 21),
     })
     assert scheduled_entry_scan_sessions(sessions, "daily") == frozenset(sessions)
+
+
+def test_friday_execution_plan_uses_the_final_session_when_friday_is_closed():
+    sessions = [
+        date(2021, 11, 22), date(2021, 11, 23), date(2021, 11, 24),
+        date(2021, 11, 26),  # Thanksgiving Thursday is closed.
+        date(2021, 12, 6), date(2021, 12, 7), date(2021, 12, 8),
+        date(2021, 12, 9), date(2021, 12, 10),
+    ]
+    execution, by_decision = friday_execution_plan(sessions)
+    assert execution == frozenset({date(2021, 11, 26), date(2021, 12, 10)})
+    assert by_decision[date(2021, 11, 24)] == date(2021, 11, 26)
+    assert by_decision[date(2021, 12, 9)] == date(2021, 12, 10)
+
+
+def test_weekly_batch_executes_stock_and_spy_orders_only_at_friday_open():
+    bundle, _ = _market(tickers=("AAA",), n=130, days_ahead=21)
+    path = Path(
+        "studies/pre_earnings_momentum/config/"
+        "post_earnings_weekly_batch_baseline.yaml"
+    )
+    cfg = load_study_config(path)
+    assert cfg.execution_schedule == EXECUTION_FRIDAY_OPEN
+
+    result = run_simulation(cfg=cfg, market=bundle, year=2000)
+    filled = [order for order in result.orders if order.status == "filled"]
+    assert filled
+    assert all(order.execution_date.weekday() == 4 for order in filled)
+    stock_orders = [order for order in filled if order.ticker != "SPY"]
+    assert stock_orders
+    assert all(order.execution_date > order.decision_date for order in stock_orders)
+    tracked_dates = {
+        date.fromisoformat(record.payload["decision_date"])
+        for record in result.decisions
+        if record.payload["state"] == "weekly_tracking"
+    }
+    assert tracked_dates
+    assert all(day.weekday() < 3 for day in tracked_dates)
+    selected_dates = {
+        date.fromisoformat(record.payload["decision_date"])
+        for record in result.decisions if record.payload["state"] == "selected"
+    }
+    assert selected_dates
+    assert all(day.weekday() == 3 for day in selected_dates)
 
 
 def test_setup_score_gate_is_strictly_greater_than_fifty():

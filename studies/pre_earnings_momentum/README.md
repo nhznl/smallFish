@@ -218,6 +218,38 @@ In `decisions.csv`, `sector_open_plus_pending_count` and
 Selected entries and scheduled exits expose `order_id`, which is the explicit
 join key to the execution outcome or cancellation reason in `orders.csv`.
 
+### Friday-only execution replay
+
+[`post_earnings_weekly_batch_spec.md`](post_earnings_weekly_batch_spec.md)
+defines a separate $0.0008/share, equal-arm replay that evaluates Monday through
+the final decision session of each week and executes all stock and SPY changes
+at the following Friday open. If Friday is a market holiday, that week's final
+available SPY session is the execution session. Stock exits are deliberately
+deferred too, so the post-event maximum may be late. Weekday virtual P&L never
+feeds real sizing or reported performance.
+
+The owner authorized only the already-observed 2022–2025 window. It is
+exploratory development evidence, **not** a new holdout; it cannot revise the
+published 2023–2025 Study 3 result.
+
+```bash
+./commands.sh pre-earnings-post-event-weekly-batch \
+  --variant baseline --year 2022 --origin-year 2022 \
+  --run-id weekly-batch-baseline-2022-2025-COMMIT --confirm-weekly-batch-development-run
+```
+
+Every following year requires the immediately prior variant-specific
+`state_checkpoint.json`. After the two continuous chains finish:
+
+```bash
+./commands.sh pre-earnings-post-event-weekly-batch-comparison \
+  --artifact-root "$SFP_DATA_DIR/backtest/pre_earnings_momentum/post_earnings_weekly_batch" \
+  --baseline-tag weekly-batch-baseline-2022-2025-COMMIT \
+  --risk-on-tag weekly-batch-risk-on-2022-2025-COMMIT \
+  --start-year 2022 --end-year 2025 \
+  --output "$SFP_DATA_DIR/backtest/pre_earnings_momentum/post_earnings_weekly_batch/reports/2022-2025-COMMIT/weekly-batch-comparison.csv"
+```
+
 The owner-frozen rule set uses daily candidate scans and a $500 maximum entry
 price. The earlier price-cap sensitivities use
 `config/daily_redeployment_price_500.yaml` and
@@ -248,12 +280,16 @@ authorize any later year.
 | `post_earnings_hold_comparison.py` | Joins three validated equal-arm annual series with their common SPY benchmark |
 | `post_earnings_low_fee.py` | Guarded baseline/Risk-On runner for the independent per-share-fee study |
 | `post_earnings_low_fee_comparison.py` | Joins the two validated low-fee annual series with their common SPY benchmark |
+| `post_earnings_weekly_batch.py` | Guarded 2022–2025 Friday-only execution replay |
+| `post_earnings_weekly_batch_comparison.py` | Joins the two Friday-only annual series with their common SPY benchmark |
 | `config/daily_redeployment.yaml` | Accepted $500 daily-scan parameters for the daily-redeployment study |
 | `config/daily_redeployment_cash_staging.yaml` | Separate equal-only development configuration with post-scan cash staging |
 | `cash_staging_study_spec.md` | Binding methodology for the independent cash-staging development study |
 | `post_earnings_hold_study_spec.md` | Binding frozen T+7 post-event and market-regime methodology |
 | `config/post_earnings_hold_*.yaml` | Separate baseline, Risk-On, and Risk-On-or-Neutral study contracts |
 | `post_earnings_hold_low_fee_study_spec.md` | Frozen-design per-share-fee development methodology |
+| `post_earnings_weekly_batch_spec.md` | Exploratory Friday-only execution methodology |
+| `config/post_earnings_weekly_batch_*.yaml` | Frozen baseline and Risk-On Friday-only execution contracts |
 | `config/post_earnings_hold_low_fee_*.yaml` | Separate baseline and Risk-On low-fee study contracts |
 | `config/daily_redeployment_price_500.yaml` | 2021 development sensitivity with a $500 entry-price ceiling |
 | `config/daily_redeployment_price_1000.yaml` | 2021 development sensitivity with a $1,000 entry-price ceiling |
