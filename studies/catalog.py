@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import copy
+import csv
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import os
@@ -139,6 +141,163 @@ def _verify_pre_earnings(artifact: Mapping[str, Any], root: Path) -> tuple[dict[
     return summary, provenance
 
 
+def _load_csv(path: Path) -> list[dict[str, str]]:
+    try:
+        with path.open(encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+    except FileNotFoundError as exc:
+        raise ArtifactVerificationError(f"required artifact is missing: {path}") from exc
+    if not rows:
+        raise ArtifactVerificationError(f"CSV artifact has no rows: {path}")
+    return rows
+
+
+def _decimal(row: Mapping[str, str], key: str, path: Path) -> Decimal:
+    try:
+        return Decimal(row[key])
+    except (KeyError, InvalidOperation) as exc:
+        raise ArtifactVerificationError(f"{path}: invalid numeric field {key!r}") from exc
+
+
+def _verify_post_earnings_holdout(
+    artifact: Mapping[str, Any], root: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Verify the frozen annual chains and derive the published holdout summary."""
+    comparison_path = root / artifact["comparisonPath"]
+    comparison_validation_path = root / artifact["comparisonValidationPath"]
+    comparison_metadata_path = root / artifact["comparisonMetadataPath"]
+    comparison_rows = _load_csv(comparison_path)
+    comparison_validation = _load_json(comparison_validation_path)
+    comparison_metadata = _load_json(comparison_metadata_path)
+    expected_years = artifact["years"]
+    source_commit = artifact["sourceCommit"]
+
+    if comparison_validation.get("status") != "PASS" or comparison_validation.get("phase") != "holdout":
+        raise ArtifactVerificationError(f"{comparison_validation_path}: expected a passed holdout comparison")
+    if comparison_validation.get("years") != expected_years:
+        raise ArtifactVerificationError(f"{comparison_validation_path}: unexpected holdout years")
+    comparison_hash = _sha256(comparison_path)
+    if comparison_validation.get("comparison_sha256") != comparison_hash:
+        raise ArtifactVerificationError(f"{comparison_path}: SHA-256 does not match validation")
+    if comparison_metadata.get("artifact_sha256") != comparison_hash:
+        raise ArtifactVerificationError(f"{comparison_path}: SHA-256 does not match metadata")
+    if (comparison_metadata.get("git_commit") != source_commit
+            or comparison_metadata.get("git_dirty") is not False):
+        raise ArtifactVerificationError(f"{comparison_metadata_path}: expected the pinned clean source commit")
+    if (comparison_metadata.get("phase") != "holdout"
+            or comparison_metadata.get("validation_status") != "PASS"):
+        raise ArtifactVerificationError(f"{comparison_metadata_path}: expected a validated holdout artifact")
+    if comparison_metadata.get("study_id") != artifact["comparisonStudyId"]:
+        raise ArtifactVerificationError(f"{comparison_metadata_path}: unexpected comparison study ID")
+
+    variant_rows: dict[str, list[dict[str, str]]] = {}
+    for variant_id, paths in artifact["variants"].items():
+        summary_path = root / paths["summaryPath"]
+        validation_path = root / paths["validationPath"]
+        rows = _load_csv(summary_path)
+        validation = _load_json(validation_path)
+        comparison_variant = comparison_validation.get("variants", {}).get(variant_id)
+        if validation.get("annual_summary_sha256") != _sha256(summary_path):
+            raise ArtifactVerificationError(f"{summary_path}: SHA-256 does not match validation")
+        if not isinstance(comparison_variant, Mapping):
+            raise ArtifactVerificationError(f"{comparison_validation_path}: missing {variant_id!r} validation")
+        comparable_validation = dict(validation)
+        comparable_validation.pop("annual_summary_sha256", None)
+        if comparable_validation != comparison_variant:
+            raise ArtifactVerificationError(
+                f"{comparison_validation_path}: {variant_id!r} evidence disagrees with annual validation")
+        if (validation.get("status") != "PASS" or validation.get("phase") != "holdout"
+                or validation.get("source_git_commit") != source_commit
+                or validation.get("years") != expected_years
+                or validation.get("arms") != ["equal"]
+                or validation.get("series_tag") != paths["seriesTag"]):
+            raise ArtifactVerificationError(f"{validation_path}: unexpected frozen series identity")
+        config = validation.get("config", {})
+        expected_config = {
+            "arms": ["equal"],
+            "cash_staging_enabled": True,
+            "cost_model": "per_share",
+            "cost_per_share": 0.0008,
+            "entry_scan_schedule": "daily",
+            "exit_policy": "post_event_hold",
+            "market_regime_gate": paths["marketRegimeGate"],
+            "post_event_hold_sessions": 7,
+            "price_max": 500.0,
+            "starting_equity": 50000,
+            "study_id": paths["studyId"],
+        }
+        if any(config.get(key) != value for key, value in expected_config.items()):
+            raise ArtifactVerificationError(f"{validation_path}: frozen strategy configuration changed")
+        if comparison_validation.get("tags", {}).get(variant_id) != paths["seriesTag"]:
+            raise ArtifactVerificationError(f"{comparison_validation_path}: unexpected {variant_id!r} series tag")
+        if comparison_metadata.get("args", {}).get("tags", {}).get(variant_id) != paths["seriesTag"]:
+            raise ArtifactVerificationError(f"{comparison_metadata_path}: unexpected {variant_id!r} series tag")
+        if comparison_metadata.get("config", {}).get(variant_id) != config:
+            raise ArtifactVerificationError(f"{comparison_metadata_path}: {variant_id!r} config disagrees with validation")
+        if [int(row.get("Year", 0)) for row in rows] != expected_years:
+            raise ArtifactVerificationError(f"{summary_path}: annual rows do not match pinned years")
+        if any(row.get("Arm") != "equal" for row in rows):
+            raise ArtifactVerificationError(f"{summary_path}: expected equal-arm rows only")
+        variant_rows[variant_id] = rows
+
+    if [int(row.get("Year", 0)) for row in comparison_rows] != expected_years:
+        raise ArtifactVerificationError(f"{comparison_path}: comparison rows do not match pinned years")
+    if artifact["primaryVariant"] not in variant_rows or "baseline" not in variant_rows:
+        raise ArtifactVerificationError("post-earnings holdout requires baseline and primary variants")
+
+    field_prefixes = {"baseline": "Baseline", "risk-on": "Risk-On"}
+    for variant_id, rows in variant_rows.items():
+        prefix = field_prefixes.get(variant_id)
+        if prefix is None:
+            raise ArtifactVerificationError(f"unsupported post-earnings variant {variant_id!r}")
+        for comparison_row, annual_row in zip(comparison_rows, rows, strict=True):
+            pairs = {
+                f"{prefix} Beginning Equity": "Beginning Equity",
+                f"{prefix} Ending Equity": "Ending Equity",
+                f"{prefix} Equity Growth": "Equity Growth",
+                f"{prefix} Excess Growth": "Excess Growth",
+                f"{prefix} Transactions": "No Of Transactions",
+            }
+            if any(comparison_row.get(left) != annual_row.get(right) for left, right in pairs.items()):
+                raise ArtifactVerificationError(
+                    f"{comparison_path}: {variant_id!r} row disagrees with annual summary")
+            if (comparison_row.get("SPY Start") != annual_row.get("SPY Start")
+                    or comparison_row.get("SPY End") != annual_row.get("SPY End")
+                    or comparison_row.get("SPY Growth") != annual_row.get("SPY Growth")):
+                raise ArtifactVerificationError(f"{comparison_path}: SPY row disagrees with annual summary")
+
+    primary_rows = variant_rows[artifact["primaryVariant"]]
+    baseline_rows = variant_rows["baseline"]
+    starting_equity = _decimal(primary_rows[0], "Beginning Equity", root / artifact["variants"][artifact["primaryVariant"]]["summaryPath"])
+    ending_equity = _decimal(primary_rows[-1], "Ending Equity", root / artifact["variants"][artifact["primaryVariant"]]["summaryPath"])
+    spy_start = _decimal(primary_rows[0], "SPY Start", root / artifact["variants"][artifact["primaryVariant"]]["summaryPath"])
+    spy_end = _decimal(primary_rows[-1], "SPY End", root / artifact["variants"][artifact["primaryVariant"]]["summaryPath"])
+    baseline_end = _decimal(baseline_rows[-1], "Ending Equity", root / artifact["variants"]["baseline"]["summaryPath"])
+    summary = {
+        "portfolio_total_return": float(ending_equity / starting_equity - 1),
+        "spy_total_return": float(spy_end / spy_start - 1),
+        "terminal_excess_return": float(ending_equity / starting_equity - spy_end / spy_start),
+        "baseline_total_return": float(baseline_end / _decimal(baseline_rows[0], "Beginning Equity", root / artifact["variants"]["baseline"]["summaryPath"]) - 1),
+        "n_trades": sum(int(row["Completed Stock Trades"]) for row in primary_rows),
+        "transactions": sum(int(row["No Of Transactions"]) for row in primary_rows),
+        "transaction_costs": float(sum(_decimal(row, "Transaction Costs", comparison_path) for row in primary_rows)),
+        "max_drawdown": float(min(_decimal(row, "Strategy Max Drawdown", comparison_path) for row in primary_rows)),
+        "spy_max_drawdown": float(min(_decimal(row, "SPY Max Drawdown", comparison_path) for row in primary_rows)),
+    }
+    if summary["terminal_excess_return"] <= 0:
+        raise ArtifactVerificationError(f"{comparison_path}: frozen primary endpoint did not pass")
+    provenance = {
+        "specificationPath": artifact["specificationPath"],
+        "artifactPath": artifact["comparisonPath"],
+        "runId": artifact["runId"],
+        "sourceCommit": source_commit,
+        "generatedAt": _as_utc_z(comparison_metadata["generated_at_utc"], comparison_metadata_path),
+        "dataCutoff": artifact["dataCutoff"],
+        "verificationState": "VERIFIED",
+    }
+    return summary, provenance
+
+
 def _verify_sector(artifact: Mapping[str, Any], root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     run_dir = root / artifact["runPath"]
     manifest_path = run_dir / "manifest.json"
@@ -208,6 +367,25 @@ def _stats(profile: str, summary: Mapping[str, Any]) -> list[dict[str, Any]]:
                        "Exploratory daily comparison", "The confidence interval includes zero.", "PRIMARY",
                        tuple(summary["excess_ci95"])),
         ]
+    if profile == "pre-earnings-post-event-risk-on":
+        return [
+            _statistic("portfolio-return", "Risk-On portfolio return", summary["portfolio_total_return"], "PERCENT", 2,
+                       "One-shot 2023-2025 holdout", "The selected Risk-On variation exceeded the same-fee SPY benchmark.", "PRIMARY"),
+            _statistic("spy-return", "SPY return", summary["spy_total_return"], "PERCENT", 2,
+                       "Same one-shot holdout", "Identically costed passive SPY benchmark.", "PRIMARY"),
+            _statistic("terminal-excess-return", "Terminal excess versus SPY", summary["terminal_excess_return"], "PERCENT", 2,
+                       "Cumulative 2023-2025 endpoint", "This was the frozen primary endpoint.", "PRIMARY"),
+            _statistic("completed-trades", "Completed stock trades", summary["n_trades"], "INTEGER", 0,
+                       "Risk-On holdout chain", "Completed stock positions across the three annual continuations.", "SECONDARY"),
+            _statistic("transactions", "Filled order sides", summary["transactions"], "INTEGER", 0,
+                       "Stocks and SPY", "Turnover remained substantial despite the regime gate.", "SECONDARY"),
+            _statistic("transaction-costs", "Transaction costs", summary["transaction_costs"], "CURRENCY", 2,
+                       "$0.0008 per filled share", "Total simulated stock and SPY regulatory fees.", "SECONDARY"),
+            _statistic("maximum-drawdown", "Worst annual max drawdown", summary["max_drawdown"], "PERCENT", 2,
+                       "Worst calendar year in the holdout", "The Risk-On strategy did not improve drawdown versus SPY.", "SECONDARY"),
+            _statistic("baseline-return", "All-regime diagnostic return", summary["baseline_total_return"], "PERCENT", 2,
+                       "Non-primary holdout diagnostic", "The unrestricted diagnostic outperformed the selected Risk-On variant.", "SECONDARY"),
+        ]
     if profile == "sector-v1":
         primary = summary["primary_endpoint"]
         period = summary["primary_period"]
@@ -251,6 +429,8 @@ def _materialize_definition(definition_path: Path, root: Path) -> dict[str, Any]
         artifact_type = artifact.get("type")
         if artifact_type == "pre-earnings":
             summary, provenance = _verify_pre_earnings(artifact, root)
+        elif artifact_type == "pre-earnings-post-event-holdout":
+            summary, provenance = _verify_post_earnings_holdout(artifact, root)
         elif artifact_type == "sector":
             summary, provenance = _verify_sector(artifact, root)
         else:

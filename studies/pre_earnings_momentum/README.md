@@ -7,8 +7,8 @@ review and remediation work.
 
 Part of the Research Studies catalog — see [`../README.md`](../README.md) for how
 studies are published, verified, and frozen. Published at
-`/studies/pre-earnings-momentum` with verdict `FAILED` and evidence level
-`EXPLORATORY`.
+`/studies/pre-earnings-momentum`. Its default Study 1 remains `FAILED` with
+`CONFIRMATORY` evidence; the separately frozen Study 3 is also available there.
 
 The live UI scan requires a current upcoming-earnings cache; it reuses a cache
 fetched within one day with sufficient coverage or conditionally refreshes it
@@ -20,8 +20,8 @@ and is never fetched automatically in the live request path.
 
 ## Current status
 
-**The research workstream is closed. The strategy did not demonstrate an edge
-over SPY in its one-shot holdout.**
+**The original strategy did not demonstrate an edge over SPY in its one-shot
+holdout. Its failed result remains the default and is not superseded.**
 
 The frozen Study 1 portfolio returned **+22.42%** from 2025-04-04 through
 2026-06-26, while SPY returned **+49.17%**. The strategy had lower volatility
@@ -36,6 +36,16 @@ already spent. It is not validation evidence.
 Do not present either study as proof of a validated strategy edge. Any future
 validation requires a dated pre-registration and genuinely new prospective or
 point-in-time data.
+
+Study 3 is a separately pre-registered post-earnings Risk-On method. In its
+spent 2023–2025 holdout, the selected Risk-On portfolio grew from **$50,000 to
+$109,465.01 (+118.93%)**, versus identically costed SPY at **$92,267.22
+(+84.53%)**. It passed its frozen cumulative endpoint by **34.40 percentage
+points** across 393 completed stock trades. The result is confirmatory for that
+specific protocol, but the static current universe is survivorship-limited,
+execution is simulated, and annual drawdowns were not better than SPY. The
+holdout cannot be rerun or tuned; broader claims require a new prospective or
+point-in-time-universe study.
 
 ## Strategy intent
 

@@ -72,6 +72,16 @@ parameter cannot be retuned to improve a result, and a failed verdict stays
 published as failed. A revised method needs a new pre-registered study. See
 [`studies/README.md`](studies/README.md).
 
+**The post-earnings Risk-On holdout is published as passed** (2026-09-03).
+The separately pre-registered 2023–2025 Study 3 returned 118.93% from a $50,000
+origin versus 84.53% for identically costed SPY, passing its frozen cumulative
+endpoint by 34.40 percentage points. This does not alter the failed default
+Pre-Earnings Study 1. Study 3 uses a static present-day universe and simulated
+execution, its drawdowns were not better than SPY, and its holdout is spent.
+Do not rerun, retune, or generalize it; additional validation needs a new study
+with prospective evidence or point-in-time universe membership. See
+[`studies/pre_earnings_momentum/post_earnings_hold_low_fee_holdout_spec.md`](studies/pre_earnings_momentum/post_earnings_hold_low_fee_holdout_spec.md).
+
 **No scheduled retirement event sync** (2026-07-24). The manual *Sync from
 Fidelity* action already refreshes the event ledger. SnapTrade serves positions
 in real time but transactions on a slower cadence, so a closing transaction can

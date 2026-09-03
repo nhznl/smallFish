@@ -28,24 +28,28 @@ license a product decision.
 
 ## Catalog
 
-Each study publishes two variations. The catalog reports the **default**
-variation's outcome.
+Published studies may contain multiple frozen variations. The catalog reports
+the **default** variation's outcome.
 
 | Study | Variation | Verdict | Evidence |
 |---|---|---|---|
 | [Pre-earnings momentum](pre_earnings_momentum/README.md) | `base` (default) | `FAILED` | `CONFIRMATORY` |
 | | `spy-cash-sweep` | `NO_VERDICT` | `EXPLORATORY` |
+| | `post-earnings-risk-on` | `PASSED` | `CONFIRMATORY` |
 | [Sector relative leadership](sector_rotation/README.md) | `base` (default) | `FAILED` | `CONFIRMATORY` |
 | | `full-period` | `NO_VERDICT` | `EXPLORATORY` |
 
 Specs: [`backtest_spec.md`](pre_earnings_momentum/backtest_spec.md),
 [`backtest_spec_2.md`](pre_earnings_momentum/backtest_spec_2.md),
+[`post_earnings_hold_low_fee_holdout_spec.md`](pre_earnings_momentum/post_earnings_hold_low_fee_holdout_spec.md),
 [`sector_rotation_study_spec.md`](sector_rotation/sector_rotation_study_spec.md),
 [`sector_rotation_study_v2_spec.md`](sector_rotation/sector_rotation_study_v2_spec.md).
 
-Read this carefully: in both studies the **pre-registered, one-shot,
-confirmatory** endpoint **failed**. The second variation in each is exploratory
-work done afterwards, carries no verdict, and cannot rescue the first.
+Read this carefully: both default **pre-registered, one-shot, confirmatory**
+endpoints **failed**. The second variation in each is exploratory work done
+afterwards, carries no verdict, and cannot rescue the first. The separately
+pre-registered Pre-Earnings Study 3 later passed its own 2023–2025 endpoint;
+that result is additive and does not rewrite the failed default Study 1.
 
 Neither result lifts a product gate. The Momentum and Sectors views remain
 descriptive screens.

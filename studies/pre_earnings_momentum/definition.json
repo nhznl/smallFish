@@ -1,8 +1,8 @@
 {
   "id": "pre-earnings-momentum",
   "name": "Pre-Earnings Momentum",
-  "summary": "A fixed pre-earnings stock-selection study with a failed primary portfolio endpoint and a separately labeled exploratory cash-sweep replay.",
-  "updatedAt": "2026-07-26T00:00:00Z",
+  "summary": "Three frozen pre-earnings momentum studies: the original failed endpoint, an exploratory cash-sweep replay, and a separately preregistered post-earnings Risk-On holdout that passed its endpoint.",
+  "updatedAt": "2026-09-03T17:50:50.783974Z",
   "defaultVariationId": "base",
   "variations": [
     {
@@ -136,6 +136,106 @@
         "dataCutoff": "2026-06-26"
       },
       "statsProfile": "pre-earnings-sweep"
+    },
+    {
+      "id": "post-earnings-risk-on",
+      "name": "Post-Earnings Risk-On — Study 3",
+      "thesis": "A daily pre-earnings momentum portfolio that opens positions only in a Risk-On market regime and may hold winners for seven post-event sessions would finish the one-shot 2023–2025 holdout above an identically costed SPY investment.",
+      "methodology": {
+        "summary": "A frozen equal-allocation, whole-share portfolio simulation used daily decisions, Risk-On-only entries, next-session execution, cash staging, and a floor-protected hold through no later than the seventh post-event session's open.",
+        "population": "The static current universe minus retired symbols, limited to securities with locally available historical prices and earnings records; this is not a point-in-time universe.",
+        "inclusionCriteria": [
+          "Price from $10 through $500, with the frozen liquidity and freshness gates.",
+          "A causally predicted earnings event two through five weeks away.",
+          "BULLISH_CONTINUATION, penalized momentum-v3 setupScore above 50, and a Risk-On market regime."
+        ],
+        "exclusionCriteria": [
+          "Risk-On entry gate not satisfied.",
+          "Missing, stale, inconsistent, non-positive, or otherwise ineligible price or event data.",
+          "Stocks blocked by the frozen position, sector, pin, or whole-share allocation constraints."
+        ],
+        "features": [
+          "Daily end-of-day decisions with next-session fills.",
+          "Equal whole-share allocations from $1,000 through $5,000, with no more than three open-plus-pending positions per sector.",
+          "Cash staging before residual whole-share SPY sweeps.",
+          "Stock and SPY costs of $0.0008 per filled share on each side."
+        ],
+        "endpoint": "The selected Risk-On portfolio's cumulative ending equity had to exceed the identically costed passive SPY benchmark after the continuous 2023–2025 holdout chain.",
+        "controls": [
+          "Identically costed passive SPY over the same continuous holdout.",
+          "A separately reported all-regime baseline diagnostic using the same non-regime rules."
+        ],
+        "period": "One-shot holdout from 2023 through 2025, with state carried across calendar-year boundaries.",
+        "inference": "The frozen primary endpoint passed within this survivorship-limited historical simulation. It is not evidence of live execution quality or a general investment recommendation.",
+        "limitations": [
+          "The static present-day universe creates survivorship and availability bias and omits a true point-in-time membership history.",
+          "Historical earnings coverage combines realized records with visibly labeled causal prediction fallbacks.",
+          "Open and close fills are simulated from daily bars without spread, market impact, or order-level slippage.",
+          "The 2023–2025 holdout is spent and cannot be reused for tuning or a second validation claim."
+        ]
+      },
+      "outcome": {
+        "verdict": "PASSED",
+        "evidenceLevel": "CONFIRMATORY",
+        "summary": "The selected Risk-On portfolio grew from $50,000 to $109,465.01 (+118.93%) versus identically costed SPY at $92,267.22 (+84.53%), passing the frozen endpoint by 34.40 percentage points across 393 completed stock trades.",
+        "whatWorked": [
+          "The selected Risk-On variant exceeded SPY in every holdout calendar year and at the cumulative endpoint.",
+          "The Risk-On gate used fewer filled order sides than the all-regime diagnostic."
+        ],
+        "whatDidNotWork": [
+          "The Risk-On variant's annual maximum drawdown was slightly worse than SPY in all three holdout years.",
+          "The non-primary all-regime diagnostic finished above the selected Risk-On variation.",
+          "Turnover remained high at 1,073 filled stock and SPY order sides."
+        ],
+        "nextSteps": [
+          "Preserve this result without retuning or rerunning the spent holdout.",
+          "Require a separately preregistered prospective or point-in-time-universe evaluation before making a broader edge claim."
+        ],
+        "moreData": {
+          "assessment": true,
+          "rationale": "Prospective evidence or a point-in-time universe could address the principal limitations, but it must be evaluated as a new study rather than by reusing this holdout."
+        }
+      },
+      "scan": null,
+      "caveats": [
+        "This passed endpoint belongs only to the separately frozen Study 3 method; it does not alter the failed Study 1 verdict.",
+        "The universe is survivorship-limited, and all execution is simulated.",
+        "The holdout is spent and cannot be rerun or retuned under this study identity."
+      ],
+      "artifact": {
+        "type": "pre-earnings-post-event-holdout",
+        "specificationPath": "studies/pre_earnings_momentum/post_earnings_hold_low_fee_holdout_spec.md",
+        "comparisonPath": "data/backtest/pre_earnings_momentum/post_earnings_hold_low_fee_holdout/reports/2023-2025-e8b8239/post-event-low-fee-holdout-comparison.csv",
+        "comparisonValidationPath": "data/backtest/pre_earnings_momentum/post_earnings_hold_low_fee_holdout/reports/2023-2025-e8b8239/post-event-low-fee-holdout-comparison.csv.validation.json",
+        "comparisonMetadataPath": "data/backtest/pre_earnings_momentum/post_earnings_hold_low_fee_holdout/reports/2023-2025-e8b8239/post-event-low-fee-holdout-comparison.csv.meta.json",
+        "comparisonStudyId": "pre-earnings-post-event-hold-low-fee-v1",
+        "runId": "low-fee-holdout-risk-on-2023-2025-e8b8239",
+        "sourceCommit": "e8b8239766ec376aa0439141333b26764bf25dad",
+        "dataCutoff": "2025-12-31",
+        "years": [
+          2023,
+          2024,
+          2025
+        ],
+        "primaryVariant": "risk-on",
+        "variants": {
+          "baseline": {
+            "summaryPath": "data/backtest/pre_earnings_momentum/post_earnings_hold_low_fee_holdout/reports/2023-2025-e8b8239/baseline-annual-summary.csv",
+            "validationPath": "data/backtest/pre_earnings_momentum/post_earnings_hold_low_fee_holdout/reports/2023-2025-e8b8239/baseline-annual-summary.validation.json",
+            "seriesTag": "low-fee-holdout-baseline-2023-2025-e8b8239",
+            "marketRegimeGate": "all",
+            "studyId": "pre-earnings-post-event-hold-low-fee-holdout-baseline-v1"
+          },
+          "risk-on": {
+            "summaryPath": "data/backtest/pre_earnings_momentum/post_earnings_hold_low_fee_holdout/reports/2023-2025-e8b8239/risk_on-annual-summary.csv",
+            "validationPath": "data/backtest/pre_earnings_momentum/post_earnings_hold_low_fee_holdout/reports/2023-2025-e8b8239/risk_on-annual-summary.validation.json",
+            "seriesTag": "low-fee-holdout-risk-on-2023-2025-e8b8239",
+            "marketRegimeGate": "risk_on",
+            "studyId": "pre-earnings-post-event-hold-low-fee-holdout-risk-on-v1"
+          }
+        }
+      },
+      "statsProfile": "pre-earnings-post-event-risk-on"
     }
   ]
 }

@@ -4,8 +4,8 @@
   "name": "Pre-Earnings Momentum",
   "schemaName": "smallfish.research-study",
   "schemaVersion": 1,
-  "summary": "A fixed pre-earnings stock-selection study with a failed primary portfolio endpoint and a separately labeled exploratory cash-sweep replay.",
-  "updatedAt": "2026-07-26T00:00:00Z",
+  "summary": "Three frozen pre-earnings momentum studies: the original failed endpoint, an exploratory cash-sweep replay, and a separately preregistered post-earnings Risk-On holdout that passed its endpoint.",
+  "updatedAt": "2026-09-03T17:50:50.783974Z",
   "variations": [
     {
       "caveats": [
@@ -250,6 +250,163 @@
         }
       ],
       "thesis": "Mechanically sweeping idle portfolio cash into SPY could remove the deployment gap observed in Study 1, but this replay is exploratory because both the dates and sweep followed Study 1."
+    },
+    {
+      "caveats": [
+        "This passed endpoint belongs only to the separately frozen Study 3 method; it does not alter the failed Study 1 verdict.",
+        "The universe is survivorship-limited, and all execution is simulated.",
+        "The holdout is spent and cannot be rerun or retuned under this study identity."
+      ],
+      "id": "post-earnings-risk-on",
+      "methodology": {
+        "controls": [
+          "Identically costed passive SPY over the same continuous holdout.",
+          "A separately reported all-regime baseline diagnostic using the same non-regime rules."
+        ],
+        "endpoint": "The selected Risk-On portfolio's cumulative ending equity had to exceed the identically costed passive SPY benchmark after the continuous 2023\u20132025 holdout chain.",
+        "exclusionCriteria": [
+          "Risk-On entry gate not satisfied.",
+          "Missing, stale, inconsistent, non-positive, or otherwise ineligible price or event data.",
+          "Stocks blocked by the frozen position, sector, pin, or whole-share allocation constraints."
+        ],
+        "features": [
+          "Daily end-of-day decisions with next-session fills.",
+          "Equal whole-share allocations from $1,000 through $5,000, with no more than three open-plus-pending positions per sector.",
+          "Cash staging before residual whole-share SPY sweeps.",
+          "Stock and SPY costs of $0.0008 per filled share on each side."
+        ],
+        "inclusionCriteria": [
+          "Price from $10 through $500, with the frozen liquidity and freshness gates.",
+          "A causally predicted earnings event two through five weeks away.",
+          "BULLISH_CONTINUATION, penalized momentum-v3 setupScore above 50, and a Risk-On market regime."
+        ],
+        "inference": "The frozen primary endpoint passed within this survivorship-limited historical simulation. It is not evidence of live execution quality or a general investment recommendation.",
+        "limitations": [
+          "The static present-day universe creates survivorship and availability bias and omits a true point-in-time membership history.",
+          "Historical earnings coverage combines realized records with visibly labeled causal prediction fallbacks.",
+          "Open and close fills are simulated from daily bars without spread, market impact, or order-level slippage.",
+          "The 2023\u20132025 holdout is spent and cannot be reused for tuning or a second validation claim."
+        ],
+        "period": "One-shot holdout from 2023 through 2025, with state carried across calendar-year boundaries.",
+        "population": "The static current universe minus retired symbols, limited to securities with locally available historical prices and earnings records; this is not a point-in-time universe.",
+        "summary": "A frozen equal-allocation, whole-share portfolio simulation used daily decisions, Risk-On-only entries, next-session execution, cash staging, and a floor-protected hold through no later than the seventh post-event session's open."
+      },
+      "name": "Post-Earnings Risk-On \u2014 Study 3",
+      "outcome": {
+        "evidenceLevel": "CONFIRMATORY",
+        "moreData": {
+          "assessment": true,
+          "rationale": "Prospective evidence or a point-in-time universe could address the principal limitations, but it must be evaluated as a new study rather than by reusing this holdout."
+        },
+        "nextSteps": [
+          "Preserve this result without retuning or rerunning the spent holdout.",
+          "Require a separately preregistered prospective or point-in-time-universe evaluation before making a broader edge claim."
+        ],
+        "summary": "The selected Risk-On portfolio grew from $50,000 to $109,465.01 (+118.93%) versus identically costed SPY at $92,267.22 (+84.53%), passing the frozen endpoint by 34.40 percentage points across 393 completed stock trades.",
+        "verdict": "PASSED",
+        "whatDidNotWork": [
+          "The Risk-On variant's annual maximum drawdown was slightly worse than SPY in all three holdout years.",
+          "The non-primary all-regime diagnostic finished above the selected Risk-On variation.",
+          "Turnover remained high at 1,073 filled stock and SPY order sides."
+        ],
+        "whatWorked": [
+          "The selected Risk-On variant exceeded SPY in every holdout calendar year and at the cumulative endpoint.",
+          "The Risk-On gate used fewer filled order sides than the all-regime diagnostic."
+        ]
+      },
+      "provenance": {
+        "artifactPath": "data/backtest/pre_earnings_momentum/post_earnings_hold_low_fee_holdout/reports/2023-2025-e8b8239/post-event-low-fee-holdout-comparison.csv",
+        "dataCutoff": "2025-12-31",
+        "generatedAt": "2026-09-03T17:50:50.783974Z",
+        "runId": "low-fee-holdout-risk-on-2023-2025-e8b8239",
+        "sourceCommit": "e8b8239766ec376aa0439141333b26764bf25dad",
+        "specificationPath": "studies/pre_earnings_momentum/post_earnings_hold_low_fee_holdout_spec.md",
+        "verificationState": "VERIFIED"
+      },
+      "scan": null,
+      "stats": [
+        {
+          "format": "PERCENT",
+          "id": "portfolio-return",
+          "interpretation": "The selected Risk-On variation exceeded the same-fee SPY benchmark.",
+          "label": "Risk-On portfolio return",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "One-shot 2023-2025 holdout",
+          "value": 1.1893002
+        },
+        {
+          "format": "PERCENT",
+          "id": "spy-return",
+          "interpretation": "Identically costed passive SPY benchmark.",
+          "label": "SPY return",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "Same one-shot holdout",
+          "value": 0.8453444
+        },
+        {
+          "format": "PERCENT",
+          "id": "terminal-excess-return",
+          "interpretation": "This was the frozen primary endpoint.",
+          "label": "Terminal excess versus SPY",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "Cumulative 2023-2025 endpoint",
+          "value": 0.3439558
+        },
+        {
+          "format": "INTEGER",
+          "id": "completed-trades",
+          "interpretation": "Completed stock positions across the three annual continuations.",
+          "label": "Completed stock trades",
+          "precision": 0,
+          "priority": "SECONDARY",
+          "scope": "Risk-On holdout chain",
+          "value": 393
+        },
+        {
+          "format": "INTEGER",
+          "id": "transactions",
+          "interpretation": "Turnover remained substantial despite the regime gate.",
+          "label": "Filled order sides",
+          "precision": 0,
+          "priority": "SECONDARY",
+          "scope": "Stocks and SPY",
+          "value": 1073
+        },
+        {
+          "format": "CURRENCY",
+          "id": "transaction-costs",
+          "interpretation": "Total simulated stock and SPY regulatory fees.",
+          "label": "Transaction costs",
+          "precision": 2,
+          "priority": "SECONDARY",
+          "scope": "$0.0008 per filled share",
+          "value": 62.09
+        },
+        {
+          "format": "PERCENT",
+          "id": "maximum-drawdown",
+          "interpretation": "The Risk-On strategy did not improve drawdown versus SPY.",
+          "label": "Worst annual max drawdown",
+          "precision": 2,
+          "priority": "SECONDARY",
+          "scope": "Worst calendar year in the holdout",
+          "value": -0.1908242111
+        },
+        {
+          "format": "PERCENT",
+          "id": "baseline-return",
+          "interpretation": "The unrestricted diagnostic outperformed the selected Risk-On variant.",
+          "label": "All-regime diagnostic return",
+          "precision": 2,
+          "priority": "SECONDARY",
+          "scope": "Non-primary holdout diagnostic",
+          "value": 1.308818
+        }
+      ],
+      "thesis": "A daily pre-earnings momentum portfolio that opens positions only in a Risk-On market regime and may hold winners for seven post-event sessions would finish the one-shot 2023\u20132025 holdout above an identically costed SPY investment."
     }
   ]
 }
