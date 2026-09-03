@@ -195,7 +195,9 @@ def test_series_report_validates_checkpoint_chain_and_calculates_calendar_years(
     bundle, _ = _market(tickers=("AAA", "BBB"), n=400)
     artifact_root = tmp_path / "daily"
     first = run_simulation(cfg=cfg, market=bundle, year=2000)
-    first_dir = artifact_root / "2000" / "series-2000"
+    # The runner preserves an explicit --run-id verbatim; annual reporting
+    # must therefore accept a tag without appending the calendar year.
+    first_dir = artifact_root / "2000" / "series"
     write_run(first, first_dir, command="test", args={
         "year": 2000, "origin_year": 2000, "state_in": None,
     })
@@ -211,7 +213,7 @@ def test_series_report_validates_checkpoint_chain_and_calculates_calendar_years(
             (first_dir / "state_checkpoint.json").read_bytes()
         ).hexdigest(),
     }
-    second_dir = artifact_root / "2001" / "series-2001"
+    second_dir = artifact_root / "2001" / "series"
     write_run(second, second_dir, command="test", args={
         "year": 2001,
         "origin_year": 2000,

@@ -146,7 +146,14 @@ def build_series_summary(
     warnings: list[str] = []
 
     for year in ordered_years:
-        run_dir = artifact_root / str(year) / f"{series_tag}-{year}"
+        year_root = artifact_root / str(year)
+        suffixed_run_dir = year_root / f"{series_tag}-{year}"
+        exact_run_dir = year_root / series_tag
+        if suffixed_run_dir.is_dir() and exact_run_dir.is_dir():
+            raise SeriesValidationError(
+                f"{year}: ambiguous run directories for series tag {series_tag}"
+            )
+        run_dir = suffixed_run_dir if suffixed_run_dir.is_dir() else exact_run_dir
         paths = {name: run_dir / name for name in (
             "run_manifest.json", "summary.json", "daily_equity.csv", "decisions.csv",
             "orders.csv", "trades.csv", "state_checkpoint.json",
