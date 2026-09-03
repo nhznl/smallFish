@@ -15,9 +15,11 @@ import studies.pre_earnings_momentum.daily_redeployment_engine as engine
 import studies.pre_earnings_momentum.daily_redeployment as daily_cli
 import studies.pre_earnings_momentum.post_earnings_hold as post_cli
 import studies.pre_earnings_momentum.post_earnings_low_fee as low_fee_cli
+import studies.pre_earnings_momentum.post_earnings_low_fee_holdout as holdout_cli
 from studies.pre_earnings_momentum.daily_redeployment import (
     POST_EVENT_CONFIGS,
     POST_EVENT_LOW_FEE_CONFIGS,
+    POST_EVENT_LOW_FEE_HOLDOUT_CONFIGS,
     _validate_continuation_config,
 )
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
@@ -67,6 +69,10 @@ def _post_cfg(variant: str = "baseline"):
 
 def _low_fee_cfg(variant: str = "baseline"):
     return load_study_config(POST_EVENT_LOW_FEE_CONFIGS[variant])
+
+
+def _holdout_cfg(variant: str = "baseline"):
+    return load_study_config(POST_EVENT_LOW_FEE_HOLDOUT_CONFIGS[variant])
 
 
 def _spy_frame(closes: list[float]) -> pd.DataFrame:
@@ -150,6 +156,17 @@ def test_low_fee_configs_change_only_identity_output_gate_and_cost_model():
         assert cfg.raw == expected
 
 
+def test_low_fee_holdout_configs_change_only_identity_phase_and_output():
+    for variant in ("baseline", "risk-on"):
+        cfg = _holdout_cfg(variant)
+        _validate_continuation_config(POST_EVENT_LOW_FEE_HOLDOUT_CONFIGS[variant], cfg)
+        expected = dict(_low_fee_cfg(variant).raw)
+        expected["study_id"] = cfg.study_id
+        expected["phase"] = "holdout"
+        expected["output"] = dict(cfg.raw["output"])
+        assert cfg.raw == expected
+
+
 def test_low_fee_config_rejects_ambiguous_or_missing_fee(tmp_path):
     raw = yaml.safe_load(POST_EVENT_LOW_FEE_CONFIGS["baseline"].read_text())
     config = tmp_path / "low-fee.yaml"
@@ -215,6 +232,28 @@ def test_low_fee_series_report_reconciles_costs(tmp_path, monkeypatch):
     assert float(rows[0]["Transaction Costs"]) == pytest.approx(
         float((filled["shares"] * 0.0008).sum()), abs=0.01,
     )
+
+
+def test_series_report_requires_and_records_holdout_phase(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "utilities.manifest._git",
+        lambda *args: "holdout-test-commit" if args == ("rev-parse", "HEAD") else "",
+    )
+    cfg = _holdout_cfg()
+    bundle, _ = _market(tickers=("AAA",), n=95)
+    result = run_simulation(cfg=cfg, market=bundle, year=2000)
+    artifact_root = tmp_path / "holdout"
+    run_dir = artifact_root / "2000" / "holdout-2000"
+    write_run(result, run_dir, command="test", args={
+        "year": 2000, "origin_year": 2000, "state_in": None,
+    })
+    with pytest.raises(SeriesValidationError, match="year/phase mismatch"):
+        build_series_summary(artifact_root, "holdout", [2000])
+    rows, validation = build_series_summary(
+        artifact_root, "holdout", [2000], expected_phase="holdout",
+    )
+    assert len(rows) == 1
+    assert validation["phase"] == "holdout"
 
 
 def test_market_regime_is_causal_and_uses_five_completed_sessions():
@@ -744,9 +783,51 @@ def test_low_fee_command_is_frozen_to_authorized_variants_and_years(
     assert "not accepted" in capsys.readouterr().err
 
 
+def test_low_fee_holdout_command_is_frozen_to_2023_2025(monkeypatch, capsys):
+    assert holdout_cli.main(["--help"]) == 0
+    assert "2023-2025" in capsys.readouterr().out
+    assert holdout_cli.main([
+        "--variant", "risk-on", "--year", "2023", "--origin-year", "2023",
+    ]) == 2
+    assert "unauthorized" in capsys.readouterr().err
+
+    observed = {}
+    monkeypatch.setattr(
+        holdout_cli,
+        "run_daily_study",
+        lambda argv, command_name: observed.update(
+            {"argv": argv, "command_name": command_name}
+        ) or 0,
+    )
+    assert holdout_cli.main([
+        "--variant", "risk-on", "--year", "2023", "--origin-year", "2023",
+        "--confirm-low-fee-holdout",
+    ]) == 0
+    assert observed["command_name"] == "pre-earnings-post-event-low-fee-holdout"
+    assert str(POST_EVENT_LOW_FEE_HOLDOUT_CONFIGS["risk-on"]) in observed["argv"]
+    assert "--confirm-historical-run" in observed["argv"]
+
+    observed.clear()
+    assert holdout_cli.main([
+        "--variant", "baseline", "--year", "2022", "--origin-year", "2023",
+        "--confirm-low-fee-holdout",
+    ]) == 2
+    assert not observed
+    assert "2023-2025" in capsys.readouterr().err
+    assert holdout_cli.main([
+        "--variant", "baseline", "--year", "2023", "--origin-year", "2022",
+        "--confirm-low-fee-holdout",
+    ]) == 2
+    assert "origin-year 2023" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize(
     "config_path",
-    (*POST_EVENT_CONFIGS.values(), *POST_EVENT_LOW_FEE_CONFIGS.values()),
+    (
+        *POST_EVENT_CONFIGS.values(),
+        *POST_EVENT_LOW_FEE_CONFIGS.values(),
+        *POST_EVENT_LOW_FEE_HOLDOUT_CONFIGS.values(),
+    ),
 )
 def test_shared_daily_cli_refuses_post_event_configs_before_data_loading(
     config_path, tmp_path, monkeypatch, capsys,
@@ -861,6 +942,7 @@ def test_study_module_does_not_import_stock_app():
         Path("studies/pre_earnings_momentum/daily_redeployment_engine.py"),
         Path("studies/pre_earnings_momentum/post_earnings_hold.py"),
         Path("studies/pre_earnings_momentum/post_earnings_low_fee.py"),
+        Path("studies/pre_earnings_momentum/post_earnings_low_fee_holdout.py"),
         Path("studies/pre_earnings_momentum/post_earnings_low_fee_comparison.py"),
     ):
         source = path.read_text(encoding="utf-8")
@@ -874,3 +956,5 @@ def test_commands_sh_exposes_post_event_runner():
     assert "studies.pre_earnings_momentum.post_earnings_hold" in body
     assert "pre-earnings-post-event-low-fee-study)" in body
     assert "studies.pre_earnings_momentum.post_earnings_low_fee" in body
+    assert "pre-earnings-post-event-low-fee-holdout)" in body
+    assert "studies.pre_earnings_momentum.post_earnings_low_fee_holdout" in body

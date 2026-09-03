@@ -127,6 +127,8 @@ def build_series_summary(
     artifact_root: Path,
     series_tag: str,
     years: Iterable[int],
+    *,
+    expected_phase: str = "development",
 ) -> tuple[list[dict[str, str]], dict[str, Any]]:
     """Return annual arm rows and validation evidence for a checkpoint chain."""
     artifact_root = Path(artifact_root)
@@ -156,7 +158,7 @@ def build_series_summary(
         manifest = _read_json(paths["run_manifest.json"])
         summary = _read_json(paths["summary.json"])
         checkpoint = _read_json(paths["state_checkpoint.json"])
-        if manifest.get("year") != year or manifest.get("phase") != "development":
+        if manifest.get("year") != year or manifest.get("phase") != expected_phase:
             raise SeriesValidationError(f"{year}: manifest year/phase mismatch")
         if manifest.get("git_dirty"):
             raise SeriesValidationError(f"{year}: historical run used a dirty worktree")
@@ -340,6 +342,7 @@ def build_series_summary(
         "arms": list(arms or ()),
         "warnings": warnings,
         "rows": len(rows),
+        "phase": expected_phase,
     }
     return rows, evidence
 
@@ -378,7 +381,7 @@ def write_series_summary(
         config=evidence["config"],
         extra={
             "study_id": evidence["config"]["study_id"],
-            "phase": "development",
+            "phase": evidence["phase"],
             "source_git_commit": evidence["source_git_commit"],
             "validation_status": evidence["status"],
             "warnings": evidence["warnings"],
@@ -394,6 +397,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--start-year", type=int, required=True)
     parser.add_argument("--end-year", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--expected-phase", choices=("development", "holdout"), default="development",
+    )
     return parser.parse_args(argv)
 
 
@@ -402,6 +408,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         rows, evidence = build_series_summary(
             args.artifact_root, args.series_tag, range(args.start_year, args.end_year + 1),
+            expected_phase=args.expected_phase,
         )
         write_series_summary(args.output, rows, evidence, artifact_root=args.artifact_root)
     except (OSError, ValueError, json.JSONDecodeError) as exc:

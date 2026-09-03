@@ -82,6 +82,8 @@ def build_comparison(
     artifact_root: Path,
     tags: dict[str, str],
     years: Iterable[int],
+    *,
+    expected_phase: str = "development",
 ) -> tuple[list[dict[str, str]], dict[str, Any]]:
     ordered_years = list(years)
     rows_by_variant = {}
@@ -91,6 +93,7 @@ def build_comparison(
             Path(artifact_root) / VARIANT_DIRS[variant],
             tags[variant],
             ordered_years,
+            expected_phase=expected_phase,
         )
         rows_by_variant[variant] = rows
         evidence[variant] = validation
@@ -99,6 +102,7 @@ def build_comparison(
         "years": ordered_years,
         "tags": dict(tags),
         "variants": evidence,
+        "phase": expected_phase,
     }
 
 
@@ -135,7 +139,7 @@ def write_comparison(
         },
         extra={
             "study_id": "pre-earnings-post-event-hold-low-fee-v1",
-            "phase": "development",
+            "phase": evidence.get("phase", "development"),
             "validation_status": evidence.get("status"),
         },
     )
@@ -151,6 +155,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--start-year", type=int, required=True)
     parser.add_argument("--end-year", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--expected-phase", choices=("development", "holdout"), default="development",
+    )
     return parser.parse_args(argv)
 
 
@@ -161,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
             args.artifact_root,
             {"baseline": args.baseline_tag, "risk-on": args.risk_on_tag},
             range(args.start_year, args.end_year + 1),
+            expected_phase=args.expected_phase,
         )
         write_comparison(args.output, rows, evidence)
     except (OSError, ValueError, SeriesValidationError) as exc:

@@ -149,7 +149,18 @@ keeps the frozen post-event rules and changes only the transaction-cost model
 to `$0.0008 × filled shares` on every filled stock and SPY side. It has its own
 study IDs and artifact root, starts independent $50,000 baseline and Risk-On
 chains in 2010, continues them through 2022, and does not include the
-Risk-On-or-Neutral arm. The 2023–2025 period remains untouched.
+Risk-On-or-Neutral arm. The development runner cannot access 2023–2025.
+
+The separately guarded 2023–2025 one-shot holdout is frozen in
+[`post_earnings_hold_low_fee_holdout_spec.md`](post_earnings_hold_low_fee_holdout_spec.md).
+It starts new $50,000 baseline and Risk-On chains in 2023, carries each chain
+through 2025, and never accepts a development checkpoint:
+
+```bash
+./commands.sh pre-earnings-post-event-low-fee-holdout \
+  --variant risk-on --year 2023 --origin-year 2023 \
+  --run-id HOLDOUT-risk-on-2023 --confirm-low-fee-holdout
+```
 
 Each invocation is guarded independently of the predecessor command:
 

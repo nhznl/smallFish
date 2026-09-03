@@ -233,6 +233,7 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh pre-earnings-daily-study` | Development daily pre-earnings redeployment study; every run requires owner authorization, 2021 is guarded, and later years require the prior `--state-in` checkpoint |
 | `./commands.sh pre-earnings-post-event-study` | Frozen equal-arm post-earnings T+7 development variants; every historical invocation is explicitly guarded |
 | `./commands.sh pre-earnings-post-event-low-fee-study` | Separate 2010–2022 baseline/Risk-On rerun using $0.0008 per filled share per side; every invocation is explicitly guarded |
+| `./commands.sh pre-earnings-post-event-low-fee-holdout` | One-shot 2023–2025 baseline/Risk-On holdout; requires the explicit holdout confirmation flag |
 
 ## Testing
 
