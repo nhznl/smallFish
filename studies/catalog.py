@@ -321,7 +321,7 @@ def _verify_post_earnings_weekly_extension(
                 or validation.get("source_git_commit") != source_commit
                 or validation.get("years") != expected_years or validation.get("arms") != ["equal"]):
             raise ArtifactVerificationError(f"{validation_path}: unexpected extension series identity")
-        if (metadata.get("git_commit") != source_commit or metadata.get("git_dirty") is not False
+        if (metadata.get("source_git_commit") != source_commit or metadata.get("git_dirty") is not False
                 or metadata.get("validation_status") != "PASS"):
             raise ArtifactVerificationError(f"{metadata_path}: expected clean pinned extension evidence")
         config = validation.get("config", {})
@@ -470,15 +470,15 @@ def _stats(profile: str, summary: Mapping[str, Any]) -> list[dict[str, Any]]:
     if profile == "pre-earnings-post-event-weekly-extension":
         return [
             _statistic("risk-on-portfolio-return", "Risk-On portfolio return", summary["portfolio_total_return"], "PERCENT", 2,
-                       "Exploratory 2010-2021 extension", "Retrospective result; not a fresh holdout.", "PRIMARY"),
+                       "Exploratory 2010-2025 extension", "Retrospective result; not a fresh holdout.", "PRIMARY"),
             _statistic("spy-return", "SPY return", summary["spy_total_return"], "PERCENT", 2,
                        "Same continuous extension", "Identically costed passive SPY benchmark.", "PRIMARY"),
             _statistic("terminal-excess-return", "Terminal excess versus SPY", summary["terminal_excess_return"], "PERCENT", 2,
                        "Exploratory cumulative endpoint", "Descriptive only because the method was chosen after observed results.", "PRIMARY"),
             _statistic("baseline-return", "All-regime baseline return", summary["baseline_total_return"], "PERCENT", 2,
-                       "Independent 2010-2021 extension", "The unrestricted baseline was separately replayed from its own $50,000 origin.", "SECONDARY"),
+                       "Independent 2010-2025 extension", "The unrestricted baseline was separately replayed from its own $50,000 origin.", "SECONDARY"),
             _statistic("completed-trades", "Completed stock trades", summary["n_trades"], "INTEGER", 0,
-                       "Risk-On extension chain", "Completed stock positions across twelve annual continuations.", "SECONDARY"),
+                       "Risk-On extension chain", "Completed stock positions across sixteen annual continuations.", "SECONDARY"),
             _statistic("filled-order-sides", "Filled order sides", summary["transactions"], "INTEGER", 0,
                        "Stocks and SPY", "Friday-only execution still produced material turnover.", "SECONDARY"),
             _statistic("transaction-costs", "Transaction costs", summary["transaction_costs"], "CURRENCY", 2,

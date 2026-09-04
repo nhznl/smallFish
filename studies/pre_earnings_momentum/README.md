@@ -53,8 +53,8 @@ Study 4 applies the same low-fee post-earnings selection, sizing, T+7, cash
 staging, and Risk-On rules, but changes **execution timing**: Study 3 made
 daily decisions with next-session fills, while Study 4 evaluated Monday through
 Thursday and executed every stock and SPY change together at Friday's open.
-Its independent 2010–2021 Risk-On chain returned **+529.71%** versus SPY
-**+425.59%**; the all-regime baseline returned **+515.91%**. It is
+Its independent 2010–2025 Risk-On chain returned **+921.43%** versus SPY
+**+697.74%**; the all-regime baseline returned **+889.36%**. It is
 retrospective exploratory context, not a new holdout or a broader validation
 claim.
 

@@ -5,7 +5,7 @@
   "schemaName": "smallfish.research-study",
   "schemaVersion": 1,
   "summary": "Four pre-earnings momentum studies: the original failed endpoint, an exploratory cash-sweep replay, a separately preregistered post-earnings Risk-On holdout, and an exploratory Friday-only execution extension.",
-  "updatedAt": "2026-09-04T08:00:00Z",
+  "updatedAt": "2026-09-04T09:35:00Z",
   "variations": [
     {
       "caveats": [
@@ -411,13 +411,13 @@
     {
       "caveats": [
         "Study 4 differs from Study 3 mainly in execution timing: Study 3 made daily end-of-day decisions with next-session fills, while Study 4 evaluates during the week and executes every stock and SPY change together at Friday's open.",
-        "Study 4 covers 2010\u20132021 from independent $50,000 origins; Study 3 is the separately preregistered 2023\u20132025 one-shot holdout.",
+        "Study 4 covers 2010\u20132025 from independent $50,000 origins; Study 3 is the separately preregistered 2023\u20132025 one-shot holdout.",
         "Study 4 is exploratory and cannot alter Study 3's passed confirmatory verdict or turn its spent holdout into a reusable test."
       ],
       "id": "post-earnings-weekly-extension",
       "methodology": {
         "controls": [
-          "Identically costed passive SPY over the same continuous 2010\u20132021 period.",
+          "Identically costed passive SPY over the same continuous 2010\u20132025 period.",
           "A separately run all-regime baseline using the same Friday-only execution schedule."
         ],
         "endpoint": "Descriptive cumulative and annual comparison of the independent Risk-On and all-regime baseline chains against identically costed passive SPY.",
@@ -441,9 +441,9 @@
           "The static present-day universe creates survivorship and availability bias and omits point-in-time membership history.",
           "Execution uses daily-bar simulated Friday-open fills without bid-ask spread, market impact, or order-level slippage."
         ],
-        "period": "Exploratory extension from 2010 through 2021, with state carried across calendar-year boundaries and a new $50,000 origin for each variant.",
+        "period": "Exploratory extension from 2010 through 2025, with state carried across calendar-year boundaries and a new $50,000 origin for each variant.",
         "population": "The static current universe minus retired symbols, limited to securities with locally available historical prices and earnings records; this is not a point-in-time universe.",
-        "summary": "An independent equal-allocation baseline and Risk-On replay began with $50,000 in 2010 and carried state through 2021. It used the same selection, T+7, whole-share, sector, pin, price, fee, and cash-staging rules as the low-fee post-earnings method, with Friday-only execution."
+        "summary": "An independent equal-allocation baseline and Risk-On replay began with $50,000 in 2010 and carried state continuously through 2025. It used the same selection, T+7, whole-share, sector, pin, price, fee, and cash-staging rules as the low-fee post-earnings method, with Friday-only execution."
       },
       "name": "Friday-Only Execution \u2014 Study 4",
       "outcome": {
@@ -456,22 +456,22 @@
           "Keep Study 3's confirmatory holdout result unchanged and preserve this as exploratory context.",
           "Use a separately preregistered prospective or point-in-time-universe evaluation for any future confirmation."
         ],
-        "summary": "The independent Friday-only Risk-On chain grew from $50,000 to $314,854.22 (+529.71%) versus SPY at $262,796.26 (+425.59%); the all-regime baseline ended at $307,954.19 (+515.91%). These retrospective results carry no confirmatory weight.",
+        "summary": "The independent Friday-only Risk-On chain grew from $50,000 to $510,715.63 (+921.43%) versus SPY at $398,871.22 (+697.74%); the all-regime baseline ended at $494,681.23 (+889.36%). These retrospective results carry no confirmatory weight.",
         "verdict": "NO_VERDICT",
         "whatDidNotWork": [
           "Both variants lost more than SPY in 2018, and neither result establishes out-of-sample validity.",
-          "Friday-only execution reduces execution days, but 2,787 Risk-On filled stock and SPY sides over twelve years is still substantial turnover."
+          "Friday-only execution reduces execution days, but 3,761 Risk-On filled stock and SPY sides over sixteen years is still substantial turnover."
         ],
         "whatWorked": [
-          "Both independently started Friday-only variants finished above the identical SPY path across the 2010\u20132021 extension.",
+          "Both independently started Friday-only variants finished above the identical SPY path across the 2010\u20132025 extension.",
           "Risk-On finished slightly above the all-regime baseline while using fewer filled order sides."
         ]
       },
       "provenance": {
-        "artifactPath": "data/backtest/pre_earnings_momentum/post_earnings_weekly_batch_extension/reports/2010-2021-d608a97/risk-on-annual-summary.csv",
-        "dataCutoff": "2021-12-31",
-        "generatedAt": "2026-09-04T07:06:19.802162Z",
-        "runId": "weekly-batch-extension-risk-on-2010-2021-d608a97",
+        "artifactPath": "data/backtest/pre_earnings_momentum/post_earnings_weekly_batch_extension/reports/2010-2025-5d15b38/risk-on-annual-summary.csv",
+        "dataCutoff": "2025-12-31",
+        "generatedAt": "2026-09-04T16:29:36.713063Z",
+        "runId": "weekly-batch-extension-risk-on-2010-2025-d608a97",
         "sourceCommit": "d608a9794dc6226d3d102098701de70f7d02ea9c",
         "specificationPath": "studies/pre_earnings_momentum/post_earnings_weekly_batch_extension_spec.md",
         "verificationState": "VERIFIED"
@@ -485,8 +485,8 @@
           "label": "Risk-On portfolio return",
           "precision": 2,
           "priority": "PRIMARY",
-          "scope": "Exploratory 2010-2021 extension",
-          "value": 5.2970844
+          "scope": "Exploratory 2010-2025 extension",
+          "value": 9.2143126
         },
         {
           "format": "PERCENT",
@@ -496,7 +496,7 @@
           "precision": 2,
           "priority": "PRIMARY",
           "scope": "Same continuous extension",
-          "value": 4.2559252
+          "value": 6.9774244
         },
         {
           "format": "PERCENT",
@@ -506,7 +506,7 @@
           "precision": 2,
           "priority": "PRIMARY",
           "scope": "Exploratory cumulative endpoint",
-          "value": 1.0411592
+          "value": 2.2368882
         },
         {
           "format": "PERCENT",
@@ -515,18 +515,18 @@
           "label": "All-regime baseline return",
           "precision": 2,
           "priority": "SECONDARY",
-          "scope": "Independent 2010-2021 extension",
-          "value": 5.1590838
+          "scope": "Independent 2010-2025 extension",
+          "value": 8.8936246
         },
         {
           "format": "INTEGER",
           "id": "completed-trades",
-          "interpretation": "Completed stock positions across twelve annual continuations.",
+          "interpretation": "Completed stock positions across sixteen annual continuations.",
           "label": "Completed stock trades",
           "precision": 0,
           "priority": "SECONDARY",
           "scope": "Risk-On extension chain",
-          "value": 1061
+          "value": 1449
         },
         {
           "format": "INTEGER",
@@ -536,7 +536,7 @@
           "precision": 0,
           "priority": "SECONDARY",
           "scope": "Stocks and SPY",
-          "value": 2787
+          "value": 3761
         },
         {
           "format": "CURRENCY",
@@ -546,7 +546,7 @@
           "precision": 2,
           "priority": "SECONDARY",
           "scope": "$0.0008 per filled share",
-          "value": 327.95
+          "value": 413.32
         },
         {
           "format": "PERCENT",
