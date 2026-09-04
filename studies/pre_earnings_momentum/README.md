@@ -58,6 +58,12 @@ Its independent 2010–2025 Risk-On chain returned **+921.43%** versus SPY
 retrospective exploratory context, not a new holdout or a broader validation
 claim.
 
+The proposed live management and Tastytrade execution workflow is documented
+in [`../../docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md`](../../docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md).
+The operational evaluator is `./commands.sh study4-live-evaluate`. FastAPI
+consumes its checksummed artifacts; it never imports this package. Frozen Study
+4 specs and published numbers are unchanged.
+
 ## Strategy intent
 
 The live scan looks for liquid stocks with an upcoming earnings catalyst and

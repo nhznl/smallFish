@@ -116,6 +116,8 @@ never touches another symbol's cache.
 | `data/portfolio_analysis/profiles.json` | Owner-reviewed account-role limits; no product numeric defaults | Portfolio Analysis profile editor |
 | `data/portfolio_analysis/classifications.csv` | Account/symbol allocation-bucket overrides, separate from broker instruments | Portfolio Analysis classification editor |
 | `data/studies/` | Materialized Research Studies JSON | `studies build` |
+| `data/execution/study4.sqlite` | Study 4 plans, intents, fills, valuations, audit | Pre-Earnings Momentum live tool |
+| `data/execution/study4/` | Checksummed operational evaluator artifacts | `study4-live-evaluate` |
 | `logs/` | Scraper, audit, and server logs | various |
 
 ### Price cache format

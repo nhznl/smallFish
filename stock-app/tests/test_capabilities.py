@@ -45,7 +45,8 @@ def test_capabilities_endpoint_reports_every_optional_feature(blank_env):
     payload = response.json()
     assert payload["schemaName"] == "smallfish.capabilities"
     assert set(_by_id(payload)) == {
-        "core-data", "earnings", "tastytrade", "snaptrade", "retirement-risk"}
+        "core-data", "earnings", "tastytrade", "snaptrade", "retirement-risk",
+        "study4-execution"}
 
 
 def test_every_capability_carries_a_reason_and_a_next_action(blank_env):
@@ -196,6 +197,11 @@ def test_the_response_never_contains_a_credential_value(blank_env, monkeypatch):
         "SNAPTRADE_CONSUMER_KEY": "snaptrade-consumer-value-eee",
         "SNAPTRADE_USER_ID": "snaptrade-user-fff",
         "SNAPTRADE_USER_SECRET": "snaptrade-user-secret-ggg",
+        "SFP_STUDY4_SANDBOX_TT_CLIENT_SECRET": "study4-sandbox-secret-hhh",
+        "SFP_STUDY4_SANDBOX_TT_REFRESH_TOKEN": "study4-sandbox-token-iii",
+        "SFP_STUDY4_PRODUCTION_TT_CLIENT_SECRET": "study4-prod-secret-jjj",
+        "SFP_STUDY4_PRODUCTION_TT_REFRESH_TOKEN": "study4-prod-token-kkk",
+        "SFP_STUDY4_CONFIRMATION_SECRET": "study4-confirm-secret-lll",
     }
     for name, value in values.items():
         monkeypatch.setenv(name, value)

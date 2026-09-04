@@ -16,6 +16,7 @@ from . import capabilities, config
 from .path_security import UnsafePathError, contained_path
 from .routers import (
     brokerages,
+    execution,
     portfolios,
     premium_quotes,
     run_jobs,
@@ -47,6 +48,7 @@ app.include_router(portfolios.router)
 app.include_router(tracked_stocks.router)
 app.include_router(sector_rotation.router)
 app.include_router(studies.router)
+app.include_router(execution.router)
 
 
 @app.get("/health")

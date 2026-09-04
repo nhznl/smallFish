@@ -289,8 +289,10 @@ def setup_tastytrade(env_path: Path, *, assume_yes: bool = False) -> int:
 Tastytrade setup
 ================
 
-smallFish uses Tastytrade read-only, for options activity, DXLink quotes,
-Greeks, and market-metric beta. It never places, modifies, or cancels an order.
+smallFish uses Tastytrade read-only for options activity, DXLink quotes,
+Greeks, and market-metric beta. Ordinary TT_* credentials never place, modify,
+or cancel an order. Study 4 live execution uses separate SFP_STUDY4_* settings
+and is configured from Strategies › Pre-Earnings Momentum, not this wizard.
 
 You need an OAuth client secret and a refresh token from your Tastytrade
 account's API settings. smallFish does not use a client ID.

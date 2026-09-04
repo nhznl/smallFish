@@ -89,8 +89,13 @@ lag its position by hours; rerunning the manual sync collects it. That window is
 normal operation, and the ledger correctly reads `OPEN`/`INDICATIVE` until the
 close lands.
 
-**Brokerage access is read-only.** smallFish never places, modifies, or cancels
-an order, and never receives a brokerage password.
+**Ordinary brokerage access is read-only.** Trading and Retirement APIs never
+place, modify, or cancel an order, and smallFish never receives a brokerage
+password. Study 4 live management is the sole gated exception: it may submit
+only a stored, finalized, dry-run-approved, owner-confirmed Study 4 Risk-On
+batch to a dedicated Tastytrade account, using separate sandbox/production
+execution credentials. Production execution defaults to disabled. See
+[`docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md`](docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md).
 
 **Provider I/O boundary is complete** (2026-07-29). Production Tastytrade and
 SnapTrade SDK imports belong only in `services/`, which owns environment-backed

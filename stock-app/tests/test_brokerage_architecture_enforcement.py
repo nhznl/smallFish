@@ -290,6 +290,32 @@ def test_options_activity_uses_tastytrade_only_for_its_account_role():
     assert used <= ACCOUNT_TRANSPORT, sorted(used - ACCOUNT_TRANSPORT)
 
 
+ORDER_TRANSPORT = frozenset({
+    "place_equity_order", "find_orders_by_external_id", "cancel_order",
+    "fetch_trading_snapshot", "load_trading_credentials", "EquityOrderRequest",
+})
+
+
+def test_order_transport_is_confined_to_the_execution_bounded_context():
+    """Ordinary brokerage routes stay read-only. Write methods exist only for
+    the Study 4 execution adapter."""
+    allowed = {APP / "execution" / "broker.py"}
+    for path in production_sources(APP):
+        tree = parse(path)
+        used = attributes_used_on(tree, names_bound_to(tree, "services.tastytrade"))
+        used |= names_imported_from(tree, "services.tastytrade")
+        used |= names_imported_from(tree, "services.tastytrade.orders")
+        leaked = used & ORDER_TRANSPORT
+        if leaked:
+            assert path in allowed, f"{path} uses order transport {sorted(leaked)}"
+
+
+def test_execution_router_does_not_call_order_transport_directly():
+    tree = parse(APP / "routers" / "execution.py")
+    assert not imports_package(tree, "services.tastytrade")
+    assert not imports_package(tree, "tastytrade")
+
+
 def test_options_activity_reads_market_data_through_the_neutral_api():
     tree = parse(APP / "brokerages" / "activity_sync.py")
     assert imports_package(tree, "services.options_market")
@@ -391,3 +417,10 @@ def test_no_production_module_references_retirement_options():
     for path in production_sources(APP, TOOLS, SERVICES, UTILITIES):
         assert "retirement_options" not in path.read_text(encoding="utf-8"), path
     assert not (APP / "retirement_options.py").exists()
+
+
+def test_fastapi_does_not_import_studies_or_utilities():
+    for path in production_sources(APP):
+        tree = parse(path)
+        assert not imports_package(tree, "studies"), path
+        assert not imports_package(tree, "utilities"), path

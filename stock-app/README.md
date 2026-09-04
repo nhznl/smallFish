@@ -11,6 +11,9 @@ analytics, and owns the Trading and Retirement brokerage ledgers.
 - Read-only Tastytrade and SnapTrade sync into common Holdings, Symbol Ledger,
   and Combined Adjusted Basis projections, with immutable broker events and
   brokerage-scoped manual reconciliation.
+- Gated Study 4 live management under `/api/execution/study4`. FastAPI never
+  imports `studies/` or `utilities/`; it shells the allowlisted evaluator and
+  persists a SQLite ledger under `SFP_DATA_DIR`.
 - On-demand strategy and wheel jobs through API endpoints.
 - Static Angular bundle hosting when `./commands.sh build-ui` has been run.
 
@@ -32,6 +35,7 @@ stock-app/
 │   ├── portfolios.py       # named symbol lists, returns, sector exposure
 │   ├── studies_read.py     # fail-closed Research Studies reader
 │   ├── capabilities.py     # optional-integration and core-data states
+│   ├── execution/          # Study 4 ledger, risk gates, broker adapter, lifecycle
 │   ├── brokerages/         # registry, importers, adapters, call coverage, canonical facts
 │   └── routers/            # HTTP endpoint groups
 └── tests/
@@ -195,6 +199,10 @@ install may still have them on disk, but nothing reads or writes them.
 Tastytrade sync is read-only at the broker and idempotent by transaction ID. It
 retains timestamped Greeks, beta, and marks as broker evidence. Grouping is
 retired, so no sync path can create or change group state.
+
+Study 4 execution is not part of that sync path. It uses dedicated
+`SFP_STUDY4_*` credentials, defaults production submission to disabled, and
+accepts only a stored confirmed plan.
 
 Each sync also replaces the selected ledger's `account_capital.csv` with one
 nullable provider-fact row per account. Net liquidating value is the future

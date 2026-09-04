@@ -218,6 +218,17 @@ def build_report(root: Path) -> Report:
         report.add(rows, OFF, "Tastytrade",
                    "not configured — the options ledger and quote collection are unavailable")
 
+    study4_mode = setting("SFP_STUDY4_EXECUTION_MODE").lower()
+    if study4_mode in {"sandbox", "production"}:
+        report.add(rows, OK, "Study 4 execution",
+                   f"mode={study4_mode}; ordinary brokerage APIs stay read-only")
+    elif study4_mode:
+        report.add(rows, FAIL, "Study 4 execution",
+                   "SFP_STUDY4_EXECUTION_MODE must be sandbox, production, or empty")
+    else:
+        report.add(rows, OFF, "Study 4 execution",
+                   "not configured — Strategies › Pre-Earnings Momentum stays inert and cannot submit orders")
+
     st_id, st_key = setting("SNAPTRADE_CLIENT_ID"), setting("SNAPTRADE_CONSUMER_KEY")
     st_user, st_user_secret = setting("SNAPTRADE_USER_ID"), setting("SNAPTRADE_USER_SECRET")
     if st_id and st_key:

@@ -103,16 +103,22 @@ def check_referenced_paths(path: Path, body: str) -> list[str]:
 def commands_sh_subcommands() -> set[str]:
     """Subcommands the dispatcher actually implements."""
     body = (REPO_ROOT / "commands.sh").read_text(encoding="utf-8")
-    implemented = set(re.findall(r'\[ "\$1" = "([a-z-]+)" \]', body))
+    implemented = set(re.findall(r'\[ "\$1" = "([a-z0-9-]+)" \]', body))
     case_block = body.split("case \"$1\" in", 1)[-1]
-    implemented |= set(re.findall(r"^\s{2}([a-z][a-z-]*)\)", case_block, re.MULTILINE))
+    implemented |= set(re.findall(r"^\s{2}([a-z][a-z0-9-]*)\)", case_block, re.MULTILINE))
     return implemented
 
 
 def documented_subcommands() -> set[str]:
     """Subcommands the README's command table promises."""
     body = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    return set(re.findall(r"`\./commands\.sh ([a-z][a-z-]*)", body))
+    documented: set[str] = set()
+    for match in re.finditer(
+            r"`\./commands\.sh ([a-z][a-z0-9-]*)(\[-([a-z0-9-]+)\])?", body):
+        documented.add(match.group(1))
+        if match.group(3):
+            documented.add(f"{match.group(1)}-{match.group(3)}")
+    return documented
 
 
 def check_commands() -> list[str]:

@@ -61,6 +61,28 @@ There is no `TT_CLIENT_ID`. Earlier templates listed one, but neither smallFish
 nor the `tastytrade` SDK consumes it. If your `app.env` still has it, it is
 ignored and can be deleted.
 
+## Optional: Study 4 live execution
+
+Gated. Off by default. Ordinary `TT_*` credentials cannot submit Study 4 orders.
+See [`STUDY4_LIVE_MANAGEMENT_DESIGN.md`](STUDY4_LIVE_MANAGEMENT_DESIGN.md).
+
+| Setting | Type | Default | Effect |
+|---|---|---|---|
+| `SFP_STUDY4_EXECUTION_MODE` | Optional | empty | `sandbox` or `production`. Empty keeps the control plane inert. |
+| `SFP_STUDY4_PRODUCTION_ENABLED` | Optional | empty | Production submissions remain disabled unless `true`/`1`/`yes`. |
+| `SFP_STUDY4_KILL_SWITCH` | Optional | empty | Blocks new submissions immediately when set. |
+| `SFP_STUDY4_ACCOUNT_ALIAS` | Optional | `study4` | Masked label shown in the UI. |
+| `SFP_STUDY4_ACCOUNT_FINGERPRINT` | Optional | empty | SHA-256 of `sandbox:<account>` or `production:<account>`. Never store the raw account number. |
+| `SFP_STUDY4_SANDBOX_TT_CLIENT_SECRET` | Optional, secret | empty | Dedicated sandbox OAuth client secret. |
+| `SFP_STUDY4_SANDBOX_TT_REFRESH_TOKEN` | Optional, secret | empty | Dedicated sandbox refresh token. |
+| `SFP_STUDY4_PRODUCTION_TT_CLIENT_SECRET` | Optional, secret | empty | Dedicated production OAuth client secret. |
+| `SFP_STUDY4_PRODUCTION_TT_REFRESH_TOKEN` | Optional, secret | empty | Dedicated production refresh token. |
+| `SFP_STUDY4_CONFIRMATION_SECRET` | Optional, secret | empty | HMAC key binding the one-time confirmation to the plan. |
+| `SFP_STUDY4_TARGET_BUCKET` | Optional | empty | Owner-configured target capital. |
+| `SFP_STUDY4_PRODUCTION_CAP` | Optional | empty | Owner-entered production pilot ceiling. Never increased automatically. |
+| `SFP_STUDY4_LEDGER` | Advanced | `$SFP_DATA_DIR/execution/study4.sqlite` | Execution ledger path. |
+| `SFP_STUDY4_ARTIFACTS` | Advanced | `$SFP_DATA_DIR/execution/study4` | Evaluator artifact directory. |
+
 ## Optional: SnapTrade
 
 Read-only holdings. Fidelity and other brokerages connect *through* SnapTrade;

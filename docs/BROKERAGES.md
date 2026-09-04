@@ -1,11 +1,15 @@
 # Brokerage integrations
 
-Both integrations are **optional and read-only**. smallFish's core — stocks,
-ETFs, portfolios, sectors, momentum, wheel screening, Research Studies — never
-needs one. You can stop at any point and still have a working application.
+Both integrations are **optional**. Ordinary Trading and Retirement surfaces are
+**read-only**. smallFish's core — stocks, ETFs, portfolios, sectors, momentum,
+wheel screening, Research Studies — never needs a brokerage. You can stop at any
+point and still have a working application.
 
-smallFish never places, modifies, or cancels an order, and never asks for a
-brokerage password.
+smallFish never asks for a brokerage password. Ordinary Tastytrade and SnapTrade
+credentials (`TT_*`, `SNAPTRADE_*`) never place, modify, or cancel an order.
+Study 4 live management is the sole gated exception: it uses separate
+`SFP_STUDY4_*` execution credentials and may submit only a stored, confirmed
+Study 4 batch. See [`STUDY4_LIVE_MANAGEMENT_DESIGN.md`](STUDY4_LIVE_MANAGEMENT_DESIGN.md).
 
 One entry point for everything below:
 
@@ -52,8 +56,10 @@ transport directly.
 
 The backend and utilities retain provider-specific policy: normalization,
 Symbol Ledger selection, quote eligibility, artifact writes, CLI presentation,
-and public API responses. Services never place, modify, or cancel an order, and
-they never persist credentials or brokerage data.
+and public API responses. Ordinary Tastytrade transport in `services.tastytrade.io`
+never places, modifies, or cancels an order. Study 4 order transport lives in
+`services.tastytrade.orders` and is reachable only from the execution bounded
+context. Services never persist credentials or brokerage data.
 
 ---
 
@@ -253,6 +259,24 @@ holdings alone are not exact-contract Greeks or market-metric beta.
   logs.
 - Automated tests use fakes. No test contacts a provider.
 
+## Study 4 dedicated-account execution
+
+Ordinary Trading/Retirement setup above stays read-only. Study 4 live management
+uses a **separate** credential set and account fingerprint so sandbox and
+production cannot be mixed with `TT_*`:
+
+| Setting | Role |
+|---|---|
+| `SFP_STUDY4_EXECUTION_MODE` | empty (off), `sandbox`, or `production` |
+| `SFP_STUDY4_PRODUCTION_ENABLED` | Production submissions stay off unless explicitly `true` |
+| `SFP_STUDY4_SANDBOX_TT_*` / `SFP_STUDY4_PRODUCTION_TT_*` | Dedicated OAuth client secret and refresh token |
+| `SFP_STUDY4_ACCOUNT_FINGERPRINT` | SHA-256 of `sandbox:` or `production:` plus the account number |
+| `SFP_STUDY4_PRODUCTION_CAP` | Owner-entered pilot ceiling; never auto-increased |
+
+The dashboard is Strategies › Pre-Earnings Momentum (`/study4`). Execute accepts only a stored, finalized, dry-run
+approved, confirmed plan. See
+[`STUDY4_LIVE_MANAGEMENT_DESIGN.md`](STUDY4_LIVE_MANAGEMENT_DESIGN.md).
+
 ## Local files
 
 | Path | Contents |
@@ -264,6 +288,7 @@ holdings alone are not exact-contract Greeks or market-metric beta.
 | `$SFP_DATA_DIR/ledger_trading/options_betas.csv` | Timestamped market-metric beta |
 | `$SFP_DATA_DIR/ledger_retirement/positions.csv` | Normalized holdings (equity, option, cash) |
 | `$SFP_DATA_DIR/ledger_retirement/options_activity.csv` | Immutable option transaction events |
+| `$SFP_DATA_DIR/execution/study4.sqlite` | Study 4 execution ledger (plans, intents, fills, audit) |
 
 All git-ignored. All contain real position data — never attach them to an issue.
 

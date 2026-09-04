@@ -4,12 +4,15 @@
 environment, SDK session/client construction, provider calls, streaming, and
 raw SDK payload envelopes.
 
-It is shared by the backend and utilities runtimes when the relevant SDK is
+The services layer is shared by the backend and utilities runtimes when the relevant SDK is
 installed. It must not import `stock-app`, `utilities`, `studies`, FastAPI,
 project configuration, artifact code, pandas, or numpy.
 
 Consumers own provider-policy decisions, normalization, public response shapes,
-and artifact writes. The services never place, modify, or cancel an order.
+and artifact writes. Ordinary Tastytrade I/O never places, modifies, or cancels
+an order. Study 4 equity order transport is a separate module,
+`services.tastytrade.orders`, used only by the FastAPI execution bounded
+context.
 
 ## Options market data
 
@@ -40,14 +43,17 @@ fake-provider contract tests.
 
 ## Tastytrade
 
-`services.tastytrade` supplies lazy, read-only account/balance/history/position,
+`services.tastytrade` supplies lazy account/balance/history/position,
 market-metric, DXLink Greek and quote transport calls, plus session
-verification. It plays two independent roles:
+verification. It plays three independent roles:
 
 1. **Brokerage account transport** — used by `options_activity.py` for account
-   history and marked positions.
+   history and marked positions. Read-only.
 2. **Options market-data transport** — reached only through
    `services.options_market` for quotes, Greeks/IV, and underlying beta.
+3. **Study 4 order transport** — `services.tastytrade.orders`, used only by
+   `stock-app/app/execution/`. Sandbox and production trading credentials are
+   distinct types and environment variables; they cannot be mixed with `TT_*`.
 
 Importing it does not import the SDK, read a credential, authenticate, or
 contact a provider. The Tastytrade pin remains identical in
@@ -70,11 +76,12 @@ brokerage importers.
 | `stock-app/app/brokerages/importers/held_option_market_data.py` | Held-option beta/Greek materialization via `services.options_market` |
 | `stock-app/app/brokerages/importers/snaptrade.py` | SnapTrade holdings/activity normalization and ledger writes |
 | `utilities/options/market_quotes.py` | Quote coverage metadata, freshness, and premium-archive enrichment from neutral observations |
+| `stock-app/app/execution/` | Study 4 plan validation, SQLite ledger, and gated order submission |
 | `tools/brokerages.py` | Standard-library verification orchestration and safe human-facing status |
 
 ## Tests
 
-`services/tests/test_tastytrade_io.py` and
+`services/tests/test_tastytrade_io.py`, `services/tests/test_tastytrade_orders.py`, and
 `services/tests/test_options_market.py` run under both Python environments.
 `services/tests/test_snaptrade_io.py` runs under the backend environment.
 All use injected fake sessions/clients and never contact a provider.

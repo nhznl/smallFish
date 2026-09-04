@@ -74,11 +74,15 @@ Optional, each independently:
 | Feature | Needs | Without it |
 |---|---|---|
 | Upcoming earnings dates | Finnhub API key (free) | The Pre-Earnings Momentum scan cannot run, and Wheel candidates and ledger positions show their earnings window as unknown |
-| Trading ledger, quotes, Greeks, beta | Tastytrade (read-only) | Trading page stays empty until credentials are set and a sync runs |
+| Trading ledger, quotes, Greeks, beta | Tastytrade (read-only `TT_*`) | Trading page stays empty until credentials are set and a sync runs |
 | Retirement holdings | SnapTrade — Fidelity and others connect *through* it | Retirement page stays empty until credentials are set and a sync runs |
+| Study 4 live management | Separate `SFP_STUDY4_*` Tastytrade execution credentials | Strategies › Pre-Earnings Momentum stays inert; no orders can be submitted |
 
-smallFish never receives your brokerage password, and never places, modifies, or
-cancels an order. See [`docs/BROKERAGES.md`](docs/BROKERAGES.md).
+smallFish never receives your brokerage password. Ordinary brokerage APIs never
+place, modify, or cancel an order. Study 4 may submit only a stored, confirmed
+batch after sandbox/production credentials are configured separately. See
+[`docs/BROKERAGES.md`](docs/BROKERAGES.md) and
+[`docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md`](docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md).
 
 ## Quickstart
 
@@ -237,6 +241,7 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh pre-earnings-post-event-weekly-batch` | Separate, exploratory 2022–2025 Friday-only execution replay for the post-earnings baseline and Risk-On variants |
 | `./commands.sh pre-earnings-post-event-weekly-batch-comparison` | Joins the two Friday-only annual chains after their guarded runs complete |
 | `./commands.sh pre-earnings-post-event-weekly-batch-extension` | Separate, exploratory 2010–2021 Friday-only historical extension with independent $50,000 origins |
+| `./commands.sh study4-live-evaluate` | Operational Study 4 Risk-On evaluator. Writes checksummed artifacts; never places a broker order |
 
 ## Testing
 
@@ -264,8 +269,10 @@ an issue, a pull request, or a screenshot.
 - Everything runs locally. smallFish has no telemetry and no backend service of
   its own.
 - `app.env` holds your credentials, is git-ignored, and is created at mode 0600.
-- Brokerage access is read-only. Revocation is documented in
-  [`docs/BROKERAGES.md`](docs/BROKERAGES.md).
+- Ordinary brokerage APIs are read-only. Study 4 live execution is a separately
+  unlocked exception documented in
+  [`docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md`](docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md).
+  Revocation is documented in [`docs/BROKERAGES.md`](docs/BROKERAGES.md).
 - FastAPI binds to `127.0.0.1` and has **no authentication layer**. Do not expose
   it to the internet.
 - Report a vulnerability privately: [`SECURITY.md`](SECURITY.md). Do not open a

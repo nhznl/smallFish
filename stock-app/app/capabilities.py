@@ -245,12 +245,52 @@ def retirement_risk_capability() -> Capability:
         provider="Tastytrade + SnapTrade")
 
 
+def study4_execution_capability() -> Capability:
+    mode = _setting("SFP_STUDY4_EXECUTION_MODE").lower()
+    provides = "Study 4 live management and dedicated-account execution"
+    requires = _present(
+        "SFP_STUDY4_EXECUTION_MODE",
+        "SFP_STUDY4_ACCOUNT_FINGERPRINT",
+        "SFP_STUDY4_SANDBOX_TT_CLIENT_SECRET",
+        "SFP_STUDY4_SANDBOX_TT_REFRESH_TOKEN",
+        "SFP_STUDY4_PRODUCTION_TT_CLIENT_SECRET",
+        "SFP_STUDY4_PRODUCTION_TT_REFRESH_TOKEN",
+    )
+    if not mode or mode in {"disabled", "off"}:
+        return Capability(
+            id="study4-execution", label="Study 4 execution",
+            provides=provides, state=NOT_CONFIGURED, available=False,
+            reason="Study 4 execution is off. Ordinary brokerage surfaces stay read-only.",
+            action="Set SFP_STUDY4_EXECUTION_MODE=sandbox after reading docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md",
+            provider="Tastytrade", docs="docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md",
+            requires=requires)
+    if mode not in {"sandbox", "production"}:
+        return Capability(
+            id="study4-execution", label="Study 4 execution",
+            provides=provides, state=ERROR, available=False,
+            reason="SFP_STUDY4_EXECUTION_MODE must be sandbox or production.",
+            action="Correct SFP_STUDY4_EXECUTION_MODE in app.env",
+            provider="Tastytrade", docs="docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md",
+            requires=requires)
+    production_off = mode == "production" and _setting("SFP_STUDY4_PRODUCTION_ENABLED").lower() not in {
+        "1", "true", "yes"}
+    reason = f"Study 4 execution is configured ({mode})."
+    if production_off:
+        reason += " Production submission remains disabled until explicitly unlocked."
+    return Capability(
+        id="study4-execution", label="Study 4 execution",
+        provides=provides, state=CONFIGURED, available=True,
+        reason=reason, provider="Tastytrade",
+        docs="docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md", requires=requires)
+
+
 CAPABILITIES = (
     core_data_capability,
     finnhub_capability,
     tastytrade_capability,
     snaptrade_capability,
     retirement_risk_capability,
+    study4_execution_capability,
 )
 
 

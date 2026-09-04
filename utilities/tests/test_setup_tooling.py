@@ -223,6 +223,7 @@ def test_doctor_reports_unconfigured_integrations_as_off_not_failure(tmp_path, m
     assert integrations["Finnhub earnings"][0] == D.OFF
     assert integrations["Tastytrade"][0] == D.OFF
     assert integrations["SnapTrade"][0] == D.OFF
+    assert integrations["Study 4 execution"][0] == D.OFF
     # An unconfigured optional integration must never count as a failure.
     for status, _, _ in (r for t, rows in report.sections
                          if t.startswith("Optional") for r in rows):

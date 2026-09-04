@@ -8,9 +8,10 @@ tracks only active evidence gaps and standing constraints.
 ## Shape
 
 smallFish is a **batch pipeline that writes files** and a **read-mostly API that
-serves them**. There is no database, no queue, and no service-to-service call
-inside the project. The filesystem under `SFP_DATA_DIR` is the integration
-point.
+serves them**. There is no queue and no service-to-service call inside the
+project. The filesystem under `SFP_DATA_DIR` is the integration point. Study 4
+live management additionally keeps a transactional SQLite execution ledger at
+`$SFP_DATA_DIR/execution/study4.sqlite`.
 
 ```
 ┌────────────────┐        ┌──────────────┐        ┌────────────────────────┐
@@ -70,7 +71,8 @@ interpreter, because it has to work *before* either environment exists.
 Some pins are duplicated deliberately. Adding a dependency to one environment
 because the other has it is a mistake.
 
-`services/tests/test_tastytrade_io.py` and
+`services/tests/test_tastytrade_io.py`,
+`services/tests/test_tastytrade_orders.py`, and
 `services/tests/test_options_market.py` run in both environments; the
 SnapTrade service suite runs in the API environment only.
 
@@ -110,6 +112,15 @@ UI owns filtering, sorting, presentation, and disclosure.
 Four run-job endpoints (`/runWheel`, `/runChains`, `/runSectorRotation`,
 `/runEarningsScan`) let the UI trigger batch work. They are the only place that
 crosses the boundary, and they shell out rather than importing the pipeline.
+
+Study 4 live management is a separately gated bounded context under
+`/api/execution/study4` and the Angular `/study4` route (Strategies › Pre-Earnings Momentum). FastAPI never imports
+`studies/` or `utilities/`; it shells `./commands.sh study4-live-evaluate` and
+reads checksummed artifacts. Ordinary Trading and Retirement brokerage routes
+remain read-only. Order transport lives in `services/tastytrade/orders.py` and
+is imported only by `stock-app/app/execution/`. Production submission stays
+disabled unless `SFP_STUDY4_PRODUCTION_ENABLED` is explicitly set. See
+[`STUDY4_LIVE_MANAGEMENT_DESIGN.md`](STUDY4_LIVE_MANAGEMENT_DESIGN.md).
 
 The Wheel and operational Pre-Earnings actions first shell out to the shared
 upcoming-earnings freshness check. It serializes concurrent refreshes and

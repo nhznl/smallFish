@@ -71,7 +71,9 @@ authenticating reverse proxy and accept responsibility for that design.
 - A path that leaks a credential into a response, log, error message, or the UI.
 - Path traversal or arbitrary file read through an API parameter.
 - Command injection through a parameter reaching a batch job.
-- A brokerage integration performing a write when it should be read-only.
+- A brokerage integration performing a write when it should be read-only,
+  except the gated Study 4 execution path which may submit only a stored,
+  confirmed plan.
 - A committed secret, or one written to a git-tracked file.
 - Dependency vulnerabilities that are reachable in normal use.
 
@@ -94,8 +96,9 @@ authenticating reverse proxy and accept responsibility for that design.
 - `GET /capabilities` reports presence only — booleans, never values.
 - Provider exceptions can embed tokens, so only the exception *type* is shown to
   the user; detail stays in the server logs.
-- Brokerage access is read-only. smallFish never places, modifies, or cancels an
-  order, and never receives a brokerage password.
+- Ordinary brokerage APIs are read-only. Study 4 live execution is a separately
+  unlocked exception that still never receives a brokerage password, never logs
+  tokens, and never submits an arbitrary order payload.
 
 Verify the repository yourself:
 
