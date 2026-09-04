@@ -189,8 +189,18 @@ def build_series_summary(
             raise SeriesValidationError(f"{year}: allocation arms drifted")
         if manifest["config"].get("price_max") != 500.0:
             raise SeriesValidationError(f"{year}: selected $500 price cap is absent")
-        if manifest["config"].get("entry_scan_schedule") != "daily":
-            raise SeriesValidationError(f"{year}: selected daily scan cadence is absent")
+        execution_schedule = manifest["config"].get(
+            "execution_schedule", "next_session",
+        )
+        expected_scan_schedule = (
+            "weekly_preopen"
+            if execution_schedule == "weekly_open_decision"
+            else "daily"
+        )
+        if manifest["config"].get("entry_scan_schedule") != expected_scan_schedule:
+            raise SeriesValidationError(
+                f"{year}: selected {expected_scan_schedule} scan cadence is absent"
+            )
         if manifest.get("args", {}).get("origin_year") != ordered_years[0]:
             raise SeriesValidationError(f"{year}: sequence origin year mismatch")
 

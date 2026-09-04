@@ -84,6 +84,16 @@ POST_EVENT_WEEKLY_BATCH_EXTENSION_CONFIGS = {
         / "config" / "post_earnings_weekly_batch_extension_risk_on.yaml"
     ),
 }
+POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS = {
+    "baseline": (
+        Path(__file__).resolve().parent
+        / "config" / "post_earnings_weekly_open_decision_baseline.yaml"
+    ),
+    "risk-on": (
+        Path(__file__).resolve().parent
+        / "config" / "post_earnings_weekly_open_decision_risk_on.yaml"
+    ),
+}
 FROZEN_CONTINUATION_CONFIG_SHA256 = (
     "b54bf152d61a55ed86c387cf5e48a4116a9e92d2baa37a04e9ef8944c4232c6c"
 )
@@ -110,6 +120,10 @@ POST_EVENT_WEEKLY_BATCH_CONFIG_SHA256 = {
 POST_EVENT_WEEKLY_BATCH_EXTENSION_CONFIG_SHA256 = {
     "baseline": "aa8e392eda079009ebd653b1f21d8ae46d24b3de8784456dfa22b7d22cbdba9a",
     "risk-on": "de2cb0f274e3cbdb092900b3bc28c65d607eb983c691248b5c4f588d13fd3229",
+}
+POST_EVENT_WEEKLY_OPEN_DECISION_CONFIG_SHA256 = {
+    "baseline": "e85b8d679b4ed0b521470c2086d7cf2e1a7db1e0407d4f7b31d3545d2c8b0c2f",
+    "risk-on": "bd77b76067359904cba26b3d2e3f3308e4fc5da5057d443a44a8cb5a8b7a1d41",
 }
 
 
@@ -160,6 +174,10 @@ def _validate_continuation_config(config_path: Path, cfg: StudyConfig) -> None:
         **{
             POST_EVENT_WEEKLY_BATCH_EXTENSION_CONFIGS[variant].resolve(): digest
             for variant, digest in POST_EVENT_WEEKLY_BATCH_EXTENSION_CONFIG_SHA256.items()
+        },
+        **{
+            POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS[variant].resolve(): digest
+            for variant, digest in POST_EVENT_WEEKLY_OPEN_DECISION_CONFIG_SHA256.items()
         },
     }
     resolved = Path(config_path).expanduser().resolve()

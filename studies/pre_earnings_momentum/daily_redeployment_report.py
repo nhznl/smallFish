@@ -208,6 +208,11 @@ def _human_report(result: SimulationResult) -> str:
             f"- Exits by reason: {stats.get('exits_by_reason')}",
             f"- Average holding sessions: {stats.get('average_holding_sessions')}",
             f"- Median holding sessions: {stats.get('median_holding_sessions')}",
+            f"- Late post-event maximum exits: {stats.get('late_post_event_max_exits')}",
+            f"- Average sessions late: "
+            f"{stats.get('average_post_event_max_sessions_late')}",
+            f"- Maximum sessions late: "
+            f"{stats.get('maximum_post_event_max_sessions_late')}",
             f"- Stock costs: {stats.get('total_stock_costs')}",
             f"- SPY costs: {stats.get('total_spy_costs')}",
             f"- Gross stock turnover: {stats.get('gross_stock_turnover_dollars')}",

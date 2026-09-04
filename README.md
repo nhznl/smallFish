@@ -240,7 +240,9 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh pre-earnings-post-event-low-fee-holdout` | One-shot 2023–2025 baseline/Risk-On holdout; requires the explicit holdout confirmation flag |
 | `./commands.sh pre-earnings-post-event-weekly-batch` | Separate, exploratory 2022–2025 Friday-only execution replay for the post-earnings baseline and Risk-On variants |
 | `./commands.sh pre-earnings-post-event-weekly-batch-comparison` | Joins the two Friday-only annual chains after their guarded runs complete |
-| `./commands.sh pre-earnings-post-event-weekly-batch-extension` | Separate, exploratory 2010–2021 Friday-only historical extension with independent $50,000 origins |
+| `./commands.sh pre-earnings-post-event-weekly-batch-extension` | Separate, exploratory 2010–2025 Friday-only historical extension with independent $50,000 origins |
+| `./commands.sh pre-earnings-post-event-weekly-open-decision` | Guarded Study 5 baseline/Risk-On annual runner with one prior-close decision per final-session open |
+| `./commands.sh pre-earnings-post-event-weekly-open-decision-comparison` | Validates and compares the complete 2010–2025 Study 5 annual chains as exploratory evidence |
 | `./commands.sh study4-live-evaluate` | Operational Study 4 Risk-On evaluator. Writes checksummed artifacts; never places a broker order |
 
 ## Testing

@@ -64,6 +64,7 @@ COST_MODEL_NOTIONAL_BPS = "notional_bps"
 COST_MODEL_PER_SHARE = "per_share"
 EXECUTION_NEXT_SESSION = "next_session"
 EXECUTION_FRIDAY_OPEN = "friday_open"
+EXECUTION_WEEKLY_OPEN_DECISION = "weekly_open_decision"
 
 _CONFIG_SCHEMA: dict[str, Any] = {
     "study_id": str,
@@ -233,11 +234,21 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         raise ValueError("invalid price gate")
     if raw["event_min_weeks"] <= 0 or raw["event_max_weeks"] < raw["event_min_weeks"]:
         raise ValueError("invalid event window")
-    if raw["entry_scan_schedule"] not in {"daily", "monday_thursday", "monday"}:
+    if raw["entry_scan_schedule"] not in {
+        "daily", "monday_thursday", "monday", "weekly_preopen",
+    }:
         raise ValueError("unsupported entry_scan_schedule")
     execution_schedule = str(raw.get("execution_schedule", EXECUTION_NEXT_SESSION))
-    if execution_schedule not in {EXECUTION_NEXT_SESSION, EXECUTION_FRIDAY_OPEN}:
+    if execution_schedule not in {
+        EXECUTION_NEXT_SESSION, EXECUTION_FRIDAY_OPEN,
+        EXECUTION_WEEKLY_OPEN_DECISION,
+    }:
         raise ValueError("unsupported execution_schedule")
+    if ((raw["entry_scan_schedule"] == "weekly_preopen")
+            != (execution_schedule == EXECUTION_WEEKLY_OPEN_DECISION)):
+        raise ValueError(
+            "weekly_preopen entry scans require weekly_open_decision execution"
+        )
     exit_policy = str(raw.get("exit_policy", EXIT_POLICY_T1))
     if exit_policy not in {EXIT_POLICY_T1, EXIT_POLICY_POST_EVENT}:
         raise ValueError("unsupported exit_policy")
@@ -335,6 +346,10 @@ def scheduled_entry_scan_sessions(
     ordered = sorted(set(sessions))
     if schedule == "daily":
         return frozenset(ordered)
+    if schedule == "weekly_preopen":
+        # Resolved inside run_simulation from the full calendar, including the
+        # following year, so a Dec/Jan ISO week cannot create a false cutoff.
+        return frozenset()
     if schedule not in {"monday", "monday_thursday"}:
         raise ValueError(f"unsupported entry scan schedule: {schedule}")
     first_by_week: dict[tuple[int, int], date] = {}
@@ -1514,6 +1529,7 @@ def _update_post_event_state(
     sessions: Sequence[date],
     realized_history: np.ndarray,
     hold_sessions: int,
+    anchor_close_lookup: Callable[[date], float | None] | None = None,
 ) -> None:
     """Advance event state using only outcomes known by this session close."""
     if position.realized_event_date is None:
@@ -1539,8 +1555,16 @@ def _update_post_event_state(
     anchor_session = session_on_or_after(sessions, event_date)
     if anchor_session is None or session < anchor_session:
         return
-    position.post_event_anchor_session = session
-    anchor_close = None if stale else close
+    if anchor_close_lookup is None:
+        # Daily evaluation observes the anchor on the session when the event
+        # lifecycle first becomes actionable. Preserve that frozen behavior.
+        position.post_event_anchor_session = session
+        anchor_close = None if stale else close
+    else:
+        # A single weekly evaluation reconstructs the original event anchor
+        # from already-completed history without creating weekday signals.
+        position.post_event_anchor_session = anchor_session
+        anchor_close = anchor_close_lookup(anchor_session)
     position.post_event_anchor_close = anchor_close
     position.post_event_floor = max(
         position.entry_fill_price,
@@ -1641,7 +1665,17 @@ def run_simulation(
     weekly_execution_sessions, weekly_execution_for_decision = friday_execution_plan(
         all_sessions,
     )
-    weekly_batch = cfg.execution_schedule == EXECUTION_FRIDAY_OPEN
+    weekly_batch = cfg.execution_schedule in {
+        EXECUTION_FRIDAY_OPEN, EXECUTION_WEEKLY_OPEN_DECISION,
+    }
+    weekly_open_decision = (
+        cfg.execution_schedule == EXECUTION_WEEKLY_OPEN_DECISION
+    )
+    weekly_cutoff_for_execution = {
+        execution: cutoff
+        for cutoff, execution in weekly_execution_for_decision.items()
+        if session_after(all_sessions, cutoff) == execution
+    }
     spy_bars = dailies_from_frame(spy)
     stock_frames = {
         ticker: frame.sort_values("date").assign(date=lambda df: pd.to_datetime(df["date"]))
@@ -1713,6 +1747,12 @@ def run_simulation(
             and session_after(all_sessions, session) == batch_execution
         )
         is_batch_execution_session = weekly_batch and session in weekly_execution_sessions
+        opening_batch_cutoff = weekly_cutoff_for_execution.get(session)
+        opening_order_decision = (
+            opening_batch_cutoff
+            if weekly_open_decision and opening_batch_cutoff is not None
+            else session
+        )
         spy_o, spy_c = spy_open_close(session)
         market_regime = market_regime_at_close(
             spy,
@@ -1860,7 +1900,8 @@ def run_simulation(
                     orders.append(OrderRecord(
                         _order_id(state, session, cfg.benchmark_symbol, "spy_sell"),
                         arm, cfg.benchmark_symbol, "sell", "spy_sell", sell_shares,
-                        session, session, spy_o, None, spy_o, sell_shares * spy_o, cost,
+                        opening_order_decision,
+                        session, spy_o, None, spy_o, sell_shares * spy_o, cost,
                         STATUS_FILLED, "fund_entries"))
                     if first_strategy_entry[arm] is None:
                         first_strategy_entry[arm] = session
@@ -1951,7 +1992,8 @@ def run_simulation(
                     orders.append(OrderRecord(
                         _order_id(state, session, cfg.benchmark_symbol, "spy_sweep"),
                         arm, cfg.benchmark_symbol, "buy", "spy_sweep", sweep_shares,
-                        session, session, spy_o, None, spy_o, principal, cost,
+                        opening_order_decision,
+                        session, spy_o, None, spy_o, principal, cost,
                         STATUS_FILLED, "weekly_batch_residual"))
                     if first_strategy_entry[arm] is None:
                         first_strategy_entry[arm] = session
@@ -1992,18 +2034,31 @@ def run_simulation(
             decision_execution = batch_execution or next_session
             for ticker, position in list(state.positions.items()):
                 open_px, close_px, stale = stock_open_close(ticker, session)
-                bars = [bar for bar in stock_bars.get(ticker, []) if _as_date(bar.date) <= session]
-                snapshot = evaluate_as_of(
-                    bars, as_of=session, spy_bars=spy_bars, symbol=ticker) if bars else None
                 if close_px is not None and not stale:
                     position.last_valid_close = close_px
                     position.last_valid_close_date = session
+                # Study 5 observes holdings only at the final pre-open cutoff.
+                # Intermediate closes remain valuation/history inputs and
+                # cannot latch an exit or run an indicator decision.
+                if weekly_open_decision and not is_batch_cutoff:
+                    continue
+                bars = [bar for bar in stock_bars.get(ticker, []) if _as_date(bar.date) <= session]
+                snapshot = evaluate_as_of(
+                    bars, as_of=session, spy_bars=spy_bars, symbol=ticker) if bars else None
                 # Friday is the batch fill day.  Mark its closing value, but
                 # do not create a new Friday-close signal after that open.
                 if weekly_batch and batch_execution is None:
                     continue
                 if cfg.exit_policy == EXIT_POLICY_POST_EVENT:
                     history = histories.get(ticker, np.array([], dtype="datetime64[D]"))
+                    anchor_lookup = None
+                    if weekly_open_decision:
+                        frame = stock_frames.get(ticker)
+
+                        def anchor_lookup(anchor_session: date) -> float | None:
+                            row = _bar_on(frame, anchor_session)
+                            return None if row is None else float(row.close)
+
                     _update_post_event_state(
                         position,
                         session=session,
@@ -2012,6 +2067,7 @@ def run_simulation(
                         sessions=all_sessions,
                         realized_history=history,
                         hold_sessions=cfg.post_event_hold_sessions,
+                        anchor_close_lookup=anchor_lookup,
                     )
                     shadow_position = shadows[arm].positions.get(ticker)
                     if shadow_position is not None:
@@ -2064,7 +2120,7 @@ def run_simulation(
                         position.pending_exit = True
                         scheduled_exit = True
                         pending_order = exit_order
-                decisions.append(DecisionRecord({
+                held_payload = {
                     "decision_date": session.isoformat(),
                     "intended_execution_date": (
                         None if pending_order is None else pending_order.execution_date.isoformat()),
@@ -2102,14 +2158,27 @@ def run_simulation(
                     "pending_exit": position.pending_exit,
                     "order_id": None if pending_order is None else pending_order.order_id,
                     "stale_holding": stale,
-                }))
+                }
+                if weekly_open_decision:
+                    held_payload.update({
+                        "information_cutoff_session": session.isoformat(),
+                        "execution_session": (
+                            None if decision_execution is None
+                            else decision_execution.isoformat()
+                        ),
+                        "decision_timing": "execution_session_preopen",
+                    })
+                decisions.append(DecisionRecord(held_payload))
 
             origin = (not state.origin_consumed) and session == decision_sessions[0]
             deployable = _deployable(state, spy_c, cfg)
-            scan_scheduled = (
-                (origin or session in entry_scan_sessions)
-                and (not weekly_batch or batch_execution is not None)
-            )
+            if weekly_open_decision:
+                scan_scheduled = is_batch_cutoff
+            else:
+                scan_scheduled = (
+                    (origin or session in entry_scan_sessions)
+                    and (not weekly_batch or batch_execution is not None)
+                )
             funding_actionable = (
                 origin or scheduled_exit or _can_fund_min_target(deployable, cfg)
             )
@@ -2158,6 +2227,15 @@ def run_simulation(
                     decision.payload["market_regime"] = market_regime
                     decision.payload["market_regime_gate"] = cfg.market_regime_gate
                     decision.payload["entry_regime_allowed"] = entry_regime_allowed
+                    if weekly_open_decision:
+                        decision.payload.update({
+                            "information_cutoff_session": session.isoformat(),
+                            "execution_session": (
+                                None if decision_execution is None
+                                else decision_execution.isoformat()
+                            ),
+                            "decision_timing": "execution_session_preopen",
+                        })
                     if ticker in exited_today:
                         continue
                     decisions.append(decision)
@@ -2250,7 +2328,9 @@ def run_simulation(
                 state.origin_consumed = True
             else:
                 note = (
-                    "weekly_batch_tracking" if weekly_batch and scan_scheduled
+                    "weekly_open_no_turnover" if weekly_open_decision and scan_scheduled
+                    else "weekly_open_waiting" if weekly_open_decision
+                    else "weekly_batch_tracking" if weekly_batch and scan_scheduled
                     else "no_turnover" if scan_scheduled else "entry_scan_off_schedule"
                 )
                 notes.append(f"{arm}:{note}:{session.isoformat()}")
@@ -2361,7 +2441,13 @@ def run_simulation(
                 notes=(("no_candidates",) if actionable and eligible_count == 0 else ())
                 + (("market_regime_blocked",) if regime_blocked_count else ())
                 + (() if actionable else (
-                    "no_turnover" if scan_scheduled else "entry_scan_off_schedule",
+                    "weekly_open_no_turnover"
+                    if weekly_open_decision and scan_scheduled
+                    else "weekly_open_waiting"
+                    if weekly_open_decision
+                    else "no_turnover"
+                    if scan_scheduled
+                    else "entry_scan_off_schedule",
                 )),
             ))
             shadow_mv = 0.0
@@ -2403,7 +2489,7 @@ def run_simulation(
     summary = _build_summary(
         cfg, year, states, marks, decisions, orders, trades, shadow_equity,
         cash_staging_metrics,
-        shadow_reconciliation_verified, notes, market)
+        shadow_reconciliation_verified, notes, market, all_sessions)
     return SimulationResult(
         cfg=cfg,
         year=year,
@@ -2434,6 +2520,7 @@ def _build_summary(
     shadow_reconciliation_verified: dict[str, bool],
     notes: Sequence[str],
     market: MarketBundle,
+    all_sessions: Sequence[date],
 ) -> dict[str, Any]:
     def distribution(values: Sequence[float | None]) -> dict[str, float] | None:
         available = [float(value) for value in values if value is not None]
@@ -2484,6 +2571,17 @@ def _build_summary(
             if len(trade.exit_triggers) > 1:
                 simultaneous += 1
         holds = [trade.holding_sessions for trade in arm_trades]
+        late_post_event_delays = [
+            sum(
+                1 for item in all_sessions
+                if trade.post_event_target_session < item <= trade.exit_execution_date
+            )
+            for trade in arm_trades
+            if (
+                POST_EVENT_MAX_LATE in trade.exit_triggers
+                and trade.post_event_target_session is not None
+            )
+        ]
         shadow_last = shadow_equity[arm][-1][1] if shadow_equity[arm] else None
         filled_stock_principal = sum(
             float(item.principal or 0.0) for item in arm_orders
@@ -2536,6 +2634,14 @@ def _build_summary(
             "simultaneous_trigger_exits": simultaneous,
             "average_holding_sessions": None if not holds else sum(holds) / len(holds),
             "median_holding_sessions": None if not holds else float(np.median(holds)),
+            "late_post_event_max_exits": len(late_post_event_delays),
+            "average_post_event_max_sessions_late": (
+                None if not late_post_event_delays
+                else sum(late_post_event_delays) / len(late_post_event_delays)
+            ),
+            "maximum_post_event_max_sessions_late": max(
+                late_post_event_delays, default=None,
+            ),
             "average_stock_positions": None if not arm_marks else sum(
                 item.stock_position_count for item in arm_marks) / len(arm_marks),
             "maximum_stock_positions": max(

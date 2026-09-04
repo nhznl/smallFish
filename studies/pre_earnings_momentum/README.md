@@ -58,6 +58,14 @@ Its independent 2010–2025 Risk-On chain returned **+921.43%** versus SPY
 retrospective exploratory context, not a new holdout or a broader validation
 claim.
 
+Study 5 changes the decision cadence again: it performs one
+evaluation immediately before the week's final NYSE session opens, uses only
+evidence through the prior session's close, and executes the resulting batch
+at that same open. It has no weekday scans or sticky weekday exits. The causal
+timing and complete protocol are frozen in
+[`post_earnings_weekly_open_decision_spec.md`](post_earnings_weekly_open_decision_spec.md)
+as a separate retrospective exploratory method.
+
 The proposed live management and Tastytrade execution workflow is documented
 in [`../../docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md`](../../docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md).
 The operational evaluator is `./commands.sh study4-live-evaluate`. FastAPI
@@ -267,6 +275,39 @@ Every following year requires the immediately prior variant-specific
   --output "$SFP_DATA_DIR/backtest/pre_earnings_momentum/post_earnings_weekly_batch/reports/2022-2025-COMMIT/weekly-batch-comparison.csv"
 ```
 
+### Study 5: one pre-open weekly decision
+
+[`post_earnings_weekly_open_decision_spec.md`](post_earnings_weekly_open_decision_spec.md)
+defines the independent 2010-2025 baseline and Risk-On study. The
+week's full decision uses only prior-session-close evidence immediately before
+the final NYSE session opens, then executes at that open. The interval is
+already observed, so any result is retrospective exploratory evidence with
+`NO_VERDICT`; it cannot reopen or replace Study 3 or Study 4.
+
+The guarded runner requires a clean committed worktree and explicit owner
+confirmation. The implementation agent must not run it; historical execution
+was delegated to a separate agent.
+
+```bash
+./commands.sh pre-earnings-post-event-weekly-open-decision \
+  --variant baseline --year 2010 --origin-year 2010 \
+  --run-id study5-baseline-2010-2025-COMMIT \
+  --confirm-weekly-open-decision-exploratory-run
+```
+
+Each later year requires its variant's immediately prior
+`state_checkpoint.json`. After both continuous chains finish, validate and
+compare them with:
+
+```bash
+./commands.sh pre-earnings-post-event-weekly-open-decision-comparison \
+  --artifact-root "$SFP_DATA_DIR/backtest/pre_earnings_momentum/post_earnings_weekly_open_decision" \
+  --baseline-tag study5-baseline-2010-2025-COMMIT \
+  --risk-on-tag study5-risk-on-2010-2025-COMMIT \
+  --start-year 2010 --end-year 2025 \
+  --output "$SFP_DATA_DIR/backtest/pre_earnings_momentum/post_earnings_weekly_open_decision/reports/2010-2025-COMMIT/study5-comparison.csv"
+```
+
 The owner-frozen rule set uses daily candidate scans and a $500 maximum entry
 price. The earlier price-cap sensitivities use
 `config/daily_redeployment_price_500.yaml` and
@@ -306,6 +347,10 @@ authorize any later year.
 | `config/post_earnings_hold_*.yaml` | Separate baseline, Risk-On, and Risk-On-or-Neutral study contracts |
 | `post_earnings_hold_low_fee_study_spec.md` | Frozen-design per-share-fee development methodology |
 | `post_earnings_weekly_batch_spec.md` | Exploratory Friday-only execution methodology |
+| `post_earnings_weekly_open_decision.py` | Guarded Study 5 baseline/Risk-On annual runner |
+| `post_earnings_weekly_open_decision_comparison.py` | Validates and compares the Study 5 annual chains |
+| `post_earnings_weekly_open_decision_spec.md` | Frozen Study 5 single weekly pre-open decision methodology |
+| `config/post_earnings_weekly_open_decision_*.yaml` | Frozen baseline and Risk-On Study 5 contracts |
 | `config/post_earnings_weekly_batch_*.yaml` | Frozen baseline and Risk-On Friday-only execution contracts |
 | `config/post_earnings_hold_low_fee_*.yaml` | Separate baseline and Risk-On low-fee study contracts |
 | `config/daily_redeployment_price_500.yaml` | 2021 development sensitivity with a $500 entry-price ceiling |
