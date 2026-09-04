@@ -1,4 +1,4 @@
-"""Guarded 2010-2021 historical extension of the Friday-only replay."""
+"""Guarded 2010-2025 historical extension of the Friday-only replay."""
 
 from __future__ import annotations
 
@@ -48,8 +48,8 @@ def main(argv: list[str] | None = None) -> int:
     except (ValueError, IndexError):
         print("exactly one --year and --origin-year are required", file=sys.stderr)
         return 2
-    if origin != 2010 or not 2010 <= year <= 2021:
-        print("historical extension permits only origin 2010 and years 2010-2021", file=sys.stderr)
+    if origin != 2010 or not 2010 <= year <= 2025:
+        print("historical extension permits only origin 2010 and years 2010-2025", file=sys.stderr)
         return 2
     return run_daily_study(
         [*remainder, "--confirm-historical-run", "--config",

@@ -44,7 +44,7 @@ def write_comparison(output: Path, rows: list[dict[str, str]], evidence: dict) -
             for variant, payload in evidence.get("variants", {}).items()
         },
         extra={
-            "study_id": "pre-earnings-post-event-weekly-batch-v1",
+            "study_id": evidence.get("study_id", "pre-earnings-post-event-weekly-batch-v1"),
             "phase": evidence.get("phase", "development"),
             "validation_status": evidence.get("status"),
         },
@@ -58,6 +58,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--artifact-root", type=Path, required=True)
     parser.add_argument("--baseline-tag", required=True)
     parser.add_argument("--risk-on-tag", required=True)
+    parser.add_argument("--baseline-prior-tag")
+    parser.add_argument("--risk-on-prior-tag")
+    parser.add_argument("--prior-through-year", type=int)
+    parser.add_argument(
+        "--study-id", default="pre-earnings-post-event-weekly-batch-v1",
+        help="Materialized study identity for the comparison manifest.",
+    )
     parser.add_argument("--start-year", type=int, required=True)
     parser.add_argument("--end-year", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -67,12 +74,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        if bool(args.baseline_prior_tag) != bool(args.risk_on_prior_tag):
+            raise ValueError("both prior variant tags are required together")
+        if bool(args.baseline_prior_tag) != bool(args.prior_through_year):
+            raise ValueError("prior tags and --prior-through-year must be supplied together")
+        if args.prior_through_year is not None and not (
+            args.start_year <= args.prior_through_year < args.end_year
+        ):
+            raise ValueError("--prior-through-year must fall within the comparison before --end-year")
+        tags = {"baseline": args.baseline_tag, "risk-on": args.risk_on_tag}
+        if args.prior_through_year is not None:
+            tags = {
+                "baseline": {
+                    year: args.baseline_prior_tag if year <= args.prior_through_year else args.baseline_tag
+                    for year in range(args.start_year, args.end_year + 1)
+                },
+                "risk-on": {
+                    year: args.risk_on_prior_tag if year <= args.prior_through_year else args.risk_on_tag
+                    for year in range(args.start_year, args.end_year + 1)
+                },
+            }
         rows, evidence = build_comparison(
             args.artifact_root,
-            {"baseline": args.baseline_tag, "risk-on": args.risk_on_tag},
+            tags,
             range(args.start_year, args.end_year + 1),
             expected_phase="development",
         )
+        evidence["study_id"] = args.study_id
         write_comparison(args.output, rows, evidence)
     except (OSError, ValueError, SeriesValidationError) as exc:
         print(f"{type(exc).__name__}: {exc}")

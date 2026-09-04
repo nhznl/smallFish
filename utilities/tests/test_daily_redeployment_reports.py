@@ -13,6 +13,7 @@ import yaml
 
 import studies.pre_earnings_momentum.daily_redeployment as daily_redeployment_cli
 import studies.pre_earnings_momentum.post_earnings_weekly_batch as weekly_batch_cli
+import studies.pre_earnings_momentum.post_earnings_weekly_batch_extension as weekly_extension_cli
 from studies.pre_earnings_momentum.daily_redeployment import (
     CASH_STAGING_CONFIG,
     DEFAULT_CONFIG,
@@ -46,6 +47,25 @@ def test_2021_guard_fails_closed_without_confirmation(tmp_path, monkeypatch):
 
 def test_2021_continuation_from_earlier_authorized_origin_is_not_pilot_guarded():
     _fail_closed_for_2021(2021, 2010, False)
+
+
+def test_weekly_extension_guard_allows_the_authorized_2025_endpoint(monkeypatch):
+    received = []
+    monkeypatch.setattr(
+        weekly_extension_cli,
+        "run_daily_study",
+        lambda args, **kwargs: received.append((args, kwargs)) or 0,
+    )
+    assert weekly_extension_cli.main([
+        "--variant", "baseline", "--year", "2025", "--origin-year", "2010",
+        "--state-in", "/tmp/prior-checkpoint.json", "--confirm-weekly-batch-extension-run",
+    ]) == 0
+    assert received[0][0][-2:] == ["--config", str(
+        weekly_extension_cli.POST_EVENT_WEEKLY_BATCH_EXTENSION_CONFIGS["baseline"])]
+    assert weekly_extension_cli.main([
+        "--variant", "baseline", "--year", "2026", "--origin-year", "2010",
+        "--state-in", "/tmp/prior-checkpoint.json", "--confirm-weekly-batch-extension-run",
+    ]) == 2
 
 
 def test_help_labels_guarded_development_tooling():
@@ -262,6 +282,39 @@ def test_series_report_rejects_broken_checkpoint_hash(tmp_path, monkeypatch):
     })
     with pytest.raises(SeriesValidationError, match="checkpoint hash"):
         build_series_summary(artifact_root, "series", [2000, 2001])
+
+
+def test_series_report_accepts_explicit_tag_transition(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "utilities.manifest._git",
+        lambda *args: "test-commit" if args == ("rev-parse", "HEAD") else "",
+    )
+    cfg = load_study_config(CASH_STAGING_CONFIG)
+    bundle, _ = _market(tickers=("AAA",), n=400)
+    artifact_root = tmp_path / "transition"
+    first = run_simulation(cfg=cfg, market=bundle, year=2000)
+    first_dir = artifact_root / "2000" / "old-series"
+    write_run(first, first_dir, command="test", args={
+        "year": 2000, "origin_year": 2000, "state_in": None,
+    })
+    second = run_simulation(cfg=cfg, market=bundle, year=2001, initial_checkpoint=first.checkpoint)
+    second.summary["input_hashes"] = {
+        **second.summary["input_hashes"],
+        "state_checkpoint": __import__("hashlib").sha256(
+            (first_dir / "state_checkpoint.json").read_bytes()
+        ).hexdigest(),
+    }
+    second_dir = artifact_root / "2001" / "new-series"
+    write_run(second, second_dir, command="test", args={
+        "year": 2001, "origin_year": 2000,
+        "state_in": str(first_dir / "state_checkpoint.json"),
+    })
+
+    rows, evidence = build_series_summary(
+        artifact_root, {2000: "old-series", 2001: "new-series"}, [2000, 2001],
+    )
+    assert [row["Year"] for row in rows] == ["2000", "2001"]
+    assert evidence["series_tag"] == {2000: "old-series", 2001: "new-series"}
 
 
 def test_series_report_supports_one_arm_study(tmp_path, monkeypatch):

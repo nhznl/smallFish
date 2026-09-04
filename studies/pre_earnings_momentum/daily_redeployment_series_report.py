@@ -10,7 +10,7 @@ import math
 import os
 import statistics
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from utilities.manifest import sha256_file, write_manifest
 
@@ -125,7 +125,7 @@ def _expected_order_cost(
 
 def build_series_summary(
     artifact_root: Path,
-    series_tag: str,
+    series_tag: str | Mapping[int, str],
     years: Iterable[int],
     *,
     expected_phase: str = "development",
@@ -146,12 +146,15 @@ def build_series_summary(
     warnings: list[str] = []
 
     for year in ordered_years:
+        effective_tag = series_tag.get(year) if isinstance(series_tag, Mapping) else series_tag
+        if not effective_tag:
+            raise SeriesValidationError(f"{year}: missing series tag")
         year_root = artifact_root / str(year)
-        suffixed_run_dir = year_root / f"{series_tag}-{year}"
-        exact_run_dir = year_root / series_tag
+        suffixed_run_dir = year_root / f"{effective_tag}-{year}"
+        exact_run_dir = year_root / effective_tag
         if suffixed_run_dir.is_dir() and exact_run_dir.is_dir():
             raise SeriesValidationError(
-                f"{year}: ambiguous run directories for series tag {series_tag}"
+                f"{year}: ambiguous run directories for series tag {effective_tag}"
             )
         run_dir = suffixed_run_dir if suffixed_run_dir.is_dir() else exact_run_dir
         paths = {name: run_dir / name for name in (
@@ -342,7 +345,7 @@ def build_series_summary(
 
     evidence = {
         "status": "PASS",
-        "series_tag": series_tag,
+        "series_tag": dict(series_tag) if isinstance(series_tag, Mapping) else series_tag,
         "years": ordered_years,
         "source_git_commit": frozen_commit,
         "config": frozen_config,
@@ -401,6 +404,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate and summarize an authorized annual study chain")
     parser.add_argument("--artifact-root", type=Path, required=True)
     parser.add_argument("--series-tag", required=True)
+    parser.add_argument("--prior-series-tag")
+    parser.add_argument("--prior-through-year", type=int)
     parser.add_argument("--start-year", type=int, required=True)
     parser.add_argument("--end-year", type=int, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -413,8 +418,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        if bool(args.prior_series_tag) != bool(args.prior_through_year):
+            raise ValueError("--prior-series-tag and --prior-through-year must be supplied together")
+        if args.prior_through_year is not None and not (
+            args.start_year <= args.prior_through_year < args.end_year
+        ):
+            raise ValueError("--prior-through-year must fall within the series before --end-year")
+        series_tag: str | dict[int, str] = args.series_tag
+        if args.prior_series_tag:
+            series_tag = {
+                year: args.prior_series_tag if year <= args.prior_through_year else args.series_tag
+                for year in range(args.start_year, args.end_year + 1)
+            }
         rows, evidence = build_series_summary(
-            args.artifact_root, args.series_tag, range(args.start_year, args.end_year + 1),
+            args.artifact_root, series_tag, range(args.start_year, args.end_year + 1),
             expected_phase=args.expected_phase,
         )
         write_series_summary(args.output, rows, evidence, artifact_root=args.artifact_root)
