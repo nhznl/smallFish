@@ -31,6 +31,16 @@
     <span class="nav-sep" aria-hidden="true"></span>
 
     <div class="nav-group">
+      <span class="nav-group-label" aria-hidden="true">Strategies</span>
+      <a routerLink="/study4" routerLinkActive="active" #study4Link="routerLinkActive"
+         [routerLinkActiveOptions]="{ exact: false }"
+         [class.active-section]="isPreEarningsExplainer()"
+         [attr.aria-current]="study4Link.isActive || isPreEarningsExplainer() ? 'page' : null">Pre-Earnings Momentum</a>
+    </div>
+
+    <span class="nav-sep" aria-hidden="true"></span>
+
+    <div class="nav-group">
       <span class="nav-group-label" aria-hidden="true">Ledgers</span>
       <a routerLink="/options" routerLinkActive="active" #optionsLink="routerLinkActive"
          [routerLinkActiveOptions]="{ exact: false }"

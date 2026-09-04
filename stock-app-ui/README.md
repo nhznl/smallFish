@@ -57,6 +57,8 @@ it unconditionally. A new route colliding with an API path must be added to
 | `/sectors` | Sectors | Descriptive 11-SPDR market-regime context. |
 | `/studies` | Studies | Materialized research catalog; selects the default study. |
 | `/studies/:studyId` | Study Detail | Evidence, methodology, variations, provenance, and optional candidate scan. |
+| `/study4` | Pre-Earnings Momentum | Gated live management under Strategies. Ordinary brokerage pages stay read-only. |
+| `/preEarningsExplainer` | Pre-Earnings Momentum Explainer | How the live tool relates to Study 3 and Study 4. |
 | `/wheel` | Wheel | Wheel candidates, probability context, and archived option quotes. |
 | `/wheelExplainer` | Wheel Explainer | Wheel methodology and field definitions. |
 | `/options` | Trading Ledger | Shared brokerage shell for Tastytrade: Holdings, Options (Symbol Ledger), Combined Adjusted Basis, and Portfolio Analysis. |

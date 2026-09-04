@@ -1,0 +1,375 @@
+<div class="page-header">
+  <div>
+    <p class="page-eyebrow">Strategy</p>
+    <h1 class="page-title">Pre-Earnings Momentum</h1>
+    <p class="page-subtitle">
+      Live weekly-batch execution for a dedicated Tastytrade account.
+      This is an operational implementation of
+      <a routerLink="/studies/pre-earnings-momentum" [queryParams]="{ variation: 'post-earnings-risk-on' }">Study 3</a>
+      and
+      <a routerLink="/studies/pre-earnings-momentum" [queryParams]="{ variation: 'post-earnings-weekly-extension' }">Study 4</a>.
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-ghost how-it-works" routerLink="/preEarningsExplainer">? How this works</a>
+    <button class="btn" type="button" (click)="refresh()" [disabled]="busy">Refresh</button>
+    <button class="btn" type="button" (click)="resetOpen = true; resetAck = ''" [disabled]="busy">Reset stats</button>
+    <button class="btn" [class.btn-danger]="!status?.killSwitch" type="button"
+            (click)="toggleKillSwitch()" [disabled]="busy"
+            [attr.title]="killSwitchHelp">
+      {{ status?.killSwitch ? 'Release kill switch' : 'Kill switch' }}
+    </button>
+  </div>
+</div>
+
+@if (loading) {
+  <div class="skeleton skeleton-row"></div>
+  <div class="skeleton skeleton-row"></div>
+} @else if (error) {
+  <div class="banner banner-neg" role="alert">{{ error }}</div>
+}
+
+@if (status) {
+  @if (status.configured) {
+    <div class="banner" [class]="environmentClass()" role="status">
+      <strong>{{ environmentBanner() }}</strong>
+    </div>
+  }
+  @if (status.killSwitch) {
+    <div class="banner banner-neg" role="alert">{{ killSwitchHelp }}</div>
+  }
+  @if (message) {
+    <div class="banner banner-pos" role="status">{{ message }}</div>
+  }
+  @if (!status.killSwitch) {
+    <p class="kill-switch-hint">{{ killSwitchHelp }}</p>
+  }
+
+  <div class="tab-bar" role="tablist" aria-label="Pre-Earnings Momentum views">
+    @for (id of ['overview','tracking','plan','execute','reconcile','performance','audit']; track id) {
+      <button type="button" class="tab" role="tab"
+              [class.active]="tab === id"
+              [attr.aria-selected]="tab === id"
+              (click)="tab = $any(id)">{{ id }}</button>
+    }
+  </div>
+
+  @if (tab === 'overview') {
+    <section class="stat-strip">
+      <div class="stat-card"><span>Lifecycle</span><strong>{{ lifecycleLabel() }}</strong></div>
+      <div class="stat-card"><span>Next action</span><strong>{{ nextActionLabel() }}</strong></div>
+      <div class="stat-card"><span>Cutoff</span><strong>{{ status.cycle?.cutoff_session || '—' }}</strong></div>
+      <div class="stat-card"><span>Execution</span><strong>{{ status.cycle?.execution_session || '—' }}</strong></div>
+      <div class="stat-card"><span>Target bucket</span><strong>{{ status.capital?.target_bucket ?? '—' }}</strong></div>
+      <div class="stat-card"><span>Active / cap</span><strong>{{ status.capital?.active_bucket ?? status.recommendedPilotCap ?? '—' }}</strong></div>
+    </section>
+    @if (pendingSetup().length) {
+      <div class="panel">
+        <div class="panel-heading"><h2>Setup needed</h2></div>
+        <div class="panel-body">
+          <p>The control plane stays inert until these are in place. Restart the server after editing <code>app.env</code>.</p>
+          <ol class="setup-list">
+            @for (item of status.setupRequirements; track item.id) {
+              <li [class.ready]="item.ready">
+                <strong>{{ item.label }}</strong>
+                @if (item.ready) {
+                  <span>Ready</span>
+                } @else {
+                  <span>{{ item.action }}</span>
+                }
+              </li>
+            }
+          </ol>
+          @if (!status.capital && status.configuredTargetBucket) {
+            <div class="page-actions">
+              <button class="btn btn-primary" type="button" (click)="initializeCapital()" [disabled]="busy">
+                Initialize capital from configured target
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+    <div class="panel">
+      <div class="panel-heading"><h2>Required action</h2></div>
+      <div class="panel-body">
+        <p>Ordinary Trading and Retirement APIs stay read-only. This route is the only place a stored weekly plan can be armed.</p>
+        <div class="page-actions">
+          <button class="btn btn-primary" type="button" (click)="run('scan')" [disabled]="busy || !setupComplete()">Run EOD scan</button>
+          <button class="btn" type="button" (click)="run('finalize')" [disabled]="busy || !setupComplete()">Finalize cutoff plan</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (tab === 'tracking') {
+    <div class="panel">
+      <div class="panel-heading"><h2>Daily tracking</h2></div>
+      <div class="panel-body">
+        @if (snapshotSessions().length) {
+          <div class="tab-bar" role="tablist" aria-label="Session snapshots">
+            @for (session of snapshotSessions(); track session) {
+              <button type="button" class="tab" [class.active]="trackingSession === session"
+                      (click)="trackingSession = session">{{ session }}</button>
+            }
+          </div>
+        }
+        @if (scanChanges(); as changes) {
+          <p>Added {{ changes.added.join(', ') || 'none' }}. Retained {{ changes.retained.join(', ') || 'none' }}. Dropped {{ changes.dropped.join(', ') || 'none' }}.</p>
+        }
+        <div class="table-shell">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="col-sticky">Symbol</th>
+                <th>State</th>
+                <th class="num">Score</th>
+                <th class="num">Close</th>
+                <th>Sector</th>
+                <th>Event</th>
+                <th class="num">Qty</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of scanRows(); track row.ticker) {
+                <tr (click)="selectedRow = row">
+                  <th class="col-sticky">{{ row.ticker }}</th>
+                  <td><span class="badge">{{ row.state }}</span></td>
+                  <td class="num">{{ row.setup_score ?? '—' }}</td>
+                  <td class="num">{{ row.decision_close ?? '—' }}</td>
+                  <td>{{ row.sector || '—' }}</td>
+                  <td>{{ row.predicted_event_date || '—' }}</td>
+                  <td class="num">{{ row.provisional_shares ?? row.shares ?? '—' }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="7"><div class="empty-state">No scan snapshot yet. Run an EOD scan after the session close.</div></td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-heading"><h2>Held positions</h2></div>
+      <div class="panel-body">
+        <div class="table-shell">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="col-sticky">Symbol</th>
+                <th class="num">Shares</th>
+                <th>Exit</th>
+                <th class="num">Close</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of heldRows(); track $index) {
+                <tr>
+                  <th class="col-sticky">{{ $any(row).ticker }}</th>
+                  <td class="num">{{ $any(row).shares }}</td>
+                  <td>{{ $any(row).pendingExit ? ($any(row).primaryExit || 'latched') : 'hold' }}</td>
+                  <td class="num">{{ $any(row).decisionClose ?? '—' }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="4"><div class="empty-state">No open stock positions in the latest snapshot.</div></td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (tab === 'plan') {
+    @for (section of [
+      {kind: 'stock_exit', title: 'Stock exits'},
+      {kind: 'spy_funding', title: 'SPY funding'},
+      {kind: 'stock_entry', title: 'Stock entries'},
+      {kind: 'spy_residual', title: 'Residual SPY'}
+    ]; track section.kind) {
+      <div class="panel">
+        <div class="panel-heading"><h2>{{ section.title }}</h2></div>
+        <div class="panel-body">
+          <div class="table-shell">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th class="col-sticky">Symbol</th>
+                  <th>Side</th>
+                  <th class="num">Delta</th>
+                  <th class="num">Limit</th>
+                  <th>TIF</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (item of itemsOf(section.kind); track item.priority) {
+                  <tr>
+                    <th class="col-sticky">{{ item.symbol }}</th>
+                    <td>{{ item.side }}</td>
+                    <td class="num">{{ item.deltaShares ?? 'formula' }}</td>
+                    <td class="num">{{ item.limitPrice ?? '—' }}</td>
+                    <td>{{ item.timeInForce || '—' }}</td>
+                    <td>{{ item.reason || item.formula || '—' }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="6"><div class="empty-state">No {{ section.title | lowercase }} in the frozen plan.</div></td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    }
+  }
+
+  @if (tab === 'execute') {
+    <div class="panel">
+      <div class="panel-heading"><h2>Friday execute</h2></div>
+      <div class="panel-body">
+        <p>One confirmation arms the complete immutable batch. Unfilled IOC entries are rejected for the week and are never chased.</p>
+        <div class="page-actions">
+          <button class="btn btn-primary" type="button" (click)="run('preflight')" [disabled]="busy || !setupComplete()">Preflight and confirm</button>
+          <button class="btn" type="button" (click)="executeArmed()"
+                  [disabled]="busy || status.cycle?.state !== 'Armed' || !status.submissionsAllowed">Submit at open</button>
+        </div>
+        <div class="table-shell">
+          <table class="data-table">
+            <thead>
+              <tr><th>External id</th><th>State</th><th>Broker id</th></tr>
+            </thead>
+            <tbody>
+              @for (intent of detail?.intents || []; track intent.external_identifier) {
+                <tr>
+                  <td class="mono">{{ intent.external_identifier }}</td>
+                  <td>
+                    <span class="badge">{{ intent.state }}</span>
+                    @if (intent.state === 'SUBMISSION_UNKNOWN') {
+                      <button class="btn btn-ghost" type="button" (click)="reconcileUnknown()">Reconcile first</button>
+                    }
+                  </td>
+                  <td>{{ intent.broker_order_id || '—' }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="3"><div class="empty-state">No order intents yet.</div></td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (tab === 'reconcile') {
+    <div class="panel">
+      <div class="panel-heading"><h2>Reconciliation</h2></div>
+      <div class="panel-body">
+        <div class="page-actions">
+          <button class="btn" type="button" (click)="run('reconcile')" [disabled]="busy">Reconcile</button>
+          <button class="btn btn-primary" type="button" (click)="run('finalSync')" [disabled]="busy">Final sync</button>
+        </div>
+        @for (row of detail?.reconciliations || []; track row.kind) {
+          <p><span class="badge" [class.badge-neg]="!row.ok">{{ row.ok ? 'Agreed' : 'Needs review' }}</span> {{ row.discrepancy_codes }}</p>
+        } @empty {
+          <div class="empty-state">No reconciliation yet.</div>
+        }
+      </div>
+    </div>
+  }
+
+  @if (tab === 'performance') {
+    <div class="panel">
+      <div class="panel-heading"><h2>Performance</h2></div>
+      <div class="panel-body">
+        <p>{{ performance?.modeledCostNote }}</p>
+        @if (performance?.unavailableDates?.length) {
+          <div class="banner banner-warn">Unavailable dates: {{ performance?.unavailableDates?.join(', ') }}</div>
+        }
+        <div class="table-shell">
+          <table class="data-table">
+            <thead>
+              <tr><th>Session</th><th class="num">Strategy</th><th class="num">Passive SPY</th><th class="num">Daily</th><th class="num">Drawdown</th></tr>
+            </thead>
+            <tbody>
+              @for (row of performance?.series || []; track row.session) {
+                <tr>
+                  <td>{{ row.session }}</td>
+                  <td class="num">{{ row.complete ? row.strategyEquity : '—' }}</td>
+                  <td class="num">{{ row.complete ? row.benchmarkEquity : '—' }}</td>
+                  <td class="num">{{ row.dailyReturn ?? '—' }}</td>
+                  <td class="num">{{ row.drawdown ?? '—' }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="5"><div class="empty-state">No valuations yet. Incomplete marks stay unavailable rather than zero.</div></td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (tab === 'audit') {
+    <div class="panel">
+      <div class="panel-heading"><h2>Audit</h2></div>
+      <div class="panel-body">
+        <div class="table-shell">
+          <table class="data-table">
+            <thead>
+              <tr><th>When</th><th>Actor</th><th>Action</th><th>Result</th></tr>
+            </thead>
+            <tbody>
+              @for (row of audit?.events || []; track row.id) {
+                <tr>
+                  <td>{{ row.created_at }}</td>
+                  <td>{{ row.actor }}</td>
+                  <td>{{ row.action }}</td>
+                  <td>{{ row.result }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="4"><div class="empty-state">No audit events.</div></td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  }
+}
+
+@if (selectedRow; as row) {
+  <app-drawer [ariaLabel]="row.ticker + ' score details'" (closed)="selectedRow = null">
+    <div drawerHeader>{{ row.ticker }}</div>
+    <pre>{{ row | json }}</pre>
+  </app-drawer>
+}
+
+@if (confirmOpen) {
+  <app-modal title="Arm the complete batch" subtitle="This confirmation is single-use and bound to the frozen plan." (closed)="confirmOpen = false">
+    <p>Environment: <strong>{{ environmentBanner() }}</strong></p>
+    <p>Plan hash: <code>{{ detail?.plan?.plan_hash || 'after preflight' }}</code></p>
+    @if (status?.environment === 'production') {
+      <label>Type PRODUCTION to acknowledge live money
+        <input [(ngModel)]="productionAck" name="productionAck">
+      </label>
+    }
+    <ng-container modalActions>
+      <button class="btn" type="button" (click)="confirmOpen = false">Cancel</button>
+      <button class="btn btn-primary" type="button" (click)="confirmPlan()"
+              [disabled]="busy || (status?.environment === 'production' && productionAck !== 'PRODUCTION')">Confirm and arm</button>
+    </ng-container>
+  </app-modal>
+}
+
+@if (resetOpen) {
+  <app-modal title="Reset local stats" subtitle="Development cleanup. Broker positions are not changed." (closed)="resetOpen = false">
+    <p>This deletes the local execution ledger — cycles, plans, fills, valuations, and audit — and local evaluator artifacts. Type RESET to confirm.</p>
+    <label>Type RESET
+      <input [(ngModel)]="resetAck" name="resetAck">
+    </label>
+    <ng-container modalActions>
+      <button class="btn" type="button" (click)="resetOpen = false">Cancel</button>
+      <button class="btn btn-danger" type="button" (click)="confirmReset()" [disabled]="busy || resetAck !== 'RESET'">Wipe local stats</button>
+    </ng-container>
+  </app-modal>
+}

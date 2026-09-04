@@ -1,0 +1,59 @@
+<div class="page-header">
+  <div>
+    <p class="page-eyebrow">Strategy</p>
+    <h1 class="page-title">Pre-Earnings Momentum</h1>
+    <p class="page-subtitle">
+      This live tool is an operational implementation of the published Pre-Earnings Momentum research.
+      It is an execution and recordkeeping surface, not a new study result.
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" routerLink="/study4">Back to live management</a>
+  </div>
+</div>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Research it implements</h2></div>
+  <div class="panel-body">
+    <p>
+      The live schedule, selection, sizing, T+7, and Risk-On gates come from the frozen
+      Pre-Earnings Momentum studies. Open those research tabs for methodology, verdicts, and caveats:
+    </p>
+    <ul>
+      <li>
+        <a routerLink="/studies/pre-earnings-momentum" [queryParams]="{ variation: 'post-earnings-risk-on' }">
+          Study 3 — Post-Earnings Risk-On
+        </a>
+        — daily decisions with next-session fills. The live tool uses this Risk-On method.
+      </li>
+      <li>
+        <a routerLink="/studies/pre-earnings-momentum" [queryParams]="{ variation: 'post-earnings-weekly-extension' }">
+          Study 4 — Friday-only weekly batch
+        </a>
+        — the live calendar: Thursday close cutoff, Friday open execution, with the published holiday shift.
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Kill switch</h2></div>
+  <div class="panel-body">
+    <p>
+      The kill switch immediately blocks new broker submissions. It does not sell, flatten, or
+      otherwise change positions. Scan, reconcile, and read-only views keep working so you can
+      inspect state. Release it from the same button when you want submissions allowed again.
+    </p>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-heading"><h2>Reset stats</h2></div>
+  <div class="panel-body">
+    <p>
+      Reset stats wipes the local execution ledger — cycles, plans, fills, valuations, and audit —
+      and local evaluator artifacts. Broker positions are unchanged. Use it during development to
+      reinitialize. It requires typing RESET.
+    </p>
+  </div>
+</section>

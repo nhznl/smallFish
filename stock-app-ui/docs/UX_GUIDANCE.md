@@ -98,10 +98,12 @@ other textual state.
   concise subtitle, and a `.page-actions` slot.
 - Put timestamps and data provenance in `.snapshot-chip`. Keep primary actions
   in the header rather than scattering them across the first section.
+- Primary navigation groups are Research, Strategies, Ledgers, and Tracking.
+  Live operational tools belong under Strategies, not under Research Studies.
 - Use in-context “How this works” links for explainers. Documentation should
   not compete with primary tools in the global navigation.
 - Use `.how-it-works` with `btn btn-ghost` for a header explainer link; it
-  provides the shared, prominent treatment used by Strategy and Wheel.
+  provides the shared, prominent treatment used by Wheel and Pre-Earnings Momentum.
 
 ### Panels, stats, tabs, and buttons
 

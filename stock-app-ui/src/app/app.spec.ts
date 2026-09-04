@@ -26,9 +26,16 @@ describe('App', () => {
       'Wheel',
       'Sectors',
       'Studies',
+      'Pre-Earnings Momentum',
       'Trading',
       'Retirement',
       'Portfolios',
+      'Tracking'
+    ]);
+    expect([...compiled.querySelectorAll('.nav-group-label')].map(el => el.textContent?.trim())).toEqual([
+      'Research',
+      'Strategies',
+      'Ledgers',
       'Tracking'
     ]);
   });
@@ -37,6 +44,8 @@ describe('App', () => {
     const paths = routes.map(route => route.path);
     expect(paths).toContain('studies');
     expect(paths).toContain('studies/:studyId');
+    expect(paths).toContain('study4');
+    expect(paths).toContain('preEarningsExplainer');
     expect(paths).not.toContain('strategy');
     expect(paths).not.toContain('strategyExplainer');
   });

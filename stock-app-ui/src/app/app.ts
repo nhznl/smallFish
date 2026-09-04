@@ -15,4 +15,9 @@ export class App {
   isWheelExplainer(): boolean {
     return this.router.url.startsWith('/wheelExplainer');
   }
+
+  /** Keep Pre-Earnings Momentum marked as current on its explainer. */
+  isPreEarningsExplainer(): boolean {
+    return this.router.url.startsWith('/preEarningsExplainer');
+  }
 }

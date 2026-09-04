@@ -1,0 +1,46 @@
+:host { display: block; }
+
+.subtitle { max-width: 62ch; color: var(--text-secondary); }
+.mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.page-subtitle a { font-weight: 650; }
+
+.kill-switch-hint {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  max-width: 72ch;
+}
+
+.setup-list {
+  margin: 12px 0 0;
+  padding-left: 1.2em;
+}
+
+.setup-list li {
+  margin-bottom: 10px;
+}
+
+.setup-list li span {
+  display: block;
+  color: var(--text-secondary);
+}
+
+.setup-list li.ready span {
+  color: var(--pos);
+}
+
+.tab-bar { margin: 16px 0; }
+.tab { text-transform: capitalize; }
+
+.data-table .col-sticky {
+  position: sticky;
+  left: 0;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}

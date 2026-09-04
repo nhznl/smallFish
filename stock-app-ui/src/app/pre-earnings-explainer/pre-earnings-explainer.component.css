@@ -1,0 +1,17 @@
+:host { display: block; }
+
+.panel { margin-bottom: 16px; }
+
+.panel-body p,
+.panel-body li {
+  max-width: 72ch;
+}
+
+.panel-body ul {
+  margin: 12px 0 0;
+  padding-left: 1.2em;
+}
+
+.panel-body li + li {
+  margin-top: 8px;
+}
