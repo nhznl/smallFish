@@ -75,7 +75,7 @@ def test_published_catalog_is_valid_and_lists_both_studies():
     catalog = json.loads((PUBLISHED / "catalog.json").read_text(encoding="utf-8"))
     validate_catalog(catalog)
     assert [item["id"] for item in catalog["studies"]] == list(STUDY_IDS)
-    assert [item["variationCount"] for item in catalog["studies"]] == [3, 2]
+    assert [item["variationCount"] for item in catalog["studies"]] == [4, 2]
 
 
 @pytest.mark.parametrize("study_id", STUDY_IDS)
@@ -112,6 +112,7 @@ FROZEN_OUTCOMES = {
         "base": ("FAILED", "CONFIRMATORY"),
         "spy-cash-sweep": ("NO_VERDICT", "EXPLORATORY"),
         "post-earnings-risk-on": ("PASSED", "CONFIRMATORY"),
+        "post-earnings-weekly-extension": ("NO_VERDICT", "EXPLORATORY"),
     },
     "sector-relative-leadership": {
         "base": ("FAILED", "CONFIRMATORY"),
@@ -400,7 +401,7 @@ def test_materialization_reproduces_the_published_artifacts_byte_for_byte(tmp_pa
     validate_published_catalog(output_root=destination)
 
     assert [item["id"] for item in catalog["studies"]] == list(STUDY_IDS)
-    assert [item["variationCount"] for item in catalog["studies"]] == [3, 2]
+    assert [item["variationCount"] for item in catalog["studies"]] == [4, 2]
     for relative in (Path("catalog.json"),
                      Path("pre-earnings-momentum/study.json"),
                      Path("sector-relative-leadership/study.json")):

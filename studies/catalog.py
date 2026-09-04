@@ -298,6 +298,87 @@ def _verify_post_earnings_holdout(
     return summary, provenance
 
 
+def _verify_post_earnings_weekly_extension(
+    artifact: Mapping[str, Any], root: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Verify the two independent Friday-only exploratory annual chains."""
+    expected_years = artifact["years"]
+    source_commit = artifact["sourceCommit"]
+    variant_rows: dict[str, list[dict[str, str]]] = {}
+    metadata_by_variant: dict[str, dict[str, Any]] = {}
+    for variant_id, paths in artifact["variants"].items():
+        summary_path = root / paths["summaryPath"]
+        validation_path = root / paths["validationPath"]
+        metadata_path = root / paths["metadataPath"]
+        rows = _load_csv(summary_path)
+        validation = _load_json(validation_path)
+        metadata = _load_json(metadata_path)
+        if validation.get("annual_summary_sha256") != _sha256(summary_path):
+            raise ArtifactVerificationError(f"{summary_path}: SHA-256 does not match validation")
+        if metadata.get("artifact_sha256") != _sha256(summary_path):
+            raise ArtifactVerificationError(f"{summary_path}: SHA-256 does not match metadata")
+        if (validation.get("status") != "PASS" or validation.get("phase") != "development"
+                or validation.get("source_git_commit") != source_commit
+                or validation.get("years") != expected_years or validation.get("arms") != ["equal"]):
+            raise ArtifactVerificationError(f"{validation_path}: unexpected extension series identity")
+        if (metadata.get("git_commit") != source_commit or metadata.get("git_dirty") is not False
+                or metadata.get("validation_status") != "PASS"):
+            raise ArtifactVerificationError(f"{metadata_path}: expected clean pinned extension evidence")
+        config = validation.get("config", {})
+        expected_config = {
+            "arms": ["equal"], "cash_staging_enabled": True, "cost_model": "per_share",
+            "cost_per_share": 0.0008, "entry_scan_schedule": "daily",
+            "execution_schedule": "friday_open", "exit_policy": "post_event_hold",
+            "market_regime_gate": paths["marketRegimeGate"], "post_event_hold_sessions": 7,
+            "price_max": 500.0, "starting_equity": 50000, "study_id": paths["studyId"],
+        }
+        if any(config.get(key) != value for key, value in expected_config.items()):
+            raise ArtifactVerificationError(f"{validation_path}: frozen extension configuration changed")
+        if [int(row.get("Year", 0)) for row in rows] != expected_years:
+            raise ArtifactVerificationError(f"{summary_path}: annual rows do not match pinned years")
+        if any(row.get("Arm") != "equal" for row in rows):
+            raise ArtifactVerificationError(f"{summary_path}: expected equal-arm rows only")
+        variant_rows[variant_id] = rows
+        metadata_by_variant[variant_id] = metadata
+
+    if set(variant_rows) != {"baseline", "risk-on"}:
+        raise ArtifactVerificationError("weekly extension requires baseline and risk-on annual chains")
+    baseline_rows, primary_rows = variant_rows["baseline"], variant_rows["risk-on"]
+    for baseline, primary in zip(baseline_rows, primary_rows, strict=True):
+        if any(baseline[key] != primary[key] for key in ("Year", "SPY Start", "SPY End", "SPY Growth")):
+            raise ArtifactVerificationError("weekly extension variants disagree on the passive SPY path")
+    primary_path = root / artifact["variants"]["risk-on"]["summaryPath"]
+    baseline_path = root / artifact["variants"]["baseline"]["summaryPath"]
+    start = _decimal(primary_rows[0], "Beginning Equity", primary_path)
+    ending = _decimal(primary_rows[-1], "Ending Equity", primary_path)
+    spy_start = _decimal(primary_rows[0], "SPY Start", primary_path)
+    spy_end = _decimal(primary_rows[-1], "SPY End", primary_path)
+    baseline_start = _decimal(baseline_rows[0], "Beginning Equity", baseline_path)
+    baseline_end = _decimal(baseline_rows[-1], "Ending Equity", baseline_path)
+    summary = {
+        "portfolio_total_return": float(ending / start - 1),
+        "spy_total_return": float(spy_end / spy_start - 1),
+        "terminal_excess_return": float(ending / start - spy_end / spy_start),
+        "baseline_total_return": float(baseline_end / baseline_start - 1),
+        "n_trades": sum(int(row["Completed Stock Trades"]) for row in primary_rows),
+        "transactions": sum(int(row["No Of Transactions"]) for row in primary_rows),
+        "transaction_costs": float(sum(_decimal(row, "Transaction Costs", primary_path) for row in primary_rows)),
+        "max_drawdown": float(min(_decimal(row, "Strategy Max Drawdown", primary_path) for row in primary_rows)),
+        "baseline_transactions": sum(int(row["No Of Transactions"]) for row in baseline_rows),
+    }
+    primary_metadata = metadata_by_variant["risk-on"]
+    provenance = {
+        "specificationPath": artifact["specificationPath"],
+        "artifactPath": artifact["variants"]["risk-on"]["summaryPath"],
+        "runId": artifact["runId"],
+        "sourceCommit": source_commit,
+        "generatedAt": _as_utc_z(primary_metadata["generated_at_utc"], root / artifact["variants"]["risk-on"]["metadataPath"]),
+        "dataCutoff": artifact["dataCutoff"],
+        "verificationState": "VERIFIED",
+    }
+    return summary, provenance
+
+
 def _verify_sector(artifact: Mapping[str, Any], root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     run_dir = root / artifact["runPath"]
     manifest_path = run_dir / "manifest.json"
@@ -386,6 +467,25 @@ def _stats(profile: str, summary: Mapping[str, Any]) -> list[dict[str, Any]]:
             _statistic("baseline-return", "All-regime diagnostic return", summary["baseline_total_return"], "PERCENT", 2,
                        "Non-primary holdout diagnostic", "The unrestricted diagnostic outperformed the selected Risk-On variant.", "SECONDARY"),
         ]
+    if profile == "pre-earnings-post-event-weekly-extension":
+        return [
+            _statistic("risk-on-portfolio-return", "Risk-On portfolio return", summary["portfolio_total_return"], "PERCENT", 2,
+                       "Exploratory 2010-2021 extension", "Retrospective result; not a fresh holdout.", "PRIMARY"),
+            _statistic("spy-return", "SPY return", summary["spy_total_return"], "PERCENT", 2,
+                       "Same continuous extension", "Identically costed passive SPY benchmark.", "PRIMARY"),
+            _statistic("terminal-excess-return", "Terminal excess versus SPY", summary["terminal_excess_return"], "PERCENT", 2,
+                       "Exploratory cumulative endpoint", "Descriptive only because the method was chosen after observed results.", "PRIMARY"),
+            _statistic("baseline-return", "All-regime baseline return", summary["baseline_total_return"], "PERCENT", 2,
+                       "Independent 2010-2021 extension", "The unrestricted baseline was separately replayed from its own $50,000 origin.", "SECONDARY"),
+            _statistic("completed-trades", "Completed stock trades", summary["n_trades"], "INTEGER", 0,
+                       "Risk-On extension chain", "Completed stock positions across twelve annual continuations.", "SECONDARY"),
+            _statistic("filled-order-sides", "Filled order sides", summary["transactions"], "INTEGER", 0,
+                       "Stocks and SPY", "Friday-only execution still produced material turnover.", "SECONDARY"),
+            _statistic("transaction-costs", "Transaction costs", summary["transaction_costs"], "CURRENCY", 2,
+                       "$0.0008 per filled share", "Simulated stock and SPY regulatory fees.", "SECONDARY"),
+            _statistic("worst-annual-drawdown", "Worst annual max drawdown", summary["max_drawdown"], "PERCENT", 2,
+                       "Risk-On extension", "Worst calendar-year peak-to-trough value change.", "SECONDARY"),
+        ]
     if profile == "sector-v1":
         primary = summary["primary_endpoint"]
         period = summary["primary_period"]
@@ -431,6 +531,8 @@ def _materialize_definition(definition_path: Path, root: Path) -> dict[str, Any]
             summary, provenance = _verify_pre_earnings(artifact, root)
         elif artifact_type == "pre-earnings-post-event-holdout":
             summary, provenance = _verify_post_earnings_holdout(artifact, root)
+        elif artifact_type == "pre-earnings-post-event-weekly-extension":
+            summary, provenance = _verify_post_earnings_weekly_extension(artifact, root)
         elif artifact_type == "sector":
             summary, provenance = _verify_sector(artifact, root)
         else:

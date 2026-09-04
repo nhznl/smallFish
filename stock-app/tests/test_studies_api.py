@@ -38,12 +38,15 @@ def test_studies_catalog_and_full_detail_are_served_from_materialized_artifacts(
     assert detail.status_code == 200
     assert detail.json()["id"] == "pre-earnings-momentum"
     assert [item["outcome"]["verdict"] for item in detail.json()["variations"]] == [
-        "FAILED", "NO_VERDICT", "PASSED"]
+        "FAILED", "NO_VERDICT", "PASSED", "NO_VERDICT"]
     assert detail.json()["variations"][0]["scan"]["executionSupported"] is True
     post_earnings = detail.json()["variations"][2]
     assert post_earnings["id"] == "post-earnings-risk-on"
     assert post_earnings["stats"][0]["value"] == pytest.approx(1.1893002)
     assert post_earnings["scan"] is None
+    weekly_extension = detail.json()["variations"][3]
+    assert weekly_extension["id"] == "post-earnings-weekly-extension"
+    assert weekly_extension["outcome"]["evidenceLevel"] == "EXPLORATORY"
 
 
 def test_studies_preserve_sector_evidence_labels_and_typed_stats(tmp_path, monkeypatch):

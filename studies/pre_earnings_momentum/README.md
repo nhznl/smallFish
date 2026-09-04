@@ -9,6 +9,8 @@ Part of the Research Studies catalog — see [`../README.md`](../README.md) for 
 studies are published, verified, and frozen. Published at
 `/studies/pre-earnings-momentum`. Its default Study 1 remains `FAILED` with
 `CONFIRMATORY` evidence; the separately frozen Study 3 is also available there.
+Study 4 is a separate exploratory Friday-only execution extension and does not
+change either prior verdict.
 
 The live UI scan requires a current upcoming-earnings cache; it reuses a cache
 fetched within one day with sufficient coverage or conditionally refreshes it
@@ -46,6 +48,15 @@ specific protocol, but the static current universe is survivorship-limited,
 execution is simulated, and annual drawdowns were not better than SPY. The
 holdout cannot be rerun or tuned; broader claims require a new prospective or
 point-in-time-universe study.
+
+Study 4 applies the same low-fee post-earnings selection, sizing, T+7, cash
+staging, and Risk-On rules, but changes **execution timing**: Study 3 made
+daily decisions with next-session fills, while Study 4 evaluated Monday through
+Thursday and executed every stock and SPY change together at Friday's open.
+Its independent 2010–2021 Risk-On chain returned **+529.71%** versus SPY
+**+425.59%**; the all-regime baseline returned **+515.91%**. It is
+retrospective exploratory context, not a new holdout or a broader validation
+claim.
 
 ## Strategy intent
 
