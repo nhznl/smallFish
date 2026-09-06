@@ -130,6 +130,11 @@ etf_seed:
   VHT: "Broad Healthcare"
   VPU : "Broad Utilities"
   WAGN : "Pabrai Funds"
+  ZROZ: "Zero-coupon US Treasury"
+  UUP: "US Dollar Index"
+  RWM: "daily inverse Russell 2000"
+  PSQ: "daily inverse Nasdaq-100"
+  SDS: "daily leveraged inverse S&P 500."
 
 
 # Manual pins. symbol: {type, notes}; every entry is pinned=true and survives
