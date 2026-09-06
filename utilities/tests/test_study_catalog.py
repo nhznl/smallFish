@@ -30,6 +30,7 @@ from studies.catalog import (
     ROOT,
     ArtifactVerificationError,
     _verify_post_earnings_holdout,
+    _verify_pre_earnings_regime_staging,
     _verify_pre_earnings,
     build_catalog,
     validate_published_catalog,
@@ -75,7 +76,7 @@ def test_published_catalog_is_valid_and_lists_both_studies():
     catalog = json.loads((PUBLISHED / "catalog.json").read_text(encoding="utf-8"))
     validate_catalog(catalog)
     assert [item["id"] for item in catalog["studies"]] == list(STUDY_IDS)
-    assert [item["variationCount"] for item in catalog["studies"]] == [4, 2]
+    assert [item["variationCount"] for item in catalog["studies"]] == [5, 2]
 
 
 @pytest.mark.parametrize("study_id", STUDY_IDS)
@@ -113,6 +114,7 @@ FROZEN_OUTCOMES = {
         "spy-cash-sweep": ("NO_VERDICT", "EXPLORATORY"),
         "post-earnings-risk-on": ("PASSED", "CONFIRMATORY"),
         "post-earnings-weekly-extension": ("NO_VERDICT", "EXPLORATORY"),
+        "post-earnings-regime-staging": ("NO_VERDICT", "EXPLORATORY"),
     },
     "sector-relative-leadership": {
         "base": ("FAILED", "CONFIRMATORY"),
@@ -392,6 +394,111 @@ def test_post_earnings_verification_rejects_a_changed_frozen_config(tmp_path):
         _verify_post_earnings_holdout(artifact, tmp_path)
 
 
+def write_regime_staging_evidence(root: Path) -> dict:
+    directory = root / "data/backtest/regime-staging/reports"
+    directory.mkdir(parents=True)
+    source_commit = "study6frozen"
+    years = [2025]
+    tags = {
+        "stocks-spy-control": "control-tag",
+        "stocks-regime-staging": "treatment-tag",
+        "etf-only": "etf-tag",
+    }
+    values = {
+        "stocks-spy-control": ("60000", "0.20", 0.12, -0.10, 5),
+        "stocks-regime-staging": ("70000", "0.40", 0.16, -0.20, 4),
+        "etf-only": ("75000", "0.50", 0.18, -0.25, 0),
+    }
+    summary = {
+        "implementation_commit": source_commit,
+        "study_family": "pre-earnings-weekly-regime-staging-v1",
+        "evidence_status": "NO_VERDICT / EXPLORATORY",
+        "years": years,
+        "variants": {
+            variant_id: {
+                "terminal_close_equity": float(equity),
+                "terminal_net_liquidation_return": float(equity) / 50000 - 1,
+                "worst_year": {"period_end": "2025-12-31", "return": float(annual_return)},
+                "cagr": cagr,
+                "drawdown": {"maximum_drawdown": drawdown},
+                "completed_stock_trades": trades,
+                "filled_costs": 1.25,
+                "etf_switches": 3,
+            }
+            for variant_id, (equity, annual_return, cagr, drawdown, trades) in values.items()
+        },
+    }
+    summary_path = directory / "comparison_summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    annual_path = directory / "comparison_annual.csv"
+    annual_path.write_text(
+        "year,variant,ending_equity,calendar_return\n" +
+        "".join(f"2025,{variant_id},{equity},{annual_return}\n"
+                for variant_id, (equity, annual_return, *_rest) in values.items()),
+        encoding="utf-8",
+    )
+    daily_path = directory / "comparison_daily.csv"
+    daily_path.write_text(
+        "variant,date,total_equity,benchmark_value,benchmark_net_liquidation_value\n" +
+        "".join(f"{variant_id},2025-12-31,{equity},55000,54999\n"
+                for variant_id, (equity, *_rest) in values.items()),
+        encoding="utf-8",
+    )
+
+    def write_metadata(data_path: Path) -> Path:
+        metadata_path = data_path.with_name(f"{data_path.name}.meta.json")
+        metadata_path.write_text(json.dumps({
+            "artifact_sha256": hashlib.sha256(data_path.read_bytes()).hexdigest(),
+            "generated_at_utc": "2026-09-06T08:53:50+00:00",
+            "git_commit": source_commit,
+            "git_dirty": False,
+            "study_family": "pre-earnings-weekly-regime-staging-v1",
+            "evidence_status": "NO_VERDICT / EXPLORATORY",
+            "args": {"years": years, "tags": tags},
+        }), encoding="utf-8")
+        return metadata_path
+
+    summary_metadata = write_metadata(summary_path)
+    annual_metadata = write_metadata(annual_path)
+    daily_metadata = write_metadata(daily_path)
+    return {
+        "type": "pre-earnings-regime-staging",
+        "specificationPath": "studies/example/study6-spec.md",
+        "summaryPath": str(summary_path.relative_to(root)),
+        "metadataPath": str(summary_metadata.relative_to(root)),
+        "annualPath": str(annual_path.relative_to(root)),
+        "annualMetadataPath": str(annual_metadata.relative_to(root)),
+        "dailyPath": str(daily_path.relative_to(root)),
+        "dailyMetadataPath": str(daily_metadata.relative_to(root)),
+        "runId": "treatment-tag",
+        "sourceCommit": source_commit,
+        "dataCutoff": "2025-12-31",
+        "studyFamily": "pre-earnings-weekly-regime-staging-v1",
+        "years": years,
+        "primaryVariant": "stocks-regime-staging",
+        "variantTags": tags,
+    }
+
+
+def test_regime_staging_verification_derives_published_comparison(tmp_path):
+    summary, provenance = _verify_pre_earnings_regime_staging(
+        write_regime_staging_evidence(tmp_path), tmp_path)
+    assert summary["portfolio_total_return"] == pytest.approx(0.40)
+    assert summary["control_total_return"] == pytest.approx(0.20)
+    assert summary["etf_only_total_return"] == pytest.approx(0.50)
+    assert summary["spy_total_return"] == pytest.approx(0.09998)
+    assert provenance["sourceCommit"] == "study6frozen"
+
+
+def test_regime_staging_verification_rejects_tampered_annual_comparison(tmp_path):
+    artifact = write_regime_staging_evidence(tmp_path)
+    annual_path = tmp_path / artifact["annualPath"]
+    annual_path.write_text(annual_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    with pytest.raises(ArtifactVerificationError, match="SHA-256"):
+        _verify_pre_earnings_regime_staging(artifact, tmp_path)
+
+
 # ------------------------------------------------- 3. full reproduction
 
 @needs_evidence
@@ -401,7 +508,7 @@ def test_materialization_reproduces_the_published_artifacts_byte_for_byte(tmp_pa
     validate_published_catalog(output_root=destination)
 
     assert [item["id"] for item in catalog["studies"]] == list(STUDY_IDS)
-    assert [item["variationCount"] for item in catalog["studies"]] == [4, 2]
+    assert [item["variationCount"] for item in catalog["studies"]] == [5, 2]
     for relative in (Path("catalog.json"),
                      Path("pre-earnings-momentum/study.json"),
                      Path("sector-relative-leadership/study.json")):

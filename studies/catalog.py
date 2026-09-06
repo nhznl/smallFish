@@ -379,6 +379,119 @@ def _verify_post_earnings_weekly_extension(
     return summary, provenance
 
 
+def _verify_pre_earnings_regime_staging(
+    artifact: Mapping[str, Any], root: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Verify the frozen Study 6 comparison and derive its published summary."""
+    paths = {
+        "summary": (artifact["summaryPath"], artifact["metadataPath"]),
+        "annual": (artifact["annualPath"], artifact["annualMetadataPath"]),
+        "daily": (artifact["dailyPath"], artifact["dailyMetadataPath"]),
+    }
+    source_commit = artifact["sourceCommit"]
+    expected_years = artifact["years"]
+    expected_tags = artifact["variantTags"]
+    family = artifact["studyFamily"]
+    evidence_status = "NO_VERDICT / EXPLORATORY"
+    metadata: dict[str, dict[str, Any]] = {}
+
+    for label, (data_relative, metadata_relative) in paths.items():
+        data_path = root / data_relative
+        metadata_path = root / metadata_relative
+        item_metadata = _load_json(metadata_path)
+        if item_metadata.get("artifact_sha256") != _sha256(data_path):
+            raise ArtifactVerificationError(f"{data_path}: SHA-256 does not match metadata")
+        if (item_metadata.get("git_commit") != source_commit
+                or item_metadata.get("git_dirty") is not False):
+            raise ArtifactVerificationError(f"{metadata_path}: expected the pinned clean source commit")
+        if (item_metadata.get("study_family") != family
+                or item_metadata.get("evidence_status") != evidence_status
+                or item_metadata.get("args", {}).get("years") != expected_years
+                or item_metadata.get("args", {}).get("tags") != expected_tags):
+            raise ArtifactVerificationError(f"{metadata_path}: unexpected Study 6 comparison identity")
+        metadata[label] = item_metadata
+
+    comparison = _load_json(root / artifact["summaryPath"])
+    if (comparison.get("implementation_commit") != source_commit
+            or comparison.get("study_family") != family
+            or comparison.get("evidence_status") != evidence_status
+            or comparison.get("years") != expected_years):
+        raise ArtifactVerificationError(f"{root / artifact['summaryPath']}: unexpected Study 6 summary identity")
+
+    variants = comparison.get("variants")
+    expected_variants = set(expected_tags)
+    if not isinstance(variants, Mapping) or set(variants) != expected_variants:
+        raise ArtifactVerificationError("Study 6 comparison must contain the three frozen variants")
+
+    annual_path = root / artifact["annualPath"]
+    annual_rows = _load_csv(annual_path)
+    annual_by_variant: dict[str, list[dict[str, str]]] = {key: [] for key in expected_variants}
+    for row in annual_rows:
+        variant_id = row.get("variant")
+        if variant_id not in annual_by_variant:
+            raise ArtifactVerificationError(f"{annual_path}: unexpected variant {variant_id!r}")
+        annual_by_variant[variant_id].append(row)
+    for variant_id, rows in annual_by_variant.items():
+        if [int(row.get("year", 0)) for row in rows] != expected_years:
+            raise ArtifactVerificationError(f"{annual_path}: {variant_id!r} annual rows do not match pinned years")
+        variant_summary = variants[variant_id]
+        if _decimal(rows[-1], "ending_equity", annual_path) != Decimal(str(variant_summary["terminal_close_equity"])):
+            raise ArtifactVerificationError(f"{annual_path}: {variant_id!r} terminal equity disagrees with summary")
+        worst_row = min(rows, key=lambda row: _decimal(row, "calendar_return", annual_path))
+        if _decimal(worst_row, "calendar_return", annual_path) != Decimal(str(variant_summary["worst_year"]["return"])):
+            raise ArtifactVerificationError(f"{annual_path}: {variant_id!r} worst year disagrees with summary")
+
+    daily_path = root / artifact["dailyPath"]
+    daily_rows = _load_csv(daily_path)
+    daily_by_variant: dict[str, list[dict[str, str]]] = {key: [] for key in expected_variants}
+    for row in daily_rows:
+        variant_id = row.get("variant")
+        if variant_id not in daily_by_variant:
+            raise ArtifactVerificationError(f"{daily_path}: unexpected variant {variant_id!r}")
+        daily_by_variant[variant_id].append(row)
+    reference_variant = artifact["primaryVariant"]
+    reference_rows = daily_by_variant[reference_variant]
+    reference_benchmark = [(row["date"], row["benchmark_value"], row["benchmark_net_liquidation_value"])
+                           for row in reference_rows]
+    for variant_id, rows in daily_by_variant.items():
+        if not rows or rows[-1].get("date") != artifact["dataCutoff"]:
+            raise ArtifactVerificationError(f"{daily_path}: {variant_id!r} has an incomplete daily series")
+        if [(row["date"], row["benchmark_value"], row["benchmark_net_liquidation_value"])
+                for row in rows] != reference_benchmark:
+            raise ArtifactVerificationError(f"{daily_path}: variants disagree on the passive SPY ledger")
+        if _decimal(rows[-1], "total_equity", daily_path) != Decimal(str(variants[variant_id]["terminal_close_equity"])):
+            raise ArtifactVerificationError(f"{daily_path}: {variant_id!r} terminal equity disagrees with summary")
+
+    primary = variants[reference_variant]
+    control = variants["stocks-spy-control"]
+    etf_only = variants["etf-only"]
+    starting_equity = Decimal("50000")
+    benchmark_end = _decimal(reference_rows[-1], "benchmark_net_liquidation_value", daily_path)
+    summary = {
+        "portfolio_total_return": primary["terminal_net_liquidation_return"],
+        "spy_total_return": float(benchmark_end / starting_equity - 1),
+        "control_total_return": control["terminal_net_liquidation_return"],
+        "etf_only_total_return": etf_only["terminal_net_liquidation_return"],
+        "portfolio_cagr": primary["cagr"],
+        "portfolio_max_drawdown": primary["drawdown"]["maximum_drawdown"],
+        "control_max_drawdown": control["drawdown"]["maximum_drawdown"],
+        "etf_only_max_drawdown": etf_only["drawdown"]["maximum_drawdown"],
+        "completed_stock_trades": primary["completed_stock_trades"],
+        "filled_costs": primary["filled_costs"],
+        "etf_switches": primary["etf_switches"],
+    }
+    provenance = {
+        "specificationPath": artifact["specificationPath"],
+        "artifactPath": artifact["summaryPath"],
+        "runId": artifact["runId"],
+        "sourceCommit": source_commit,
+        "generatedAt": _as_utc_z(metadata["summary"]["generated_at_utc"], root / artifact["metadataPath"]),
+        "dataCutoff": artifact["dataCutoff"],
+        "verificationState": "VERIFIED",
+    }
+    return summary, provenance
+
+
 def _verify_sector(artifact: Mapping[str, Any], root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     run_dir = root / artifact["runPath"]
     manifest_path = run_dir / "manifest.json"
@@ -486,6 +599,25 @@ def _stats(profile: str, summary: Mapping[str, Any]) -> list[dict[str, Any]]:
             _statistic("worst-annual-drawdown", "Worst annual max drawdown", summary["max_drawdown"], "PERCENT", 2,
                        "Risk-On extension", "Worst calendar-year peak-to-trough value change.", "SECONDARY"),
         ]
+    if profile == "pre-earnings-regime-staging":
+        return [
+            _statistic("regime-staging-return", "Stocks + SPXL/SPY return", summary["portfolio_total_return"], "PERCENT", 2,
+                       "Terminal net liquidation, 2010-2025", "SPXL is used in Risk-On and SPY otherwise.", "PRIMARY"),
+            _statistic("spy-staging-control-return", "Stocks + SPY return", summary["control_total_return"], "PERCENT", 2,
+                       "Control terminal net liquidation", "The control keeps residual capital in SPY.", "PRIMARY"),
+            _statistic("etf-only-return", "ETF-only return", summary["etf_only_total_return"], "PERCENT", 2,
+                       "ETF-only terminal net liquidation", "The ETF-only switch finished above the stock treatment.", "PRIMARY"),
+            _statistic("passive-spy-return", "Passive SPY return", summary["spy_total_return"], "PERCENT", 2,
+                       "Benchmark terminal net liquidation", "One identically costed SPY purchase held throughout.", "PRIMARY"),
+            _statistic("regime-staging-cagr", "Stocks + SPXL/SPY CAGR", summary["portfolio_cagr"], "PERCENT", 2,
+                       "Exploratory treatment", "Annualized growth across the continuous chain.", "SECONDARY"),
+            _statistic("regime-staging-drawdown", "Stocks + SPXL/SPY max drawdown", summary["portfolio_max_drawdown"], "PERCENT", 2,
+                       "Exploratory treatment", "Leverage materially increased drawdown relative to the SPY-staging control.", "SECONDARY"),
+            _statistic("spy-control-drawdown", "Stocks + SPY max drawdown", summary["control_max_drawdown"], "PERCENT", 2,
+                       "Independent control", "The unleveraged staging control had the smallest drawdown of the three Study 6 portfolios.", "SECONDARY"),
+            _statistic("completed-stock-trades", "Completed stock trades", summary["completed_stock_trades"], "INTEGER", 0,
+                       "Stocks + SPXL/SPY treatment", "Completed positions across the sixteen annual continuations.", "SECONDARY"),
+        ]
     if profile == "sector-v1":
         primary = summary["primary_endpoint"]
         period = summary["primary_period"]
@@ -533,6 +665,8 @@ def _materialize_definition(definition_path: Path, root: Path) -> dict[str, Any]
             summary, provenance = _verify_post_earnings_holdout(artifact, root)
         elif artifact_type == "pre-earnings-post-event-weekly-extension":
             summary, provenance = _verify_post_earnings_weekly_extension(artifact, root)
+        elif artifact_type == "pre-earnings-regime-staging":
+            summary, provenance = _verify_pre_earnings_regime_staging(artifact, root)
         elif artifact_type == "sector":
             summary, provenance = _verify_sector(artifact, root)
         else:

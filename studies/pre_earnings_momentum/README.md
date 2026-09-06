@@ -340,17 +340,79 @@ authorize any later year.
 The [frozen Study 6 specification](post_earnings_regime_staging_spec.md) defines
 Risk-On-only stock entries with SPXL for residual capital during Risk-On and
 SPY otherwise, alongside a stock-free ETF switching comparison. Existing Study
-5 artifacts are read-only historical context. Approval covers implementation
-and synthetic verification; it does not authorize the 2010-2025 historical run.
+5 artifacts are read-only historical context.
 
 Implementation is isolated in `post_earnings_regime_staging_engine.py`, with
 three pinned configs selected by the guarded `post_earnings_regime_staging.py`
 runner. It writes ETF-aware annual checkpoints and artifacts without changing
-the Study 3/4/5 schemas. After a separately authorized complete run,
-`post_earnings_regime_staging_comparison.py` validates the three checkpoint
-chains, their shared input snapshots and passive-SPY ledger before producing
-the predefined comparison. The final 2025 cutoff that would execute in 2026 is
-excluded by the frozen execution-date boundary.
+the Study 3/4/5 schemas. The authorized 2010–2025 run is complete:
+`post_earnings_regime_staging_comparison.py` validated all three checkpoint
+chains, their shared input snapshots and passive-SPY ledger. The final 2025
+cutoff that would execute in 2026 is excluded by the frozen execution-date
+boundary. The result remains `NO_VERDICT / EXPLORATORY`.
+
+#### Calendar-year returns
+
+The following total returns use the final adjusted close before each calendar
+year and the final adjusted close within that year. The years are the four in
+which Study 6's stock-plus-SPXL treatment had a negative calendar return. SPY
+itself was positive in 2011 and 2015.
+
+| Year | SPY | VOO | TLT | GLD | USO | Best of these funds |
+|---:|---:|---:|---:|---:|---:|---|
+| 2011 | +1.89% | +1.90% | **+34.00%** | +9.57% | -2.28% | TLT |
+| 2015 | +1.23% | **+1.33%** | -1.79% | -10.67% | -45.97% | VOO |
+| 2018 | -4.57% | -4.50% | **-1.61%** | -1.94% | -19.57% | TLT |
+| 2022 | -18.18% | -18.17% | -31.23% | -0.77% | **+28.97%** | USO |
+
+#### Best performers in the broader comparison
+
+The fixed comparison universe contained 26 funds covering Treasuries, broad
+bonds, gold, commodities, currencies, defensive equity sectors, Treasury
+bills, and inverse-equity ETFs. Every included fund existed before 2011.
+
+| Year | First | Second | Third |
+|---:|---|---|---|
+| 2011 | **ZROZ +60.36%** | EDV +55.94% | TLT +34.00% |
+| 2015 | **UUP +7.01%** | XLP +6.87% | XLV +6.83% |
+| 2018 | **RWM +11.57%** | UUP +7.05% | XLV +6.28% |
+| 2022 | **PSQ +36.40%** | SDS +30.69% | USO +28.97% |
+
+Selecting each year's winner retrospectively would introduce perfect hindsight.
+These comparisons describe the selected years; they do not define a causal
+defensive allocation rule.
+
+#### What those winners represent
+
+- **ZROZ:** 25+ year zero-coupon U.S. Treasuries. Its extreme duration produced
+  exceptional gains when long-term rates fell in 2011.
+- **UUP:** bullish U.S. dollar exposure.
+- **RWM:** daily inverse Russell 2000 exposure.
+- **PSQ:** daily inverse Nasdaq-100 exposure.
+- **SDS:** daily leveraged inverse S&P 500 exposure.
+- **XLP and XLV:** consumer-staples and healthcare equity sectors.
+
+RWM, PSQ, and SDS target daily inverse returns. Their longer-period results can
+differ materially from a simple inverse multiple because they reset daily.
+
+#### SPXS returns
+
+SPXS targets -300% of the S&P 500's return for one day. Its multi-day result is
+path-dependent and should not be inferred by multiplying SPY's calendar return
+by -3.
+
+| Year | SPY | Naive -3x SPY | Actual SPXS | Broader-comparison winner |
+|---:|---:|---:|---:|---:|
+| 2011 | +1.90% | -5.69% | **-32.66%** | ZROZ +60.36% |
+| 2015 | +1.23% | -3.70% | **-17.86%** | UUP +7.01% |
+| 2018 | -4.57% | +13.71% | **+3.44%** | RWM +11.57% |
+| 2022 | -18.18% | +54.53% | **+36.14%** | PSQ +36.40% |
+
+SPXS gained during 2018 and 2022, but lost heavily in the positive, volatile
+markets of 2011 and 2015. It nearly matched the broader winner in 2022, while
+falling well short of the naive -3x calculation in every displayed year.
+Calendar-year SPXS returns do not determine its result over Study 6's exact
+weekly Risk-Off intervals; that policy requires a separately frozen replay.
 
 ## Package map
 

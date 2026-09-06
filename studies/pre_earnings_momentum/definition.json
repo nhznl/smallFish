@@ -1,8 +1,8 @@
 {
   "id": "pre-earnings-momentum",
   "name": "Pre-Earnings Momentum",
-  "summary": "Four pre-earnings momentum studies: the original failed endpoint, an exploratory cash-sweep replay, a separately preregistered post-earnings Risk-On holdout, and an exploratory Friday-only execution extension.",
-  "updatedAt": "2026-09-04T09:35:00Z",
+  "summary": "Five published pre-earnings momentum variations: the original failed endpoint, an exploratory cash-sweep replay, a separately preregistered post-earnings Risk-On holdout, an exploratory Friday-only execution extension, and exploratory SPXL/SPY regime staging.",
+  "updatedAt": "2026-09-06T14:00:00Z",
   "defaultVariationId": "base",
   "variations": [
     {
@@ -323,6 +323,112 @@
         }
       },
       "statsProfile": "pre-earnings-post-event-weekly-extension"
+    },
+    {
+      "id": "post-earnings-regime-staging",
+      "name": "SPXL/SPY Regime Staging — Study 6",
+      "thesis": "Using SPXL for residual capital during Risk-On weeks and SPY otherwise could improve the 2010–2025 return of the weekly pre-earnings stock portfolio, with the change in drawdown and the contribution of the stock sleeve reported alongside it.",
+      "methodology": {
+        "summary": "Three independent $50,000 portfolios used one causal decision before each week’s final NYSE open: a stock-plus-SPY control, a stock-plus-SPXL/SPY treatment, and a stock-free SPXL/SPY switch. All shared the same frozen inputs and passive-SPY ledger.",
+        "population": "The static current stock universe minus retired symbols, plus locally validated SPY and SPXL histories; the stock universe is not point-in-time.",
+        "inclusionCriteria": [
+          "Stock entries occurred only in Risk-On weeks and retained the frozen Study 5 selection, liquidity, setupScore, price, sector, pin, and whole-share allocation rules.",
+          "Risk-On required SPY above its 50-session moving average with that average above its value five sessions earlier.",
+          "Residual capital used SPXL in Risk-On and SPY in Neutral, Risk-Off, or Unknown regimes."
+        ],
+        "exclusionCriteria": [
+          "No individual-stock entries outside Risk-On.",
+          "Missing, stale, inconsistent, non-positive, or otherwise ineligible stock price or event data.",
+          "Stock entries blocked by the frozen position, sector, pin, limit-price, or whole-share allocation constraints."
+        ],
+        "features": [
+          "One pre-open decision for the final actual NYSE session of each week using information through the immediately prior session close.",
+          "Whole-share stock and ETF execution at the weekly open, with $0.0008 per filled share on each side.",
+          "SPXL and SPY positions held between weekly switches; no portfolio-level daily leverage rebalancing.",
+          "Continuous annual checkpoints from 2010 through 2025, with the out-of-window 2026 execution excluded."
+        ],
+        "endpoint": "Descriptive comparison of terminal return, drawdown, volatility, and allocation for the stock-plus-SPXL/SPY treatment against the stock-plus-SPY control, ETF-only switch, and common passive-SPY benchmark.",
+        "controls": [
+          "An independently originated stock-plus-SPY staging control under the same Study 6 input snapshot.",
+          "A stock-free SPXL/SPY switching portfolio that isolates the ETF mechanism at portfolio level.",
+          "One identically costed passive-SPY purchase held throughout the common period."
+        ],
+        "period": "Retrospective exploratory simulation from 2010 through 2025 with state carried across calendar-year boundaries.",
+        "inference": "The results describe one retrospective simulation. They do not establish a validated edge or isolate pure stock alpha.",
+        "limitations": [
+          "SPXL targets three times the S&P 500’s daily return, so its longer-period result is path-dependent and can suffer large drawdowns.",
+          "The static present-day stock universe creates survivorship and availability bias.",
+          "Execution uses daily-bar simulated opens without bid-ask spread, market impact, taxes, or order-level slippage.",
+          "The observed 2010–2025 period cannot provide fresh confirmation for a rule selected after reviewing these results."
+        ]
+      },
+      "outcome": {
+        "verdict": "NO_VERDICT",
+        "evidenceLevel": "EXPLORATORY",
+        "summary": "At terminal net liquidation, the stock-plus-SPXL/SPY treatment grew from $50,000 to $586,377.32 (+1,072.75%), above the stock-plus-SPY control at $476,229.08 (+852.46%) and passive SPY at $398,871.22 (+697.74%). The ETF-only switch finished higher at $618,573.09 (+1,137.15%), while the treatment’s maximum drawdown widened to -49.80%.",
+        "whatWorked": [
+          "Changing the ETF destination from SPY to SPXL during Risk-On increased terminal net-liquidation value by $110,148.24 under the shared Study 6 snapshot.",
+          "Both SPXL/SPY portfolios finished above the stock-plus-SPY control and passive SPY in this retrospective period."
+        ],
+        "whatDidNotWork": [
+          "The stock sleeve finished $32,195.77 below the ETF-only switch at terminal net liquidation, so it did not improve the terminal result of the ETF mechanism.",
+          "Maximum drawdown was -49.80% for the stock treatment and -52.60% for ETF-only, versus -33.52% for the stock-plus-SPY control.",
+          "The stock treatment lost 34.17% in 2022, compared with an 18.18% loss for passive SPY."
+        ],
+        "nextSteps": [
+          "Keep the result labeled exploratory and preserve the frozen artifacts.",
+          "Evaluate any inverse or alternative defensive destination under a separately frozen study identity."
+        ],
+        "moreData": {
+          "assessment": true,
+          "rationale": "Only a separately specified prospective or point-in-time-universe evaluation could provide fresh validation evidence."
+        }
+      },
+      "scan": null,
+      "caveats": [
+        "Study 6 is retrospective exploratory evidence and does not alter the verdicts of Studies 1–4.",
+        "SPXL’s daily reset makes its longer-period return and drawdown dependent on the sequence of daily market moves.",
+        "The stock-sleeve comparison is a total portfolio effect because different portfolio paths can change later stock sizing."
+      ],
+      "artifact": {
+        "type": "pre-earnings-regime-staging",
+        "specificationPath": "studies/pre_earnings_momentum/post_earnings_regime_staging_spec.md",
+        "summaryPath": "data/backtest/pre_earnings_momentum/weekly_regime_staging/reports/2010-2025-354abf9/study6-comparison/comparison_summary.json",
+        "metadataPath": "data/backtest/pre_earnings_momentum/weekly_regime_staging/reports/2010-2025-354abf9/study6-comparison/comparison_summary.json.meta.json",
+        "annualPath": "data/backtest/pre_earnings_momentum/weekly_regime_staging/reports/2010-2025-354abf9/study6-comparison/comparison_annual.csv",
+        "annualMetadataPath": "data/backtest/pre_earnings_momentum/weekly_regime_staging/reports/2010-2025-354abf9/study6-comparison/comparison_annual.csv.meta.json",
+        "dailyPath": "data/backtest/pre_earnings_momentum/weekly_regime_staging/reports/2010-2025-354abf9/study6-comparison/comparison_daily.csv",
+        "dailyMetadataPath": "data/backtest/pre_earnings_momentum/weekly_regime_staging/reports/2010-2025-354abf9/study6-comparison/comparison_daily.csv.meta.json",
+        "runId": "study6-b-regime-staging-2010-2025-354abf9",
+        "sourceCommit": "354abf92d7a3965d10d39baf8612da0c0aa0fb59",
+        "dataCutoff": "2025-12-31",
+        "studyFamily": "pre-earnings-weekly-regime-staging-v1",
+        "years": [
+          2010,
+          2011,
+          2012,
+          2013,
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "primaryVariant": "stocks-regime-staging",
+        "variantTags": {
+          "stocks-spy-control": "study6-a-spy-control-2010-2025-354abf9",
+          "stocks-regime-staging": "study6-b-regime-staging-2010-2025-354abf9",
+          "etf-only": "study6-c-etf-only-2010-2025-354abf9"
+        }
+      },
+      "statsProfile": "pre-earnings-regime-staging"
     }
   ]
 }

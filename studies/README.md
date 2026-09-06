@@ -37,6 +37,7 @@ the **default** variation's outcome.
 | | `spy-cash-sweep` | `NO_VERDICT` | `EXPLORATORY` |
 | | `post-earnings-risk-on` | `PASSED` | `CONFIRMATORY` |
 | | `post-earnings-weekly-extension` | `NO_VERDICT` | `EXPLORATORY` |
+| | `post-earnings-regime-staging` | `NO_VERDICT` | `EXPLORATORY` |
 | [Sector relative leadership](sector_rotation/README.md) | `base` (default) | `FAILED` | `CONFIRMATORY` |
 | | `full-period` | `NO_VERDICT` | `EXPLORATORY` |
 
@@ -44,6 +45,7 @@ Specs: [`backtest_spec.md`](pre_earnings_momentum/backtest_spec.md),
 [`backtest_spec_2.md`](pre_earnings_momentum/backtest_spec_2.md),
 [`post_earnings_hold_low_fee_holdout_spec.md`](pre_earnings_momentum/post_earnings_hold_low_fee_holdout_spec.md),
 [`post_earnings_weekly_batch_extension_spec.md`](pre_earnings_momentum/post_earnings_weekly_batch_extension_spec.md),
+[`post_earnings_regime_staging_spec.md`](pre_earnings_momentum/post_earnings_regime_staging_spec.md),
 [`sector_rotation_study_spec.md`](sector_rotation/sector_rotation_study_spec.md),
 [`sector_rotation_study_v2_spec.md`](sector_rotation/sector_rotation_study_v2_spec.md).
 
@@ -52,8 +54,8 @@ endpoints **failed**. The second variation in each is exploratory work done
 afterwards, carries no verdict, and cannot rescue the first. The separately
 pre-registered Pre-Earnings Study 3 later passed its own 2023–2025 endpoint;
 that result is additive and does not rewrite the failed default Study 1. Study
-4 is an exploratory 2010–2021 Friday-only execution extension; it does not
-change either prior verdict.
+4 is an exploratory Friday-only execution extension, and Study 6 is an
+exploratory SPXL/SPY regime-staging comparison; neither changes a prior verdict.
 
 Neither result lifts a product gate. The Momentum and Sectors views remain
 descriptive screens.
