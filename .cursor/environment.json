@@ -1,0 +1,17 @@
+{
+  "name": "smallFish",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "smallFish server",
+      "command": "./commands.sh server --no-reload",
+      "description": "FastAPI backend serving the built Angular dashboard on http://127.0.0.1:8000 (single-server mode)."
+    }
+  ],
+  "ports": [
+    {
+      "name": "smallFish web",
+      "port": 8000
+    }
+  ]
+}
