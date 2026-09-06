@@ -24,7 +24,7 @@ from studies.pre_earnings_momentum.post_earnings_regime_staging_engine import (
     run_regime_staging_simulation,
 )
 from studies.pre_earnings_momentum.post_earnings_regime_staging_report import write_run
-from utilities.price_reader import read_prices_validated
+from utilities.price_reader import missing_price_years, read_prices_validated
 from utilities.universe import (
     get_sector,
     live_universe_symbols,
@@ -208,6 +208,11 @@ def load_market(
     hashes: dict[str, str] = {"earnings": _hash_frame(earnings)}
     required = {cfg.benchmark_symbol, cfg.risk_on_staging_symbol}
     for symbol in sorted(required):
+        missing_years = missing_price_years(cache_root, symbol, calendar_years)
+        if missing_years:
+            raise ValueError(
+                f"{symbol} is missing required cache years: {missing_years}"
+            )
         frame, issues = read_prices_validated(cache_root, symbol, calendar_years)
         if issues or frame.empty:
             raise ValueError(f"{symbol} failed validation or is missing: {issues}")

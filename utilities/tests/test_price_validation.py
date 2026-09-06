@@ -9,7 +9,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from utilities.price_reader import read_prices_validated
+from utilities.price_reader import missing_price_years, read_prices_validated
 
 
 def _write(cache: Path, symbol: str, year: int, lines: list[str]) -> None:
@@ -103,3 +103,14 @@ def test_missing_symbol_returns_empty_and_no_issues():
         df, issues = read_prices_validated(Path(t), "NOPE", [2025])
         assert df.empty
         assert issues == []
+
+
+def test_missing_price_years_reports_absent_and_empty_partitions():
+    with tempfile.TemporaryDirectory() as t:
+        cache = Path(t)
+        _write(cache, "AAA", 2024, GOOD)
+        empty = cache / "2025"
+        empty.mkdir()
+        (empty / "AAA.txt").touch()
+
+        assert missing_price_years(cache, "AAA", [2024, 2025, 2026]) == [2025, 2026]

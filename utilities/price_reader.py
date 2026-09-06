@@ -34,6 +34,21 @@ def _read_symbol_year(cache_root: Path, symbol: str, year: int) -> pd.DataFrame 
     return df
 
 
+def missing_price_years(cache_root: Path, symbol: str,
+                        years: list[int]) -> list[int]:
+    """Return requested years whose symbol partitions are absent or empty.
+
+    Partition coverage is intentionally separate from row-integrity validation:
+    a missing year can be expected for a newly listed or optional symbol, while
+    required benchmark/staging assets may need every requested partition.
+    """
+    return sorted({
+        year for year in years
+        if not (cache_root / str(year) / f"{symbol}.txt").is_file()
+        or (cache_root / str(year) / f"{symbol}.txt").stat().st_size == 0
+    })
+
+
 def read_prices(cache_root: Path, symbol: str, years: list[int]) -> pd.DataFrame:
     """Returns a single OHLCV DataFrame for `symbol` across all given `years`,
     sorted by date. Columns: date, ticker, open, high, low, close, adj_close, volume.
