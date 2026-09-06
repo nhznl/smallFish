@@ -24,8 +24,26 @@ export NVM_DIR="$HOME/.nvm"
 . "$NVM_DIR/nvm.sh"
 nvm install 24 >/dev/null
 nvm alias default 24 >/dev/null
-PATH="$(dirname "$(nvm which 24)"):$PATH"
+node_bin="$(dirname "$(nvm which 24)")"
+PATH="$node_bin:$PATH"
 export PATH
+
+# Make Node 24 win in non-interactive/agent shells too. Those shells skip
+# ~/.bashrc (where nvm loads), so `node` would otherwise resolve to the older
+# interpreter the Cursor exec-daemon puts early on PATH, and smallFish's
+# Node >= 22.22.3 gate (setup.sh, ./commands.sh doctor, build-ui) would fail.
+# /usr/local/cargo/bin sits ahead of that interpreter on PATH, so shadow it
+# there with symlinks to the nvm-managed Node 24 toolchain.
+shim_dir="/usr/local/cargo/bin"
+if [ -d "$shim_dir" ]; then
+  for tool in node npm npx corepack; do
+    if [ -w "$shim_dir" ]; then
+      ln -sf "$node_bin/$tool" "$shim_dir/$tool"
+    else
+      sudo ln -sf "$node_bin/$tool" "$shim_dir/$tool"
+    fi
+  done
+fi
 
 # 3. Repository bootstrap: both Python virtual environments and UI deps.
 #    setup.sh is non-interactive and idempotent.
