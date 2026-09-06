@@ -335,6 +335,23 @@ holiday-adjusted weekly slots while retaining daily held-position exits. The
 `pilot-2021-mon-158bf3e`; they remain development sensitivities and do not
 authorize any later year.
 
+### Study 6: weekly SPXL/SPY allocation
+
+The [frozen Study 6 specification](post_earnings_regime_staging_spec.md) defines
+Risk-On-only stock entries with SPXL for residual capital during Risk-On and
+SPY otherwise, alongside a stock-free ETF switching comparison. Existing Study
+5 artifacts are read-only historical context. Approval covers implementation
+and synthetic verification; it does not authorize the 2010-2025 historical run.
+
+Implementation is isolated in `post_earnings_regime_staging_engine.py`, with
+three pinned configs selected by the guarded `post_earnings_regime_staging.py`
+runner. It writes ETF-aware annual checkpoints and artifacts without changing
+the Study 3/4/5 schemas. After a separately authorized complete run,
+`post_earnings_regime_staging_comparison.py` validates the three checkpoint
+chains, their shared input snapshots and passive-SPY ledger before producing
+the predefined comparison. The final 2025 cutoff that would execute in 2026 is
+excluded by the frozen execution-date boundary.
+
 ## Package map
 
 | Path | Responsibility |
@@ -364,6 +381,12 @@ authorize any later year.
 | `post_earnings_weekly_open_decision_comparison.py` | Validates and compares the Study 5 annual chains |
 | `post_earnings_weekly_open_decision_spec.md` | Frozen Study 5 single weekly pre-open decision methodology |
 | `config/post_earnings_weekly_open_decision_*.yaml` | Frozen baseline and Risk-On Study 5 contracts |
+| `post_earnings_regime_staging.py` | Guarded Study 6 annual runner; separate historical authorization required |
+| `post_earnings_regime_staging_engine.py` | ETF-aware Study 6 state, fills, passive benchmark and checkpoint contract |
+| `post_earnings_regime_staging_report.py` | Atomic Study 6 annual artifact writer |
+| `post_earnings_regime_staging_comparison.py` | Validates and compares complete A/B/C chains and optional Study 5 drift context |
+| `post_earnings_regime_staging_spec.md` | Frozen Study 6 SPXL/SPY methodology and reporting contract |
+| `config/post_earnings_regime_staging_*.yaml` | Frozen A/B/C Study 6 contracts |
 | `config/post_earnings_weekly_batch_*.yaml` | Frozen baseline and Risk-On Friday-only execution contracts |
 | `config/post_earnings_hold_low_fee_*.yaml` | Separate baseline and Risk-On low-fee study contracts |
 | `config/daily_redeployment_price_500.yaml` | 2021 development sensitivity with a $500 entry-price ceiling |

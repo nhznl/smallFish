@@ -243,6 +243,8 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh pre-earnings-post-event-weekly-batch-extension` | Separate, exploratory 2010–2025 Friday-only historical extension with independent $50,000 origins |
 | `./commands.sh pre-earnings-post-event-weekly-open-decision` | Guarded Study 5 baseline/Risk-On annual runner with one prior-close decision per final-session open |
 | `./commands.sh pre-earnings-post-event-weekly-open-decision-comparison` | Validates and compares the complete 2010–2025 Study 5 annual chains as exploratory evidence |
+| `./commands.sh pre-earnings-regime-staging` | Guarded Study 6 annual runner for the SPY control, Risk-On SPXL/SPY staging, and ETF-only variants; historical execution requires separate authorization |
+| `./commands.sh pre-earnings-regime-staging-comparison` | Validates shared inputs, checkpoint chains, and passive-SPY ledgers before comparing complete Study 6 variants |
 | `./commands.sh study4-live-evaluate` | Operational Study 4 Risk-On evaluator. Writes checksummed artifacts; never places a broker order |
 
 ## Testing

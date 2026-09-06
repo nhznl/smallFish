@@ -65,6 +65,9 @@ COST_MODEL_PER_SHARE = "per_share"
 EXECUTION_NEXT_SESSION = "next_session"
 EXECUTION_FRIDAY_OPEN = "friday_open"
 EXECUTION_WEEKLY_OPEN_DECISION = "weekly_open_decision"
+STAGING_POLICY_LEGACY_SPY = "legacy_spy"
+STAGING_POLICY_SPY_ONLY = "spy_only"
+STAGING_POLICY_REGIME = "risk_on_spxl_spy"
 
 _CONFIG_SCHEMA: dict[str, Any] = {
     "study_id": str,
@@ -94,6 +97,11 @@ _CONFIG_SCHEMA: dict[str, Any] = {
     "cash_staging_enabled": bool,
     "exit_policy": str,
     "market_regime_gate": str,
+    "staging_policy": str,
+    "risk_on_staging_symbol": str,
+    "defensive_staging_symbol": str,
+    "stock_entries_enabled": bool,
+    "terminal_execution_year": int,
     "post_event_hold_sessions": int,
     "market_regime": {
         "sma_window": int,
@@ -125,6 +133,11 @@ _OPTIONAL_CONFIG_KEYS = {
     "post_event_hold_sessions",
     "execution_schedule",
     "market_regime",
+    "staging_policy",
+    "risk_on_staging_symbol",
+    "defensive_staging_symbol",
+    "stock_entries_enabled",
+    "terminal_execution_year",
 }
 
 
@@ -192,6 +205,11 @@ class StudyConfig:
     drawdown_decline_at_low: float
     drawdown_decline_at_high: float
     output_relative_root: str
+    staging_policy: str = STAGING_POLICY_LEGACY_SPY
+    risk_on_staging_symbol: str = "SPY"
+    defensive_staging_symbol: str = "SPY"
+    stock_entries_enabled: bool = True
+    terminal_execution_year: int | None = None
 
     @property
     def event_min_days(self) -> int:
@@ -257,6 +275,28 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         REGIME_GATE_ALL, REGIME_GATE_RISK_ON, REGIME_GATE_RISK_ON_NEUTRAL,
     }:
         raise ValueError("unsupported market_regime_gate")
+    staging_policy = str(raw.get("staging_policy", STAGING_POLICY_LEGACY_SPY))
+    if staging_policy not in {
+        STAGING_POLICY_LEGACY_SPY, STAGING_POLICY_SPY_ONLY, STAGING_POLICY_REGIME,
+    }:
+        raise ValueError("unsupported staging_policy")
+    risk_on_staging_symbol = str(
+        raw.get("risk_on_staging_symbol", raw["benchmark_symbol"])
+    ).upper()
+    defensive_staging_symbol = str(
+        raw.get("defensive_staging_symbol", raw["benchmark_symbol"])
+    ).upper()
+    stock_entries_enabled = bool(raw.get("stock_entries_enabled", True))
+    terminal_execution_year = raw.get("terminal_execution_year")
+    if terminal_execution_year is not None:
+        terminal_execution_year = int(terminal_execution_year)
+    if staging_policy != STAGING_POLICY_LEGACY_SPY:
+        if execution_schedule != EXECUTION_WEEKLY_OPEN_DECISION:
+            raise ValueError("ETF staging requires weekly_open_decision execution")
+        if defensive_staging_symbol != str(raw["benchmark_symbol"]).upper():
+            raise ValueError("defensive staging symbol must match benchmark_symbol")
+        if not stock_entries_enabled and market_regime_gate != REGIME_GATE_RISK_ON:
+            raise ValueError("stock-free staging retains the frozen risk_on gate")
     post_event_hold_sessions = int(raw.get("post_event_hold_sessions", 7))
     if post_event_hold_sessions <= 0:
         raise ValueError("post_event_hold_sessions must be positive")
@@ -315,6 +355,11 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         drawdown_decline_at_low=float(draw["decline_at_low"]),
         drawdown_decline_at_high=float(draw["decline_at_high"]),
         output_relative_root=str(raw["output"]["relative_root"]),
+        staging_policy=staging_policy,
+        risk_on_staging_symbol=risk_on_staging_symbol,
+        defensive_staging_symbol=defensive_staging_symbol,
+        stock_entries_enabled=stock_entries_enabled,
+        terminal_execution_year=terminal_execution_year,
     )
 
 

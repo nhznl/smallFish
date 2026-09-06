@@ -42,6 +42,8 @@ saved 2010–2025 exploratory chains include a 2025-12-31 snapshot targeting
 cutoff whose execution session falls after the authorized window is an owner
 decision. Do not change the frozen method or rerun the preserved artifacts to
 close this without that decision.
+Study 6 separately freezes an execution-date boundary that excludes its
+2025-12-31 cutoff targeting 2026-01-02; that decision does not alter Study 5.
 
 ## Standing decisions
 
