@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import time
 from dataclasses import replace
@@ -21,6 +22,7 @@ from pathlib import Path
 import pandas as pd
 
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
+    EXECUTION_WEEKLY_OPEN_DECISION,
     EXIT_POLICY_POST_EVENT,
     MarketBundle,
     StudyConfig,
@@ -125,6 +127,10 @@ POST_EVENT_WEEKLY_OPEN_DECISION_CONFIG_SHA256 = {
     "baseline": "e85b8d679b4ed0b521470c2086d7cf2e1a7db1e0407d4f7b31d3545d2c8b0c2f",
     "risk-on": "bd77b76067359904cba26b3d2e3f3308e4fc5da5057d443a44a8cb5a8b7a1d41",
 }
+STUDY5_ORIGIN_YEAR = 2010
+STUDY5_MIN_YEAR = 2010
+STUDY5_MAX_YEAR = 2025
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _hash_frame(frame: pd.DataFrame) -> str:
@@ -193,6 +199,83 @@ def _validate_continuation_config(config_path: Path, cfg: StudyConfig) -> None:
         )
 
 
+def _git(*args: str) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip()
+
+
+def pinned_implementation_revision() -> tuple[str, bool]:
+    """Return HEAD and whether the repository worktree is dirty."""
+    commit = _git("rev-parse", "HEAD")
+    status = _git("status", "--porcelain")
+    if not commit or status is None:
+        raise ValueError("Study 5 requires a clean committed worktree and pinned HEAD")
+    return commit, bool(status)
+
+
+def _is_study5_config(cfg: StudyConfig, config_path: Path) -> bool:
+    resolved = Path(config_path).expanduser().resolve()
+    known = {
+        path.resolve() for path in POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS.values()
+    }
+    return (
+        resolved in known
+        or cfg.execution_schedule == EXECUTION_WEEKLY_OPEN_DECISION
+    )
+
+
+def _predecessor_implementation_commit(state_in: Path) -> str:
+    manifest_path = Path(state_in).expanduser().resolve().parent / "run_manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError(
+            "Study 5 continuation requires the predecessor run_manifest.json"
+        )
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    commit = payload.get("git_commit")
+    if not commit:
+        raise ValueError("Study 5 predecessor is missing a pinned implementation commit")
+    if payload.get("git_dirty"):
+        raise ValueError("Study 5 predecessor was not a clean pinned implementation")
+    return str(commit)
+
+
+def _enforce_study5_controls(args: argparse.Namespace, cfg: StudyConfig) -> str:
+    if not args.confirm_weekly_open_decision_exploratory_run:
+        raise ValueError(
+            "Study 5 is unauthorized without "
+            "--confirm-weekly-open-decision-exploratory-run."
+        )
+    if (
+        args.origin_year != STUDY5_ORIGIN_YEAR
+        or not STUDY5_MIN_YEAR <= args.year <= STUDY5_MAX_YEAR
+    ):
+        raise ValueError(
+            "Study 5 permits only origin 2010 and exploratory years 2010-2025"
+        )
+    commit, dirty = pinned_implementation_revision()
+    if dirty:
+        raise ValueError("Study 5 requires a clean committed worktree and pinned HEAD")
+    if args.state_in is not None:
+        predecessor = _predecessor_implementation_commit(args.state_in)
+        if predecessor != commit:
+            raise ValueError(
+                "Study 5 continuation requires implementation commit "
+                f"{predecessor}; HEAD is {commit}"
+            )
+    return commit
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="pre-earnings-daily-study",
@@ -224,6 +307,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Required for every post-event study run. Do not pass this flag "
             "without separate owner authorization."
+        ),
+    )
+    parser.add_argument(
+        "--confirm-weekly-open-decision-exploratory-run",
+        action="store_true",
+        help=(
+            "Required for Study 5. Direct invocation of this shared runner "
+            "cannot substitute --confirm-historical-run for that flag."
         ),
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -344,7 +435,11 @@ def main(
             args.year, args.origin_year, args.confirm_2021_pilot,
         )
         cfg = load_study_config(args.config)
-        if cfg.exit_policy == EXIT_POLICY_POST_EVENT and not args.confirm_historical_run:
+        study5 = _is_study5_config(cfg, args.config)
+        pinned_commit = None
+        if study5:
+            pinned_commit = _enforce_study5_controls(args, cfg)
+        elif cfg.exit_policy == EXIT_POLICY_POST_EVENT and not args.confirm_historical_run:
             raise ValueError(
                 "Historical post-earnings study run is unauthorized. Refusing to run "
                 "without --confirm-historical-run."
@@ -389,20 +484,24 @@ def main(
             initial_checkpoint=checkpoint,
             progress_callback=report_progress,
         )
+        run_args = {
+            "year": args.year,
+            "origin_year": args.origin_year,
+            "confirm_2021_pilot": bool(args.confirm_2021_pilot),
+            "confirm_historical_run": bool(args.confirm_historical_run),
+            "config": str(args.config),
+            "cache_root": None if args.cache_root is None else str(args.cache_root),
+            "run_id": run_id,
+            "state_in": None if args.state_in is None else str(args.state_in),
+        }
+        if study5:
+            run_args["confirm_weekly_open_decision_exploratory_run"] = True
+            run_args["pinned_implementation_commit"] = pinned_commit
         write_run(
             result,
             output_dir,
             command=command_name,
-            args={
-                "year": args.year,
-                "origin_year": args.origin_year,
-                "confirm_2021_pilot": bool(args.confirm_2021_pilot),
-                "confirm_historical_run": bool(args.confirm_historical_run),
-                "config": str(args.config),
-                "cache_root": None if args.cache_root is None else str(args.cache_root),
-                "run_id": run_id,
-                "state_in": None if args.state_in is None else str(args.state_in),
-            },
+            args=run_args,
         )
     except FileExistsError as exc:
         print(str(exc), file=sys.stderr)

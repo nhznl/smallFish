@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 
 from studies.pre_earnings_momentum.daily_redeployment import (
     POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS,
     main as run_daily_study,
+    pinned_implementation_revision,
 )
 
 
@@ -34,24 +34,11 @@ def _single_int_option(argv: list[str], flag: str) -> int:
 
 
 def _clean_pinned_commit() -> bool:
-    commit = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    return (
-        commit.returncode == 0
-        and bool(commit.stdout.strip())
-        and status.returncode == 0
-        and not status.stdout.strip()
-    )
+    try:
+        _, dirty = pinned_implementation_revision()
+    except ValueError:
+        return False
+    return not dirty
 
 
 def _print_help() -> None:
@@ -106,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
         [
             *remainder,
             "--confirm-historical-run",
+            "--confirm-weekly-open-decision-exploratory-run",
             "--config",
             str(POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS[args.variant]),
         ],

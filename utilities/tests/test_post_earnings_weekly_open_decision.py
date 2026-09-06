@@ -7,12 +7,14 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 
 import studies.pre_earnings_momentum.daily_redeployment_engine as engine
 import studies.pre_earnings_momentum.post_earnings_weekly_open_decision as study5_cli
+import studies.pre_earnings_momentum.daily_redeployment as daily_cli
 from studies.pre_earnings_momentum.daily_redeployment import (
     POST_EVENT_WEEKLY_BATCH_EXTENSION_CONFIGS,
     POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS,
@@ -20,10 +22,14 @@ from studies.pre_earnings_momentum.daily_redeployment import (
 )
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
     EXECUTION_WEEKLY_OPEN_DECISION,
+    PRIMARY_POST_EVENT_MAX,
     REGIME_GATE_ALL,
     REGIME_GATE_RISK_ON,
+    STATUS_CANCELLED,
+    STATUS_DELAYED,
     ArmState,
     OpenPosition,
+    checkpoint_payload,
     load_study_config,
     run_simulation,
     session_after,
@@ -306,6 +312,7 @@ def test_guarded_runner_requires_confirmation_clean_commit_and_frozen_variant(
     assert received["command_name"] == "pre-earnings-post-event-weekly-open-decision"
     assert str(POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS["baseline"]) in received["argv"]
     assert "--confirm-historical-run" in received["argv"]
+    assert "--confirm-weekly-open-decision-exploratory-run" in received["argv"]
 
     received.clear()
     assert study5_cli.main([
@@ -361,3 +368,269 @@ def test_commands_expose_study5_without_importing_the_application():
         source = path.read_text(encoding="utf-8")
         assert "stock-app" not in source
         assert "fastapi" not in source.lower()
+
+
+def test_missing_open_cancels_weekly_exit_without_next_session_retry():
+    cfg = _cfg()
+    bundle, sessions = _market(tickers=("AAA",), n=130, days_ahead=21)
+    _, execution_for_decision = engine.friday_execution_plan(sessions)
+    cutoffs = {
+        cutoff: execution
+        for cutoff, execution in execution_for_decision.items()
+        if cutoff.year == 2000 and session_after(sessions, cutoff) == execution
+    }
+    first_cutoff = min(cutoffs)
+    first_execution = cutoffs[first_cutoff]
+    monday_after = session_after(sessions, first_execution)
+    next_cutoff = min(cutoff for cutoff in cutoffs if cutoff > first_cutoff)
+    next_execution = cutoffs[next_cutoff]
+    event = next(item for item in sessions if item.year == 1999)
+    bundle = replace(
+        bundle,
+        earnings=pd.concat([
+            bundle.earnings,
+            pd.DataFrame([{
+                "ticker": "AAA",
+                "event_date": pd.Timestamp(event),
+                "event_type": "earnings",
+            }]),
+        ], ignore_index=True),
+        stocks={
+            "AAA": bundle.stocks["AAA"].loc[
+                bundle.stocks["AAA"]["date"].dt.date != first_execution
+            ].reset_index(drop=True),
+        },
+    )
+    result = run_simulation(
+        cfg=cfg,
+        market=bundle,
+        year=2000,
+        initial_states=_initial_state(_initial_position(event)),
+    )
+
+    cancelled = [
+        order for order in result.orders
+        if order.ticker == "AAA" and order.kind == "stock_exit"
+        and order.execution_date == first_execution
+    ]
+    assert len(cancelled) == 1
+    assert cancelled[0].status == STATUS_CANCELLED
+    assert cancelled[0].reason == "missing_open_bar"
+    assert not any(order.status == STATUS_DELAYED for order in result.orders)
+    assert result.summary["arms"]["equal"]["delayed_exits"] == 0
+    assert not any(
+        trade.ticker == "AAA"
+        and trade.exit_execution_date in {first_execution, monday_after}
+        for trade in result.trades
+    )
+    filled = next(
+        order for order in result.orders
+        if order.ticker == "AAA"
+        and order.kind == "stock_exit"
+        and order.status == "filled"
+    )
+    assert filled.decision_date == next_cutoff
+    assert filled.execution_date == next_execution
+    held_next = next(
+        record.payload for record in result.decisions
+        if record.payload["ticker"] == "AAA"
+        and record.payload["decision_date"] == next_cutoff.isoformat()
+        and record.payload["state"] == "held"
+    )
+    assert held_next["primary_exit"] == PRIMARY_POST_EVENT_MAX
+    assert held_next["pending_exit"] is True
+
+
+def test_shared_runner_enforces_study5_controls_before_loading_history(
+    tmp_path, monkeypatch, capsys,
+):
+    reached_data_loading = False
+
+    def forbidden_load(*args, **kwargs):
+        nonlocal reached_data_loading
+        reached_data_loading = True
+        raise AssertionError("Study 5 guard reached market loading")
+
+    monkeypatch.setattr(daily_cli, "load_market", forbidden_load)
+    monkeypatch.setattr(
+        daily_cli, "pinned_implementation_revision", lambda: ("abc123", False),
+    )
+    config = str(POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS["baseline"])
+    output = str(tmp_path)
+
+    def run(extra):
+        nonlocal reached_data_loading
+        reached_data_loading = False
+        return daily_cli.main([
+            "--year", "2010",
+            "--origin-year", "2010",
+            "--config", config,
+            "--output-root", output,
+            "--run-id", "must-not-run",
+            *extra,
+        ])
+
+    assert run([]) == 2
+    assert reached_data_loading is False
+    assert "unauthorized" in capsys.readouterr().err
+
+    assert run(["--confirm-historical-run"]) == 2
+    assert reached_data_loading is False
+    assert "unauthorized" in capsys.readouterr().err
+
+    monkeypatch.setattr(
+        daily_cli, "pinned_implementation_revision", lambda: ("abc123", True),
+    )
+    assert run(["--confirm-weekly-open-decision-exploratory-run"]) == 2
+    assert reached_data_loading is False
+    assert "clean committed worktree" in capsys.readouterr().err
+
+    monkeypatch.setattr(
+        daily_cli, "pinned_implementation_revision", lambda: ("abc123", False),
+    )
+    assert daily_cli.main([
+        "--year", "2026",
+        "--origin-year", "2026",
+        "--config", config,
+        "--confirm-weekly-open-decision-exploratory-run",
+        "--output-root", output,
+        "--run-id", "must-not-run",
+    ]) == 2
+    assert reached_data_loading is False
+    assert "2010-2025" in capsys.readouterr().err
+
+    assert daily_cli.main([
+        "--year", "2011",
+        "--origin-year", "2011",
+        "--config", config,
+        "--confirm-weekly-open-decision-exploratory-run",
+        "--output-root", output,
+        "--run-id", "must-not-run",
+    ]) == 2
+    assert reached_data_loading is False
+    assert "origin 2010" in capsys.readouterr().err
+
+
+def test_failed_git_status_blocks_study5_before_loading_history(
+    tmp_path, monkeypatch, capsys,
+):
+    reached_data_loading = False
+
+    def forbidden_load(*args, **kwargs):
+        nonlocal reached_data_loading
+        reached_data_loading = True
+        raise AssertionError("failed git status reached market loading")
+
+    def fake_git(*args: str) -> str | None:
+        if args == ("rev-parse", "HEAD"):
+            return "abc123"
+        if args == ("status", "--porcelain"):
+            return None
+        raise AssertionError(args)
+
+    monkeypatch.setattr(daily_cli, "load_market", forbidden_load)
+    monkeypatch.setattr(daily_cli, "_git", fake_git)
+    result = daily_cli.main([
+        "--year", "2010",
+        "--origin-year", "2010",
+        "--config", str(POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS["baseline"]),
+        "--confirm-weekly-open-decision-exploratory-run",
+        "--output-root", str(tmp_path),
+        "--run-id", "must-not-run",
+    ])
+    assert result == 2
+    assert reached_data_loading is False
+    assert "clean committed worktree" in capsys.readouterr().err
+
+
+def test_shared_runner_refuses_revision_drift_and_wrong_variant_checkpoint(
+    tmp_path, monkeypatch, capsys,
+):
+    reached_data_loading = False
+
+    def forbidden_load(*args, **kwargs):
+        nonlocal reached_data_loading
+        reached_data_loading = True
+        raise AssertionError("Study 5 guard reached market loading")
+
+    monkeypatch.setattr(daily_cli, "load_market", forbidden_load)
+    monkeypatch.setattr(
+        daily_cli, "pinned_implementation_revision", lambda: ("headcommit", False),
+    )
+    prior = tmp_path / "risk_on" / "2010" / "series"
+    prior.mkdir(parents=True)
+    (prior / "run_manifest.json").write_text(
+        json.dumps({"git_commit": "othercommit", "git_dirty": False}) + "\n",
+        encoding="utf-8",
+    )
+    (prior / "state_checkpoint.json").write_text("{}\n", encoding="utf-8")
+    result = daily_cli.main([
+        "--year", "2011",
+        "--origin-year", "2010",
+        "--config", str(POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS["baseline"]),
+        "--state-in", str(prior / "state_checkpoint.json"),
+        "--confirm-weekly-open-decision-exploratory-run",
+        "--output-root", str(tmp_path / "out"),
+        "--run-id", "must-not-run",
+    ])
+    assert result == 2
+    assert reached_data_loading is False
+    assert "implementation commit" in capsys.readouterr().err
+
+    risk_cfg = _cfg("risk-on")
+    bundle, _ = _market(tickers=("AAA",), n=130, days_ahead=21)
+    synthetic = run_simulation(cfg=risk_cfg, market=bundle, year=2000)
+    payload = checkpoint_payload(synthetic.checkpoint, risk_cfg)
+    payload["source_year"] = 2010
+    (prior / "run_manifest.json").write_text(
+        json.dumps({"git_commit": "headcommit", "git_dirty": False}) + "\n",
+        encoding="utf-8",
+    )
+    (prior / "state_checkpoint.json").write_text(
+        json.dumps(payload) + "\n", encoding="utf-8",
+    )
+    result = daily_cli.main([
+        "--year", "2011",
+        "--origin-year", "2010",
+        "--config", str(POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS["baseline"]),
+        "--state-in", str(prior / "state_checkpoint.json"),
+        "--confirm-weekly-open-decision-exploratory-run",
+        "--output-root", str(tmp_path / "out"),
+        "--run-id", "must-not-run",
+    ])
+    assert result == 2
+    assert reached_data_loading is False
+    assert "study_id" in capsys.readouterr().err
+
+
+def test_shared_runner_records_study5_authorization_and_revision(
+    tmp_path, monkeypatch,
+):
+    captured = {}
+    monkeypatch.setattr(
+        daily_cli, "pinned_implementation_revision", lambda: ("deadbeef", False),
+    )
+    monkeypatch.setattr(daily_cli, "load_market", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        daily_cli,
+        "run_simulation",
+        lambda **kwargs: SimpleNamespace(sessions=[]),
+    )
+
+    def fake_write(result, output_dir, command, args):
+        captured["command"] = command
+        captured["args"] = args
+        return output_dir
+
+    monkeypatch.setattr(daily_cli, "write_run", fake_write)
+    assert daily_cli.main([
+        "--year", "2010",
+        "--origin-year", "2010",
+        "--config", str(POST_EVENT_WEEKLY_OPEN_DECISION_CONFIGS["baseline"]),
+        "--confirm-weekly-open-decision-exploratory-run",
+        "--output-root", str(tmp_path),
+        "--run-id", "study5-auth-meta",
+    ]) == 0
+    assert captured["args"]["confirm_weekly_open_decision_exploratory_run"] is True
+    assert captured["args"]["pinned_implementation_commit"] == "deadbeef"
+    assert captured["command"] == "pre-earnings-daily-study"

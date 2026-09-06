@@ -296,7 +296,10 @@ was delegated to a separate agent.
 ```
 
 Each later year requires its variant's immediately prior
-`state_checkpoint.json`. After both continuous chains finish, validate and
+`state_checkpoint.json`. The shared daily-study runner now enforces the same
+Study 5 confirmation flag, 2010 origin, 2010–2025 window, clean worktree, and
+predecessor implementation-commit identity, so a direct `--config` invocation
+cannot bypass the wrapper. After both continuous chains finish, validate and
 compare them with:
 
 ```bash
@@ -307,6 +310,16 @@ compare them with:
   --start-year 2010 --end-year 2025 \
   --output "$SFP_DATA_DIR/backtest/pre_earnings_momentum/post_earnings_weekly_open_decision/reports/2010-2025-COMMIT/study5-comparison.csv"
 ```
+
+The saved 2010–2025 exploratory artifacts remain `NO_VERDICT / EXPLORATORY`.
+Each variant has 835 weekly decision snapshots: 834 execution weeks whose
+fills fall inside 2010–2025, plus one 2025-12-31 cutoff that schedules the
+2026-01-02 open. Those year-end checkpoints each retain five pending orders
+for that next-year open; no 2026 fills enter reported performance. The shared
+runner loads the following year's SPY calendar only so a 31 December cutoff can
+schedule that pending batch. Changing that end-of-period boundary needs an
+explicit owner decision; do not alter the preserved artifacts or silently
+omit the snapshot.
 
 The owner-frozen rule set uses daily candidate scans and a $500 maximum entry
 price. The earlier price-cap sensitivities use

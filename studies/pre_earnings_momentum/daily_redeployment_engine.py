@@ -1790,9 +1790,16 @@ def run_simulation(
                         0.0, STATUS_CANCELLED, "missing_position", order.rank))
                     continue
                 if missing or open_px is None:
-                    if any(item in order.exit_triggers for item in (
-                        PRIMARY_T1, PRIMARY_EARLY, PRIMARY_POST_EVENT_MAX,
-                    )):
+                    # Study 3/4 may retry selected exits at the next session.
+                    # Study 5 orders are terminal in the weekly batch: a missing
+                    # open cancels the exit, keeps the position, and waits for
+                    # the next weekly decision.
+                    if (
+                        not weekly_open_decision
+                        and any(item in order.exit_triggers for item in (
+                            PRIMARY_T1, PRIMARY_EARLY, PRIMARY_POST_EVENT_MAX,
+                        ))
+                    ):
                         delayed = session_after(all_sessions, session)
                         if delayed is not None:
                             order.execution_date = delayed

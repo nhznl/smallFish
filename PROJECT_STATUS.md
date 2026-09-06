@@ -35,6 +35,14 @@ activity has never posted, so its exact structure is unverified. Both are
 handled generically by structured action and net value; confirm the real shape
 when the first one arrives rather than assuming the generic path is right.
 
+**Study 5's 31 December cutoff may schedule the next year's first open.** The
+saved 2010–2025 exploratory chains include a 2025-12-31 snapshot targeting
+2026-01-02, with five unfilled pending orders in each final checkpoint and no
+2026 fills in reported performance. Whether a terminal year should omit a
+cutoff whose execution session falls after the authorized window is an owner
+decision. Do not change the frozen method or rerun the preserved artifacts to
+close this without that decision.
+
 ## Standing decisions
 
 These are settled. Treat them as constraints, not open questions.
