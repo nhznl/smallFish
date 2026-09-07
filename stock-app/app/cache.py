@@ -24,8 +24,9 @@ from models.universe import TYPE_STOCK
 from . import config
 from .path_security import UnsafePathError, symbol_year_path
 from .readers import read_latest_strategy_report
-from .stock_model import Stock, normalize_stock_type
-from .trend_engine import Daily, f32
+from analysis.numeric import f32
+from analysis.stock import Stock, normalize_stock_type
+from analysis.trend import Daily
 from .universe_read import (
     get_sector,
     get_type,

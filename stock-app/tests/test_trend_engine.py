@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from app import serializers
-from app import trend_engine as te
-from app.stock_model import (
+from analysis import numeric as num
+from analysis import trend as te
+from analysis.stock import (
     BEARISH_REVERSAL,
     BEARISH_CONTINUATION,
     BULLISH_CONTINUATION,
     BULLISH_REVERSAL,
     Stock,
 )
+from app import serializers
 
 
 def _rising_series(n: int) -> list[te.Daily]:
@@ -22,9 +23,9 @@ def _rising_series(n: int) -> list[te.Daily]:
     close = 100.0
     while len(out) < n:
         if d.weekday() < 5:  # weekday
-            c = te.f32(close)
-            out.append(te.Daily(d, te.f32(close - 0.2), te.f32(close + 0.3),
-                                 te.f32(close - 0.3), c, 1_000_000 + len(out) * 1000))
+            c = num.f32(close)
+            out.append(te.Daily(d, num.f32(close - 0.2), num.f32(close + 0.3),
+                                 num.f32(close - 0.3), c, 1_000_000 + len(out) * 1000))
             close += 1.0
         d += timedelta(days=1)
     return out
@@ -65,15 +66,15 @@ def _confirmed_reversal_candidate(source_direction: str, target_direction: int) 
 
 
 def test_round_half_up():
-    assert te.round_half_up(0.5) == 1
-    assert te.round_half_up(1.4) == 1
-    assert te.round_half_up(-0.5) == 0
-    assert te.round_float32_half_up(2.675 * 100) in {267, 268}
+    assert num.round_half_up(0.5) == 1
+    assert num.round_half_up(1.4) == 1
+    assert num.round_half_up(-0.5) == 0
+    assert num.round_float32_half_up(2.675 * 100) in {267, 268}
 
 
 def test_float32_json_uses_concise_representation():
-    assert serializers.float32_json(te.f32(328.01)) == 328.01
-    assert serializers.float32_json(te.f32(293.91)) == 293.91
+    assert serializers.float32_json(num.f32(328.01)) == 328.01
+    assert serializers.float32_json(num.f32(293.91)) == 293.91
 
 
 def test_enums_thresholds():

@@ -1,6 +1,6 @@
 import app.cache as cache_module
 from app.cache import Cache
-from app.stock_model import Stock
+from analysis.stock import Stock
 
 
 def test_cache_passes_universe_type_into_stock(tmp_path, monkeypatch):

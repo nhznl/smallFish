@@ -77,8 +77,8 @@ Read these completely:
    [`event_forecast.py`](event_forecast.py), and [`backtest.py`](backtest.py);
 6. [`scoring.py`](scoring.py), to understand what this study must **not** use
    as its entry score;
-7. `stock-app/app/stock_model.py`, `stock-app/app/trend_engine.py`,
-   `stock-app/app/ema_crossover.py`, and `stock-app/app/cache.py`, as the
+7. `analysis/stock.py`, `analysis/trend.py`,
+   `analysis/ema_crossover.py`, and `stock-app/app/cache.py`, as the
    canonical `momentum-v3` behavior to characterize without importing; and
 8. `utilities/price_reader.py`, `utilities/indicators/`,
    `utilities/manifest.py`, `utilities/universe.py`, and relevant tests.

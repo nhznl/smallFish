@@ -4,10 +4,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.ema_crossover import EmaCrossover, ema14_over_20_crossover
+from analysis.ema_crossover import EmaCrossover, ema14_over_20_crossover
+from analysis.stock import Stock
+from analysis.trend import Daily
 from app.serializers import momentum_stock_dict
-from app.stock_model import Stock
-from app.trend_engine import Daily
 
 NOW = datetime(2026, 8, 25, 21, tzinfo=timezone.utc)
 

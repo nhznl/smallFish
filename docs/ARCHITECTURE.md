@@ -29,8 +29,9 @@ live management additionally keeps a transactional SQLite execution ledger at
                                  │                  │    batch pipeline    │
                                  │                  └──────────┬───────────┘
                                  │                             │
-                                 └──────────▶ models/ ◀────────┘
-                                     stdlib-only contracts
+                                 └────▶ models/ ◀── analysis/ ─┘
+                                  stdlib contracts   stdlib + NumPy
+                                                     calculations
 ```
 
 ## Dependency direction
@@ -42,6 +43,14 @@ One way, and it is a hard rule:
 - `utilities/` and `studies/` may import `models/`. They write artifacts.
 - `stock-app/` may import `models/`. It **must never** import `utilities/` or
   `studies/`.
+- `analysis/` holds the reusable, dependency-light stock-analysis calculations
+  (trend engine, EMA14/20 crossover evidence, the stock/weekly/gain-loss
+  models, and single-precision numeric helpers). It imports **only the standard
+  library, NumPy, and `models/`** — never FastAPI, pandas, files,
+  configuration, the network, or the wall clock (callers inject `now`).
+  `stock-app/` imports it; `utilities/` and `studies/` may import it. It keeps a
+  single implementation shared across both Python environments without coupling
+  them, and a dependency-allowlist test enforces the boundary.
 - `services/` owns provider credentials, SDK sessions, streaming, and raw
   payload envelopes. `services.options_market` adds a provider-neutral read API
   for exact-contract quotes, Greeks/IV, and underlying beta, routing to

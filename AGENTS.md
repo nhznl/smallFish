@@ -20,6 +20,7 @@ stock-app-ui/  ──HTTP──▶  stock-app/  ──reads──▶  data/  ◀
 | Path | Owns | README |
 |---|---|---|
 | `models/` | Standard-library-only shared data contracts | [models/README.md](models/README.md) |
+| `analysis/` | Shared stdlib+NumPy stock-analysis calculations (trend, EMA crossover, stock models, numeric helpers) | — |
 | `services/` | Shared raw provider transport; no application imports | [services/README.md](services/README.md) |
 | `utilities/` | Batch pipeline: scraper, universe, indicators, options | [utilities/README.md](utilities/README.md) |
 | `studies/` | Research studies and materialization | [studies/README.md](studies/README.md) |
@@ -35,6 +36,14 @@ breaks the split. If you think you need it, you need a new artifact instead.
 `services/` is the narrow exception: both runtimes may import its raw
 provider-transport packages, while it imports neither runtime nor project
 configuration, persistence, FastAPI, pandas, or numpy.
+
+`analysis/` is a second shared exception in the other direction: it holds
+reusable stock-analysis calculations and may be imported by `stock-app/`,
+`utilities/`, and `studies/`. It imports only the standard library, NumPy, and
+`models/` — never FastAPI, pandas, files, configuration, the network, or the
+wall clock (callers inject `now`). A dependency-allowlist test enforces this;
+keep a single implementation there rather than copying calculations back into a
+runtime.
 
 ## Runtimes
 

@@ -3,7 +3,8 @@
 ``analysis/`` is shared by both Python runtimes, so it must stay dependency
 light: standard library, NumPy, and ``models`` only, plus intra-package
 imports. It must not import FastAPI, pandas, study code, the FastAPI ``app``
-package, or ``utilities``. See ``docs/SHARED_ANALYSIS_REFACTOR_PLAN.md``.
+package, or ``utilities``. See the dependency-direction rules in
+``docs/ARCHITECTURE.md``.
 """
 
 from __future__ import annotations
