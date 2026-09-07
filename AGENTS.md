@@ -40,8 +40,9 @@ configuration, persistence, FastAPI, pandas, or numpy.
 `analysis/` is a second shared exception in the other direction: it holds
 reusable stock-analysis calculations and may be imported by `stock-app/`,
 `utilities/`, and `studies/`. It imports only the standard library, NumPy, and
-`models/` — never FastAPI, pandas, files, configuration, the network, or the
-wall clock (callers inject `now`). A dependency-allowlist test enforces this;
+`models/` — never FastAPI, pandas, files, configuration, or the network, and it
+reads the wall clock only through an injectable `now` argument (production
+callers may default to the current time). A dependency-allowlist test enforces this;
 keep a single implementation there rather than copying calculations back into a
 runtime.
 

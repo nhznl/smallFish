@@ -47,7 +47,9 @@ One way, and it is a hard rule:
   (trend engine, EMA14/20 crossover evidence, the stock/weekly/gain-loss
   models, and single-precision numeric helpers). It imports **only the standard
   library, NumPy, and `models/`** — never FastAPI, pandas, files,
-  configuration, the network, or the wall clock (callers inject `now`).
+  configuration, or the network, and it reads the wall clock only through an
+  injectable `now` argument (production callers may default to the current
+  time; tests pass a fixed value).
   `stock-app/` imports it; `utilities/` and `studies/` may import it. It keeps a
   single implementation shared across both Python environments without coupling
   them, and a dependency-allowlist test enforces the boundary.

@@ -14,7 +14,7 @@ describe('MACD chart data', () => {
   it('matches the backend float32 and SMA-seeded MACD on synthetic non-linear prices', () => {
     const closes = Array.from({ length: 60 }, (_, i) => 100 + ((i * 7) % 17) * .37 + (i % 3) * .011);
     const values = calculateMacd(closes);
-    // Generated with trend_engine.calc_ema/calc_macd/calc_macd_signal/calc_macd_hist.
+    // Generated with analysis/trend.py calc_ema/calc_macd/calc_macd_signal/calc_macd_hist.
     expect(values[25].macd).toBeCloseTo(0.030995506394248196, 11);
     expect(values[32].macd).toBeCloseTo(0.05856898857857118, 11);
     expect(values[33].macd).toBeCloseTo(0.10479449919172623, 11);

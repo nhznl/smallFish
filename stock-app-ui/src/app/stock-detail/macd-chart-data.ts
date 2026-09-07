@@ -1,4 +1,4 @@
-/** Match stock-app/app/trend_engine.py, not the first-close-seeded EMA overlays. */
+/** Match analysis/trend.py, not the first-close-seeded EMA overlays. */
 export interface MacdValue {
   macd: number | null;
   signal: number | null;

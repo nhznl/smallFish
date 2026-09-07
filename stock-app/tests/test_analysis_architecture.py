@@ -40,13 +40,33 @@ def _import_roots(source: str) -> set[str]:
     return roots
 
 
-def _analysis_modules() -> list[Path]:
-    return sorted(PACKAGE_DIR.glob("*.py"))
+def _analysis_modules(base: Path = PACKAGE_DIR) -> list[Path]:
+    # Recursive so a future subpackage (e.g. analysis/indicators/) cannot evade
+    # the dependency allowlist.
+    return sorted(
+        path for path in base.rglob("*.py")
+        if "__pycache__" not in path.parts
+    )
 
 
 def test_analysis_has_modules_to_check():
     names = {path.name for path in _analysis_modules()}
     assert {"__init__.py", "numeric.py", "trend.py", "ema_crossover.py", "stock.py"} <= names
+
+
+def test_scanner_scans_nested_modules(tmp_path):
+    # Prove the gate is recursive: a module in a subpackage must be scanned, so
+    # a forbidden import cannot hide one directory down.
+    pkg = tmp_path / "analysis_fixture"
+    (pkg / "indicators").mkdir(parents=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "indicators" / "nested.py").write_text("import pandas\n", encoding="utf-8")
+
+    scanned = _analysis_modules(pkg)
+    assert (pkg / "indicators" / "nested.py") in scanned
+    roots = _import_roots((pkg / "indicators" / "nested.py").read_text(encoding="utf-8"))
+    assert "pandas" in roots
+    assert roots & FORBIDDEN_ROOTS == {"pandas"}
 
 
 def test_analysis_imports_only_allowed_roots():
