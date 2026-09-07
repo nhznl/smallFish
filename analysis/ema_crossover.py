@@ -1,11 +1,17 @@
-"""Informational EMA14/20 crossover evidence; never an input to setup scoring."""
+"""Informational EMA14/20 crossover evidence; never an input to setup scoring.
+
+These EMAs are first-close seeded to match Stock Detail's Technical chart. That
+is deliberately distinct from the SMA-seeded scanner EMA in ``analysis.trend``;
+do not consolidate the two conventions.
+"""
 
 from dataclasses import dataclass
 from datetime import date, datetime
 import math
 from zoneinfo import ZoneInfo
 
-from .trend_engine import Daily, float32_json
+from analysis.trend import Daily
+from analysis.numeric import float32_json
 
 MAX_CROSSOVER_AGE = 60
 MIN_EMA_GAP_DOLLARS = 1.0

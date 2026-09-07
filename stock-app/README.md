@@ -28,9 +28,7 @@ stock-app/
 │   ├── data_reader.py      # cached OHLCV reader
 │   ├── dates.py            # API date formatting
 │   ├── serializers.py      # stable Angular JSON serialization
-│   ├── cache.py            # in-memory stock and trend cache
-│   ├── trend_engine.py     # technical trend calculations
-│   ├── stock_model.py      # stock, weekly, and gain/loss models
+│   ├── cache.py            # in-memory stock and trend cache (adapts files → analysis/)
 │   ├── options_activity.py # Tastytrade sync policy, normalization, marks, reconciliation
 │   ├── portfolios.py       # named symbol lists, returns, sector exposure
 │   ├── studies_read.py     # fail-closed Research Studies reader
@@ -40,6 +38,13 @@ stock-app/
 │   └── routers/            # HTTP endpoint groups
 └── tests/
 ```
+
+The reusable stock-analysis calculations — the trend engine, EMA14/20 crossover
+evidence, the stock/weekly/gain-loss models, and the single-precision numeric
+helpers — live in the repository-root [`analysis/`](../analysis) package rather
+than in `app/`. `cache.py` and `serializers.py` import them from `analysis`.
+`analysis/` depends only on the standard library, NumPy, and `models/`, so both
+Python runtimes can share it without coupling the API to the batch environment.
 
 ## Configuration
 

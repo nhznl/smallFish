@@ -182,19 +182,21 @@ Angular dashboard  ──HTTP──▶  FastAPI  ──reads──▶  data/  �
  stock-app-ui/                stock-app/           generated            batch pipeline
                                   │                                          │
                                   ├──▶ services/ ◀───────────────────────────┤
+                                  ├──▶ analysis/ ◀───────────────────────────┤
                                   └──▶ models/ ◀─────────────────────────────┘
-                                      shared provider transport + stdlib contracts
+                              shared transport + stdlib+NumPy calculations + stdlib contracts
 ```
 
 Dependencies point one way. The API reads generated artifacts and never imports
-the batch runtime; both runtimes may use `services/` for raw provider transport
-and `models/` for contracts.
+the batch runtime; both runtimes may use `services/` for raw provider transport,
+`analysis/` for shared stock-analysis calculations, and `models/` for contracts.
 
 | Directory | Purpose |
 |---|---|
 | [`utilities/`](utilities/README.md) | Batch pipeline: scraper, universe, indicators, options. Its own Python environment. |
 | [`studies/`](studies/README.md) | Research studies and their materialization. Shares the utilities environment. |
 | [`models/`](models/README.md) | Standard-library-only data contracts shared by everything. |
+| [`analysis/`](analysis/) | Dependency-light stock-analysis calculations (trend engine, EMA crossover, stock/weekly/gain-loss models, numeric helpers) shared by both Python runtimes. Standard library, NumPy, and `models/` only. |
 | [`services/`](services/README.md) | Read-only provider credentials, SDK sessions/clients, streaming/paging, and raw payload transport. |
 | [`stock-app/`](stock-app/README.md) | FastAPI backend and API tests. Its own Python environment. |
 | [`stock-app-ui/`](stock-app-ui/README.md) | Angular 22 dashboard. |

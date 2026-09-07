@@ -10,13 +10,12 @@ import numpy as np
 
 from models.universe import TYPE_ETF, TYPE_MF, TYPE_STOCK
 
-from . import trend_engine as te
-from .ema_crossover import EmaCrossover, ema14_over_20_crossover, has_crossover_session_coverage
-from .trend_engine import (
+from analysis import trend as te
+from analysis.ema_crossover import EmaCrossover, ema14_over_20_crossover, has_crossover_session_coverage
+from analysis.numeric import f32, round_float32_half_up
+from analysis.trend import (
     Daily,
     AdvancedTrendWithVolume,
-    f32,
-    round_float32_half_up,
 )
 
 RECENT_WEEKS_SIZE = 5
@@ -209,7 +208,17 @@ class Stock:
 
     @classmethod
     def build(cls, code: str, dailies: list[Daily], yearly_slopes: dict[int, dict] | None = None,
-              stock_type: str = TYPE_STOCK) -> "Stock":
+              stock_type: str = TYPE_STOCK, *, now: datetime | None = None) -> "Stock":
+        """Build a ``Stock`` from daily bars.
+
+        ``now`` makes the only wall-clock reads injectable and deterministic. It
+        is used verbatim as the fallback date for an empty history and is
+        forwarded to ``ema14_over_20_crossover`` to decide whether the current
+        New York session counts as complete. Pass a timezone-aware datetime:
+        the crossover converts it to America/New_York, so a naive value would be
+        interpreted as system-local time. When omitted (the production default),
+        both paths fall back to the current time exactly as before.
+        """
         s = cls(
             code=code,
             dailies=sorted(dailies, key=lambda d: d.date),
@@ -235,7 +244,7 @@ class Stock:
             weeklies.append(Weekly.build(cur))
 
         if s.last_trade is None:
-            s.last_trade = Daily(datetime.now(), 0.0, 0.0, 0.0, 0.0, 0)
+            s.last_trade = Daily(now if now is not None else datetime.now(), 0.0, 0.0, 0.0, 0.0, 0)
 
         if len(weeklies) <= RECENT_WEEKS_SIZE:
             s.recent_weeks = list(weeklies)
@@ -266,27 +275,29 @@ class Stock:
             ref = d[-6] if len(d) >= 6 else d[0]
             s.five_days_to_date = GainLoss.build(ref.date, ref.close, s.last_trade.close)
         else:
-            s.year_to_date = GainLoss.build(datetime.now(), 1, 1)
+            s.year_to_date = GainLoss.build(now if now is not None else datetime.now(), 1, 1)
             s.mid_point_to_date = s.year_to_date
             s.five_weeks_to_date = s.year_to_date
             s.five_days_to_date = s.year_to_date
 
         if len(d) >= te.MIN_DATA_REQUIRED:
             s.advanced_trend_with_volume = te.analyze_trend_with_volume(d)
-        s._compute_scanner_metrics()
+        s._compute_scanner_metrics(now=now)
         return s
 
     # -- momentum scanner metrics -------------------------------------------- #
-    def _compute_scanner_metrics(self) -> None:
+    def _compute_scanner_metrics(self, now: datetime | None = None) -> None:
         """Compute self-contained metrics once from the stock's daily bars.
 
         Market-relative strength and freshness are applied later by the cache,
-        after the benchmark and the expected data date are known.
+        after the benchmark and the expected data date are known. ``now`` is
+        forwarded to the EMA crossover so its completed-session cutoff is
+        injectable; when omitted it uses the current time as before.
         """
         d = self.dailies
         if not d or self.last_trade is None or self.last_trade.close <= 0:
             return
-        self.ema14_over_20_cross = ema14_over_20_crossover(d)
+        self.ema14_over_20_cross = ema14_over_20_crossover(d, now=now)
         atr = te.calc_atr(d, 14)
         if atr is not None:
             self.atr_pct = (atr / self.last_trade.close) * 100

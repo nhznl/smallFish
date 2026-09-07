@@ -6,8 +6,9 @@ from datetime import datetime
 
 from .dates import market_date_iso
 from .events_read import UpcomingEarnings
-from .stock_model import GainLoss, SETUP_SCORE_VERSION, Stock
-from .trend_engine import Daily, float32_json
+from analysis.numeric import float32_json
+from analysis.stock import GainLoss, SETUP_SCORE_VERSION, Stock
+from analysis.trend import Daily
 
 
 def gainloss_dict(g: GainLoss) -> dict:

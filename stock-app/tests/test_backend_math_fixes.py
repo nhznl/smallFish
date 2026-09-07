@@ -17,8 +17,8 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta
 
-from app import trend_engine as te
-from app.stock_model import Stock, Weekly
+from analysis import trend as te
+from analysis.stock import Stock, Weekly
 
 
 def _dailies(closes: list[float], start: datetime = datetime(2025, 1, 1),

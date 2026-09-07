@@ -3,6 +3,11 @@
 OHLC values are normalized to IEEE-754 single precision before calculations;
 derived metrics use Python floating-point arithmetic. This preserves stable
 numeric behavior across the API and user interface.
+
+The scanner trend EMA here is SMA-seeded. This is deliberately distinct from
+the first-close-seeded EMA14/20 in ``analysis.ema_crossover`` and from the
+pandas EWM calculations in ``utilities/indicators/ta.py``; do not consolidate
+them.
 """
 
 from __future__ import annotations
@@ -13,30 +18,41 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# --------------------------------------------------------------------------- #
-# float helpers                                                               #
-# --------------------------------------------------------------------------- #
-
-
-def f32(x: float) -> float:
-    """Return the nearest IEEE-754 single-precision value as a Python float."""
-    return float(np.float32(x))
-
-
-def float32_json(x) -> float:
-    """Return a concise JSON-safe representation of a single-precision value."""
-    return float(str(np.float32(x)))
-
-
-def round_half_up(x: float) -> int:
-    """Round to the nearest integer, with half values rounded upward."""
-    return int(math.floor(x + 0.5))
-
-
-def round_float32_half_up(x: float) -> int:
-    """Round a single-precision value to the nearest integer, half upward."""
-    return int(math.floor(f32(f32(x) + np.float32(0.5))))
-
+__all__ = [
+    "Daily",
+    "UP",
+    "DOWN",
+    "SIDEWAYS",
+    "trend_strength_from_value",
+    "SHORT_MA_PERIOD",
+    "LONG_MA_PERIOD",
+    "RSI_PERIOD",
+    "MOMENTUM_PERIOD",
+    "MIN_DATA_REQUIRED",
+    "RSI_OVERBOUGHT",
+    "RSI_OVERSOLD",
+    "calc_sma",
+    "calc_ema",
+    "calc_rsi",
+    "calc_momentum",
+    "calc_obv",
+    "calc_volume_ma",
+    "calc_volume_roc",
+    "calc_macd",
+    "calc_macd_signal",
+    "calc_macd_hist",
+    "calc_volume_momentum",
+    "calc_atr",
+    "calc_realized_volatility_expansion",
+    "calc_volume_ratio",
+    "calc_average_dollar_volume",
+    "calc_trend_strength_with_volume",
+    "calc_confidence_with_volume",
+    "get_reversal_signals_with_volume",
+    "determine_direction_with_volume_and_macd",
+    "AdvancedTrendWithVolume",
+    "analyze_trend_with_volume",
+]
 
 # --------------------------------------------------------------------------- #
 # enums (as plain string constants + threshold helpers)                       #
