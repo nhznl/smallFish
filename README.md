@@ -247,6 +247,8 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh pre-earnings-post-event-weekly-open-decision-comparison` | Validates and compares the complete 2010–2025 Study 5 annual chains as exploratory evidence |
 | `./commands.sh pre-earnings-regime-staging` | Guarded Study 6 annual runner for the SPY control, Risk-On SPXL/SPY staging, and ETF-only variants; historical execution requires separate authorization |
 | `./commands.sh pre-earnings-regime-staging-comparison` | Validates shared inputs, checkpoint chains, and passive-SPY ledgers before comparing complete Study 6 variants |
+| `./commands.sh pre-earnings-defensive-regime-staging` | Guarded Study 7 annual runner for the passive-SPY, stocks-plus-SPY, stocks-plus-SPXL/SPY, stocks-plus-SPXL/GLD, and ETF-only variants; historical execution requires separate authorization |
+| `./commands.sh pre-earnings-defensive-regime-staging-comparison` | Validates shared inputs and independent A–E checkpoint chains before comparing complete Study 7 variants |
 | `./commands.sh study4-live-evaluate` | Operational Study 4 Risk-On evaluator. Writes checksummed artifacts; never places a broker order |
 
 ## Testing

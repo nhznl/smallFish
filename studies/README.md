@@ -46,6 +46,7 @@ Specs: [`backtest_spec.md`](pre_earnings_momentum/backtest_spec.md),
 [`post_earnings_hold_low_fee_holdout_spec.md`](pre_earnings_momentum/post_earnings_hold_low_fee_holdout_spec.md),
 [`post_earnings_weekly_batch_extension_spec.md`](pre_earnings_momentum/post_earnings_weekly_batch_extension_spec.md),
 [`post_earnings_regime_staging_spec.md`](pre_earnings_momentum/post_earnings_regime_staging_spec.md),
+[`post_earnings_defensive_regime_staging_spec.md`](pre_earnings_momentum/post_earnings_defensive_regime_staging_spec.md),
 [`sector_rotation_study_spec.md`](sector_rotation/sector_rotation_study_spec.md),
 [`sector_rotation_study_v2_spec.md`](sector_rotation/sector_rotation_study_v2_spec.md).
 
@@ -56,6 +57,8 @@ pre-registered Pre-Earnings Study 3 later passed its own 2023–2025 endpoint;
 that result is additive and does not rewrite the failed default Study 1. Study
 4 is an exploratory Friday-only execution extension, and Study 6 is an
 exploratory SPXL/SPY regime-staging comparison; neither changes a prior verdict.
+Study 7 is an unpublished exploratory GLD Risk-Off comparison and is not in the
+catalog.
 
 Neither result lifts a product gate. The Momentum and Sectors views remain
 descriptive screens.

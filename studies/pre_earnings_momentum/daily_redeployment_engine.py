@@ -68,6 +68,8 @@ EXECUTION_WEEKLY_OPEN_DECISION = "weekly_open_decision"
 STAGING_POLICY_LEGACY_SPY = "legacy_spy"
 STAGING_POLICY_SPY_ONLY = "spy_only"
 STAGING_POLICY_REGIME = "risk_on_spxl_spy"
+STAGING_POLICY_PASSIVE_SPY = "passive_spy"
+STAGING_POLICY_DEFENSIVE = "risk_on_spxl_risk_off_gld"
 
 _CONFIG_SCHEMA: dict[str, Any] = {
     "study_id": str,
@@ -100,6 +102,7 @@ _CONFIG_SCHEMA: dict[str, Any] = {
     "staging_policy": str,
     "risk_on_staging_symbol": str,
     "defensive_staging_symbol": str,
+    "risk_off_staging_symbol": str,
     "stock_entries_enabled": bool,
     "terminal_execution_year": int,
     "post_event_hold_sessions": int,
@@ -136,6 +139,7 @@ _OPTIONAL_CONFIG_KEYS = {
     "staging_policy",
     "risk_on_staging_symbol",
     "defensive_staging_symbol",
+    "risk_off_staging_symbol",
     "stock_entries_enabled",
     "terminal_execution_year",
 }
@@ -208,6 +212,7 @@ class StudyConfig:
     staging_policy: str = STAGING_POLICY_LEGACY_SPY
     risk_on_staging_symbol: str = "SPY"
     defensive_staging_symbol: str = "SPY"
+    risk_off_staging_symbol: str | None = None
     stock_entries_enabled: bool = True
     terminal_execution_year: int | None = None
 
@@ -278,6 +283,7 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
     staging_policy = str(raw.get("staging_policy", STAGING_POLICY_LEGACY_SPY))
     if staging_policy not in {
         STAGING_POLICY_LEGACY_SPY, STAGING_POLICY_SPY_ONLY, STAGING_POLICY_REGIME,
+        STAGING_POLICY_PASSIVE_SPY, STAGING_POLICY_DEFENSIVE,
     }:
         raise ValueError("unsupported staging_policy")
     risk_on_staging_symbol = str(
@@ -286,6 +292,10 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
     defensive_staging_symbol = str(
         raw.get("defensive_staging_symbol", raw["benchmark_symbol"])
     ).upper()
+    risk_off_raw = raw.get("risk_off_staging_symbol")
+    risk_off_staging_symbol = (
+        None if risk_off_raw is None else str(risk_off_raw).upper()
+    )
     stock_entries_enabled = bool(raw.get("stock_entries_enabled", True))
     terminal_execution_year = raw.get("terminal_execution_year")
     if terminal_execution_year is not None:
@@ -297,6 +307,13 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
             raise ValueError("defensive staging symbol must match benchmark_symbol")
         if not stock_entries_enabled and market_regime_gate != REGIME_GATE_RISK_ON:
             raise ValueError("stock-free staging retains the frozen risk_on gate")
+        if staging_policy == STAGING_POLICY_PASSIVE_SPY and stock_entries_enabled:
+            raise ValueError("passive SPY staging cannot enable stock entries")
+        if staging_policy == STAGING_POLICY_DEFENSIVE:
+            if risk_on_staging_symbol != "SPXL":
+                raise ValueError("defensive staging requires SPXL during Risk-On")
+            if risk_off_staging_symbol != "GLD":
+                raise ValueError("defensive staging requires GLD during Risk-Off")
     post_event_hold_sessions = int(raw.get("post_event_hold_sessions", 7))
     if post_event_hold_sessions <= 0:
         raise ValueError("post_event_hold_sessions must be positive")
@@ -358,6 +375,7 @@ def load_study_config(path: Path | None = None) -> StudyConfig:
         staging_policy=staging_policy,
         risk_on_staging_symbol=risk_on_staging_symbol,
         defensive_staging_symbol=defensive_staging_symbol,
+        risk_off_staging_symbol=risk_off_staging_symbol,
         stock_entries_enabled=stock_entries_enabled,
         terminal_execution_year=terminal_execution_year,
     )

@@ -48,6 +48,8 @@
 #   pre-earnings-post-event-weekly-open-decision-comparison - compare Study 5 annual chains
 #   pre-earnings-regime-staging - guarded Study 6 SPXL/SPY annual runner
 #   pre-earnings-regime-staging-comparison - validate and compare Study 6 chains
+#   pre-earnings-defensive-regime-staging - guarded Study 7 SPXL/GLD/SPY annual runner
+#   pre-earnings-defensive-regime-staging-comparison - validate and compare Study 7 chains
 #   study4-live-evaluate - operational Study 4 Risk-On evaluator (writes artifacts; no broker orders)
 #   backtest [earnings]       - strategy walk-forward backtest
 #   event-backtest [earnings] - strategy event-study backtest
@@ -285,6 +287,12 @@ case "$1" in
   pre-earnings-regime-staging-comparison)
     cd "$ROOT" && "$UTILITIES_PYTHON" -m studies.pre_earnings_momentum.post_earnings_regime_staging_comparison "${@:2}"
     ;;
+  pre-earnings-defensive-regime-staging)
+    cd "$ROOT" && "$UTILITIES_PYTHON" -m studies.pre_earnings_momentum.post_earnings_defensive_regime_staging "${@:2}"
+    ;;
+  pre-earnings-defensive-regime-staging-comparison)
+    cd "$ROOT" && "$UTILITIES_PYTHON" -m studies.pre_earnings_momentum.post_earnings_defensive_regime_staging_comparison "${@:2}"
+    ;;
   study4-live-evaluate)
     cd "$ROOT" && "$UTILITIES_PYTHON" -m studies.pre_earnings_momentum.operational "${@:2}"
     ;;
@@ -298,7 +306,7 @@ case "$1" in
     cd "$ROOT" && "$UTILITIES_PYTHON" -m utilities.fetch_earnings_history "${@:2}"
     ;;
   *)
-    echo "Usage: $0 {doctor|bootstrap-data|server|build-ui|studies|fetch|ensure-events|scan|wheel|chains|verify-premiums|universe|scrape|scrape-history|scrape-retry|sector-rotation|sector-rotation-study|sector-rotation-study-v2|rsi-supertrend-study|market-regime-study|market-regime-compare|market-regime-holdout|pre-earnings-daily-study|pre-earnings-post-event-study|pre-earnings-post-event-low-fee-study|pre-earnings-post-event-low-fee-holdout|pre-earnings-post-event-weekly-batch|pre-earnings-post-event-weekly-batch-comparison|pre-earnings-post-event-weekly-batch-extension|pre-earnings-post-event-weekly-open-decision|pre-earnings-post-event-weekly-open-decision-comparison|pre-earnings-regime-staging|pre-earnings-regime-staging-comparison|study4-live-evaluate|backtest|event-backtest|earnings-history}"
+    echo "Usage: $0 {doctor|bootstrap-data|server|build-ui|studies|fetch|ensure-events|scan|wheel|chains|verify-premiums|universe|scrape|scrape-history|scrape-retry|sector-rotation|sector-rotation-study|sector-rotation-study-v2|rsi-supertrend-study|market-regime-study|market-regime-compare|market-regime-holdout|pre-earnings-daily-study|pre-earnings-post-event-study|pre-earnings-post-event-low-fee-study|pre-earnings-post-event-low-fee-holdout|pre-earnings-post-event-weekly-batch|pre-earnings-post-event-weekly-batch-comparison|pre-earnings-post-event-weekly-batch-extension|pre-earnings-post-event-weekly-open-decision|pre-earnings-post-event-weekly-open-decision-comparison|pre-earnings-regime-staging|pre-earnings-regime-staging-comparison|pre-earnings-defensive-regime-staging|pre-earnings-defensive-regime-staging-comparison|study4-live-evaluate|backtest|event-backtest|earnings-history}"
     exit 1
     ;;
 esac

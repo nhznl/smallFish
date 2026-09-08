@@ -414,6 +414,40 @@ falling well short of the naive -3x calculation in every displayed year.
 Calendar-year SPXS returns do not determine its result over Study 6's exact
 weekly Risk-Off intervals; that policy requires a separately frozen replay.
 
+### Study 7: weekly GLD Risk-Off staging
+
+The [frozen Study 7 specification](post_earnings_defensive_regime_staging_spec.md)
+keeps Study 6's regime classifier, stock rules, weekly clock, and costs, and
+asks whether replacing Risk-Off SPY with GLD improves the return/drawdown
+tradeoff. Implementation is isolated from Study 6. Historical 2010–2025
+execution is unauthorized until the owner reviews the implementation commit.
+
+```bash
+./commands.sh pre-earnings-defensive-regime-staging \
+  --variant stocks-spxl-gld-treatment --year 2010 --origin-year 2010 \
+  --run-id study7-stocks-spxl-gld-2010-2025-COMMIT \
+  --confirm-weekly-defensive-regime-staging-exploratory-run
+```
+
+The other variant names are `passive-spy`, `stocks-spy-control`,
+`stocks-spxl-spy-control`, and `etf-only-spxl-gld`. After all five continuous
+chains finish, validate them with:
+
+```bash
+./commands.sh pre-earnings-defensive-regime-staging-comparison \
+  --artifact-root "$SFP_DATA_DIR/backtest/pre_earnings_momentum/weekly_defensive_regime_staging" \
+  --passive-spy-tag study7-passive-spy-2010-2025-COMMIT \
+  --stocks-spy-control-tag study7-stocks-spy-2010-2025-COMMIT \
+  --stocks-spxl-spy-control-tag study7-stocks-spxl-spy-2010-2025-COMMIT \
+  --stocks-spxl-gld-treatment-tag study7-stocks-spxl-gld-2010-2025-COMMIT \
+  --etf-only-spxl-gld-tag study7-etf-only-spxl-gld-2010-2025-COMMIT \
+  --start-year 2010 --end-year 2025 \
+  --output-dir "$SFP_DATA_DIR/backtest/pre_earnings_momentum/weekly_defensive_regime_staging/reports/2010-2025-COMMIT/study7-comparison"
+```
+
+Study 7 remains `NO_VERDICT / EXPLORATORY` regardless of the historical result.
+Do not add it to the published catalog without a separate owner decision.
+
 ## Package map
 
 | Path | Responsibility |
@@ -449,6 +483,12 @@ weekly Risk-Off intervals; that policy requires a separately frozen replay.
 | `post_earnings_regime_staging_comparison.py` | Validates and compares complete A/B/C chains and optional Study 5 drift context |
 | `post_earnings_regime_staging_spec.md` | Frozen Study 6 SPXL/SPY methodology and reporting contract |
 | `config/post_earnings_regime_staging_*.yaml` | Frozen A/B/C Study 6 contracts |
+| `post_earnings_defensive_regime_staging.py` | Guarded Study 7 annual runner; separate historical authorization required |
+| `post_earnings_defensive_regime_staging_engine.py` | ETF-aware Study 7 state, fills, and checkpoint contract |
+| `post_earnings_defensive_regime_staging_report.py` | Atomic Study 7 annual artifact writer |
+| `post_earnings_defensive_regime_staging_comparison.py` | Validates and compares complete A–E chains |
+| `post_earnings_defensive_regime_staging_spec.md` | Frozen Study 7 GLD Risk-Off methodology and reporting contract |
+| `config/post_earnings_defensive_regime_staging_*.yaml` | Frozen A–E Study 7 contracts |
 | `config/post_earnings_weekly_batch_*.yaml` | Frozen baseline and Risk-On Friday-only execution contracts |
 | `config/post_earnings_hold_low_fee_*.yaml` | Separate baseline and Risk-On low-fee study contracts |
 | `config/daily_redeployment_price_500.yaml` | 2021 development sensitivity with a $500 entry-price ceiling |
