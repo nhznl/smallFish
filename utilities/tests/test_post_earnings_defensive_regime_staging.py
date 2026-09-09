@@ -24,15 +24,19 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
 from studies.pre_earnings_momentum.post_earnings_defensive_regime_staging_comparison import (
     VARIANT_DIRS,
     Study7ValidationError,
+    _validate_full_period_counts,
     build_comparison,
     classify_d_versus_c,
+    risk_off_price_intervals,
     session_path_attribution,
+    write_comparison,
 )
 from studies.pre_earnings_momentum.post_earnings_defensive_regime_staging_engine import (
     STUDY_FAMILY,
     RegimeStagingMarket,
     checkpoint_from_payload,
     checkpoint_payload,
+    load_study7_config,
     run_regime_staging_simulation,
     target_symbol,
 )
@@ -41,7 +45,7 @@ from utilities.tests.test_daily_redeployment_engine import _market
 
 
 def _cfg(variant: str):
-    return load_study_config(cli.VARIANT_CONFIGS[variant])
+    return load_study7_config(cli.VARIANT_CONFIGS[variant])
 
 
 def _price_frame(symbol: str, dates: pd.DatetimeIndex, close: float = 100.0):
@@ -70,6 +74,8 @@ def _bundle(*, n: int = 130, tickers=("AAA",), days_ahead: int = 21, gld_close: 
         sectors=legacy.sectors,
         quarantines=legacy.quarantines,
         input_hashes={"snapshot": "synthetic", "SPY": "spy", "SPXL": "spxl", "GLD": "gld"},
+        exchange_sessions=tuple(value.date() for value in legacy.spy["date"]),
+        exchange_calendar_source="synthetic:XNYS",
     ), sessions
 
 
@@ -184,6 +190,8 @@ def test_holiday_week_uses_final_available_session():
             "GLD": _price_frame("GLD", dates, 80.0),
         },
         stocks={}, earnings=pd.DataFrame(), sectors={},
+        exchange_sessions=tuple(value.date() for value in dates),
+        exchange_calendar_source="synthetic:XNYS",
         input_hashes={"SPY": "s", "SPXL": "x", "GLD": "g"},
     )
     result = run_regime_staging_simulation(
@@ -222,6 +230,8 @@ def test_terminal_2026_execution_is_excluded_without_pending_batch():
             "GLD": _price_frame("GLD", dates, 80.0),
         },
         stocks={}, earnings=pd.DataFrame(), sectors={},
+        exchange_sessions=tuple(value.date() for value in dates),
+        exchange_calendar_source="synthetic:XNYS",
     )
     result = run_regime_staging_simulation(
         cfg=_cfg("etf-only-spxl-gld"), variant="etf-only-spxl-gld",
@@ -405,7 +415,7 @@ def test_missing_required_gld_session_aborts_before_any_result():
             "GLD": gld.loc[gld["date"].dt.date != missing].reset_index(drop=True),
         },
     )
-    with pytest.raises(ValueError, match="incomplete"):
+    with pytest.raises(ValueError, match="does not match"):
         run_regime_staging_simulation(
             cfg=_cfg("etf-only-spxl-gld"), variant="etf-only-spxl-gld",
             market=broken, year=2000,
@@ -484,13 +494,89 @@ def test_d_minus_c_path_attribution_splits_overnight_and_open_to_close(monkeypat
     daily = pd.DataFrame([item.__dict__ for item in result.marks])
     daily["date"] = pd.to_datetime(daily["date"])
     path = session_path_attribution(daily, orders)
-    switch_days = [
-        item for item in path if item["phase"] in {"overnight", "open_to_close"}
-    ]
-    assert switch_days
-    overnight = next(item for item in switch_days if item["phase"] == "overnight")
-    incoming = next(item for item in switch_days if item["phase"] == "open_to_close")
-    assert overnight["regime"] != incoming["regime"]
+    assert sum(item["pl"] for item in path) == pytest.approx(
+        daily["total_equity"].iloc[-1] - daily["total_equity"].iloc[0], abs=1e-6,
+    )
+    by_date: dict[str, set[str]] = {}
+    for item in path:
+        by_date.setdefault(item["date"], set()).add(item["regime"])
+    assert any(len(regimes) > 1 for regimes in by_date.values())
+
+
+def test_common_missing_exchange_session_is_rejected():
+    market, sessions = _bundle()
+    missing = next(item for item in sessions if item.year == 2000 and item.weekday() == 3)
+
+    def drop(frame):
+        return frame.loc[frame["date"].dt.date != missing].reset_index(drop=True)
+
+    staging = {symbol: drop(frame) for symbol, frame in market.staging_assets.items()}
+    broken = replace(market, spy=staging["SPY"], staging_assets=staging)
+    with pytest.raises(ValueError, match="SPY does not match synthetic:XNYS"):
+        run_regime_staging_simulation(
+            cfg=_cfg("etf-only-spxl-gld"), variant="etf-only-spxl-gld",
+            market=broken, year=2000,
+        )
+
+
+def test_full_period_contract_requires_4024_sessions_and_834_decisions():
+    years = list(range(2010, 2026))
+    daily = pd.DataFrame({"date": pd.date_range("2010-01-01", periods=4024)})
+    decisions = pd.DataFrame({"state": ["staging_target"] * 834})
+    _validate_full_period_counts("stocks-spxl-gld-treatment", daily, decisions, years)
+    with pytest.raises(Study7ValidationError, match="4024"):
+        _validate_full_period_counts(
+            "stocks-spxl-gld-treatment", daily.iloc[:-1], decisions, years,
+        )
+    with pytest.raises(Study7ValidationError, match="834"):
+        _validate_full_period_counts(
+            "stocks-spxl-gld-treatment", daily, decisions.iloc[:-1], years,
+        )
+
+
+def test_path_attribution_includes_stock_pl_on_switch_day():
+    daily = pd.DataFrame([
+        {
+            "date": pd.Timestamp("2020-01-02"), "total_equity": 100.0,
+            "stock_market_value": 50.0, "stock_open_market_value_before_trades": 50.0,
+            "spy_market_value": 0.0, "spxl_market_value": 0.0, "gld_market_value": 50.0,
+            "etf_symbol": "GLD", "etf_shares": 5, "spy_open": 10.0,
+            "spy_close": 10.0, "spxl_open": 10.0, "spxl_close": 10.0,
+            "gld_open": 10.0, "gld_close": 10.0,
+            "last_executable_weekly_regime": "RISK_OFF",
+        },
+        {
+            "date": pd.Timestamp("2020-01-03"), "total_equity": 120.0,
+            "stock_market_value": 60.0, "stock_open_market_value_before_trades": 55.0,
+            "spy_market_value": 60.0, "spxl_market_value": 0.0, "gld_market_value": 0.0,
+            "etf_symbol": "SPY", "etf_shares": 5, "spy_open": 10.0,
+            "spy_close": 12.0, "spxl_open": 10.0, "spxl_close": 10.0,
+            "gld_open": 10.0, "gld_close": 10.0,
+            "last_executable_weekly_regime": "NEUTRAL",
+        },
+    ])
+    orders = pd.DataFrame([
+        {"status": "filled", "execution_date": "2020-01-03", "kind": "etf_switch_exit", "ticker": "GLD", "side": "sell", "fill_price": 10.0, "shares": 5, "principal": 50.0, "cost": 0.0},
+        {"status": "filled", "execution_date": "2020-01-03", "kind": "etf_residual", "ticker": "SPY", "side": "buy", "fill_price": 10.0, "shares": 5, "principal": 50.0, "cost": 0.0},
+    ])
+    path = session_path_attribution(daily, orders)
+    assert sum(item["pl"] for item in path) == pytest.approx(20.0)
+    assert sum(item["pl"] for item in path if item["asset"] == "stocks") == pytest.approx(10.0)
+
+
+def test_risk_off_intervals_use_execution_open_to_next_switch_open():
+    daily = pd.DataFrame([
+        {"date": pd.Timestamp("2020-01-02"), "last_executable_weekly_regime": "NEUTRAL", "spy_open": 90.0, "spy_close": 95.0, "gld_open": 180.0, "gld_close": 190.0},
+        {"date": pd.Timestamp("2020-01-03"), "last_executable_weekly_regime": "RISK_OFF", "spy_open": 100.0, "spy_close": 110.0, "gld_open": 200.0, "gld_close": 220.0},
+        {"date": pd.Timestamp("2020-01-06"), "last_executable_weekly_regime": "RISK_OFF", "spy_open": 111.0, "spy_close": 120.0, "gld_open": 221.0, "gld_close": 240.0},
+        {"date": pd.Timestamp("2020-01-10"), "last_executable_weekly_regime": "RISK_ON", "spy_open": 130.0, "spy_close": 140.0, "gld_open": 260.0, "gld_close": 280.0},
+    ])
+    intervals = risk_off_price_intervals(daily)
+    assert intervals == [{
+        "start": "2020-01-03", "end": "2020-01-10",
+        "start_boundary": "execution_open", "end_boundary": "next_execution_open",
+        "spy_return": pytest.approx(0.30), "gld_return": pytest.approx(0.30),
+    }]
 
 
 def test_writer_uses_study7_family_and_refuses_overwrite(tmp_path: Path):
@@ -534,6 +620,31 @@ def test_comparison_validates_shared_snapshot_and_independent_origin(tmp_path: P
     assert set(daily["variant"]) == set(cli.VARIANT_CONFIGS)
     assert len(annual) == 5
     assert summary["evidence_status"] == "NO_VERDICT / EXPLORATORY"
+    assert set(summary["comparisons"]) == {
+        "D_minus_C", "C_minus_B", "D_minus_E", "B_minus_A",
+        "C_minus_A", "D_minus_A", "E_minus_A",
+    }
+    for payload in summary["variants"].values():
+        assert set(payload) >= {
+            "calendar_year_returns", "allocation_ranges", "trade_diagnostics",
+            "etf_switch_reversals", "ledger_pl_by_regime",
+            "risk_off_price_intervals", "predefined_year_paths",
+        }
+        assert payload["ledger_pl_by_regime"]["overall"] == pytest.approx(
+            payload["terminal_close_equity"] - 50_000.0, abs=1e-6,
+        )
+        assert "etf_funding_costs" in payload["gross_turnover"]["SPY"]
+    for payload in summary["comparisons"].values():
+        assert set(payload) >= {
+            "metric_deltas", "calendar_year_return_deltas", "worst_periods",
+            "turnover", "allocation",
+        }
+    comparison_output = tmp_path / "comparison"
+    write_comparison(
+        comparison_output, daily, annual, monthly, summary, tags=tags,
+    )
+    assert (comparison_output / "comparison_summary.json").is_file()
+    assert "Interpretation limits" in (comparison_output / "report.md").read_text()
     labels = classify_d_versus_c(
         summary["variants"]["stocks-spxl-gld-treatment"],
         summary["variants"]["stocks-spxl-spy-control"],
@@ -569,8 +680,15 @@ def test_cli_guards_fail_before_market_loading(monkeypatch, tmp_path: Path):
     common = [
         "--variant", "etf-only-spxl-gld", "--year", "2010", "--origin-year", "2010",
         "--cache-root", str(tmp_path), "--output-root", str(tmp_path / "out"),
+        "--pinned-implementation-commit", "abc",
     ]
     assert cli.main(common) == 2
+    assert not loaded
+
+    without_pin = common[:-2]
+    assert cli.main([
+        *without_pin, "--confirm-weekly-defensive-regime-staging-exploratory-run",
+    ]) == 2
     assert not loaded
 
     monkeypatch.setattr(cli, "pinned_implementation_revision", lambda: ("abc", True))
@@ -580,10 +698,19 @@ def test_cli_guards_fail_before_market_loading(monkeypatch, tmp_path: Path):
     assert not loaded
 
     monkeypatch.setattr(cli, "pinned_implementation_revision", lambda: ("abc", False))
+    mismatch = [
+        value if value != "abc" else "reviewed-commit" for value in common
+    ]
+    assert cli.main([
+        *mismatch, "--confirm-weekly-defensive-regime-staging-exploratory-run",
+    ]) == 2
+    assert not loaded
+
     protected = tmp_path / "weekly_regime_staging" / "out"
     assert cli.main([
         "--variant", "passive-spy", "--year", "2010", "--origin-year", "2010",
         "--cache-root", str(tmp_path), "--output-root", str(protected),
+        "--pinned-implementation-commit", "abc",
         "--confirm-weekly-defensive-regime-staging-exploratory-run",
     ]) == 2
     assert not loaded
@@ -598,7 +725,7 @@ def test_legacy_runner_rejects_study7_config(capsys):
         "--config", str(config),
     ])
     assert rc == 2
-    assert "dedicated Study 7 runner" in capsys.readouterr().err
+    assert "unknown configuration key" in capsys.readouterr().err
 
 
 def test_study6_frozen_config_hashes_remain_unchanged():

@@ -7,6 +7,7 @@ yfinance==1.1.0
 tastytrade==13.2.0
 requests==2.32.5
 lxml==6.1.1  # pandas.read_html backend for the Wikipedia universe sources
+exchange_calendars==4.13.2  # independent XNYS session validation for research
 
 # Tests
 pytest==9.1.1

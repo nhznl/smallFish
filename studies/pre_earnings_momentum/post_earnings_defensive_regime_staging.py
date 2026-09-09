@@ -13,16 +13,15 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+import exchange_calendars as xcals
 
-from studies.pre_earnings_momentum.daily_redeployment_engine import (
-    StudyConfig,
-    load_study_config,
-)
 from studies.pre_earnings_momentum.post_earnings_defensive_regime_staging_engine import (
     STAGING_ASSETS,
     STUDY_FAMILY,
     RegimeStagingMarket,
+    Study7Config,
     checkpoint_from_payload,
+    load_study7_config,
     run_regime_staging_simulation,
 )
 from studies.pre_earnings_momentum.post_earnings_defensive_regime_staging_report import write_run
@@ -113,7 +112,7 @@ def _data_root(explicit: Path | None, env_name: str) -> Path:
     return Path(value).expanduser().resolve()
 
 
-def _validate_config(variant: str, cfg: StudyConfig) -> None:
+def _validate_config(variant: str, cfg: Study7Config) -> None:
     expected = VARIANT_CONFIG_SHA256[variant]
     if _effective_config_hash(cfg.raw) != expected:
         raise ValueError("Study 7 config does not match the owner-approved frozen rules")
@@ -136,7 +135,7 @@ def _validate_output_path(path: Path) -> None:
 def _validate_predecessor(
     *,
     state_path: Path,
-    cfg: StudyConfig,
+    cfg: Study7Config,
     variant: str,
     year: int,
     commit: str,
@@ -189,6 +188,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--retired", type=Path)
     parser.add_argument("--earnings", type=Path)
     parser.add_argument("--run-id")
+    parser.add_argument("--pinned-implementation-commit")
     parser.add_argument(
         "--confirm-weekly-defensive-regime-staging-exploratory-run", action="store_true",
     )
@@ -196,11 +196,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def load_market(
-    cfg: StudyConfig, year: int, args: argparse.Namespace,
+    cfg: Study7Config, year: int, args: argparse.Namespace,
 ) -> RegimeStagingMarket:
     cache_root = _data_root(args.cache_root, "SFP_DATA_DIR")
     history_years = list(range(year - cfg.warmup_calendar_years, year + 1))
     calendar_years = history_years + [year + 1]
+    calendar = xcals.get_calendar("XNYS")
+    calendar_index = calendar.sessions_in_range(
+        f"{calendar_years[0]}-01-01", f"{calendar_years[-1]}-12-31",
+    )
+    exchange_sessions = tuple(value.date() for value in calendar_index)
+    calendar_source = f"exchange_calendars:{xcals.__version__}:XNYS"
+    calendar_digest = hashlib.sha256(
+        "\n".join(value.isoformat() for value in exchange_sessions).encode("ascii")
+    ).hexdigest()
     universe_path = Path(args.universe) if args.universe else cache_root / "universe.csv"
     retired_path = Path(args.retired) if args.retired else cache_root / "retired_symbols.csv"
     earnings_path = Path(args.earnings) if args.earnings else cache_root / "earnings_history.csv"
@@ -214,7 +223,13 @@ def load_market(
         earnings["event_date"] = pd.to_datetime(earnings["event_date"])
 
     staging_assets: dict[str, pd.DataFrame] = {}
-    hashes: dict[str, str] = {"earnings": _hash_frame(earnings)}
+    hashes: dict[str, str] = {
+        "earnings": _hash_frame(earnings),
+        "exchange_calendar": calendar_digest,
+        "exchange_calendar_source": hashlib.sha256(
+            calendar_source.encode("utf-8")
+        ).hexdigest(),
+    }
     required = set(STAGING_ASSETS)
     for symbol in sorted(required):
         missing_years = missing_price_years(cache_root, symbol, calendar_years)
@@ -252,6 +267,8 @@ def load_market(
         spy=staging_assets[cfg.benchmark_symbol], staging_assets=staging_assets,
         stocks=stocks, earnings=earnings, sectors=sectors,
         quarantines=quarantines, input_hashes=hashes,
+        exchange_sessions=exchange_sessions,
+        exchange_calendar_source=calendar_source,
     )
 
 
@@ -263,17 +280,23 @@ def main(argv: list[str] | None = None) -> int:
                 "Study 7 is unauthorized without "
                 "--confirm-weekly-defensive-regime-staging-exploratory-run"
             )
+        if not args.pinned_implementation_commit:
+            raise ValueError("Study 7 requires --pinned-implementation-commit")
         if args.origin_year != ORIGIN_YEAR or not MIN_YEAR <= args.year <= MAX_YEAR:
             raise ValueError("Study 7 permits only origin 2010 and years 2010-2025")
         if args.year == ORIGIN_YEAR and args.state_in is not None:
             raise ValueError("Study 7 origin year cannot accept a prior checkpoint")
         if args.year > ORIGIN_YEAR and args.state_in is None:
             raise ValueError("Study 7 continuation requires the prior annual checkpoint")
-        cfg = load_study_config(VARIANT_CONFIGS[args.variant])
+        cfg = load_study7_config(VARIANT_CONFIGS[args.variant])
         _validate_config(args.variant, cfg)
         commit, dirty = pinned_implementation_revision()
         if dirty:
             raise ValueError("Study 7 requires a clean committed worktree and pinned HEAD")
+        if commit != args.pinned_implementation_commit:
+            raise ValueError(
+                "Study 7 HEAD does not match --pinned-implementation-commit"
+            )
 
         output_root = args.output_root
         if output_root is None:
@@ -308,6 +331,8 @@ def main(argv: list[str] | None = None) -> int:
             stocks=market.stocks, earnings=market.earnings, sectors=market.sectors,
             quarantines=market.quarantines,
             input_hashes={**market.input_hashes, **predecessor_hashes},
+            exchange_sessions=market.exchange_sessions,
+            exchange_calendar_source=market.exchange_calendar_source,
         )
 
         def progress(completed: int, total: int, session: date) -> None:

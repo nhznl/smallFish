@@ -26,12 +26,13 @@ from studies.pre_earnings_momentum.post_earnings_defensive_regime_staging_engine
 )
 
 DAILY_COLUMNS = [
-    "date", "cash", "stock_market_value", "spy_market_value",
+    "date", "cash", "stock_open_market_value_before_trades", "stock_market_value", "spy_market_value",
     "spxl_market_value", "gld_market_value", "total_equity",
     "net_liquidation_value", "stock_exposure_pct", "spy_exposure_pct",
     "spxl_exposure_pct", "gld_exposure_pct", "cash_exposure_pct",
     "etf_exposure_proxy", "stock_position_count", "etf_symbol", "etf_shares",
-    "spy_close", "gld_close", "daily_market_regime", "last_executable_weekly_regime",
+    "spy_open", "spy_close", "spxl_open", "spxl_close", "gld_open", "gld_close",
+    "daily_market_regime", "last_executable_weekly_regime",
     "cumulative_stock_costs", "cumulative_etf_costs", "realized_stock_pl",
     "realized_etf_pl", "drawdown",
 ]
@@ -162,6 +163,7 @@ def write_run(
         "year": result.year, "args": args, "config": result.cfg.raw,
         "input_hashes": result.summary["input_hashes"], "output_hashes": {},
         "terminal_boundary_exclusions": result.notes,
+        "exchange_calendar_source": result.summary["exchange_calendar_source"],
     }
     for name in artifact_names:
         path = tmp / name
@@ -172,6 +174,7 @@ def write_run(
                 "study_id": result.cfg.study_id, "variant": result.variant,
                 "year": result.year, "input_hashes": result.summary["input_hashes"],
                 "evidence_status": run_manifest["evidence_status"],
+                "exchange_calendar_source": run_manifest["exchange_calendar_source"],
             },
         )
         if "git_commit" not in run_manifest:

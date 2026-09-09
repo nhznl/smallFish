@@ -425,6 +425,7 @@ execution is unauthorized until the owner reviews the implementation commit.
 ```bash
 ./commands.sh pre-earnings-defensive-regime-staging \
   --variant stocks-spxl-gld-treatment --year 2010 --origin-year 2010 \
+  --pinned-implementation-commit REVIEWED_COMMIT \
   --run-id study7-stocks-spxl-gld-2010-2025-COMMIT \
   --confirm-weekly-defensive-regime-staging-exploratory-run
 ```
@@ -484,7 +485,7 @@ Do not add it to the published catalog without a separate owner decision.
 | `post_earnings_regime_staging_spec.md` | Frozen Study 6 SPXL/SPY methodology and reporting contract |
 | `config/post_earnings_regime_staging_*.yaml` | Frozen A/B/C Study 6 contracts |
 | `post_earnings_defensive_regime_staging.py` | Guarded Study 7 annual runner; separate historical authorization required |
-| `post_earnings_defensive_regime_staging_engine.py` | ETF-aware Study 7 state, fills, and checkpoint contract |
+| `post_earnings_defensive_regime_staging_engine.py` | Dedicated Study 7 config schema, ETF-aware state, fills, calendar validation, and checkpoint contract |
 | `post_earnings_defensive_regime_staging_report.py` | Atomic Study 7 annual artifact writer |
 | `post_earnings_defensive_regime_staging_comparison.py` | Validates and compares complete A–E chains |
 | `post_earnings_defensive_regime_staging_spec.md` | Frozen Study 7 GLD Risk-Off methodology and reporting contract |

@@ -11,10 +11,12 @@ import copy
 import math
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any, Callable, Sequence
 
 import numpy as np
 import pandas as pd
+import yaml
 
 from studies.pre_earnings_momentum import daily_redeployment_engine as legacy
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
@@ -24,8 +26,6 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
     REGIME_RISK_OFF,
     REGIME_RISK_ON,
     REGIME_UNKNOWN,
-    STAGING_POLICY_DEFENSIVE,
-    STAGING_POLICY_PASSIVE_SPY,
     STATUS_CANCELLED,
     STATUS_FILLED,
     DecisionRecord,
@@ -58,6 +58,143 @@ from studies.pre_earnings_momentum.event_forecast import (
 SCHEMA_VERSION = 1
 STUDY_FAMILY = "pre-earnings-weekly-defensive-regime-staging-v1"
 STAGING_ASSETS = ("SPY", "SPXL", "GLD")
+STAGING_POLICY_PASSIVE_SPY = "passive_spy"
+STAGING_POLICY_DEFENSIVE = "risk_on_spxl_risk_off_gld"
+
+
+@dataclass(frozen=True)
+class Study7Config(legacy.StudyConfig):
+    """Study 7 configuration identity, kept outside the frozen shared schema."""
+
+    risk_off_staging_symbol: str | None = None
+
+
+_STUDY7_SCHEMA = {
+    **legacy._CONFIG_SCHEMA,
+    "risk_off_staging_symbol": str,
+}
+
+
+def _check_study7_schema(value: Any, schema: Any, path: str = "") -> None:
+    if isinstance(schema, dict):
+        if not isinstance(value, dict):
+            raise ValueError(f"{path or 'config'} must be a mapping")
+        extra = sorted(set(value) - set(schema))
+        if extra:
+            raise ValueError(f"unknown configuration key(s) at {path or 'root'}: {extra}")
+        optional = set(legacy._OPTIONAL_CONFIG_KEYS)
+        missing = sorted(set(schema) - set(value) - optional)
+        if missing:
+            raise ValueError(f"missing configuration key(s) at {path or 'root'}: {missing}")
+        for key, child in schema.items():
+            if key in value:
+                _check_study7_schema(value[key], child, f"{path}.{key}" if path else key)
+        return
+    if schema is list:
+        if not isinstance(value, list) or not value:
+            raise ValueError(f"{path} must be a non-empty list")
+        return
+    if not isinstance(value, schema):
+        raise ValueError(f"{path} has invalid type {type(value).__name__}")
+
+
+def load_study7_config(path: Any) -> Study7Config:
+    """Load the dedicated frozen Study 7 schema without widening Study 6."""
+    raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    _check_study7_schema(raw, _STUDY7_SCHEMA)
+    if raw["setup_score_version"] != legacy.SETUP_SCORE_VERSION:
+        raise ValueError("setup_score_version must remain momentum-v3")
+    if raw["required_setup"] != legacy.BULLISH_CONTINUATION:
+        raise ValueError("required_setup must be BULLISH_CONTINUATION")
+    if tuple(raw["arms"]) != (legacy.ARM_EQUAL,):
+        raise ValueError("Study 7 requires the equal arm only")
+    if raw.get("cost_model") != legacy.COST_MODEL_PER_SHARE:
+        raise ValueError("Study 7 requires per-share costs")
+    if "cost_per_share" not in raw or "cost_bps_per_side" in raw:
+        raise ValueError("per_share cost model requires only cost_per_share")
+    if raw["entry_scan_schedule"] != "weekly_preopen":
+        raise ValueError("Study 7 requires weekly_preopen scans")
+    if raw.get("execution_schedule") != legacy.EXECUTION_WEEKLY_OPEN_DECISION:
+        raise ValueError("Study 7 requires weekly_open_decision execution")
+    if raw.get("exit_policy") != legacy.EXIT_POLICY_POST_EVENT:
+        raise ValueError("Study 7 requires the post-event hold policy")
+    if raw.get("market_regime_gate") != legacy.REGIME_GATE_RISK_ON:
+        raise ValueError("Study 7 requires the Risk-On stock-entry gate")
+    staging_policy = str(raw["staging_policy"])
+    if staging_policy not in {
+        STAGING_POLICY_PASSIVE_SPY,
+        legacy.STAGING_POLICY_SPY_ONLY,
+        legacy.STAGING_POLICY_REGIME,
+        STAGING_POLICY_DEFENSIVE,
+    }:
+        raise ValueError("unsupported Study 7 staging_policy")
+    risk_on = str(raw["risk_on_staging_symbol"]).upper()
+    defensive = str(raw["defensive_staging_symbol"]).upper()
+    risk_off = str(raw["risk_off_staging_symbol"]).upper()
+    stock_entries = bool(raw["stock_entries_enabled"])
+    if defensive != str(raw["benchmark_symbol"]).upper():
+        raise ValueError("defensive staging symbol must match benchmark_symbol")
+    if staging_policy == STAGING_POLICY_PASSIVE_SPY and stock_entries:
+        raise ValueError("passive SPY staging cannot enable stock entries")
+    if staging_policy == STAGING_POLICY_DEFENSIVE and (risk_on, risk_off) != ("SPXL", "GLD"):
+        raise ValueError("defensive staging requires SPXL Risk-On and GLD Risk-Off")
+    if float(raw["starting_equity"]) <= 0 or float(raw["cost_per_share"]) < 0:
+        raise ValueError("starting equity must be positive and costs nonnegative")
+    if float(raw["price_min"]) <= 0 or float(raw["price_max"]) < float(raw["price_min"]):
+        raise ValueError("invalid price gate")
+    if int(raw["post_event_hold_sessions"]) != 7:
+        raise ValueError("Study 7 is frozen at seven post-event sessions")
+    draw = raw["drawdown"]
+    if float(draw["principal_high"]) <= float(draw["principal_low"]):
+        raise ValueError("drawdown principal range is inverted")
+    regime = raw["market_regime"]
+    return Study7Config(
+        raw=raw,
+        study_id=str(raw["study_id"]),
+        setup_score_version=str(raw["setup_score_version"]),
+        phase=str(raw["phase"]),
+        benchmark_symbol=str(raw["benchmark_symbol"]).upper(),
+        starting_equity=float(raw["starting_equity"]),
+        cost_model=legacy.COST_MODEL_PER_SHARE,
+        cost_rate=0.0,
+        cost_per_share=float(raw["cost_per_share"]),
+        price_min=float(raw["price_min"]),
+        price_max=float(raw["price_max"]),
+        event_min_weeks=int(raw["event_min_weeks"]),
+        event_max_weeks=int(raw["event_max_weeks"]),
+        max_stale_sessions=int(raw["max_stale_sessions"]),
+        required_setup=str(raw["required_setup"]),
+        setup_score_min_exclusive=float(raw["setup_score_min_exclusive"]),
+        max_candidates_per_sector_report=int(raw["max_candidates_per_sector_report"]),
+        max_open_pending_per_sector=int(raw["max_open_pending_per_sector"]),
+        min_position_target=float(raw["min_position_target"]),
+        max_position_principal=float(raw["max_position_principal"]),
+        entry_limit_buffer_pct=float(raw["entry_limit_buffer_pct"]),
+        pin_calendar_days=int(raw["pin_calendar_days"]),
+        warmup_calendar_years=int(raw["warmup_calendar_years"]),
+        entry_scan_schedule=str(raw["entry_scan_schedule"]),
+        execution_schedule=str(raw["execution_schedule"]),
+        cash_staging_enabled=bool(raw["cash_staging_enabled"]),
+        exit_policy=str(raw["exit_policy"]),
+        market_regime_gate=str(raw["market_regime_gate"]),
+        post_event_hold_sessions=int(raw["post_event_hold_sessions"]),
+        regime_sma_window=int(regime["sma_window"]),
+        regime_slope_sessions=int(regime["slope_sessions"]),
+        arms=tuple(str(item) for item in raw["arms"]),
+        min_avg_volume=int(raw["liquidity"]["min_avg_volume"]),
+        min_avg_dollar_volume=int(raw["liquidity"]["min_avg_dollar_volume"]),
+        drawdown_principal_low=float(draw["principal_low"]),
+        drawdown_principal_high=float(draw["principal_high"]),
+        drawdown_decline_at_low=float(draw["decline_at_low"]),
+        drawdown_decline_at_high=float(draw["decline_at_high"]),
+        output_relative_root=str(raw["output"]["relative_root"]),
+        staging_policy=staging_policy,
+        risk_on_staging_symbol=risk_on,
+        defensive_staging_symbol=defensive,
+        stock_entries_enabled=stock_entries,
+        terminal_execution_year=int(raw["terminal_execution_year"]),
+        risk_off_staging_symbol=risk_off,
+    )
 
 
 @dataclass(frozen=True)
@@ -69,6 +206,8 @@ class RegimeStagingMarket:
     sectors: dict[str, str]
     quarantines: dict[str, tuple[str, ...]] = field(default_factory=dict)
     input_hashes: dict[str, str] = field(default_factory=dict)
+    exchange_sessions: tuple[date, ...] = ()
+    exchange_calendar_source: str = ""
 
 
 @dataclass(frozen=True)
@@ -129,6 +268,7 @@ class RegimeStagingCheckpoint:
 class RegimeStagingMark:
     date: date
     cash: float
+    stock_open_market_value_before_trades: float
     stock_market_value: float
     spy_market_value: float
     spxl_market_value: float
@@ -144,7 +284,11 @@ class RegimeStagingMark:
     stock_position_count: int
     etf_symbol: str | None
     etf_shares: int
+    spy_open: float
     spy_close: float
+    spxl_open: float
+    spxl_close: float
+    gld_open: float
     gld_close: float
     daily_market_regime: str
     last_executable_weekly_regime: str
@@ -224,22 +368,41 @@ def _asset_price(
 def validate_required_etf_data(
     cfg: StudyConfig, market: RegimeStagingMarket, year: int,
 ) -> list[date]:
-    spy = _frame(market.spy)
-    sessions = [value.date() for value in spy["date"] if value.year == year]
+    if not market.exchange_sessions or not market.exchange_calendar_source:
+        raise ValueError("an independently validated exchange calendar is required")
+    calendar_sessions = sorted(set(market.exchange_sessions))
+    sessions = [session for session in calendar_sessions if session.year == year]
     if not sessions:
-        raise ValueError(f"no SPY sessions in {year}")
+        raise ValueError(f"no exchange-calendar sessions in {year}")
+    spy = _frame(market.spy)
+    years_to_validate = {year - cfg.warmup_calendar_years, year}
+    expected = {
+        session for session in calendar_sessions if session.year in years_to_validate
+    }
+    spy_dates = [value.date() for value in spy["date"] if value.year in years_to_validate]
+    if len(spy_dates) != len(set(spy_dates)) or set(spy_dates) != expected:
+        missing = sorted(expected - set(spy_dates))
+        extra = sorted(set(spy_dates) - expected)
+        raise ValueError(
+            f"SPY does not match {market.exchange_calendar_source}; "
+            f"first missing={missing[:1]} first extra={extra[:1]}"
+        )
     required = set(STAGING_ASSETS)
     for symbol in sorted(required):
         frame = market.staging_assets.get(symbol)
         if frame is None or frame.empty:
             raise ValueError(f"required staging asset is missing: {symbol}")
         normalized = _frame(frame)
-        available = set(normalized["date"].dt.date)
-        missing = [session for session in sessions if session not in available]
-        if missing:
+        asset_dates = [
+            value.date() for value in normalized["date"]
+            if value.year in years_to_validate
+        ]
+        missing = sorted(expected - set(asset_dates))
+        extra = sorted(set(asset_dates) - expected)
+        if len(asset_dates) != len(set(asset_dates)) or missing or extra:
             raise ValueError(
-                f"required {symbol} data is incomplete for {year}; "
-                f"first missing session {missing[0]}"
+                f"required {symbol} data does not match {market.exchange_calendar_source}; "
+                f"first missing={missing[:1]} first extra={extra[:1]}"
             )
         for session in sessions:
             row = _bar(normalized, session)
@@ -775,7 +938,7 @@ def run_regime_staging_simulation(
         raise ValueError("legacy SPY configs cannot run through Study 7")
     decision_sessions = validate_required_etf_data(cfg, market, year)
     spy = _frame(market.spy)
-    all_sessions = [value.date() for value in spy["date"]]
+    all_sessions = sorted(set(market.exchange_sessions))
     _, execution_for_cutoff = friday_execution_plan(all_sessions)
     cutoffs = {
         cutoff: execution for cutoff, execution in execution_for_cutoff.items()
@@ -819,6 +982,15 @@ def run_regime_staging_simulation(
     ]
 
     for index, session in enumerate(decision_sessions):
+        stock_open_market_value_before_trades = 0.0
+        for ticker, position in state.positions.items():
+            open_price, _, missing = _stock_open_close(stock_frames, ticker, session)
+            mark = position.last_valid_close if missing or open_price is None else open_price
+            stock_open_market_value_before_trades += position.shares * float(mark or 0.0)
+        spy_open = _asset_price(asset_frames, "SPY", session, "open")
+        spxl_open = _asset_price(asset_frames, "SPXL", session, "open")
+        gld_open = _asset_price(asset_frames, "GLD", session, "open")
+
         if state.pending_target is not None and state.pending_target.execution_date == session:
             target = state.pending_target
             if cfg.staging_policy == STAGING_POLICY_PASSIVE_SPY:
@@ -930,13 +1102,16 @@ def run_regime_staging_simulation(
         net_liquidation = equity - liquidation_cost
         state.peak_equity = max(state.peak_equity, equity)
         spy_close = _asset_price(asset_frames, "SPY", session, "close")
+        spxl_close = _asset_price(asset_frames, "SPXL", session, "close")
         gld_close = _asset_price(asset_frames, "GLD", session, "close")
         descriptive_regime = market_regime_at_close(
             spy, session, sma_window=cfg.regime_sma_window,
             slope_sessions=cfg.regime_slope_sessions,
         )
         marks.append(RegimeStagingMark(
-            date=session, cash=state.cash, stock_market_value=stock_value,
+            date=session, cash=state.cash,
+            stock_open_market_value_before_trades=stock_open_market_value_before_trades,
+            stock_market_value=stock_value,
             spy_market_value=spy_value, spxl_market_value=spxl_value,
             gld_market_value=gld_value, total_equity=equity,
             net_liquidation_value=net_liquidation,
@@ -947,7 +1122,10 @@ def run_regime_staging_simulation(
             cash_exposure_pct=state.cash / equity if equity else 0.0,
             etf_exposure_proxy=(spy_value + 3.0 * spxl_value) / equity if equity else 0.0,
             stock_position_count=len(state.positions), etf_symbol=state.etf_symbol,
-            etf_shares=state.etf_shares, spy_close=spy_close, gld_close=gld_close,
+            etf_shares=state.etf_shares,
+            spy_open=spy_open, spy_close=spy_close,
+            spxl_open=spxl_open, spxl_close=spxl_close,
+            gld_open=gld_open, gld_close=gld_close,
             daily_market_regime=descriptive_regime,
             last_executable_weekly_regime=state.last_executable_weekly_regime,
             cumulative_stock_costs=state.cumulative_stock_costs,
@@ -1002,6 +1180,7 @@ def run_regime_staging_simulation(
         "last_executable_weekly_regime": state.last_executable_weekly_regime,
         "terminal_boundary_exclusions": notes,
         "input_hashes": dict(market.input_hashes),
+        "exchange_calendar_source": market.exchange_calendar_source,
         "year_end_cash": state.cash,
         "year_end_stock_positions": len(state.positions),
         "year_end_etf_symbol": state.etf_symbol,

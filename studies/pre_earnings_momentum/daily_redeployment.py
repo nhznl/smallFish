@@ -24,11 +24,7 @@ import pandas as pd
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
     EXECUTION_WEEKLY_OPEN_DECISION,
     EXIT_POLICY_POST_EVENT,
-    STAGING_POLICY_DEFENSIVE,
     STAGING_POLICY_LEGACY_SPY,
-    STAGING_POLICY_PASSIVE_SPY,
-    STAGING_POLICY_REGIME,
-    STAGING_POLICY_SPY_ONLY,
     MarketBundle,
     StudyConfig,
     checkpoint_from_payload,
@@ -440,13 +436,9 @@ def main(
             args.year, args.origin_year, args.confirm_2021_pilot,
         )
         cfg = load_study_config(args.config)
-        if cfg.staging_policy in {STAGING_POLICY_SPY_ONLY, STAGING_POLICY_REGIME}:
+        if cfg.staging_policy != STAGING_POLICY_LEGACY_SPY:
             raise ValueError(
                 "ETF-staging configs require the dedicated Study 6 runner"
-            )
-        if cfg.staging_policy in {STAGING_POLICY_PASSIVE_SPY, STAGING_POLICY_DEFENSIVE}:
-            raise ValueError(
-                "defensive-regime-staging configs require the dedicated Study 7 runner"
             )
         study5 = _is_study5_config(cfg, args.config)
         pinned_commit = None
