@@ -38,7 +38,7 @@ def test_studies_catalog_and_full_detail_are_served_from_materialized_artifacts(
     assert detail.status_code == 200
     assert detail.json()["id"] == "pre-earnings-momentum"
     assert [item["outcome"]["verdict"] for item in detail.json()["variations"]] == [
-        "FAILED", "NO_VERDICT", "PASSED", "NO_VERDICT", "NO_VERDICT"]
+        "FAILED", "NO_VERDICT", "PASSED", "NO_VERDICT", "NO_VERDICT", "NO_VERDICT"]
     assert detail.json()["variations"][0]["scan"]["executionSupported"] is True
     post_earnings = detail.json()["variations"][2]
     assert post_earnings["id"] == "post-earnings-risk-on"
@@ -51,6 +51,10 @@ def test_studies_catalog_and_full_detail_are_served_from_materialized_artifacts(
     assert regime_staging["id"] == "post-earnings-regime-staging"
     assert regime_staging["stats"][0]["value"] == pytest.approx(10.727546464)
     assert regime_staging["outcome"]["evidenceLevel"] == "EXPLORATORY"
+    defensive_staging = detail.json()["variations"][5]
+    assert defensive_staging["id"] == "defensive-regime-staging"
+    assert defensive_staging["stats"][0]["value"] == pytest.approx(9.186590082)
+    assert defensive_staging["outcome"]["evidenceLevel"] == "EXPLORATORY"
 
 
 def test_studies_preserve_sector_evidence_labels_and_typed_stats(tmp_path, monkeypatch):

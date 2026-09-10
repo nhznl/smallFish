@@ -8,9 +8,9 @@
       "id": "pre-earnings-momentum",
       "name": "Pre-Earnings Momentum",
       "scanAvailable": true,
-      "summary": "Five published pre-earnings momentum variations: the original failed endpoint, an exploratory cash-sweep replay, a separately preregistered post-earnings Risk-On holdout, an exploratory Friday-only execution extension, and exploratory SPXL/SPY regime staging.",
-      "updatedAt": "2026-09-06T14:00:00Z",
-      "variationCount": 5,
+      "summary": "Six published pre-earnings momentum variations: the original failed endpoint, an exploratory cash-sweep replay, a separately preregistered post-earnings Risk-On holdout, an exploratory Friday-only execution extension, exploratory SPXL/SPY regime staging, and exploratory SPXL/GLD/SPY defensive staging.",
+      "updatedAt": "2026-09-10T14:00:00Z",
+      "variationCount": 6,
       "verdict": "FAILED"
     },
     {

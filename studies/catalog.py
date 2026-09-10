@@ -382,7 +382,7 @@ def _verify_post_earnings_weekly_extension(
 def _verify_pre_earnings_regime_staging(
     artifact: Mapping[str, Any], root: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Verify the frozen Study 6 comparison and derive its published summary."""
+    """Verify a frozen weekly regime-staging comparison and derive its summary."""
     paths = {
         "summary": (artifact["summaryPath"], artifact["metadataPath"]),
         "annual": (artifact["annualPath"], artifact["annualMetadataPath"]),
@@ -421,7 +421,7 @@ def _verify_pre_earnings_regime_staging(
     variants = comparison.get("variants")
     expected_variants = set(expected_tags)
     if not isinstance(variants, Mapping) or set(variants) != expected_variants:
-        raise ArtifactVerificationError("Study 6 comparison must contain the three frozen variants")
+        raise ArtifactVerificationError("comparison must contain its pinned variants")
 
     annual_path = root / artifact["annualPath"]
     annual_rows = _load_csv(annual_path)
@@ -451,22 +451,25 @@ def _verify_pre_earnings_regime_staging(
         daily_by_variant[variant_id].append(row)
     reference_variant = artifact["primaryVariant"]
     reference_rows = daily_by_variant[reference_variant]
-    reference_benchmark = [(row["date"], row["benchmark_value"], row["benchmark_net_liquidation_value"])
-                           for row in reference_rows]
+    has_shared_benchmark = "benchmark_value" in reference_rows[0]
+    reference_benchmark = ([(row["date"], row["benchmark_value"], row["benchmark_net_liquidation_value"])
+                            for row in reference_rows] if has_shared_benchmark else None)
     for variant_id, rows in daily_by_variant.items():
         if not rows or rows[-1].get("date") != artifact["dataCutoff"]:
             raise ArtifactVerificationError(f"{daily_path}: {variant_id!r} has an incomplete daily series")
-        if [(row["date"], row["benchmark_value"], row["benchmark_net_liquidation_value"])
-                for row in rows] != reference_benchmark:
+        if reference_benchmark is not None and [(row["date"], row["benchmark_value"], row["benchmark_net_liquidation_value"])
+                                                 for row in rows] != reference_benchmark:
             raise ArtifactVerificationError(f"{daily_path}: variants disagree on the passive SPY ledger")
         if _decimal(rows[-1], "total_equity", daily_path) != Decimal(str(variants[variant_id]["terminal_close_equity"])):
             raise ArtifactVerificationError(f"{daily_path}: {variant_id!r} terminal equity disagrees with summary")
 
     primary = variants[reference_variant]
-    control = variants["stocks-spy-control"]
-    etf_only = variants["etf-only"]
+    control = variants[artifact.get("controlVariant", "stocks-spy-control")]
+    etf_only = variants[artifact.get("etfOnlyVariant", "etf-only")]
     starting_equity = Decimal("50000")
-    benchmark_end = _decimal(reference_rows[-1], "benchmark_net_liquidation_value", daily_path)
+    benchmark_end = (_decimal(reference_rows[-1], "benchmark_net_liquidation_value", daily_path)
+                     if has_shared_benchmark
+                     else Decimal(str(variants[artifact.get("passiveSpyVariant", "passive-spy")]["terminal_net_liquidation_value"])))
     summary = {
         "portfolio_total_return": primary["terminal_net_liquidation_return"],
         "spy_total_return": float(benchmark_end / starting_equity - 1),
@@ -480,6 +483,8 @@ def _verify_pre_earnings_regime_staging(
         "filled_costs": primary["filled_costs"],
         "etf_switches": primary["etf_switches"],
     }
+    if "spxlControlVariant" in artifact:
+        summary["spxl_control_total_return"] = variants[artifact["spxlControlVariant"]]["terminal_net_liquidation_return"]
     provenance = {
         "specificationPath": artifact["specificationPath"],
         "artifactPath": artifact["summaryPath"],
@@ -618,6 +623,23 @@ def _stats(profile: str, summary: Mapping[str, Any]) -> list[dict[str, Any]]:
             _statistic("completed-stock-trades", "Completed stock trades", summary["completed_stock_trades"], "INTEGER", 0,
                        "Stocks + SPXL/SPY treatment", "Completed positions across the sixteen annual continuations.", "SECONDARY"),
         ]
+    if profile == "pre-earnings-defensive-regime-staging":
+        return [
+            _statistic("defensive-treatment-return", "Stocks + SPXL/GLD/SPY return", summary["portfolio_total_return"], "PERCENT", 2,
+                       "Terminal net liquidation, 2010-2025", "GLD is used in Risk-Off, SPXL in Risk-On, and SPY otherwise.", "PRIMARY"),
+            _statistic("spxl-control-return", "Stocks + SPXL/SPY return", summary["spxl_control_total_return"], "PERCENT", 2,
+                       "Aggressive allocation control", "SPXL is used in Risk-On and SPY otherwise.", "PRIMARY"),
+            _statistic("spy-control-return", "Stocks + SPY return", summary["control_total_return"], "PERCENT", 2,
+                       "Unleveraged allocation control", "Residual capital remains in SPY.", "PRIMARY"),
+            _statistic("etf-only-return", "ETF-only SPXL/GLD/SPY return", summary["etf_only_total_return"], "PERCENT", 2,
+                       "ETF-only treatment", "The portfolio holds only SPXL, GLD, or SPY.", "PRIMARY"),
+            _statistic("defensive-treatment-drawdown", "Stocks + SPXL/GLD/SPY max drawdown", summary["portfolio_max_drawdown"], "PERCENT", 2,
+                       "Exploratory treatment", "The defensive sleeve reduced drawdown versus SPXL/SPY, but not versus Stocks + SPY.", "SECONDARY"),
+            _statistic("defensive-treatment-cagr", "Stocks + SPXL/GLD/SPY CAGR", summary["portfolio_cagr"], "PERCENT", 2,
+                       "Exploratory treatment", "Annualized growth across the continuous chain.", "SECONDARY"),
+            _statistic("completed-stock-trades", "Completed stock trades", summary["completed_stock_trades"], "INTEGER", 0,
+                       "Stocks + SPXL/GLD/SPY treatment", "Completed positions across sixteen annual continuations.", "SECONDARY"),
+        ]
     if profile == "sector-v1":
         primary = summary["primary_endpoint"]
         period = summary["primary_period"]
@@ -666,6 +688,8 @@ def _materialize_definition(definition_path: Path, root: Path) -> dict[str, Any]
         elif artifact_type == "pre-earnings-post-event-weekly-extension":
             summary, provenance = _verify_post_earnings_weekly_extension(artifact, root)
         elif artifact_type == "pre-earnings-regime-staging":
+            summary, provenance = _verify_pre_earnings_regime_staging(artifact, root)
+        elif artifact_type == "pre-earnings-defensive-regime-staging":
             summary, provenance = _verify_pre_earnings_regime_staging(artifact, root)
         elif artifact_type == "sector":
             summary, provenance = _verify_sector(artifact, root)

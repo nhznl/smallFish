@@ -1,8 +1,8 @@
 {
   "id": "pre-earnings-momentum",
   "name": "Pre-Earnings Momentum",
-  "summary": "Five published pre-earnings momentum variations: the original failed endpoint, an exploratory cash-sweep replay, a separately preregistered post-earnings Risk-On holdout, an exploratory Friday-only execution extension, and exploratory SPXL/SPY regime staging.",
-  "updatedAt": "2026-09-06T14:00:00Z",
+  "summary": "Six published pre-earnings momentum variations: the original failed endpoint, an exploratory cash-sweep replay, a separately preregistered post-earnings Risk-On holdout, an exploratory Friday-only execution extension, exploratory SPXL/SPY regime staging, and exploratory SPXL/GLD/SPY defensive staging.",
+  "updatedAt": "2026-09-10T14:00:00Z",
   "defaultVariationId": "base",
   "variations": [
     {
@@ -429,6 +429,73 @@
         }
       },
       "statsProfile": "pre-earnings-regime-staging"
+    },
+    {
+      "inherits": "base",
+      "id": "defensive-regime-staging",
+      "name": "Defensive Regime Staging — Study 7",
+      "thesis": "Replacing the Risk-Off residual sleeve with GLD could reduce the drawdown of the weekly SPXL/SPY staging portfolio while preserving much of its return.",
+      "methodology": {
+        "summary": "Five independent $50,000 annual-continuation chains compared passive SPY, Stocks plus SPY, Stocks plus SPXL/SPY, Stocks plus SPXL/GLD/SPY, and an ETF-only SPXL/GLD/SPY policy.",
+        "endpoint": "Exploratory terminal net liquidation, CAGR, drawdown, volatility, and annual returns from 2010 through 2025.",
+        "period": "2010-01-04 through 2025-12-31.",
+        "inference": "Retrospective and exploratory; it does not validate a live allocation rule.",
+        "limitations": [
+          "The static present-day stock universe creates survivorship and availability bias.",
+          "SPXL is daily-reset leveraged exposure, so path dependence is material.",
+          "The rule and asset selection followed earlier observed evidence."
+        ]
+      },
+      "outcome": {
+        "verdict": "NO_VERDICT",
+        "evidenceLevel": "EXPLORATORY",
+        "summary": "The Stocks plus SPXL/GLD/SPY treatment ended at $509,329.50 (+918.66%), with 15.62% CAGR and -40.32% maximum drawdown. It reduced drawdown versus Stocks plus SPXL/SPY (-49.80%) but trailed its 16.65% CAGR and $586,377.32 terminal value.",
+        "whatWorked": [
+          "GLD during Risk-Off reduced maximum drawdown by 9.48 percentage points relative to the SPXL/SPY control.",
+          "The treatment exceeded passive SPY and the Stocks plus SPY control in terminal return."
+        ],
+        "whatDidNotWork": [
+          "The treatment did not improve drawdown relative to Stocks plus SPY (-33.52%).",
+          "It gave up $77,047.82 of terminal value relative to the SPXL/SPY control."
+        ],
+        "nextSteps": [
+          "Keep the result exploratory and preserve the frozen artifacts.",
+          "Require prospective or point-in-time-universe evidence before treating the allocation as validated."
+        ],
+        "moreData": {"assessment": true, "rationale": "Only separately specified prospective or point-in-time-universe evidence could provide fresh validation."}
+      },
+      "caveats": [
+        "This study is retrospective exploratory evidence, not investment advice.",
+        "The ETF-only arm holds only SPXL in Risk-On, GLD in Risk-Off, and SPY otherwise.",
+        "The five arms have independent portfolio paths and are not interchangeable sleeves."
+      ],
+      "artifact": {
+        "type": "pre-earnings-defensive-regime-staging",
+        "specificationPath": "studies/pre_earnings_momentum/post_earnings_defensive_regime_staging_spec.md",
+        "summaryPath": "data/backtest/pre_earnings_momentum/weekly_defensive_regime_staging/reports/2010-2025-35fa24f/study7-comparison/comparison_summary.json",
+        "metadataPath": "data/backtest/pre_earnings_momentum/weekly_defensive_regime_staging/reports/2010-2025-35fa24f/study7-comparison/comparison_summary.json.meta.json",
+        "annualPath": "data/backtest/pre_earnings_momentum/weekly_defensive_regime_staging/reports/2010-2025-35fa24f/study7-comparison/comparison_annual.csv",
+        "annualMetadataPath": "data/backtest/pre_earnings_momentum/weekly_defensive_regime_staging/reports/2010-2025-35fa24f/study7-comparison/comparison_annual.csv.meta.json",
+        "dailyPath": "data/backtest/pre_earnings_momentum/weekly_defensive_regime_staging/reports/2010-2025-35fa24f/study7-comparison/comparison_daily.csv",
+        "dailyMetadataPath": "data/backtest/pre_earnings_momentum/weekly_defensive_regime_staging/reports/2010-2025-35fa24f/study7-comparison/comparison_daily.csv.meta.json",
+        "runId": "study7-stocks-spxl-gld-treatment-2010-2025-35fa24f",
+        "sourceCommit": "35fa24f981f5be3b351754f8fed92474d4ebc7d3",
+        "dataCutoff": "2025-12-31",
+        "studyFamily": "pre-earnings-weekly-defensive-regime-staging-v1",
+        "years": [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+        "primaryVariant": "stocks-spxl-gld-treatment",
+        "controlVariant": "stocks-spy-control",
+        "spxlControlVariant": "stocks-spxl-spy-control",
+        "etfOnlyVariant": "etf-only-spxl-gld",
+        "variantTags": {
+          "passive-spy": "study7-passive-spy-2010-2025-35fa24f",
+          "stocks-spy-control": "study7-stocks-spy-control-2010-2025-35fa24f",
+          "stocks-spxl-spy-control": "study7-stocks-spxl-spy-control-2010-2025-35fa24f",
+          "stocks-spxl-gld-treatment": "study7-stocks-spxl-gld-treatment-2010-2025-35fa24f",
+          "etf-only-spxl-gld": "study7-etf-only-spxl-gld-2010-2025-35fa24f"
+        }
+      },
+      "statsProfile": "pre-earnings-defensive-regime-staging"
     }
   ]
 }

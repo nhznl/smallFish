@@ -38,6 +38,7 @@ the **default** variation's outcome.
 | | `post-earnings-risk-on` | `PASSED` | `CONFIRMATORY` |
 | | `post-earnings-weekly-extension` | `NO_VERDICT` | `EXPLORATORY` |
 | | `post-earnings-regime-staging` | `NO_VERDICT` | `EXPLORATORY` |
+| | `defensive-regime-staging` | `NO_VERDICT` | `EXPLORATORY` |
 | [Sector relative leadership](sector_rotation/README.md) | `base` (default) | `FAILED` | `CONFIRMATORY` |
 | | `full-period` | `NO_VERDICT` | `EXPLORATORY` |
 

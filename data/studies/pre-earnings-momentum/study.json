@@ -4,8 +4,8 @@
   "name": "Pre-Earnings Momentum",
   "schemaName": "smallfish.research-study",
   "schemaVersion": 1,
-  "summary": "Five published pre-earnings momentum variations: the original failed endpoint, an exploratory cash-sweep replay, a separately preregistered post-earnings Risk-On holdout, an exploratory Friday-only execution extension, and exploratory SPXL/SPY regime staging.",
-  "updatedAt": "2026-09-06T14:00:00Z",
+  "summary": "Six published pre-earnings momentum variations: the original failed endpoint, an exploratory cash-sweep replay, a separately preregistered post-earnings Risk-On holdout, an exploratory Friday-only execution extension, exploratory SPXL/SPY regime staging, and exploratory SPXL/GLD/SPY defensive staging.",
+  "updatedAt": "2026-09-10T14:00:00Z",
   "variations": [
     {
       "caveats": [
@@ -718,6 +718,156 @@
         }
       ],
       "thesis": "Using SPXL for residual capital during Risk-On weeks and SPY otherwise could improve the 2010\u20132025 return of the weekly pre-earnings stock portfolio, with the change in drawdown and the contribution of the stock sleeve reported alongside it."
+    },
+    {
+      "caveats": [
+        "This study is retrospective exploratory evidence, not investment advice.",
+        "The ETF-only arm holds only SPXL in Risk-On, GLD in Risk-Off, and SPY otherwise.",
+        "The five arms have independent portfolio paths and are not interchangeable sleeves."
+      ],
+      "id": "defensive-regime-staging",
+      "methodology": {
+        "controls": [
+          "SPY buy-and-hold over the identical holdout window.",
+          "Frozen random eligible controls recorded in the historical run."
+        ],
+        "endpoint": "Exploratory terminal net liquidation, CAGR, drawdown, volatility, and annual returns from 2010 through 2025.",
+        "exclusionCriteria": [
+          "Missing or inconsistent price/event data.",
+          "Stocks outside the fixed price, liquidity, event, sector, or position constraints."
+        ],
+        "features": [
+          "Pre-earnings event timing.",
+          "Frozen momentum signal and liquidity gates.",
+          "Weekly Friday decisions with fixed portfolio allocation rules."
+        ],
+        "inclusionCriteria": [
+          "Price from $10 through $300.",
+          "Upcoming earnings two through five weeks away.",
+          "Super High or High eligible signal band with the frozen liquidity and freshness rules."
+        ],
+        "inference": "Retrospective and exploratory; it does not validate a live allocation rule.",
+        "limitations": [
+          "The static present-day stock universe creates survivorship and availability bias.",
+          "SPXL is daily-reset leveraged exposure, so path dependence is material.",
+          "The rule and asset selection followed earlier observed evidence."
+        ],
+        "period": "2010-01-04 through 2025-12-31.",
+        "population": "Eligible liquid stocks with upcoming earnings events and the required current strategy signals.",
+        "summary": "Five independent $50,000 annual-continuation chains compared passive SPY, Stocks plus SPY, Stocks plus SPXL/SPY, Stocks plus SPXL/GLD/SPY, and an ETF-only SPXL/GLD/SPY policy."
+      },
+      "name": "Defensive Regime Staging \u2014 Study 7",
+      "outcome": {
+        "evidenceLevel": "EXPLORATORY",
+        "moreData": {
+          "assessment": true,
+          "rationale": "Only separately specified prospective or point-in-time-universe evidence could provide fresh validation."
+        },
+        "nextSteps": [
+          "Keep the result exploratory and preserve the frozen artifacts.",
+          "Require prospective or point-in-time-universe evidence before treating the allocation as validated."
+        ],
+        "summary": "The Stocks plus SPXL/GLD/SPY treatment ended at $509,329.50 (+918.66%), with 15.62% CAGR and -40.32% maximum drawdown. It reduced drawdown versus Stocks plus SPXL/SPY (-49.80%) but trailed its 16.65% CAGR and $586,377.32 terminal value.",
+        "verdict": "NO_VERDICT",
+        "whatDidNotWork": [
+          "The treatment did not improve drawdown relative to Stocks plus SPY (-33.52%).",
+          "It gave up $77,047.82 of terminal value relative to the SPXL/SPY control."
+        ],
+        "whatWorked": [
+          "GLD during Risk-Off reduced maximum drawdown by 9.48 percentage points relative to the SPXL/SPY control.",
+          "The treatment exceeded passive SPY and the Stocks plus SPY control in terminal return."
+        ]
+      },
+      "provenance": {
+        "artifactPath": "data/backtest/pre_earnings_momentum/weekly_defensive_regime_staging/reports/2010-2025-35fa24f/study7-comparison/comparison_summary.json",
+        "dataCutoff": "2025-12-31",
+        "generatedAt": "2026-09-10T14:02:18.496161Z",
+        "runId": "study7-stocks-spxl-gld-treatment-2010-2025-35fa24f",
+        "sourceCommit": "35fa24f981f5be3b351754f8fed92474d4ebc7d3",
+        "specificationPath": "studies/pre_earnings_momentum/post_earnings_defensive_regime_staging_spec.md",
+        "verificationState": "VERIFIED"
+      },
+      "scan": {
+        "eligibilityExplanation": "The operational scan applies the current pre-earnings candidate selection rules, not a new historical test.",
+        "executionSupported": true,
+        "latestSnapshot": null,
+        "resultSchema": "pre-earnings-candidates-v1",
+        "scanType": "pre-earnings-current-candidates",
+        "warning": "This scan reproduces the studied selection rules; the historical primary endpoint failed, so candidates are not evidence of a validated edge."
+      },
+      "stats": [
+        {
+          "format": "PERCENT",
+          "id": "defensive-treatment-return",
+          "interpretation": "GLD is used in Risk-Off, SPXL in Risk-On, and SPY otherwise.",
+          "label": "Stocks + SPXL/GLD/SPY return",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "Terminal net liquidation, 2010-2025",
+          "value": 9.186590056000004
+        },
+        {
+          "format": "PERCENT",
+          "id": "spxl-control-return",
+          "interpretation": "SPXL is used in Risk-On and SPY otherwise.",
+          "label": "Stocks + SPXL/SPY return",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "Aggressive allocation control",
+          "value": 10.727546464000001
+        },
+        {
+          "format": "PERCENT",
+          "id": "spy-control-return",
+          "interpretation": "Residual capital remains in SPY.",
+          "label": "Stocks + SPY return",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "Unleveraged allocation control",
+          "value": 8.524581591999997
+        },
+        {
+          "format": "PERCENT",
+          "id": "etf-only-return",
+          "interpretation": "The portfolio holds only SPXL, GLD, or SPY.",
+          "label": "ETF-only SPXL/GLD/SPY return",
+          "precision": 2,
+          "priority": "PRIMARY",
+          "scope": "ETF-only treatment",
+          "value": 9.576006160000006
+        },
+        {
+          "format": "PERCENT",
+          "id": "defensive-treatment-drawdown",
+          "interpretation": "The defensive sleeve reduced drawdown versus SPXL/SPY, but not versus Stocks + SPY.",
+          "label": "Stocks + SPXL/GLD/SPY max drawdown",
+          "precision": 2,
+          "priority": "SECONDARY",
+          "scope": "Exploratory treatment",
+          "value": -0.4032147388590489
+        },
+        {
+          "format": "PERCENT",
+          "id": "defensive-treatment-cagr",
+          "interpretation": "Annualized growth across the continuous chain.",
+          "label": "Stocks + SPXL/GLD/SPY CAGR",
+          "precision": 2,
+          "priority": "SECONDARY",
+          "scope": "Exploratory treatment",
+          "value": 0.15622881880559403
+        },
+        {
+          "format": "INTEGER",
+          "id": "completed-stock-trades",
+          "interpretation": "Completed positions across sixteen annual continuations.",
+          "label": "Completed stock trades",
+          "precision": 0,
+          "priority": "SECONDARY",
+          "scope": "Stocks + SPXL/GLD/SPY treatment",
+          "value": 1486
+        }
+      ],
+      "thesis": "Replacing the Risk-Off residual sleeve with GLD could reduce the drawdown of the weekly SPXL/SPY staging portfolio while preserving much of its return."
     }
   ]
 }
