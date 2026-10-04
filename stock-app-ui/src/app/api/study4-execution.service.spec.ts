@@ -29,9 +29,13 @@ describe('Study4ExecutionService', () => {
       killSwitch: false,
       accountAlias: 'study4',
       accountFingerprint: null,
-      protocolId: 'pre-earnings-post-event-weekly-batch-risk-on-v1',
-      operationalId: 'study4-live-v1',
-      exploratoryWarning: 'Study 4 remains NO_VERDICT / EXPLORATORY.',
+      protocolId: null,
+      operationalId: 'study7-bc-live-v1',
+      selectedArm: null,
+      strategyVersionId: null,
+      availableArms: ['stocks-spy-control', 'stocks-spxl-spy-control'],
+      canChangeArm: true,
+      exploratoryWarning: 'Study 7 B/C remains NO_VERDICT / EXPLORATORY.',
       setupRequirements: [],
       capital: null,
       configuredTargetBucket: null,
@@ -40,6 +44,14 @@ describe('Study4ExecutionService', () => {
       nextAction: 'configure_execution_mode',
       submissionsAllowed: false
     });
+  });
+
+  it('selects a Study 7 strategy arm without exposing an order payload', () => {
+    service.selectStrategy('stocks-spxl-spy-control').subscribe();
+    const req = http.expectOne(r => r.url.endsWith('/api/execution/study4/strategy'));
+    expect(req.request.body).toEqual({ arm: 'stocks-spxl-spy-control' });
+    expect(req.request.body.symbol).toBeUndefined();
+    req.flush({ id: 2 });
   });
 
   it('resets the local ledger only with an explicit confirmation', () => {

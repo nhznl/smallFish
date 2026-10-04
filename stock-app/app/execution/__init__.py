@@ -1,1 +1,1 @@
-"""Study 4 execution bounded context."""
+"""Pre-Earnings Momentum execution bounded context."""

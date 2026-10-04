@@ -1,4 +1,4 @@
-"""Operational Study 4 Risk-On evaluator."""
+"""Operational Study 7 B/C evaluator."""
 
 from .evaluator import (
     LiveHoldings,

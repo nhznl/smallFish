@@ -11,11 +11,16 @@ const configuredStatus = {
   killSwitch: false,
   accountAlias: 'study4-sandbox',
   accountFingerprint: 'abc',
-  protocolId: 'pre-earnings-post-event-weekly-batch-risk-on-v1',
-  operationalId: 'study4-live-v1',
-  exploratoryWarning: 'Study 4 remains NO_VERDICT / EXPLORATORY.',
+  protocolId: 'pre-earnings-weekly-defensive-regime-staging-stocks-spy-v1',
+  operationalId: 'study7-bc-live-v1',
+  selectedArm: 'stocks-spy-control',
+  strategyVersionId: 1,
+  availableArms: ['stocks-spy-control', 'stocks-spxl-spy-control'],
+  canChangeArm: true,
+  exploratoryWarning: 'Study 7 B/C remains NO_VERDICT / EXPLORATORY.',
   setupRequirements: [
-    { id: 'execution_mode', label: 'Execution mode', ready: true, action: 'Set SFP_STUDY4_EXECUTION_MODE=sandbox' }
+    { id: 'execution_mode', label: 'Execution mode', ready: true, action: 'Set SFP_STUDY4_EXECUTION_MODE=sandbox' },
+    { id: 'strategy_arm', label: 'Study 7 strategy arm', ready: true, action: 'Select arm B or C.' }
   ],
   capital: { id: 1, target_bucket: 10000, active_bucket: 10000, production_cap: null, cash_flow_status: 'funded' },
   configuredTargetBucket: 10000,
@@ -45,6 +50,7 @@ function apiStub(status: Record<string, unknown> = configuredStatus) {
     reconcile: () => of({}),
     finalSync: () => of({}),
     killSwitch: () => of({}),
+    selectStrategy: jasmine.createSpy('selectStrategy').and.returnValue(of({})),
     capitalReset: jasmine.createSpy('capitalReset').and.returnValue(of({})),
     resetLedger: () => of({})
   };
@@ -65,18 +71,27 @@ describe('Study4ManagerComponent', () => {
     fixture.detectChanges();
   });
 
-  it('names the strategy and links to Study 3 and Study 4 without the exploratory banner', () => {
+  it('names the strategy and links to Study 7 without the exploratory banner', () => {
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('SANDBOX');
     expect(text).not.toContain('EXPLORATORY');
     expect(text).toContain('Pre-Earnings Momentum');
-    expect(text).toContain('Study 3');
-    expect(text).toContain('Study 4');
+    expect(text).toContain('Study 7');
+    expect(text).toContain('B · Stocks + SPY');
     expect(text).toContain('Kill switch stops new broker submissions immediately');
     const hrefs = [...fixture.nativeElement.querySelectorAll('a')].map((el: HTMLAnchorElement) => el.getAttribute('href') || '');
-    expect(hrefs.some(href => href.includes('post-earnings-risk-on'))).toBeTrue();
-    expect(hrefs.some(href => href.includes('post-earnings-weekly-extension'))).toBeTrue();
+    expect(hrefs.some(href => href.includes('defensive-regime-staging'))).toBeTrue();
     expect(hrefs).toContain('/preEarningsExplainer');
+  });
+
+  it('starts a new strategy epoch from the selected arm', () => {
+    const component = fixture.componentInstance;
+    component.selectedArmChoice = 'stocks-spxl-spy-control';
+    const api = TestBed.inject(Study4ExecutionService) as unknown as { selectStrategy: jasmine.Spy };
+
+    component.selectArm();
+
+    expect(api.selectStrategy).toHaveBeenCalledWith('stocks-spxl-spy-control');
   });
 
   it('lists tracking, plan, and execute views', () => {

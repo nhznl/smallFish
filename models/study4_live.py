@@ -1,4 +1,4 @@
-"""Shared Study 4 live-management contracts.
+"""Shared Pre-Earnings Momentum live-management contracts.
 
 Standard-library only. The operational evaluator writes versioned artifacts that
 FastAPI validates against these names and states. Strategy math does not live
@@ -11,14 +11,15 @@ import hashlib
 import json
 from enum import StrEnum
 
-PROTOCOL_ID = "pre-earnings-post-event-weekly-batch-risk-on-v1"
-OPERATIONAL_ID = "study4-live-v1"
+OPERATIONAL_ID = "study7-bc-live-v1"
 ARTIFACT_SCHEMA = "smallfish.study4-live-artifact"
-ARTIFACT_SCHEMA_VERSION = 1
+ARTIFACT_SCHEMA_VERSION = 2
 CALENDAR_SOURCE = "NYSE_STANDARD_HOLIDAY_CALENDAR"
-USER_AGENT = "smallFish-study4-live/1.0"
+USER_AGENT = "smallFish-pre-earnings-live/2.0"
 TASTYTRADE_API_VERSION = "20251101"
 SPY_SYMBOL = "SPY"
+SPXL_SYMBOL = "SPXL"
+STAGING_SYMBOLS = frozenset({SPY_SYMBOL, SPXL_SYMBOL})
 ENTRY_LIMIT_BUFFER_PCT = 0.03
 DEFAULT_PILOT_CAP = 10_000.0
 DEFAULT_PILOT_FRACTION = 0.10
@@ -44,11 +45,27 @@ class ExecutionEnvironment(StrEnum):
     PRODUCTION = "production"
 
 
+class StrategyArm(StrEnum):
+    B = "stocks-spy-control"
+    C = "stocks-spxl-spy-control"
+
+
+ARM_PROTOCOL_IDS = {
+    StrategyArm.B: "pre-earnings-weekly-defensive-regime-staging-stocks-spy-v1",
+    StrategyArm.C: "pre-earnings-weekly-defensive-regime-staging-stocks-spxl-spy-v1",
+}
+ARM_CONFIG_SHA256 = {
+    StrategyArm.B: "464b6c8b458766fa98dd2e3cc73d3f0d73e34f043e860a499fd9e5a56c692010",
+    StrategyArm.C: "e57e55358a250b5b20d6a42498d2af132f4ff71c6934602d3c2a56e334f94230",
+}
+
+
 class PlanItemKind(StrEnum):
     STOCK_EXIT = "stock_exit"
-    SPY_FUNDING = "spy_funding"
+    STAGING_EXIT = "staging_exit"
+    STAGING_FUNDING = "staging_funding"
     STOCK_ENTRY = "stock_entry"
-    SPY_RESIDUAL = "spy_residual"
+    STAGING_RESIDUAL = "staging_residual"
 
 
 class OrderIntentState(StrEnum):

@@ -1,4 +1,4 @@
-"""Study 4 execution settings. Production submission defaults to disabled."""
+"""Pre-Earnings execution settings. Production submission defaults to disabled."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Preflight and pre-submit risk gates for Study 4 execution."""
+"""Preflight and pre-submit risk gates for Pre-Earnings Momentum execution."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def _require(condition: bool, code: str, message: str) -> None:
 
 
 def check_settings(settings: ExecutionSettings) -> None:
-    _require(settings.configured, "mode", "Study 4 execution mode is not configured.")
+    _require(settings.configured, "mode", "Pre-Earnings Momentum execution mode is not configured.")
     _require(not settings.kill_switch, "kill_switch", "The kill switch is active.")
     _require(bool(settings.account_fingerprint), "account", "No dedicated account fingerprint is configured.")
     _require(bool(settings.confirmation_secret), "confirmation_secret",
@@ -75,16 +75,16 @@ def check_broker_snapshot(snapshot: dict[str, Any], *, allow_open_orders: bool =
         _require(quantity >= 0, "short", f"{symbol} is short; only long equities are allowed.")
         _require(float(quantity).is_integer(), "fractional", f"{symbol} has a fractional quantity.")
         _require(symbol == SPY_SYMBOL or (symbol or "").isalpha(), "symbol",
-                 f"{symbol} is not an allowed US equity or SPY.")
+                 f"{symbol} is not an allowed US equity.")
 
 
 def check_plan_item(item: dict[str, Any]) -> None:
     symbol = item.get("symbol")
     _require(symbol == SPY_SYMBOL or str(symbol).isalpha(), "symbol",
-             f"{symbol} is not an allowed US equity or SPY.")
+             f"{symbol} is not an allowed US equity.")
     qty = abs(int(item.get("deltaShares") or 0)) if item.get("deltaShares") is not None else 0
-    if item.get("kind") != "spy_residual":
-        _require(qty > 0 or item.get("kind") == "spy_funding" and qty == 0, "quantity",
+    if item.get("kind") != "staging_residual":
+        _require(qty > 0 or item.get("kind") == "staging_funding" and qty == 0, "quantity",
                  "Plan items must use whole shares.")
     if item.get("kind") == "stock_entry":
         _require(item.get("timeInForce") == "IOC", "tif", "Stock entries must be IOC.")

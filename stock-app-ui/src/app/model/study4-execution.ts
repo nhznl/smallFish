@@ -5,8 +5,12 @@ export interface Study4Status {
   killSwitch: boolean;
   accountAlias: string;
   accountFingerprint: string | null;
-  protocolId: string;
+  protocolId: string | null;
   operationalId: string;
+  selectedArm: 'stocks-spy-control' | 'stocks-spxl-spy-control' | null;
+  strategyVersionId: number | null;
+  availableArms: Array<'stocks-spy-control' | 'stocks-spxl-spy-control'>;
+  canChangeArm: boolean;
   exploratoryWarning: string;
   setupRequirements: Study4SetupRequirement[];
   capital: Study4Capital | null;
@@ -40,6 +44,7 @@ export interface Study4Cycle {
   state: string;
   environment: string;
   plan_hash: string | null;
+  strategy_version_id?: number | null;
 }
 
 export interface Study4ScanRow {
@@ -68,6 +73,13 @@ export interface Study4PlanItem {
   reservationCash?: number | null;
   reason?: string | null;
   rank?: number | null;
+  decisionClose?: number | null;
+  setupScore?: number | null;
+  sector?: string | null;
+  predictedEventDate?: string | null;
+  entryDecisionDate?: string | null;
+  entryExecutionDate?: string | null;
+  allowedDrawdown?: number | null;
   timeInForce?: string | null;
   formula?: string | null;
 }
@@ -88,6 +100,12 @@ export interface Study4Performance {
     dailyReturn: number | null;
     drawdown: number | null;
     complete: boolean;
+    strategyArm?: string | null;
+    strategyVersionId?: number | null;
+    startingEquity?: number | null;
+    stockEquity?: number | null;
+    stagingEquity?: number | null;
+    cashAvailable?: number | null;
   }>;
   unavailableDates: string[];
   modeledCostNote: string;

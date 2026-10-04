@@ -66,11 +66,12 @@ timing and complete protocol are frozen in
 [`post_earnings_weekly_open_decision_spec.md`](post_earnings_weekly_open_decision_spec.md)
 as a separate retrospective exploratory method.
 
-The proposed live management and Tastytrade execution workflow is documented
+The Study 7 arm B/C live management and Tastytrade execution workflow is documented
 in [`../../docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md`](../../docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md).
 The operational evaluator is `./commands.sh study4-live-evaluate`. FastAPI
-consumes its checksummed artifacts; it never imports this package. Frozen Study
-4 specs and published numbers are unchanged.
+consumes its checksummed artifacts; it never imports this package. The selected
+arm and frozen config hash must match the strategy epoch bound to the weekly
+cycle. Frozen study specs and published numbers are unchanged.
 
 ## Strategy intent
 
@@ -419,8 +420,9 @@ weekly Risk-Off intervals; that policy requires a separately frozen replay.
 The [frozen Study 7 specification](post_earnings_defensive_regime_staging_spec.md)
 keeps Study 6's regime classifier, stock rules, weekly clock, and costs, and
 asks whether replacing Risk-Off SPY with GLD improves the return/drawdown
-tradeoff. Implementation is isolated from Study 6. Historical 2010–2025
-execution is unauthorized until the owner reviews the implementation commit.
+tradeoff. Implementation is isolated from Study 6. The completed 2010–2025
+chains and comparison are preserved and published in the Research Studies
+catalog; any rerun still requires explicit authorization.
 
 ```bash
 ./commands.sh pre-earnings-defensive-regime-staging \
@@ -446,8 +448,8 @@ chains finish, validate them with:
   --output-dir "$SFP_DATA_DIR/backtest/pre_earnings_momentum/weekly_defensive_regime_staging/reports/2010-2025-COMMIT/study7-comparison"
 ```
 
-Study 7 remains `NO_VERDICT / EXPLORATORY` regardless of the historical result.
-Do not add it to the published catalog without a separate owner decision.
+Study 7 remains `NO_VERDICT / EXPLORATORY` despite its published historical
+result. It must not be presented as confirmatory evidence.
 
 ## Package map
 

@@ -61,7 +61,7 @@ There is no `TT_CLIENT_ID`. Earlier templates listed one, but neither smallFish
 nor the `tastytrade` SDK consumes it. If your `app.env` still has it, it is
 ignored and can be deleted.
 
-## Optional: Study 4 live execution
+## Optional: Pre-Earnings Momentum live execution
 
 Gated. Off by default. Ordinary `TT_*` credentials cannot submit Study 4 orders.
 See [`STUDY4_LIVE_MANAGEMENT_DESIGN.md`](STUDY4_LIVE_MANAGEMENT_DESIGN.md).

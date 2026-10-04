@@ -1,21 +1,22 @@
-# Study 4 live management and execution design
+# Pre-Earnings Momentum live management and execution design
 
 **Status:** implemented and gated. Ordinary brokerage APIs remain read-only.
-Study 4 live execution is a separately unlocked bounded context. Production
-submission defaults to disabled. This document remains the product contract;
-frozen Study 4 specifications and published results are unchanged.
+Study 7 arm B/C live execution is a separately unlocked bounded context.
+Production submission defaults to disabled. This document remains the product
+contract; frozen research specifications and published results are unchanged.
 
-**Protocol:** `pre-earnings-post-event-weekly-batch-risk-on-v1`, operated as
-`study4-live-v1`
+**Protocols:** arm B `pre-earnings-weekly-defensive-regime-staging-stocks-spy-v1`
+or arm C `pre-earnings-weekly-defensive-regime-staging-stocks-spxl-spy-v1`,
+operated as `study7-bc-live-v1`
 
-**Scope:** one dedicated Tastytrade account, long US equities and SPY only
+**Scope:** one dedicated Tastytrade account, long US equities, SPY, and SPXL
 
 ## 1. Objective
 
 Build a local smallFish workflow that:
 
-1. runs the Study 4 Risk-On evaluation after each eligible session close;
-2. preserves the week's changing recommendations and sticky exit decisions;
+1. runs the selected Study 7 arm B/C evaluation after each eligible session close;
+2. preserves reconciled holdings metadata and exit decisions between weeks;
 3. freezes the final portfolio plan after the session before the weekly
    execution session;
 4. obtains one explicit owner confirmation for the complete batch;
@@ -23,10 +24,10 @@ Build a local smallFish workflow that:
 6. reconciles intended orders, broker orders, fills, cash, and positions;
 7. treats the reconciled broker account as the true starting state for the next
    week; and
-8. records daily strategy growth and an identically cash-flowed SPY benchmark.
+8. records decision-session strategy growth and an identically cash-flowed SPY benchmark.
 
 The feature is an execution and recordkeeping tool, not a new research result.
-Study 4 remains `NO_VERDICT` / `EXPLORATORY`, with static-universe,
+Study 7 remains `NO_VERDICT` / `EXPLORATORY`, with static-universe,
 survivorship, simulated-execution, and slippage limitations visible wherever a
 batch is approved or performance is compared.
 
@@ -36,14 +37,14 @@ The initial product contract is:
 
 | Decision | Approved behavior |
 |---|---|
-| Strategy | Study 4 Risk-On variant |
+| Strategy | Owner selects Study 7 arm B or C for a versioned strategy epoch; the arm is locked while a weekly cycle is open |
 | Account | Dedicated Tastytrade account with no starting holdings |
-| Instruments | Long US equities and SPY; no options, shorts, margin-created exposure, crypto, futures, or fractional shares |
+| Instruments | Long US equities, SPY, and SPXL; no options, shorts, margin-created exposure, crypto, futures, or fractional shares |
 | Capital | Owner-configured fixed target, changeable only through an explicit dated capital reset |
-| Weekly timing | Exact Study 4 holiday schedule |
+| Weekly timing | Study 7 weekly pre-open decision: prior-session close evidence and the week's final NYSE open |
 | Entries | IOC limit at 103% of the final decision close |
 | Unfilled entry | Rejected for the week; never chased or retried later |
-| Cash staging | Residual eligible capital held in whole SPY shares |
+| Cash staging | Arm B: SPY always. Arm C: SPXL in Risk-On and SPY otherwise |
 | Approval | One final confirmation bound to the complete batch |
 | Truth after execution | Tastytrade positions, fills, fees, and cash after reconciliation |
 | Contributions/withdrawals | No withdrawals before year end; every external cash flow is recorded explicitly |
@@ -64,7 +65,7 @@ the stock allocation rather than changing the strategy.
 
 ### 3.1 Rules that remain identical
 
-The operational evaluator must use the committed Study 4 configuration and
+The operational evaluator must use the selected committed Study 7 configuration and
 preserve these rules without UI overrides:
 
 - `momentum-v3` scoring;
@@ -83,13 +84,13 @@ preserve these rules without UI overrides:
   exit;
 - the frozen capital-scaled close-drawdown rule, ranging from 20% at $1,000 to
   10% at $5,000;
-- sticky intraweek exits;
+- a single decision from evidence through the prior session close;
 - post-event floor and maximum T+7 holding rules; and
-- stock exits, necessary SPY funding sales, stock entries, and residual SPY
-  purchases in that order.
+- stock exits, staging-ETF rotation/funding sales, stock entries, and the
+  residual staging-ETF purchase in that order.
 
 The existing published study code and artifacts stay unchanged. A new
-operational implementation must prove parity against fixed Study 4 fixtures;
+operational implementation must prove parity against fixed Study 7 fixtures;
 the FastAPI runtime must not import `studies/` or `utilities/`.
 
 ### 3.2 Unavoidable live-execution difference
@@ -98,7 +99,7 @@ The historical engine observes a daily bar's Friday opening price and treats an
 entry as filled at that price when it is no higher than the 103% limit. The live
 API does not offer the simulator's omniscient atomic opening fill.
 
-`study4-live-v1` therefore uses the closest approved convention:
+`study7-bc-live-v1` therefore uses the closest approved convention:
 
 - arm the already-confirmed batch before the scheduled open;
 - submit at or immediately after the exchange reports the regular session open;
@@ -108,7 +109,7 @@ API does not offer the simulator's omniscient atomic opening fill.
 
 This difference is labeled in every performance report. Live results must not
 be spliced into, used to retune, or represented as a continuation of the
-historical Study 4 curve.
+historical Study 7 curves.
 
 ## 4. Trading-calendar contract
 
@@ -288,9 +289,9 @@ At the final pre-execution close, the job:
 3. revalidates, ranks, and allocates candidates from the real portfolio state;
 4. freezes an immutable plan;
 5. computes entry quantities using the close and 103% reservation price;
-6. estimates stock-sale proceeds and the SPY shares needed to fund the maximum
+6. estimates stock-sale proceeds and staging-ETF shares needed to fund the maximum
    reserved entry cash;
-7. records the residual-SPY formula; and
+7. records the destination staging-ETF residual formula; and
 8. hashes the plan, inputs, strategy, account fingerprint, environment, and
    capital version.
 
@@ -308,7 +309,7 @@ deterministic order that can be known in advance. It displays:
 - every planned sell and buy;
 - current shares, target shares, delta, reference close, limit, and maximum
   notional;
-- expected SPY funding sale and residual-SPY formula;
+- expected staging rotation/funding sales and residual formula;
 - dry-run buying-power and fee effects;
 - data freshness and market-regime evidence;
 - all warnings and deviations; and
@@ -325,13 +326,14 @@ When the regular session opens, submit in frozen priority order:
 
 1. **Stock exits:** sell the reconciled long quantity. An exit is never allowed
    to exceed broker-held shares.
-2. **SPY funding:** sell only the whole SPY shares required by the accepted
-   maximum entry reservations after actual exit proceeds.
+2. **Staging rotation and funding:** sell a non-destination ETF completely,
+   then sell only the destination-ETF shares required by accepted maximum entry
+   reservations after actual exit proceeds.
 3. **Stock entries:** submit ranked single-leg equity IOC limits at 103% of the
    decision close. Lower ranks may be reduced or omitted only by the frozen
    affordability rule; no new symbol can be substituted.
-4. **Residual SPY:** after all stock IOC orders are terminal and cash is
-   reconciled, buy the maximum affordable whole SPY shares.
+4. **Residual staging ETF:** after all stock IOC orders are terminal and cash is
+   reconciled, buy the maximum affordable whole shares of the arm/regime ETF.
 
 The UI streams each intent independently. One order's rejection does not hide
 the rest of the batch, but any uncertain sell/funding state blocks dependent
@@ -412,7 +414,7 @@ Every preflight and the final pre-submit check must pass all gates:
 - no unexpected position, option, short, fractional quantity, or open order;
 - broker trading status permits the action;
 - current positions and cash equal the plan's starting snapshot;
-- every symbol is an allowed US equity or SPY;
+- every symbol is an allowed long US equity, SPY, or SPXL;
 - every sell is no larger than the owned quantity;
 - every stock buy obeys its approved quantity and 103% limit;
 - the broker dry-run confirms that IOC is accepted for the equity order; if it
@@ -453,11 +455,11 @@ number silently applied to old history.
 After every market close, persist:
 
 - broker cash;
-- stock and SPY quantities;
+- stock and staging-ETF quantities;
 - dated closing marks and their source/freshness;
-- stock market value, SPY market value, and total strategy equity;
+- stock market value, staging-ETF market value, cash available, and total strategy equity;
 - realized and unrealized P/L;
-- broker-reported fees and modeled Study 4 costs as separate fields;
+- broker-reported fees and modeled Study 7 costs as separate fields;
 - external cash flows;
 - daily and cumulative strategy return;
 - drawdown from the strategy equity peak; and
@@ -490,14 +492,14 @@ The minimum durable schema is:
 
 | Entity | Purpose and invariants |
 |---|---|
-| `strategy_versions` | Immutable protocol ID, configuration JSON, source reference, and SHA-256 |
+| `strategy_versions` | Immutable epoch identity, protocol ID, arm, frozen config SHA-256, and source reference |
 | `capital_versions` | Dated target, active amount, production cap, cash-flow status, and approval |
-| `weekly_cycles` | Calendar week, cutoff, execution session, state, environment, account fingerprint, and plan hash |
+| `weekly_cycles` | Calendar week, cutoff, execution session, state, environment, account fingerprint, strategy-version binding, and plan hash |
 | `scan_snapshots` | One immutable EOD evaluation with input hashes and regime evidence |
 | `scan_rows` | Every symbol's state, reasons, score inputs, event date, price, rank, and provisional quantity |
 | `position_decisions` | Held-position evidence, sticky exit triggers, and intended execution session |
 | `plans` | Immutable final plan, starting broker snapshot hash, aggregate reservations, and confirmation state |
-| `plan_items` | Ordered stock-exit, SPY-funding, stock-entry, and SPY-residual instructions |
+| `plan_items` | Ordered stock-exit, staging-exit/funding, stock-entry, and staging-residual instructions |
 | `order_intents` | Stable UUID/external identifier, sanitized request hash, dry-run result, broker ID, and current state |
 | `order_events` | Append-only normalized broker status observations |
 | `fills` | Broker fill identity, quantity, price, timestamp, and fees; duplicate-safe import |
@@ -517,6 +519,7 @@ Keep execution routes under an explicit namespace such as
 
 | Method and path | Behavior |
 |---|---|
+| `POST /strategy` | Select arm B or C as a new strategy epoch; refused while a weekly cycle is open |
 | `GET /status` | Environment, capability, kill-switch state, setup checklist, active capital version, current cycle, next required action |
 | `GET /cycles/{week}` | Weekly timeline, snapshots, immutable plan, order states, and reconciliation summary |
 | `POST /cycles/current/scan` | Run the allowlisted EOD evaluator and materialize a new snapshot |
@@ -540,8 +543,8 @@ server-stored, finalized, preflighted, confirmed plan.
 
 Add a dedicated **Pre-Earnings Momentum** product route under a Strategies nav
 group rather than placing order controls in Trading holdings or the Research
-Studies result page. The live page explains that it implements Study 3 and
-Study 4 and links to those research tabs.
+Studies result page. The live page explains that it implements Study 7 arms B/C
+and links to that research result.
 
 ### Overview
 
@@ -549,14 +552,14 @@ Study 4 and links to those research tabs.
 - setup checklist of missing `SFP_STUDY4_*` items when the control plane is inert;
 - next cutoff and execution timestamps;
 - current lifecycle state and required action;
-- target bucket, active bucket/cap, actual equity, cash, stock value, and SPY
-  staging value;
+- selected arm and strategy epoch; target bucket, active bucket/cap, starting
+  equity, cash available, stock value, staging-ETF value, and actual equity;
 - last successful scan, broker sync, and valuation timestamps; and
 - kill-switch state, with copy that it blocks submissions and does not liquidate.
 
-### Daily tracking
+### Decision tracking
 
-- Monday-through-cutoff snapshot tabs;
+- one causal snapshot using evidence through the session before the execution open;
 - current candidate list with strategy close, timestamped broker context price,
   provisional quantity, setup score, earnings date, sector, and status;
 - Added / Retained / Dropped changes since the prior scan;
@@ -566,7 +569,7 @@ Study 4 and links to those research tabs.
 
 ### Weekly plan
 
-- four ordered sections: stock exits, SPY funding, stock entries, residual SPY;
+- ordered sections: stock exits, staging rotation, staging funding, stock entries, and residual staging ETF;
 - current quantity, target quantity, delta, rank, limit, reservation, reason, and
   worst-case notional;
 - explicit reconciliation and risk-check list; and
@@ -607,7 +610,7 @@ sticky in horizontally scrolling tables.
 
 ### Phase 1: deterministic offline verification
 
-- golden parity tests against Study 4 fixtures, including normal and holiday
+- golden parity tests against Study 7 B/C fixtures, including normal and holiday
   weeks;
 - order-state replay tests for every status and restart point;
 - crash recovery before and after each submission boundary;
@@ -643,8 +646,8 @@ There is no shadow phase, as approved by the owner.
 
 Implementation is not complete until:
 
-- the operational evaluator matches frozen Study 4 golden cases byte-for-byte
-  for decisions and quantities;
+- the operational evaluator matches frozen Study 7 B/C golden cases for
+  decisions, quantities, and staging destinations;
 - holiday calendars produce the exact prior-cutoff/final-session schedule;
 - changing Friday-close data cannot change that Friday's plan;
 - exit triggers remain sticky through later favorable closes;
@@ -679,8 +682,7 @@ corresponding phase:
 
 ## 18. Authoritative references
 
-- [Study 4 frozen weekly-batch specification](../studies/pre_earnings_momentum/post_earnings_weekly_batch_spec.md)
-- [Study 4 historical-extension specification](../studies/pre_earnings_momentum/post_earnings_weekly_batch_extension_spec.md)
+- [Study 7 frozen staging specification](../studies/pre_earnings_momentum/post_earnings_defensive_regime_staging_spec.md)
 - [Tastytrade order request contract](https://developer.tastytrade.com/reference/orders/postAccountsAccountNumberOrders/)
 - [Tastytrade order lifecycle](https://developer.tastytrade.com/docs/concepts/order-lifecycle/)
 - [Tastytrade idempotency and retry guidance](https://developer.tastytrade.com/docs/guides/idempotency-and-retries/)

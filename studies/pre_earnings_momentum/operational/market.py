@@ -1,4 +1,4 @@
-"""Current-market loader for the Study 4 operational evaluator."""
+"""Current-market loader for the Study 7 B/C operational evaluator."""
 
 from __future__ import annotations
 
@@ -58,11 +58,12 @@ def load_live_market(
     retired_csv: Path,
     earnings_history: Path,
     warmup_years: int = 1,
+    require_spxl: bool = False,
 ) -> MarketBundle:
     years = _years_for(session, warmup_years)
     spy, spy_issues = read_prices_validated(cache_root, "SPY", years)
     if spy.empty:
-        raise ValueError("SPY price history is required for the Study 4 evaluator")
+        raise ValueError("SPY price history is required for the Study 7 evaluator")
     registry = universe.load_registry(universe_csv)
     live = universe.live_universe_symbols(
         registry_path=universe_csv, retired_path=retired_csv,
@@ -72,8 +73,15 @@ def load_live_market(
     quarantines: dict[str, tuple[str, ...]] = {}
     if spy_issues:
         quarantines["SPY"] = tuple(spy_issues)
+    if require_spxl:
+        spxl, spxl_issues = read_prices_validated(cache_root, "SPXL", years)
+        if spxl.empty:
+            raise ValueError("SPXL price history is required for Study 7 arm C")
+        if spxl_issues:
+            quarantines["SPXL"] = tuple(spxl_issues)
+        stocks["SPXL"] = spxl
     for symbol in live:
-        if symbol == "SPY":
+        if symbol == "SPY" or symbol in stocks:
             continue
         frame, issues = read_prices_validated(cache_root, symbol, years)
         if issues:

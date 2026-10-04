@@ -38,6 +38,7 @@ export class Study4ManagerComponent implements OnInit {
   busy = false;
   message = '';
   trackingSession = '';
+  selectedArmChoice: 'stocks-spy-control' | 'stocks-spxl-spy-control' = 'stocks-spy-control';
 
   ngOnInit(): void {
     this.refresh();
@@ -49,6 +50,7 @@ export class Study4ManagerComponent implements OnInit {
     this.api.status().pipe(take(1)).subscribe({
       next: status => {
         this.status = status;
+        if (status.selectedArm) this.selectedArmChoice = status.selectedArm;
         this.loading = false;
         const week = status.cycle?.iso_week;
         if (week) {
@@ -63,7 +65,7 @@ export class Study4ManagerComponent implements OnInit {
       },
       error: () => {
         this.loading = false;
-        this.error = 'Study 4 execution status is unavailable.';
+        this.error = 'Pre-Earnings Momentum execution status is unavailable.';
       }
     });
   }
@@ -152,6 +154,29 @@ export class Study4ManagerComponent implements OnInit {
 
   itemsOf(kind: string): Study4PlanItem[] {
     return this.planItems().filter(item => item.kind === kind);
+  }
+
+  armLabel(arm: string | null | undefined): string {
+    if (arm === 'stocks-spy-control') return 'B · Stocks + SPY';
+    if (arm === 'stocks-spxl-spy-control') return 'C · Stocks + SPXL / SPY';
+    return 'Not selected';
+  }
+
+  selectArm(): void {
+    this.busy = true;
+    this.error = '';
+    this.message = '';
+    this.api.selectStrategy(this.selectedArmChoice).subscribe({
+      next: () => {
+        this.busy = false;
+        this.message = `${this.armLabel(this.selectedArmChoice)} started as a new strategy epoch.`;
+        this.refresh();
+      },
+      error: err => {
+        this.busy = false;
+        this.error = err.error?.detail?.message || 'Strategy selection failed.';
+      }
+    });
   }
 
   run(action: 'scan' | 'finalize' | 'preflight' | 'reconcile' | 'finalSync'): void {

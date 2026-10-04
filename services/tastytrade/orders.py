@@ -15,7 +15,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Callable, Literal, Mapping
 
-USER_AGENT = "smallFish-study4-live/1.0"
+USER_AGENT = "smallFish-pre-earnings-live/2.0"
 PINNED_API_VERSION = "20251101"
 
 
@@ -74,7 +74,7 @@ class EquityOrderRequest:
         if self.quantity <= 0:
             raise ValueError("order quantity must be a positive whole share count")
         if "." in self.symbol or " " in self.symbol:
-            raise ValueError("equity orders accept a single US equity or SPY symbol")
+            raise ValueError("equity orders accept a single US equity symbol")
         if self.order_type == "Limit" and self.limit_price is None:
             raise ValueError("limit orders require a limit price")
         if self.time_in_force == "IOC" and self.order_type != "Limit":

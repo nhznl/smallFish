@@ -1,4 +1,4 @@
-"""Broker adapter used only by the Study 4 execution bounded context."""
+"""Broker adapter used only by the Pre-Earnings execution bounded context."""
 
 from __future__ import annotations
 
@@ -29,10 +29,20 @@ def _normalize_positions(raw_positions: Any) -> list[dict[str, Any]]:
         instrument = getattr(item, "instrument_type", None) or (
             item.get("instrument-type") if isinstance(item, dict) else "Equity"
         )
+        mark = getattr(item, "mark", None)
+        if mark is None and isinstance(item, dict):
+            mark = item.get("mark")
+        average_open = getattr(item, "average_open_price", None)
+        if average_open is None and isinstance(item, dict):
+            average_open = item.get("average_open_price") or item.get("average-open-price")
         rows.append({
             "symbol": str(symbol or ""),
             "quantity": str(quantity or "0"),
             "instrument_type": str(instrument or "Equity"),
+            "mark": None if mark in (None, "") else float(mark),
+            "average_open_price": (
+                None if average_open in (None, "") else float(average_open)
+            ),
         })
     return rows
 
@@ -77,6 +87,10 @@ class ExecutionBroker:
             "normalized_positions": _normalize_positions(raw.get("positions")),
             "live_orders": tuple(live),
             "cash": float(raw.get("cash") or 0),
+            "net_liquidating_value": (
+                None if raw.get("net_liquidating_value") in (None, "")
+                else float(raw["net_liquidating_value"])
+            ),
         }
 
     def dry_run(self, request: EquityOrderRequest) -> dict[str, Any]:

@@ -1,4 +1,4 @@
-"""Study 4 execution control-plane tests. Injected fakes only; no sockets."""
+"""Study 7 B/C execution control-plane tests. Injected fakes only; no sockets."""
 
 from __future__ import annotations
 
@@ -15,7 +15,9 @@ from app.execution.ledger import ExecutionLedger
 from app.execution.service import ExecutionService
 from app.execution.settings import ExecutionSettings, load_settings
 from app.main import app
-from models.study4_live import CycleState, OrderIntentState
+from models.study4_live import (
+    ARM_CONFIG_SHA256, ARM_PROTOCOL_IDS, OPERATIONAL_ID, CycleState, OrderIntentState, StrategyArm,
+)
 
 NY = ZoneInfo("America/New_York")
 client = TestClient(app)
@@ -44,6 +46,9 @@ def _artifact(session="2026-09-03", cutoff=True):
             "priority": 1, "kind": "stock_entry", "symbol": "AAA", "side": "buy",
             "deltaShares": 10, "limitPrice": 10.3, "timeInForce": "IOC",
             "orderType": "Limit", "reservationCash": 103.0, "rank": 1,
+            "decisionClose": 10.0, "setupScore": 70.0, "sector": "Technology",
+            "predictedEventDate": "2026-09-24", "entryDecisionDate": "2026-09-03",
+            "entryExecutionDate": "2026-09-04", "allowedDrawdown": 0.15,
         }
     ] if cutoff else []
     return {
@@ -55,10 +60,16 @@ def _artifact(session="2026-09-03", cutoff=True):
         "cutoffSession": "2026-09-03",
         "scanRows": [{"ticker": "AAA", "state": "selected", "shares": 10, "limit_price": 10.3}],
         "planItems": items,
-        "holdings": {"cash": 10000, "spy_shares": 0, "positions": []},
+        "holdings": {"cash": 10000, "staging_shares": {}, "positions": []},
         "positionDecisions": [],
         "marketRegime": "RISK_ON",
-        "protocolId": "pre-earnings-post-event-weekly-batch-risk-on-v1",
+        "spyClose": 100.0,
+        "strategyArm": StrategyArm.B.value,
+        "strategyConfigHash": ARM_CONFIG_SHA256[StrategyArm.B],
+        "operationalId": OPERATIONAL_ID,
+        "stagingSymbol": "SPY",
+        "stagingCloses": {"SPY": 100.0, "SPXL": 50.0},
+        "protocolId": ARM_PROTOCOL_IDS[StrategyArm.B],
     }
 
 
@@ -103,13 +114,15 @@ def _service(tmp_path: Path, artifact=None, broker=None, clock=None) -> Executio
     def evaluator(**kwargs):
         return payload
 
-    return ExecutionService(
+    service = ExecutionService(
         settings=settings,
         ledger=ledger,
         broker=broker or FakeBroker(),
         evaluator=evaluator,
         clock=clock or (lambda: CUTOFF),
     )
+    service.select_strategy(StrategyArm.B.value)
+    return service
 
 
 def _arm(service: ExecutionService) -> None:
@@ -144,6 +157,35 @@ def test_status_distinguishes_configured_target_from_recommended_pilot_cap(tmp_p
 
     assert body["configuredTargetBucket"] == 50000
     assert body["recommendedPilotCap"] == 5000
+
+
+def test_strategy_arm_is_required_locked_to_the_cycle_and_versioned_after_close(tmp_path: Path):
+    service = ExecutionService(
+        settings=_settings(tmp_path), ledger=ExecutionLedger(tmp_path / "strategy.sqlite"),
+        broker=FakeBroker(), evaluator=lambda **kwargs: _artifact(), clock=lambda: CUTOFF,
+    )
+    with pytest.raises(Exception, match="Select Study 7 arm B or C"):
+        service.scan("2026-09-03")
+
+    first = service.select_strategy(StrategyArm.B.value)
+    service.scan("2026-09-03")
+    assert service.ledger.current_cycle()["strategy_version_id"] == first["id"]
+    with pytest.raises(Exception, match="locked"):
+        service.select_strategy(StrategyArm.C.value)
+
+    service.ledger.set_cycle_state(service.ledger.current_cycle()["id"], CycleState.WEEK_CLOSED.value)
+    second = service.select_strategy(StrategyArm.C.value)
+    assert second["id"] != first["id"]
+    assert service.status()["selectedArm"] == StrategyArm.C.value
+    third = service.select_strategy(StrategyArm.B.value)
+    assert third["id"] not in {first["id"], second["id"]}
+
+
+def test_scan_rejects_an_artifact_from_a_different_arm(tmp_path: Path):
+    service = _service(tmp_path)
+    service.evaluator = lambda **kwargs: {**_artifact(), "strategyArm": StrategyArm.C.value}
+    with pytest.raises(Exception, match="does not match the selected strategy epoch"):
+        service.scan("2026-09-03")
 
 
 def test_scan_finalize_preflight_confirm_and_execute(tmp_path: Path):
@@ -264,10 +306,10 @@ def test_preflight_revalidates_the_immutable_plan_payload(tmp_path: Path):
         service.preflight()
 
 
-def test_residual_spy_waits_for_terminal_ioc_then_buys_whole_shares(tmp_path: Path):
+def test_residual_staging_etf_waits_for_terminal_ioc_then_buys_whole_shares(tmp_path: Path):
     artifact = _artifact()
     artifact["planItems"].append({
-        "priority": 2, "kind": "spy_residual", "symbol": "SPY", "side": "buy",
+        "priority": 2, "kind": "staging_residual", "symbol": "SPY", "side": "buy",
         "deltaShares": None, "limitPrice": None, "timeInForce": "DAY",
         "orderType": "Market", "modeledCostPerShare": 0.0, "formula": "floor(cash/spy)",
     })
@@ -312,6 +354,116 @@ def test_unfilled_ioc_is_final_and_never_chased(tmp_path: Path):
         service.execute()
 
 
+def test_uncertain_staging_sale_blocks_stock_and_residual_buys(tmp_path: Path):
+    artifact = _artifact()
+    artifact["planItems"] = [
+        {
+            "priority": 1, "kind": "staging_exit", "symbol": "SPY", "side": "sell",
+            "deltaShares": -2, "limitPrice": None, "timeInForce": "DAY", "orderType": "Market",
+        },
+        artifact["planItems"][0],
+        {
+            "priority": 3, "kind": "staging_residual", "symbol": "SPXL", "side": "buy",
+            "deltaShares": None, "limitPrice": None, "timeInForce": "DAY",
+            "orderType": "Market", "decisionClose": 50.0,
+        },
+    ]
+
+    class UnknownSellBroker(FakeBroker):
+        def submit(self, request):
+            if request.side == "sell":
+                raise TimeoutError("network")
+            return super().submit(request)
+
+        def lookup(self, external_identifier):
+            self.lookups.append(external_identifier)
+            return ()
+
+    broker = UnknownSellBroker()
+    service = _service(tmp_path, artifact=artifact, broker=broker)
+    _arm(service)
+    result = service.execute()
+
+    assert [request.side for request in broker.submitted] == []
+    assert result["results"][-1]["reason"] == "upstream_sell_requires_reconciliation"
+    assert result["state"] == CycleState.NEEDS_REVIEW.value
+
+
+def test_acknowledged_staging_sale_must_fill_before_stock_buys(tmp_path: Path):
+    artifact = _artifact()
+    artifact["planItems"] = [{
+        "priority": 1, "kind": "staging_exit", "symbol": "SPY", "side": "sell",
+        "deltaShares": -2, "limitPrice": None, "timeInForce": "DAY", "orderType": "Market",
+    }, artifact["planItems"][0]]
+
+    class DelayedSellBroker(FakeBroker):
+        def submit(self, request):
+            self.submitted.append(request)
+            return {
+                "ok": True, "time_in_force": request.time_in_force, "errors": [], "warnings": [],
+                "broker_order_id": str(len(self.submitted)),
+                "status": "Received" if request.side == "sell" else "Filled",
+                "external_identifier": request.external_identifier,
+            }
+
+        def lookup(self, external_identifier):
+            return (SimpleNamespace(
+                broker_order_id="1", external_identifier=external_identifier, status="Filled",
+            ),)
+
+    broker = DelayedSellBroker()
+    service = _service(tmp_path, artifact=artifact, broker=broker)
+    _arm(service)
+
+    service.execute()
+
+    assert [(request.symbol, request.side) for request in broker.submitted] == [
+        ("SPY", "sell"), ("AAA", "buy"),
+    ]
+
+
+def test_reconcile_finishes_acknowledged_ioc_before_submitting_residual(tmp_path: Path):
+    artifact = _artifact()
+    artifact["planItems"].append({
+        "priority": 2, "kind": "staging_residual", "symbol": "SPY", "side": "buy",
+        "deltaShares": None, "limitPrice": None, "timeInForce": "DAY",
+        "orderType": "Market", "decisionClose": 100.0,
+    })
+
+    class DelayedIocBroker(FakeBroker):
+        def submit(self, request):
+            self.submitted.append(request)
+            status = "Received" if request.symbol == "AAA" else "Filled"
+            return {
+                "ok": True, "time_in_force": request.time_in_force, "errors": [], "warnings": [],
+                "broker_order_id": str(len(self.submitted)), "status": status,
+                "external_identifier": request.external_identifier,
+            }
+
+        def lookup(self, external_identifier):
+            return (SimpleNamespace(
+                broker_order_id="1", external_identifier=external_identifier, status="Cancelled",
+            ),)
+
+        def snapshot(self):
+            body = super().snapshot()
+            body["cash"] = 250.0
+            body["spy_mark"] = 100.0
+            return body
+
+    broker = DelayedIocBroker()
+    service = _service(tmp_path, artifact=artifact, broker=broker)
+    _arm(service)
+    opened = service.execute()
+    assert [request.symbol for request in broker.submitted] == ["AAA"]
+    assert opened["state"] == CycleState.MONITORING.value
+
+    reconciled = service.reconcile()
+
+    assert [request.symbol for request in broker.submitted] == ["AAA", "SPY"]
+    assert reconciled["ok"] is True
+
+
 def test_reconciliation_flags_unknown_holdings(tmp_path: Path):
     class DriftBroker(FakeBroker):
         def snapshot(self):
@@ -329,9 +481,28 @@ def test_reconciliation_flags_unknown_holdings(tmp_path: Path):
     assert "unknown_holding" in result["codes"]
 
 
+def test_reconcile_cannot_submit_residual_before_the_plan_is_armed_and_executed(tmp_path: Path):
+    artifact = _artifact()
+    artifact["planItems"].append({
+        "priority": 2, "kind": "staging_residual", "symbol": "SPY", "side": "buy",
+        "deltaShares": None, "limitPrice": None, "timeInForce": "DAY",
+        "orderType": "Market", "decisionClose": 100.0,
+    })
+    broker = FakeBroker()
+    service = _service(tmp_path, artifact=artifact, broker=broker)
+    service.capital_reset(target_bucket=10000, active_bucket=10000)
+    service.finalize("2026-09-03")
+
+    service.reconcile()
+
+    assert broker.submitted == []
+    with pytest.raises(Exception, match="submitted weekly batch"):
+        service.final_sync()
+
+
 def test_incomplete_marks_make_performance_unavailable(tmp_path: Path):
     artifact = _artifact()
-    artifact["holdings"] = {"cash": 1000, "spy_shares": 3, "positions": []}
+    artifact["holdings"] = {"cash": 1000, "staging_shares": {"SPY": 3}, "positions": []}
     artifact["spyClose"] = None
     service = _service(tmp_path, artifact=artifact)
     service.capital_reset(target_bucket=10000, active_bucket=10000)
@@ -340,6 +511,43 @@ def test_incomplete_marks_make_performance_unavailable(tmp_path: Path):
     assert series["unavailableDates"]
     assert series["series"][0]["complete"] is False
     assert series["series"][0]["strategyEquity"] is None
+
+
+def test_performance_tracks_capital_stocks_staging_and_cash_by_epoch(tmp_path: Path):
+    service = _service(tmp_path)
+    service.capital_reset(target_bucket=10000, active_bucket=10000)
+    service.finalize("2026-09-03")
+
+    row = service.performance_series()["series"][0]
+
+    assert row["strategyArm"] == StrategyArm.B.value
+    assert row["strategyVersionId"] == service.status()["strategyVersionId"]
+    assert row["startingEquity"] == 10000
+    assert row["stockEquity"] == 0
+    assert row["stagingEquity"] == 0
+    assert row["cashAvailable"] == 10000
+
+
+def test_reconciled_new_stock_keeps_plan_metadata_and_broker_entry_price(tmp_path: Path):
+    service = _service(tmp_path)
+    service.capital_reset(target_bucket=10000, active_bucket=10000)
+    service.finalize("2026-09-03")
+    holdings = service._holdings_payload({
+        "cash": 9000.0,
+        "net_liquidating_value": 10025.0,
+        "normalized_positions": [{
+            "symbol": "AAA", "quantity": "10", "instrument_type": "Equity",
+            "average_open_price": 10.25,
+        }],
+    })
+
+    position = holdings["positions"][0]
+    assert position["entry_fill_price"] == 10.25
+    assert position["entry_principal"] == 102.5
+    assert position["setup_score"] == 70.0
+    assert position["predicted_event_date"] == "2026-09-24"
+    assert position["allowed_drawdown"] == 0.15
+    assert holdings["account_equity"] == 10025.0
 
 
 def test_capital_reset_is_recorded_as_a_cash_flow_instruction(tmp_path: Path):

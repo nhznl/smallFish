@@ -3,11 +3,9 @@
     <p class="page-eyebrow">Strategy</p>
     <h1 class="page-title">Pre-Earnings Momentum</h1>
     <p class="page-subtitle">
-      Live weekly-batch execution for a dedicated Tastytrade account.
-      This is an operational implementation of
-      <a routerLink="/studies/pre-earnings-momentum" [queryParams]="{ variation: 'post-earnings-risk-on' }">Study 3</a>
-      and
-      <a routerLink="/studies/pre-earnings-momentum" [queryParams]="{ variation: 'post-earnings-weekly-extension' }">Study 4</a>.
+      Live weekly-batch execution for a dedicated Tastytrade account using
+      <a routerLink="/studies/pre-earnings-momentum" [queryParams]="{ variation: 'defensive-regime-staging' }">Study 7</a>
+      arm B or C.
     </p>
   </div>
   <div class="page-actions">
@@ -57,12 +55,35 @@
   @if (tab === 'overview') {
     <section class="stat-strip">
       <div class="stat-card"><span>Lifecycle</span><strong>{{ lifecycleLabel() }}</strong></div>
+      <div class="stat-card"><span>Strategy</span><strong>{{ armLabel(status.selectedArm) }}</strong></div>
+      <div class="stat-card"><span>Epoch</span><strong>{{ status.strategyVersionId ?? '—' }}</strong></div>
       <div class="stat-card"><span>Next action</span><strong>{{ nextActionLabel() }}</strong></div>
       <div class="stat-card"><span>Cutoff</span><strong>{{ status.cycle?.cutoff_session || '—' }}</strong></div>
       <div class="stat-card"><span>Execution</span><strong>{{ status.cycle?.execution_session || '—' }}</strong></div>
       <div class="stat-card"><span>Target bucket</span><strong>{{ status.capital?.target_bucket ?? '—' }}</strong></div>
       <div class="stat-card"><span>Active / cap</span><strong>{{ status.capital?.active_bucket ?? status.recommendedPilotCap ?? '—' }}</strong></div>
     </section>
+    <div class="panel">
+      <div class="panel-heading"><h2>Strategy arm</h2></div>
+      <div class="panel-body">
+        <p>Arm B keeps residual capital in SPY. Arm C uses SPXL in Risk-On and SPY otherwise. The selected arm stays locked for the complete weekly cycle.</p>
+        <div class="arm-controls">
+          <label for="strategyArm">Study 7 arm</label>
+          <select id="strategyArm" name="strategyArm" [(ngModel)]="selectedArmChoice"
+                  [disabled]="busy || !status.canChangeArm">
+            <option value="stocks-spy-control">B · Stocks + SPY</option>
+            <option value="stocks-spxl-spy-control">C · Stocks + SPXL / SPY</option>
+          </select>
+          <button class="btn" type="button" (click)="selectArm()"
+                  [disabled]="busy || !status.canChangeArm || selectedArmChoice === status.selectedArm">
+            {{ status.selectedArm ? 'Start new strategy epoch' : 'Select strategy arm' }}
+          </button>
+        </div>
+        @if (!status.canChangeArm) {
+          <p class="muted">Arm changes unlock after this cycle reaches WeekClosed or Missed.</p>
+        }
+      </div>
+    </div>
     @if (pendingSetup().length) {
       <div class="panel">
         <div class="panel-heading"><h2>Setup needed</h2></div>
@@ -183,9 +204,10 @@
   @if (tab === 'plan') {
     @for (section of [
       {kind: 'stock_exit', title: 'Stock exits'},
-      {kind: 'spy_funding', title: 'SPY funding'},
+      {kind: 'staging_exit', title: 'Staging ETF rotation'},
+      {kind: 'staging_funding', title: 'Staging ETF funding'},
       {kind: 'stock_entry', title: 'Stock entries'},
-      {kind: 'spy_residual', title: 'Residual SPY'}
+      {kind: 'staging_residual', title: 'Residual staging ETF'}
     ]; track section.kind) {
       <div class="panel">
         <div class="panel-heading"><h2>{{ section.title }}</h2></div>
@@ -288,19 +310,24 @@
         <div class="table-shell">
           <table class="data-table">
             <thead>
-              <tr><th>Session</th><th class="num">Strategy</th><th class="num">Passive SPY</th><th class="num">Daily</th><th class="num">Drawdown</th></tr>
+              <tr><th>Session</th><th>Arm / epoch</th><th class="num">Starting</th><th class="num">Stocks</th><th class="num">Staging ETF</th><th class="num">Cash</th><th class="num">Strategy</th><th class="num">Passive SPY</th><th class="num">Daily</th><th class="num">Drawdown</th></tr>
             </thead>
             <tbody>
               @for (row of performance?.series || []; track row.session) {
                 <tr>
                   <td>{{ row.session }}</td>
+                  <td>{{ armLabel(row.strategyArm) }} / {{ row.strategyVersionId ?? '—' }}</td>
+                  <td class="num">{{ row.startingEquity ?? '—' }}</td>
+                  <td class="num">{{ row.complete ? row.stockEquity : '—' }}</td>
+                  <td class="num">{{ row.complete ? row.stagingEquity : '—' }}</td>
+                  <td class="num">{{ row.cashAvailable ?? '—' }}</td>
                   <td class="num">{{ row.complete ? row.strategyEquity : '—' }}</td>
                   <td class="num">{{ row.complete ? row.benchmarkEquity : '—' }}</td>
                   <td class="num">{{ row.dailyReturn ?? '—' }}</td>
                   <td class="num">{{ row.drawdown ?? '—' }}</td>
                 </tr>
               } @empty {
-                <tr><td colspan="5"><div class="empty-state">No valuations yet. Incomplete marks stay unavailable rather than zero.</div></td></tr>
+                <tr><td colspan="10"><div class="empty-state">No valuations yet. Incomplete marks stay unavailable rather than zero.</div></td></tr>
               }
             </tbody>
           </table>

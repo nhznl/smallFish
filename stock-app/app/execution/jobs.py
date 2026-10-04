@@ -1,4 +1,4 @@
-"""Allowlisted Study 4 evaluator job. FastAPI never imports studies/."""
+"""Allowlisted Study 7 B/C evaluator job. FastAPI never imports studies/."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ def run_evaluator(
     holdings: dict,
     active_bucket: float,
     output_name: str,
+    strategy_arm: str,
 ) -> dict:
     root = artifacts_dir()
     root.mkdir(parents=True, exist_ok=True)
@@ -34,6 +35,7 @@ def run_evaluator(
             "--holdings", str(holdings_path),
             "--output", str(output_path),
             "--active-bucket", str(active_bucket),
+            "--strategy-arm", strategy_arm,
         ],
         cwd=str(config.repo_root()),
         stdout=subprocess.PIPE,

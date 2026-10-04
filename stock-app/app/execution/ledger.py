@@ -1,4 +1,4 @@
-"""SQLite execution ledger for Study 4 live management."""
+"""SQLite execution ledger for Pre-Earnings Momentum live management."""
 
 from __future__ import annotations
 
@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS weekly_cycles (
     environment TEXT NOT NULL,
     account_fingerprint TEXT NOT NULL,
     plan_hash TEXT,
+    strategy_version_id INTEGER,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -173,6 +174,10 @@ class ExecutionLedger:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         conn.executescript(SCHEMA)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(weekly_cycles)")}
+        if "strategy_version_id" not in columns:
+            conn.execute("ALTER TABLE weekly_cycles ADD COLUMN strategy_version_id INTEGER")
+            conn.commit()
         try:
             self.path.chmod(0o600)
         except OSError:
@@ -225,27 +230,51 @@ class ExecutionLedger:
     def cycle_by_week(self, iso_week: str) -> dict[str, Any] | None:
         return self.query_one("SELECT * FROM weekly_cycles WHERE iso_week=?", (iso_week,))
 
+    def latest_strategy_version(self) -> dict[str, Any] | None:
+        row = self.query_one("SELECT * FROM strategy_versions ORDER BY id DESC LIMIT 1")
+        if row is not None:
+            row["config"] = json.loads(row["config_json"])
+        return row
+
+    def add_strategy_version(
+        self, *, protocol_id: str, operational_id: str, arm: str,
+        source_reference: str, config_sha256: str, version_sha256: str,
+    ) -> dict[str, Any]:
+        now = _now()
+        config_json = json.dumps({"arm": arm, "configSha256": config_sha256}, sort_keys=True)
+        self.execute(
+            "INSERT INTO strategy_versions(protocol_id, operational_id, config_json, "
+            "source_reference, sha256, created_at) VALUES(?,?,?,?,?,?)",
+            (protocol_id, operational_id, config_json, source_reference, version_sha256, now),
+        )
+        row = self.query_one("SELECT * FROM strategy_versions WHERE sha256=?", (version_sha256,))
+        assert row is not None
+        row["config"] = json.loads(row["config_json"])
+        return row
+
     def upsert_cycle(self, *, iso_week: str, cutoff: str | None, execution: str | None,
                      calendar_source: str, state: str, environment: str,
-                     account_fingerprint: str) -> dict[str, Any]:
+                     account_fingerprint: str, strategy_version_id: int) -> dict[str, Any]:
         existing = self.cycle_by_week(iso_week)
         now = _now()
         if existing is None:
             self.execute(
                 "INSERT INTO weekly_cycles(iso_week, cutoff_session, execution_session, calendar_source, "
-                "state, environment, account_fingerprint, created_at, updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?)",
+                "state, environment, account_fingerprint, strategy_version_id, created_at, updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?)",
                 (iso_week, cutoff, execution, calendar_source, state, environment,
-                 account_fingerprint, now, now),
+                 account_fingerprint, strategy_version_id, now, now),
             )
         else:
+            if existing.get("strategy_version_id") not in (None, strategy_version_id):
+                raise ValueError("weekly cycle is already bound to a different strategy version")
             advanced = existing["state"] not in {"AwaitingScan", "Tracking"}
             kept_state = existing["state"] if advanced else state
             self.execute(
                 "UPDATE weekly_cycles SET cutoff_session=?, execution_session=?, calendar_source=?, "
-                "state=?, environment=?, account_fingerprint=?, updated_at=? WHERE iso_week=?",
+                "state=?, environment=?, account_fingerprint=?, strategy_version_id=?, updated_at=? WHERE iso_week=?",
                 (cutoff, execution, calendar_source, kept_state, environment,
-                 account_fingerprint, now, iso_week),
+                 account_fingerprint, strategy_version_id, now, iso_week),
             )
         cycle = self.cycle_by_week(iso_week)
         assert cycle is not None

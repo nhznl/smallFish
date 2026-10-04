@@ -1,4 +1,4 @@
-"""Allowlisted Study 4 live evaluator command."""
+"""Allowlisted Study 7 B/C live evaluator command."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import json
 import os
 from datetime import date
 from pathlib import Path
+
+from models.study4_live import StrategyArm
 
 from studies.pre_earnings_momentum.operational.evaluator import (
     LiveHoldings,
@@ -26,6 +28,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--holdings", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--active-bucket", type=float, required=True)
+    parser.add_argument("--strategy-arm", choices=[arm.value for arm in StrategyArm], required=True)
     parser.add_argument("--cache-root", type=Path)
     parser.add_argument("--universe", type=Path)
     parser.add_argument("--retired", type=Path)
@@ -53,7 +56,8 @@ def main(argv: list[str] | None = None) -> int:
     retired_csv = args.retired or cache_root / "retired_symbols.csv"
     events_csv = args.events or cache_root / "events.csv"
     history = args.earnings_history or cache_root / "earnings_history.csv"
-    cfg = default_config()
+    arm = StrategyArm(args.strategy_arm)
+    cfg = default_config(arm)
     market = load_live_market(
         session=session,
         cache_root=cache_root,
@@ -61,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         retired_csv=retired_csv,
         earnings_history=history,
         warmup_years=cfg.warmup_calendar_years,
+        require_spxl=arm is StrategyArm.C or holdings.staging_shares.get("SPXL", 0) > 0,
     )
     artifact = evaluate_live_session(
         cfg=cfg,
@@ -68,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         session=session,
         holdings=holdings,
         active_bucket=args.active_bucket,
+        arm=arm,
         forecast_overrides=load_upcoming_forecasts(events_csv),
     )
     write_artifact(artifact, args.output)

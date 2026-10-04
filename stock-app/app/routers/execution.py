@@ -52,12 +52,21 @@ class ScanBody(BaseModel):
     session: str | None = None
 
 
+class StrategyBody(BaseModel):
+    arm: str
+
+
 @router.get("/status")
 def status() -> dict:
     settings = load_settings()
     if not settings.configured:
         return ExecutionService(settings=settings).status()
     return _service().status()
+
+
+@router.post("/strategy")
+def select_strategy(body: StrategyBody) -> dict:
+    return _guarded(lambda: _service().select_strategy(body.arm))
 
 
 @router.get("/cycles/{week}")

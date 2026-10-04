@@ -101,10 +101,11 @@ close lands.
 
 **Ordinary brokerage access is read-only.** Trading and Retirement APIs never
 place, modify, or cancel an order, and smallFish never receives a brokerage
-password. Study 4 live management is the sole gated exception: it may submit
-only a stored, finalized, dry-run-approved, owner-confirmed Study 4 Risk-On
-batch to a dedicated Tastytrade account, using separate sandbox/production
-execution credentials. Production execution defaults to disabled. See
+password. Pre-Earnings Momentum live management is the sole gated exception:
+it may submit only a stored, finalized, dry-run-approved, owner-confirmed Study
+7 arm B/C batch to a dedicated Tastytrade account, using separate
+sandbox/production execution credentials. The selected arm is versioned and
+locked for each open weekly cycle. Production execution defaults to disabled. See
 [`docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md`](docs/STUDY4_LIVE_MANAGEMENT_DESIGN.md).
 
 **Provider I/O boundary is complete** (2026-07-29). Production Tastytrade and

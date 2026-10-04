@@ -9,8 +9,8 @@ tracks only active evidence gaps and standing constraints.
 
 smallFish is a **batch pipeline that writes files** and a **read-mostly API that
 serves them**. There is no queue and no service-to-service call inside the
-project. The filesystem under `SFP_DATA_DIR` is the integration point. Study 4
-live management additionally keeps a transactional SQLite execution ledger at
+project. The filesystem under `SFP_DATA_DIR` is the integration point. Study 7
+arm B/C live management additionally keeps a transactional SQLite execution ledger at
 `$SFP_DATA_DIR/execution/study4.sqlite`.
 
 ```
@@ -124,10 +124,12 @@ Four run-job endpoints (`/runWheel`, `/runChains`, `/runSectorRotation`,
 `/runEarningsScan`) let the UI trigger batch work. They are the only place that
 crosses the boundary, and they shell out rather than importing the pipeline.
 
-Study 4 live management is a separately gated bounded context under
+Study 7 arm B/C live management is a separately gated bounded context under
 `/api/execution/study4` and the Angular `/study4` route (Strategies › Pre-Earnings Momentum). FastAPI never imports
 `studies/` or `utilities/`; it shells `./commands.sh study4-live-evaluate` and
-reads checksummed artifacts. Ordinary Trading and Retirement brokerage routes
+reads checksummed artifacts. Each weekly cycle binds a versioned arm selection
+and its frozen config hash before an evaluator artifact can be accepted.
+Ordinary Trading and Retirement brokerage routes
 remain read-only. Order transport lives in `services/tastytrade/orders.py` and
 is imported only by `stock-app/app/execution/`. Production submission stays
 disabled unless `SFP_STUDY4_PRODUCTION_ENABLED` is explicitly set. See

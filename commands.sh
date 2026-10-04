@@ -50,7 +50,7 @@
 #   pre-earnings-regime-staging-comparison - validate and compare Study 6 chains
 #   pre-earnings-defensive-regime-staging - guarded Study 7 SPXL/GLD/SPY annual runner
 #   pre-earnings-defensive-regime-staging-comparison - validate and compare Study 7 chains
-#   study4-live-evaluate - operational Study 4 Risk-On evaluator (writes artifacts; no broker orders)
+#   study4-live-evaluate - operational Study 7 B/C evaluator (writes artifacts; no broker orders)
 #   backtest [earnings]       - strategy walk-forward backtest
 #   event-backtest [earnings] - strategy event-study backtest
 #   earnings-history - fetch historical earnings dates (requires yfinance)

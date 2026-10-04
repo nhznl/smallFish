@@ -1,13 +1,12 @@
-"""Operational Study 4 Risk-On evaluator.
+"""Operational Study 7 B/C evaluator.
 
-Reuses frozen Study 4 primitives without mutating published study code or
+Reuses frozen Study 7 primitives without mutating published study code or
 artifacts. FastAPI never imports this package; it shells an allowlisted command
 and reads the checksummed JSON this module writes.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 from dataclasses import dataclass, field, replace
@@ -24,11 +23,16 @@ from models.nyse_calendar import (
     friday_execution_plan,
 )
 from models.study4_live import (
+    ARM_CONFIG_SHA256,
+    ARM_PROTOCOL_IDS,
     ARTIFACT_SCHEMA,
     ARTIFACT_SCHEMA_VERSION,
     OPERATIONAL_ID,
-    PROTOCOL_ID,
+    SPY_SYMBOL,
+    SPXL_SYMBOL,
+    STAGING_SYMBOLS,
     PlanItemKind,
+    StrategyArm,
     canonical_json,
     sha256_payload,
     sha256_text,
@@ -42,7 +46,6 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
     StudyConfig,
     _as_date,
     _bar_on,
-    _deployable,
     _position_from_payload,
     _position_payload,
     _position_triggers,
@@ -50,14 +53,18 @@ from studies.pre_earnings_momentum.daily_redeployment_engine import (
     _sector_usage,
     _update_post_event_state,
     allocate_equal,
+    allowed_close_drawdown,
     cap_report_candidates,
     dailies_from_frame,
     evaluate_symbol,
-    load_study_config,
     market_regime_at_close,
     regime_allows_entry,
     sale_proceeds,
     sale_proceeds_per_share,
+)
+from studies.pre_earnings_momentum.post_earnings_defensive_regime_staging_engine import (
+    Study7Config,
+    load_study7_config,
 )
 from studies.pre_earnings_momentum.event_forecast import (
     forecast_from_sorted,
@@ -65,18 +72,20 @@ from studies.pre_earnings_momentum.event_forecast import (
 )
 from studies.pre_earnings_momentum.momentum_v3_replay import evaluate_as_of
 
-FROZEN_CONFIG = (
-    Path(__file__).resolve().parent.parent
-    / "config"
-    / "post_earnings_weekly_batch_risk_on.yaml"
-)
+_CONFIG_ROOT = Path(__file__).resolve().parent.parent / "config"
+FROZEN_CONFIGS = {
+    StrategyArm.B: _CONFIG_ROOT / "post_earnings_defensive_regime_staging_stocks_spy.yaml",
+    StrategyArm.C: _CONFIG_ROOT / "post_earnings_defensive_regime_staging_stocks_spxl_spy.yaml",
+}
 
 
-def strategy_config_hash(cfg: StudyConfig | None = None) -> str:
-    raw = Path(FROZEN_CONFIG).read_bytes()
-    digest = hashlib.sha256(raw).hexdigest()
-    if cfg is not None and cfg.study_id != PROTOCOL_ID:
-        raise ValueError(f"operational evaluator requires {PROTOCOL_ID}")
+def strategy_config_hash(arm: StrategyArm, cfg: Study7Config | None = None) -> str:
+    loaded = cfg or load_study7_config(FROZEN_CONFIGS[arm])
+    digest = sha256_payload(loaded.raw)
+    if cfg is not None and cfg.study_id != ARM_PROTOCOL_IDS[arm]:
+        raise ValueError(f"operational evaluator requires {ARM_PROTOCOL_IDS[arm]}")
+    if digest != ARM_CONFIG_SHA256[arm]:
+        raise ValueError("Study 7 config does not match the frozen arm definition")
     return digest
 
 
@@ -93,7 +102,7 @@ def _parse_date(value: object) -> date | None:
 @dataclass
 class LiveHoldings:
     cash: float
-    spy_shares: int
+    staging_shares: dict[str, int]
     positions: dict[str, OpenPosition]
     pins: dict[str, date] = field(default_factory=dict)
     pending_exits: dict[str, tuple[str, ...]] = field(default_factory=dict)
@@ -101,7 +110,7 @@ class LiveHoldings:
     def to_payload(self) -> dict[str, Any]:
         return {
             "cash": self.cash,
-            "spy_shares": self.spy_shares,
+            "staging_shares": dict(sorted(self.staging_shares.items())),
             "positions": [_position_payload(item) for item in self.positions.values()],
             "pins": {ticker: pin.isoformat() for ticker, pin in self.pins.items()},
             "pending_exits": {
@@ -128,7 +137,13 @@ class LiveHoldings:
                 positions[ticker].pending_exit = True
         return cls(
             cash=float(payload.get("cash") or 0.0),
-            spy_shares=int(payload.get("spy_shares") or 0),
+            staging_shares={
+                str(symbol): int(shares)
+                for symbol, shares in (payload.get("staging_shares") or {
+                    SPY_SYMBOL: payload.get("spy_shares") or 0,
+                }).items()
+                if int(shares)
+            },
             positions=positions,
             pins=pins,
             pending_exits=pending,
@@ -140,7 +155,7 @@ class _CashState:
 
     def __init__(self, holdings: LiveHoldings):
         self.cash = holdings.cash
-        self.spy_shares = holdings.spy_shares
+        self.spy_shares = 0
         self.positions = holdings.positions
         self.pending: list[Any] = []
 
@@ -164,11 +179,12 @@ def evaluate_live_session(
     session: date,
     holdings: LiveHoldings,
     active_bucket: float,
+    arm: StrategyArm,
     forecast_overrides: dict[str, date] | None = None,
 ) -> dict[str, Any]:
-    """Evaluate one EOD session using frozen Study 4 Risk-On rules."""
-    if cfg.study_id != PROTOCOL_ID:
-        raise ValueError(f"operational evaluator requires {PROTOCOL_ID}")
+    """Evaluate one EOD session using one frozen Study 7 live arm."""
+    if cfg.study_id != ARM_PROTOCOL_IDS[arm]:
+        raise ValueError(f"operational evaluator requires {ARM_PROTOCOL_IDS[arm]}")
     spy = market.spy.sort_values("date").copy()
     spy["date"] = pd.to_datetime(spy["date"])
     all_sessions = [pd.Timestamp(value).date() for value in spy["date"]]
@@ -186,6 +202,11 @@ def evaluate_live_session(
     intended_execution = execution if execution and not is_execution else next_session
     spy_row = _bar_on(spy, session)
     spy_close = None if spy_row is None else float(spy_row.close)
+    staging_closes = {SPY_SYMBOL: spy_close}
+    for symbol in STAGING_SYMBOLS - {SPY_SYMBOL}:
+        frame = market.stocks.get(symbol)
+        row = None if frame is None else _bar_on(frame, session)
+        staging_closes[symbol] = None if row is None else float(row.close)
     regime = market_regime_at_close(
         spy, session,
         sma_window=cfg.regime_sma_window,
@@ -203,7 +224,7 @@ def evaluate_live_session(
 
     working = LiveHoldings(
         cash=holdings.cash,
-        spy_shares=holdings.spy_shares,
+        staging_shares=dict(holdings.staging_shares),
         positions={ticker: replace(pos) for ticker, pos in holdings.positions.items()},
         pins=dict(holdings.pins),
         pending_exits=dict(holdings.pending_exits),
@@ -259,7 +280,7 @@ def evaluate_live_session(
     }
     if not is_execution:
         for ticker in tickers:
-            if ticker == cfg.benchmark_symbol:
+            if ticker in STAGING_SYMBOLS:
                 continue
             if ticker in working.positions:
                 continue
@@ -317,7 +338,16 @@ def evaluate_live_session(
                 row["rejection_reasons"] = "friday_batch_pending"
 
     cash_state = _CashState(working)
-    deployable = min(active_bucket, _deployable(cash_state, spy_close, cfg))
+    staging_value = sum(
+        sale_proceeds(shares, float(staging_closes.get(symbol) or 0), cfg)
+        for symbol, shares in working.staging_shares.items()
+    )
+    pending_exit_value = sum(
+        sale_proceeds(position.shares, position.last_valid_close, cfg)
+        for position in working.positions.values()
+        if position.pending_exit and position.last_valid_close is not None
+    )
+    deployable = min(active_bucket, max(0.0, working.cash + staging_value + pending_exit_value))
     selected = []
     if is_cutoff and allocation_candidates:
         selected = allocate_equal(
@@ -354,17 +384,22 @@ def evaluate_live_session(
                 row["reserved_cash"] = intent.reserved_cash
 
     plan_items = []
+    staging_symbol = SPY_SYMBOL if arm is StrategyArm.B or regime != "RISK_ON" else SPXL_SYMBOL
     if is_cutoff:
-        plan_items = _cutoff_plan_items(cfg, working, selected, spy_close)
+        plan_items = _cutoff_plan_items(
+            cfg, working, selected, staging_symbol, staging_closes,
+            decision_session=session, execution_session=intended_execution,
+        )
 
     input_hashes = dict(market.input_hashes)
     artifact = {
         "schemaName": ARTIFACT_SCHEMA,
         "schemaVersion": ARTIFACT_SCHEMA_VERSION,
-        "protocolId": PROTOCOL_ID,
+        "protocolId": ARM_PROTOCOL_IDS[arm],
         "operationalId": OPERATIONAL_ID,
-        "strategyConfigPath": str(FROZEN_CONFIG.as_posix()),
-        "strategyConfigHash": strategy_config_hash(cfg),
+        "strategyArm": arm.value,
+        "strategyConfigPath": str(FROZEN_CONFIGS[arm].as_posix()),
+        "strategyConfigHash": strategy_config_hash(arm, cfg),
         "calendarSource": CALENDAR_SOURCE,
         "session": session.isoformat(),
         "cutoffSession": _date_text(cutoff),
@@ -376,6 +411,8 @@ def evaluate_live_session(
         "activeBucket": active_bucket,
         "deployableCapital": deployable,
         "spyClose": spy_close,
+        "stagingSymbol": staging_symbol,
+        "stagingCloses": staging_closes,
         "holdings": working.to_payload(),
         "positionDecisions": position_rows,
         "scanRows": scan_rows,
@@ -435,7 +472,10 @@ def _cutoff_plan_items(
     cfg: StudyConfig,
     holdings: LiveHoldings,
     selected: Sequence[Any],
-    spy_close: float | None,
+    staging_symbol: str,
+    staging_closes: dict[str, float | None],
+    decision_session: date,
+    execution_session: date | None,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     priority = 1
@@ -463,24 +503,50 @@ def _cutoff_plan_items(
         })
         priority += 1
 
+    for symbol, shares in sorted(holdings.staging_shares.items()):
+        if symbol == staging_symbol or shares <= 0:
+            continue
+        mark = staging_closes.get(symbol)
+        if mark is None:
+            raise ValueError(f"{symbol} close is required to rotate the staging sleeve")
+        exit_proceeds += sale_proceeds(shares, mark, cfg)
+        items.append({
+            "priority": priority,
+            "kind": PlanItemKind.STAGING_EXIT.value,
+            "symbol": symbol,
+            "side": "sell",
+            "currentShares": shares,
+            "targetShares": 0,
+            "deltaShares": -shares,
+            "limitPrice": None,
+            "reservationCash": 0.0,
+            "reason": f"rotate_to_{staging_symbol.lower()}",
+            "rank": None,
+            "timeInForce": "DAY",
+            "orderType": "Market",
+        })
+        priority += 1
+
     reserved_entries = sum(intent.reserved_cash for intent in selected)
     cash_after_exits = holdings.cash + exit_proceeds
     funding_shares = 0
-    if spy_close and reserved_entries > cash_after_exits + 1e-9 and holdings.spy_shares > 0:
+    staging_close = staging_closes.get(staging_symbol)
+    current_staging_shares = holdings.staging_shares.get(staging_symbol, 0)
+    if staging_close and reserved_entries > cash_after_exits + 1e-9 and current_staging_shares > 0:
         gap = reserved_entries - cash_after_exits
-        net = sale_proceeds_per_share(spy_close, cfg)
+        net = sale_proceeds_per_share(staging_close, cfg)
         funding_shares = min(
-            holdings.spy_shares,
+            current_staging_shares,
             int(math.ceil(gap / net)) if net > 0 else 0,
         )
     if funding_shares > 0:
         items.append({
             "priority": priority,
-            "kind": PlanItemKind.SPY_FUNDING.value,
-            "symbol": cfg.benchmark_symbol,
+            "kind": PlanItemKind.STAGING_FUNDING.value,
+            "symbol": staging_symbol,
             "side": "sell",
-            "currentShares": holdings.spy_shares,
-            "targetShares": holdings.spy_shares - funding_shares,
+            "currentShares": current_staging_shares,
+            "targetShares": current_staging_shares - funding_shares,
             "deltaShares": -funding_shares,
             "limitPrice": None,
             "reservationCash": 0.0,
@@ -507,28 +573,33 @@ def _cutoff_plan_items(
             "decisionClose": intent.decision_close,
             "setupScore": intent.setup_score,
             "sector": intent.sector,
+            "predictedEventDate": intent.predicted_event_date.isoformat(),
+            "entryDecisionDate": decision_session.isoformat(),
+            "entryExecutionDate": _date_text(execution_session),
+            "allowedDrawdown": allowed_close_drawdown(intent.dollar_target, cfg),
             "timeInForce": "IOC",
             "orderType": "Limit",
         })
         priority += 1
 
-    spy_after_funding = holdings.spy_shares - funding_shares
+    staging_after_funding = current_staging_shares - funding_shares
     items.append({
         "priority": priority,
-        "kind": PlanItemKind.SPY_RESIDUAL.value,
-        "symbol": cfg.benchmark_symbol,
+        "kind": PlanItemKind.STAGING_RESIDUAL.value,
+        "symbol": staging_symbol,
         "side": "buy",
-        "currentShares": spy_after_funding,
+        "currentShares": staging_after_funding,
         "targetShares": None,
         "deltaShares": None,
         "limitPrice": None,
         "reservationCash": None,
         "reason": "weekly_batch_residual",
+        "decisionClose": staging_close,
         "rank": None,
         "formula": (
             "After all stock IOC orders are terminal and cash is reconciled, "
-            "buy floor(cash / purchase_cash_per_share(SPY_open, frozen_cost_model)) "
-            "whole SPY shares."
+            f"buy floor(cash / purchase_cash_per_share({staging_symbol}_open, frozen_cost_model)) "
+            f"whole {staging_symbol} shares."
         ),
         "timeInForce": "DAY",
         "orderType": "Market",
@@ -556,17 +627,25 @@ def read_artifact(path: Path) -> dict[str, Any]:
         expected = checksum_path.read_text(encoding="utf-8").strip()
         actual = sha256_text(raw)
         if actual != expected:
-            raise ValueError("study4 live artifact checksum mismatch")
+            raise ValueError("pre-earnings live artifact checksum mismatch")
     stored = payload.get("artifactHash")
     replay = sha256_payload({key: value for key, value in payload.items() if key != "artifactHash"})
     if stored != replay:
-        raise ValueError("study4 live artifact hash mismatch")
+        raise ValueError("pre-earnings live artifact hash mismatch")
     if payload.get("schemaName") != ARTIFACT_SCHEMA:
-        raise ValueError("unsupported study4 live artifact schema")
-    if payload.get("protocolId") != PROTOCOL_ID:
-        raise ValueError("study4 live artifact is not the Risk-On protocol")
+        raise ValueError("unsupported pre-earnings live artifact schema")
+    if payload.get("schemaVersion") != ARTIFACT_SCHEMA_VERSION:
+        raise ValueError("unsupported pre-earnings live artifact schema version")
+    try:
+        arm = StrategyArm(payload.get("strategyArm"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("pre-earnings live artifact has an unsupported strategy arm") from exc
+    if payload.get("protocolId") != ARM_PROTOCOL_IDS[arm]:
+        raise ValueError("pre-earnings live artifact protocol does not match its strategy arm")
+    if payload.get("strategyConfigHash") != ARM_CONFIG_SHA256[arm]:
+        raise ValueError("pre-earnings live artifact config does not match its strategy arm")
     return payload
 
 
-def default_config() -> StudyConfig:
-    return load_study_config(FROZEN_CONFIG)
+def default_config(arm: StrategyArm) -> Study7Config:
+    return load_study7_config(FROZEN_CONFIGS[arm])

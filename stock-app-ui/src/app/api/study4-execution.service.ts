@@ -15,6 +15,10 @@ export class Study4ExecutionService {
     return this.http.get<Study4Status>(`${this.base}/status`);
   }
 
+  selectStrategy(arm: 'stocks-spy-control' | 'stocks-spxl-spy-control'): Observable<unknown> {
+    return this.http.post(`${this.base}/strategy`, { arm });
+  }
+
   cycle(week: string): Observable<Study4CycleDetail> {
     return this.http.get<Study4CycleDetail>(`${this.base}/cycles/${encodeURIComponent(week)}`);
   }

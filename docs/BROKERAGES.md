@@ -7,7 +7,7 @@ point and still have a working application.
 
 smallFish never asks for a brokerage password. Ordinary Tastytrade and SnapTrade
 credentials (`TT_*`, `SNAPTRADE_*`) never place, modify, or cancel an order.
-Study 4 live management is the sole gated exception: it uses separate
+Pre-Earnings Momentum Study 7 B/C live management is the sole gated exception: it uses separate
 `SFP_STUDY4_*` execution credentials and may submit only a stored, confirmed
 Study 4 batch. See [`STUDY4_LIVE_MANAGEMENT_DESIGN.md`](STUDY4_LIVE_MANAGEMENT_DESIGN.md).
 
@@ -261,7 +261,7 @@ holdings alone are not exact-contract Greeks or market-metric beta.
 
 ## Study 4 dedicated-account execution
 
-Ordinary Trading/Retirement setup above stays read-only. Study 4 live management
+Ordinary Trading/Retirement setup above stays read-only. Pre-Earnings live management
 uses a **separate** credential set and account fingerprint so sandbox and
 production cannot be mixed with `TT_*`:
 
@@ -288,7 +288,7 @@ approved, confirmed plan. See
 | `$SFP_DATA_DIR/ledger_trading/options_betas.csv` | Timestamped market-metric beta |
 | `$SFP_DATA_DIR/ledger_retirement/positions.csv` | Normalized holdings (equity, option, cash) |
 | `$SFP_DATA_DIR/ledger_retirement/options_activity.csv` | Immutable option transaction events |
-| `$SFP_DATA_DIR/execution/study4.sqlite` | Study 4 execution ledger (plans, intents, fills, audit) |
+| `$SFP_DATA_DIR/execution/study4.sqlite` | Pre-Earnings execution ledger (strategy epochs, plans, intents, fills, audit) |
 
 All git-ignored. All contain real position data — never attach them to an issue.
 

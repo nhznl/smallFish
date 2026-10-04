@@ -44,3 +44,22 @@ label {
   gap: 6px;
   margin: 12px 0;
 }
+.arm-controls {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.arm-controls label {
+  display: grid;
+  gap: 6px;
+}
+
+.arm-controls select {
+  min-width: 15rem;
+}
+
+.muted {
+  color: var(--text-secondary);
+}

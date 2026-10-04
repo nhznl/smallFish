@@ -1,4 +1,4 @@
-"""Study 4 operational evaluator: parity, calendar, and frozen-rule tests."""
+"""Study 7 B/C operational evaluator: parity, calendar, and frozen-rule tests."""
 
 from __future__ import annotations
 
@@ -10,21 +10,19 @@ import pytest
 
 from models.nyse_calendar import friday_execution_plan as model_friday_plan
 from models.nyse_calendar import nyse_sessions
-from models.study4_live import PROTOCOL_ID, PlanItemKind
+from models.study4_live import ARM_PROTOCOL_IDS, PlanItemKind, StrategyArm
 from studies.pre_earnings_momentum.daily_redeployment_engine import (
-    EXECUTION_FRIDAY_OPEN,
     PRIMARY_DRAWDOWN,
     PRIMARY_TREND,
     MarketBundle,
     OpenPosition,
     allowed_close_drawdown,
     friday_execution_plan,
-    load_study_config,
     run_simulation,
 )
 from studies.pre_earnings_momentum.momentum_v3_replay import weekday_bars
 from studies.pre_earnings_momentum.operational.evaluator import (
-    FROZEN_CONFIG,
+    FROZEN_CONFIGS,
     LiveHoldings,
     default_config,
     evaluate_live_session,
@@ -82,16 +80,19 @@ def _market(n=130, start=datetime(1999, 10, 4), tickers=("AAA", "BBB"),
         quarantines={},
         input_hashes={"fixture": "study4-parity"},
     )
+    bundle.stocks["SPXL"] = _frame(
+        "SPXL", weekday_bars(n, start=start, close0=30.0, step=0.3, volume0=volume, kind="rising")
+    )
     return bundle, sessions
 
 
-def test_frozen_config_is_the_study4_risk_on_protocol():
-    cfg = default_config()
-    assert cfg.study_id == PROTOCOL_ID
-    assert Path(FROZEN_CONFIG).name == "post_earnings_weekly_batch_risk_on.yaml"
-    assert cfg.execution_schedule == EXECUTION_FRIDAY_OPEN
+def test_frozen_configs_are_the_study7_b_c_protocols():
+    cfg = default_config(StrategyArm.B)
+    assert cfg.study_id == ARM_PROTOCOL_IDS[StrategyArm.B]
+    assert Path(FROZEN_CONFIGS[StrategyArm.B]).name == "post_earnings_defensive_regime_staging_stocks_spy.yaml"
+    assert cfg.execution_schedule == "weekly_open_decision"
     assert cfg.market_regime_gate == "risk_on"
-    assert strategy_config_hash(cfg) == strategy_config_hash()
+    assert strategy_config_hash(StrategyArm.B, cfg) == strategy_config_hash(StrategyArm.B)
 
 
 def test_model_calendar_matches_pandas_holiday_calendar_and_study4_fridays():
@@ -115,7 +116,7 @@ def test_model_calendar_matches_pandas_holiday_calendar_and_study4_fridays():
 
 def test_operational_cutoff_matches_study4_selected_quantities_and_limits():
     bundle, sessions = _market()
-    cfg = load_study_config(FROZEN_CONFIG)
+    cfg = default_config(StrategyArm.B)
     result = run_simulation(cfg=cfg, market=bundle, year=2000)
     selected = [
         record.payload for record in result.decisions
@@ -129,8 +130,9 @@ def test_operational_cutoff_matches_study4_selected_quantities_and_limits():
         cfg=cfg,
         market=bundle,
         session=first_cutoff,
-        holdings=LiveHoldings(cash=cfg.starting_equity, spy_shares=0, positions={}),
+        holdings=LiveHoldings(cash=cfg.starting_equity, staging_shares={}, positions={}),
         active_bucket=cfg.starting_equity,
+        arm=StrategyArm.B,
     )
     assert artifact["isCutoff"] is True
     actual = [row for row in artifact["scanRows"] if row["state"] == "selected"]
@@ -155,7 +157,7 @@ def test_operational_cutoff_matches_study4_selected_quantities_and_limits():
 
 def test_friday_close_cannot_change_thursdays_plan():
     bundle, sessions = _market()
-    cfg = load_study_config(FROZEN_CONFIG)
+    cfg = default_config(StrategyArm.B)
     result = run_simulation(cfg=cfg, market=bundle, year=2000)
     selected = next(
         record.payload for record in result.decisions
@@ -165,13 +167,15 @@ def test_friday_close_cannot_change_thursdays_plan():
     execution = date.fromisoformat(selected["intended_execution_date"])
     thursday = evaluate_live_session(
         cfg=cfg, market=bundle, session=cutoff,
-        holdings=LiveHoldings(cash=cfg.starting_equity, spy_shares=0, positions={}),
+        holdings=LiveHoldings(cash=cfg.starting_equity, staging_shares={}, positions={}),
         active_bucket=cfg.starting_equity,
+        arm=StrategyArm.B,
     )
     friday = evaluate_live_session(
         cfg=cfg, market=bundle, session=execution,
-        holdings=LiveHoldings(cash=cfg.starting_equity, spy_shares=0, positions={}),
+        holdings=LiveHoldings(cash=cfg.starting_equity, staging_shares={}, positions={}),
         active_bucket=cfg.starting_equity,
+        arm=StrategyArm.B,
     )
     assert thursday["isCutoff"] is True
     assert friday["isExecutionSession"] is True
@@ -181,7 +185,7 @@ def test_friday_close_cannot_change_thursdays_plan():
 
 
 def test_exit_triggers_stay_sticky_through_a_later_favorable_close():
-    cfg = default_config()
+    cfg = default_config(StrategyArm.B)
     bundle, sessions = _market()
     origin = next(session for session in sessions if session.year == 2000)
     cutoff = next(
@@ -221,10 +225,11 @@ def test_exit_triggers_stay_sticky_through_a_later_favorable_close():
         ),
         session=cutoff,
         holdings=LiveHoldings(
-            cash=10_000.0, spy_shares=0, positions={"AAA": position},
+            cash=10_000.0, staging_shares={}, positions={"AAA": position},
             pending_exits={"AAA": (PRIMARY_DRAWDOWN,)},
         ),
         active_bucket=50_000.0,
+        arm=StrategyArm.B,
     )
     recovered_position = OpenPosition(**{**position.__dict__, "pending_exit": True})
     second = evaluate_live_session(
@@ -235,10 +240,11 @@ def test_exit_triggers_stay_sticky_through_a_later_favorable_close():
         ),
         session=cutoff,
         holdings=LiveHoldings(
-            cash=10_000.0, spy_shares=0, positions={"AAA": recovered_position},
+            cash=10_000.0, staging_shares={}, positions={"AAA": recovered_position},
             pending_exits={"AAA": (PRIMARY_DRAWDOWN,)},
         ),
         active_bucket=50_000.0,
+        arm=StrategyArm.B,
     )
     held = second["positionDecisions"][0]
     assert held["pendingExit"] is True
@@ -249,17 +255,46 @@ def test_exit_triggers_stay_sticky_through_a_later_favorable_close():
 
 def test_artifact_checksum_round_trip(tmp_path: Path):
     bundle, sessions = _market()
-    cfg = default_config()
+    cfg = default_config(StrategyArm.B)
     session = next(item for item in sessions if item.year == 2000 and item.weekday() == 3)
     artifact = evaluate_live_session(
         cfg=cfg, market=bundle, session=session,
-        holdings=LiveHoldings(cash=cfg.starting_equity, spy_shares=0, positions={}),
+        holdings=LiveHoldings(cash=cfg.starting_equity, staging_shares={}, positions={}),
         active_bucket=cfg.starting_equity,
+        arm=StrategyArm.B,
     )
     path = tmp_path / "scan.json"
     write_artifact(artifact, path)
     loaded = read_artifact(path)
     assert loaded["artifactHash"] == artifact["artifactHash"]
-    path.write_text(path.read_text(encoding="utf-8").replace("study4-live-v1", "tampered"), encoding="utf-8")
+    path.write_text(path.read_text(encoding="utf-8").replace("study7-bc-live-v1", "tampered"), encoding="utf-8")
     with pytest.raises(ValueError):
         read_artifact(path)
+
+
+def test_arm_b_and_c_choose_the_published_risk_on_staging_etfs():
+    bundle, sessions = _market()
+    cutoff = next(item for item in sessions if item.year == 2000 and item.weekday() == 3)
+
+    arm_b = evaluate_live_session(
+        cfg=default_config(StrategyArm.B), market=bundle, session=cutoff,
+        holdings=LiveHoldings(cash=50_000, staging_shares={}, positions={}),
+        active_bucket=50_000, arm=StrategyArm.B,
+    )
+    arm_c = evaluate_live_session(
+        cfg=default_config(StrategyArm.C), market=bundle, session=cutoff,
+        holdings=LiveHoldings(cash=50_000, staging_shares={"SPY": 10}, positions={}),
+        active_bucket=50_000, arm=StrategyArm.C,
+    )
+
+    assert arm_b["marketRegime"] == "RISK_ON"
+    assert arm_b["stagingSymbol"] == "SPY"
+    assert arm_c["stagingSymbol"] == "SPXL"
+    assert any(
+        item["kind"] == PlanItemKind.STAGING_EXIT.value
+        and item["symbol"] == "SPY"
+        and item["deltaShares"] == -10
+        for item in arm_c["planItems"]
+    )
+    assert arm_c["planItems"][-1]["kind"] == PlanItemKind.STAGING_RESIDUAL.value
+    assert arm_c["planItems"][-1]["symbol"] == "SPXL"
