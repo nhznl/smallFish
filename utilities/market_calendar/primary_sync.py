@@ -109,6 +109,19 @@ def _calendar_fetched_as_of(calendar_text: str | None) -> str | None:
     return value
 
 
+def _calendar_identity_complete(calendar_text: str | None) -> bool:
+    if not calendar_text:
+        return False
+    try:
+        raw = json.loads(calendar_text)
+        return (
+            raw.get("identityComplete") is True
+            and int(raw["identityFailureCount"]) == 0
+        )
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return False
+
+
 def _fresh(row, spec, start: date, end: date, now: datetime) -> bool:
     if row is None or row["status"] != "fresh" or row["parser_version"] != spec.parser_version:
         return False
@@ -258,18 +271,18 @@ CLUSTER_RISK = (
 
 def _overlaps_exposure(row, window) -> bool:
     if row["time_precision"] != "exact" or not row["scheduled_at_utc"]:
-        return True
+        return False
     clock = parse_utc(row["scheduled_at_utc"]).astimezone(EASTERN).time().replace(
         second=0, microsecond=0,
     )
-    return clock <= window.hard_exit
+    return window.entry <= clock <= window.hard_exit
 
 
 def _rebuild_clusters(connection, windows) -> int:
     """Relate broad events only when they overlap a configured strategy exposure."""
     rows = connection.execute(
         """
-        SELECT id, session_date, scheduled_at_utc, time_precision FROM events
+        SELECT id, event_type, session_date, scheduled_at_utc, time_precision FROM events
         WHERE lifecycle_status != 'cancelled'
           AND portfolio_relevance IN ('DIRECT_BROAD_INDEX', 'INDIRECT_BROAD_INDEX')
         ORDER BY session_date, scheduled_at_utc, id
@@ -279,7 +292,12 @@ def _rebuild_clusters(connection, windows) -> int:
     for row in rows:
         grouped.setdefault(row["session_date"], []).append(row["id"])
     connection.execute(
-        "DELETE FROM event_relationships WHERE relationship LIKE 'strategy_exposure_overlap:%'"
+        """
+        DELETE FROM event_relationships
+        WHERE relationship = 'same_session_cluster'
+           OR relationship = 'fomc_statement_press_conference'
+           OR relationship LIKE 'strategy_exposure_overlap:%'
+        """
     )
     assessment_rows = connection.execute(
         "SELECT rowid, benefits_json, risks_json, rule_ids_json FROM strategy_assessments"
@@ -297,6 +315,26 @@ def _rebuild_clusters(connection, windows) -> int:
         )
     links = 0
     rows_by_id = {row["id"]: row for row in rows}
+    for event_ids in grouped.values():
+        decisions = [
+            item for item in event_ids
+            if rows_by_id[item]["event_type"] == "FOMC_DECISION"
+        ]
+        conferences = [
+            item for item in event_ids
+            if rows_by_id[item]["event_type"] == "FOMC_PRESS_CONFERENCE"
+        ]
+        for event_id in decisions:
+            for related_id in conferences:
+                connection.execute(
+                    "INSERT INTO event_relationships (event_id, related_event_id, relationship) VALUES (?, ?, ?)",
+                    (event_id, related_id, "fomc_statement_press_conference"),
+                )
+                connection.execute(
+                    "INSERT INTO event_relationships (event_id, related_event_id, relationship) VALUES (?, ?, ?)",
+                    (related_id, event_id, "fomc_statement_press_conference"),
+                )
+                links += 2
     for event_ids in grouped.values():
         for window in windows:
             overlapping = [
@@ -574,15 +612,29 @@ def run_primary_sync(
             )
             lines.append("finnhub_earnings: unavailable; previous rows were kept.")
             required_failures += 1
-        elif earnings_calendar_text is None or calendar_coverage is None:
+        elif not _calendar_identity_complete(earnings_calendar_text):
             _mark_failure(
                 connection,
                 spec,
                 observed_at,
                 "stable_identity_unavailable",
-                "The legacy Finnhub CSV has no fiscal-period identity. No earnings rows were published to avoid false reschedule history.",
+                "At least one Finnhub row lacks fiscal-period identity. No earnings rows "
+                "were published to avoid false covered-empty state or reschedule history.",
             )
-            lines.append("finnhub_earnings: stable fiscal-period identity unavailable; previous rows were kept.")
+            lines.append(
+                "finnhub_earnings: stable fiscal-period identity is incomplete; "
+                "previous rows were kept."
+            )
+            required_failures += 1
+        elif calendar_coverage is None:
+            _mark_failure(
+                connection,
+                spec,
+                observed_at,
+                "insufficient_coverage",
+                "The Finnhub calendar sidecar does not prove complete coverage for the requested horizon.",
+            )
+            lines.append("finnhub_earnings: insufficient coverage; previous rows were kept.")
             required_failures += 1
         elif calendar_fetched != earnings_metadata[0]:
             _mark_failure(

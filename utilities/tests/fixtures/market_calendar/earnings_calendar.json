@@ -14,6 +14,10 @@
     }
   ],
   "fetchedAsOf": "2026-10-04",
+  "identityComplete": true,
+  "identityFailureCount": 0,
   "provider": "finnhub",
-  "schemaVersion": 1
+  "requestedCoverageEnd": "2026-11-15",
+  "requestedCoverageStart": "2026-10-04",
+  "schemaVersion": 2
 }

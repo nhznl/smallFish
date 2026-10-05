@@ -36,6 +36,7 @@ TITLE_TYPES = (
     (re.compile(r"employment cost index|\beci\b", re.I), "ECI"),
     (re.compile(r"unemployment insurance weekly claims|jobless claims", re.I), "JOBLESS_CLAIMS"),
     (re.compile(r"fomc.*(decision|statement)|federal funds rate", re.I), "FOMC_DECISION"),
+    (re.compile(r"fomc press conference", re.I), "FOMC_PRESS_CONFERENCE"),
     (re.compile(r"fomc minutes|minutes of the federal open market", re.I), "FOMC_MINUTES"),
     (re.compile(r"beige book", re.I), "BEIGE_BOOK"),
     (re.compile(r"speech|testimony|remarks", re.I), "FED_SPEECH"),
@@ -232,10 +233,14 @@ def _fed_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, s
         kind = str(item.get("type") or "").strip().lower()
         if title == "FOMC Meeting":
             event_type = "FOMC_DECISION"
+        elif title == "FOMC Press Conference":
+            event_type = "FOMC_PRESS_CONFERENCE"
         elif title == "FOMC Minutes":
             event_type = "FOMC_MINUTES"
         elif title == "Beige Book":
             event_type = "BEIGE_BOOK"
+        elif kind == "stat" and title.startswith("G.17 - Industrial Production"):
+            event_type = "INDUSTRIAL_PRODUCTION"
         elif kind in {"speeches", "testimony"} or re.search(r"speech|testimony|remarks", title, re.I):
             event_type = "FED_SPEECH"
         else:
@@ -245,11 +250,15 @@ def _fed_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, s
                 continue
             civil = f"{month}-{int(raw_day):02d}"
             identity_seed = (
-                f"{event_type}|{item.get('link') or ''}|{title}|{description}|{location}|{month}"
+                f"{event_type}|{item.get('link') or ''}|{title}|"
+                f"{description}|{location}|{month}"
             )
             source_id = hashlib.sha256(identity_seed.encode("utf-8")).hexdigest()[:24]
             reference = description or civil
-            if event_type in {"FOMC_DECISION", "BEIGE_BOOK"}:
+            if event_type in {
+                "FOMC_DECISION", "FOMC_PRESS_CONFERENCE", "BEIGE_BOOK",
+                "INDUSTRIAL_PRODUCTION",
+            }:
                 reference = civil
             clock = _clock_text(str(item.get("time") or ""))
             scheduled = None
@@ -258,6 +267,17 @@ def _fed_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, s
                 scheduled = datetime.combine(
                     date.fromisoformat(civil), parsed_clock, ZoneInfo("America/New_York")
                 ).isoformat()
+            if event_type == "FOMC_DECISION":
+                source_id = f"FOMC_DECISION:{civil}"
+            elif event_type == "FOMC_PRESS_CONFERENCE":
+                source_id = f"FOMC_PRESS_CONFERENCE:{civil}"
+            elif event_type == "INDUSTRIAL_PRODUCTION":
+                source_id = f"INDUSTRIAL_PRODUCTION:{month}"
+            canonical_subject = source_id
+            if event_type in {"FOMC_DECISION", "FOMC_PRESS_CONFERENCE"}:
+                canonical_subject = civil
+            elif event_type == "INDUSTRIAL_PRODUCTION":
+                canonical_subject = month
             rows.append({
                 "id": source_id,
                 "title": title,
@@ -266,7 +286,7 @@ def _fed_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, s
                 "civilDate": civil,
                 "scheduledAt": scheduled,
                 "timezone": "America/New_York",
-                "canonicalKey": f"US:FED:{event_type}:{source_id}",
+                "canonicalKey": f"US:FED:{event_type}:{canonical_subject}",
             })
     if not months:
         raise PrimaryCalendarParseError("Federal Reserve calendar has no dated coverage")

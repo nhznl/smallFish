@@ -222,7 +222,7 @@ def run_fetch(as_of: str, lookahead_days: int,
             try:
                 fiscal_year = int(item["fiscal_year"])
                 fiscal_quarter = int(item["fiscal_quarter"])
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 continue
             if not 1 <= fiscal_quarter <= 4:
                 continue
@@ -238,12 +238,18 @@ def run_fetch(as_of: str, lookahead_days: int,
                 "referenceLabel": period,
                 "canonicalKey": f"US:EARNINGS:{symbol}:{period}",
             })
+    identity_failure_count = len(normalized) - len(calendar_rows)
+    identity_complete = identity_failure_count == 0
     calendar_content = json.dumps({
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "provider": "finnhub",
         "fetchedAsOf": as_of,
-        "coverageStart": as_of,
-        "coverageEnd": end_date,
+        "coverageStart": as_of if identity_complete else None,
+        "coverageEnd": end_date if identity_complete else None,
+        "requestedCoverageStart": as_of,
+        "requestedCoverageEnd": end_date,
+        "identityComplete": identity_complete,
+        "identityFailureCount": identity_failure_count,
         "events": calendar_rows,
     }, indent=2, sort_keys=True) + "\n"
     metadata_content = json.dumps({

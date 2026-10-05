@@ -70,6 +70,12 @@ attribution, are not a redistribution surface, and must be deleted if dataset
 access ends. The legacy earnings job remains the only active Finnhub fetcher;
 its `events.csv` contract is unchanged.
 
+The Federal Reserve adapter retains G.17 industrial production and represents
+the 2:00 p.m. FOMC statement and advertised 2:30 p.m. press conference as
+separate related occurrences. The earnings sidecar claims coverage only when
+every retained Finnhub row has fiscal-year and fiscal-quarter identity; an
+incomplete projection fails closed without changing the legacy CSV contract.
+
 See [`options/README.md`](options/README.md).
 
 Research studies live in [`../studies/`](../studies/README.md) and share this

@@ -348,6 +348,14 @@ def _ordered(events: list[dict]) -> list[dict]:
     return sorted(events, key=sort_key)
 
 
+def _has_strategy_overlap(event: dict) -> bool:
+    return any(
+        str(rule_id).startswith("cluster-exposure-overlap:")
+        for assessment in event["strategyAssessments"]
+        for rule_id in assessment["ruleIds"]
+    )
+
+
 def _days(start: date, end: date, events: list[dict], zone: str, coverage_status: str) -> list[dict]:
     grouped: dict[str, list[dict]] = {}
     for event in events:
@@ -366,7 +374,7 @@ def _days(start: date, end: date, events: list[dict], zone: str, coverage_status
             state = "covered_empty"
         primary = [event for event in day_events if event["priority"] == "primary"]
         secondary = [event for event in day_events if event["priority"] == "secondary"]
-        clustered = [event for event in primary if event["relatedEventIds"]]
+        clustered = [event for event in primary if _has_strategy_overlap(event)]
         days.append({
             "date": iso,
             "sessionState": _session_state(cursor),

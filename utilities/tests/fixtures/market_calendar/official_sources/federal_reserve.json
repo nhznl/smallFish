@@ -1,6 +1,8 @@
 {
   "events": [
-    {"title":"FOMC Meeting","description":"Two-day meeting, October 27 - 28","time":"2:00 p.m.","month":"2026-10","days":"28","type":"FOMC"},
+    {"title":"FOMC Meeting","description":"<p>Two-day meeting, October 27 - 28<br />Press Conference</p>","time":"2:00 p.m.","month":"2026-10","days":"28","type":"FOMC"},
+    {"title":"FOMC Press Conference","time":"2:30 p.m.","month":"2026-10","days":"28","type":"FOMC"},
+    {"title":"G.17 - Industrial Production and Capacity Utilization","time":"9:15 a.m.","month":"2026-10","days":"16","type":"Stat"},
     {"title":"Beige Book","time":"2:00 p.m.","month":"2026-11","days":"5","type":"Beige"}
   ],
   "announcement": []

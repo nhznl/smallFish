@@ -25,11 +25,11 @@ sources:
   federal_reserve:
     required: true
     configured: true
-    parser_version: fed-calendar-json-2
+    parser_version: fed-calendar-json-3
     schedule_url: https://www.federalreserve.gov/json/calendar.json
     freshness_hours: 24
-    scope: fomc_calendar_speeches_beige_book
-    detail: Official Federal Reserve calendar, FOMC, speech, and Beige Book schedule.
+    scope: fomc_calendar_speeches_beige_book_industrial_production
+    detail: Official Federal Reserve calendar, separate FOMC statement and press-conference occurrences, speech, Beige Book, and G.17 industrial-production schedule.
   treasury:
     required: true
     configured: true
@@ -65,7 +65,7 @@ sources:
   finnhub_earnings:
     required: true
     configured: true
-    parser_version: finnhub-calendar-sidecar-1
+    parser_version: finnhub-calendar-sidecar-2
     freshness_hours: 24
     scope: private_local_earnings_with_dated_membership
     detail: >-

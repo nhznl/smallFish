@@ -163,11 +163,15 @@ def _earnings_calendar(*events: dict[str, str]) -> str:
         "canonicalKey": "US:EARNINGS:AAA:2026-Q3",
     }]
     return json.dumps({
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "provider": "finnhub",
         "fetchedAsOf": "2026-10-04",
         "coverageStart": "2026-10-04",
         "coverageEnd": END.isoformat(),
+        "requestedCoverageStart": "2026-10-04",
+        "requestedCoverageEnd": END.isoformat(),
+        "identityComplete": True,
+        "identityFailureCount": 0,
         "events": rows,
     })
 
@@ -717,7 +721,7 @@ def test_m2_primary_sources_publish_with_coverage_and_named_clusters(tmp_path: P
         "SELECT source_url, parser_version FROM event_source_facts WHERE provider = 'finnhub'",
     )
     assert earnings[0]["source_url"] == "https://finnhub.io/docs/api/earnings-calendar"
-    assert earnings[0]["parser_version"] == "finnhub-calendar-sidecar-1"
+    assert earnings[0]["parser_version"] == "finnhub-calendar-sidecar-2"
 
 
 def test_m2_official_source_shapes_prove_coverage_without_network(tmp_path: Path):
@@ -759,7 +763,8 @@ def test_m2_official_source_shapes_prove_coverage_without_network(tmp_path: Path
         )
     }
     assert {
-        "FOMC_DECISION", "BEIGE_BOOK", "TREASURY_REFUNDING", "TREASURY_AUCTION",
+        "FOMC_DECISION", "FOMC_PRESS_CONFERENCE", "BEIGE_BOOK",
+        "INDUSTRIAL_PRODUCTION", "TREASURY_REFUNDING", "TREASURY_AUCTION",
         "GDP", "PCE", "RETAIL_SALES", "DURABLE_GOODS", "JOBLESS_CLAIMS",
     }.issubset(event_types)
     fed_labels = _rows(
@@ -773,6 +778,38 @@ def test_m2_official_source_shapes_prove_coverage_without_network(tmp_path: Path
     )
     assert fed_labels
     assert all("<" not in row["reference_label"] for row in fed_labels)
+    fed_occurrences = _rows(
+        tmp_path / "calendar.sqlite",
+        """
+        SELECT event_type, canonical_key, scheduled_at_utc
+        FROM events
+        WHERE event_type IN (
+          'FOMC_DECISION', 'FOMC_PRESS_CONFERENCE', 'INDUSTRIAL_PRODUCTION'
+        )
+        ORDER BY scheduled_at_utc
+        """,
+    )
+    assert [tuple(row) for row in fed_occurrences] == [
+        (
+            "INDUSTRIAL_PRODUCTION",
+            "US:FED:INDUSTRIAL_PRODUCTION:2026-10",
+            "2026-10-16T13:15:00Z",
+        ),
+        ("FOMC_DECISION", "US:FED:FOMC_DECISION:2026-10-28", "2026-10-28T18:00:00Z"),
+        (
+            "FOMC_PRESS_CONFERENCE",
+            "US:FED:FOMC_PRESS_CONFERENCE:2026-10-28",
+            "2026-10-28T18:30:00Z",
+        ),
+    ]
+    fomc_links = _rows(
+        tmp_path / "calendar.sqlite",
+        """
+        SELECT relationship FROM event_relationships
+        WHERE relationship = 'fomc_statement_press_conference'
+        """,
+    )
+    assert len(fomc_links) == 2
 
 
 def test_m2_failed_required_provider_keeps_rows_and_marks_calendar_incomplete(tmp_path: Path):
@@ -970,6 +1007,43 @@ def test_m2_earnings_cache_freshness_and_coverage(
         assert result.exit_code == 1
 
 
+def test_m2_earnings_identity_incompleteness_fails_closed(tmp_path: Path):
+    _prices(tmp_path / "cache")
+    incomplete = json.loads(_earnings_calendar())
+    incomplete["identityComplete"] = False
+    incomplete["identityFailureCount"] = 1
+    result = run_primary_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        now=NOW,
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        provider_documents=_primary_documents(),
+        earnings_csv_text=(
+            "ticker,event_type,event_date,source,fetched_as_of\n"
+            "AAA,earnings,2026-10-20,finnhub,2026-10-04\n"
+            "BBB,earnings,2026-10-21,finnhub,2026-10-04\n"
+        ),
+        earnings_meta_text=json.dumps({
+            "events_fetched_as_of": "2026-10-04",
+            "events_coverage_end": END.isoformat(),
+        }),
+        earnings_calendar_text=json.dumps(incomplete),
+    )
+    assert result.exit_code == 1
+    assert not _rows(
+        tmp_path / "calendar.sqlite", "SELECT id FROM events WHERE event_type = 'EARNINGS'",
+    )
+    source = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT status, error_category FROM source_sync_state WHERE provider = 'finnhub_earnings'",
+    )[0]
+    assert dict(source) == {"status": "failed", "error_category": "stable_identity_unavailable"}
+
+
 def test_m2_earnings_membership_controls_relevance_with_dated_provenance(tmp_path: Path):
     _prices(tmp_path / "cache")
     earnings = _earnings_calendar(
@@ -1106,6 +1180,34 @@ def test_m2_clusters_require_true_strategy_exposure_overlap(tmp_path: Path):
     )
     assert CLUSTER_BENEFIT in json.loads(assessment["benefits_json"])
     assert CLUSTER_RISK in json.loads(assessment["risks_json"])
+
+    connection = sqlite3.connect(tmp_path / "overlap" / "calendar.sqlite")
+    try:
+        connection.execute(
+            "INSERT INTO event_relationships VALUES (?, ?, 'same_session_cluster')",
+            (
+                "US:FEDERAL_RESERVE:FOMC_DECISION:2026-10-28",
+                "US:TREASURY:TREASURY_AUCTION:2026-10-28",
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    assert run_at(tmp_path / "overlap", _primary_documents()).exit_code == 0
+    assert not _rows(
+        tmp_path / "overlap" / "calendar.sqlite",
+        "SELECT * FROM event_relationships WHERE relationship = 'same_session_cluster'",
+    )
+
+    preentry = _primary_documents()
+    for provider, clock in (("federal_reserve", "08:30:00"), ("treasury", "08:45:00")):
+        raw = json.loads(preentry[provider])
+        raw["events"][0]["scheduledAt"] = f"2026-10-28T{clock}"
+        preentry[provider] = json.dumps(raw)
+    assert run_at(tmp_path / "preentry", preentry).exit_code == 0
+    assert not _rows(
+        tmp_path / "preentry" / "calendar.sqlite", "SELECT * FROM event_relationships",
+    )
 
     nonoverlap = _primary_documents()
     for provider in ("federal_reserve", "treasury"):

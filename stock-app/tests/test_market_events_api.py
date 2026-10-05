@@ -10,10 +10,26 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.market_events_read import _has_strategy_overlap
 from models.market_events import display_clocks
 
 MIGRATION = Path(__file__).resolve().parents[2] / "utilities" / "market_calendar" / "migrations" / "001_initial.sql"
 CLIENT = TestClient(app)
+
+
+def test_cluster_warning_requires_named_strategy_overlap_rule():
+    occurrence_only = {
+        "relatedEventIds": ["US:FED:FOMC_PRESS_CONFERENCE:2026-10-28"],
+        "strategyAssessments": [{"ruleIds": ["importance-fomc-extreme"]}],
+    }
+    clustered = {
+        **occurrence_only,
+        "strategyAssessments": [{
+            "ruleIds": ["cluster-exposure-overlap:long-premium-20d-0-or-1dte"],
+        }],
+    }
+    assert _has_strategy_overlap(occurrence_only) is False
+    assert _has_strategy_overlap(clustered) is True
 
 
 def _database(path: Path, *, fresh: bool) -> None:

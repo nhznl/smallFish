@@ -57,6 +57,48 @@ def test_run_fetch_writes_current_history_and_freshness(tmp_path: Path) -> None:
         "symbol": "AAPL",
         "title": "AAPL earnings",
     }]
+    assert calendar["schemaVersion"] == 2
+    assert calendar["identityComplete"] is True
+    assert calendar["identityFailureCount"] == 0
+    assert calendar["coverageStart"] == "2026-07-16"
+    assert calendar["coverageEnd"] == "2026-09-24"
+
+
+@pytest.mark.parametrize("with_identity_columns", [True, False])
+def test_run_fetch_marks_calendar_projection_incomplete_when_identity_is_missing(
+    tmp_path: Path, with_identity_columns: bool,
+) -> None:
+    rows = [
+        {
+            "ticker": "AAPL",
+            "event_type": "earnings",
+            "event_date": "2026-08-01",
+            "source": "finnhub",
+            **({"fiscal_year": 2026, "fiscal_quarter": 3} if with_identity_columns else {}),
+        },
+        {
+            "ticker": "MSFT",
+            "event_type": "earnings",
+            "event_date": "2026-08-02",
+            "source": "finnhub",
+            **({"fiscal_year": None, "fiscal_quarter": None} if with_identity_columns else {}),
+        },
+    ]
+    run_fetch(
+        "2026-07-16", 70, lambda *_: pd.DataFrame(rows),
+        api_key="test-key", output_root=tmp_path,
+    )
+
+    legacy = pd.read_csv(tmp_path / "events.csv")
+    assert legacy["ticker"].tolist() == ["AAPL", "MSFT"]
+    calendar = json.loads(
+        (tmp_path / "market_calendar" / "earnings.json").read_text(encoding="utf-8")
+    )
+    assert calendar["identityComplete"] is False
+    assert calendar["identityFailureCount"] == (1 if with_identity_columns else 2)
+    assert calendar["coverageStart"] is None
+    assert calendar["coverageEnd"] is None
+    assert len(calendar["events"]) == (1 if with_identity_columns else 0)
 
 
 def test_ensure_fresh_events_reuses_recent_covered_cache_without_a_key(tmp_path: Path) -> None:

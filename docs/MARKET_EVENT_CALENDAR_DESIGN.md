@@ -578,6 +578,11 @@ and press conference, Treasury announcement/auction/result, and earnings
 release/call remain separate related occurrences because their risk windows
 differ.
 
+Named strategy-exposure clusters require an exact event time within the
+configured inclusive interval from strategy entry through hard exit. Pre-entry
+and post-exit events do not use that relationship name, and legacy
+`same_session_cluster` rows are removed during rematerialization.
+
 ## 11. Existing earnings compatibility
 
 The current `data/events.csv`, `events_meta.json`, and `events_history/`
@@ -587,7 +592,9 @@ fail-closed semantics.
 
 The existing Finnhub fetch also writes a private calendar-only normalized
 sidecar with fiscal-period identity. This does not replace or widen the legacy
-CSV artifact and does not add a second provider fetch. A later migration may derive a
+CSV artifact and does not add a second provider fetch. The sidecar fails closed
+for calendar use and does not claim coverage if any in-horizon provider row
+lacks fiscal-period identity. A later migration may derive a
 legacy-compatible earnings projection from the canonical database only after
 all consumers, freshness behavior, failure behavior, and historical workflows
 have been audited. No duplicate active fetch implementation should remain after

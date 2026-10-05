@@ -111,8 +111,10 @@ fetches official schedules through `services/market_events`, and
 not import `utilities/` or `studies/`, and opening Event Risk does not contact
 a provider. The existing Finnhub fetch writes the unchanged legacy
 `events.csv` projection plus a private calendar-only normalized sidecar with
-fiscal-period identity. The calendar reads the sidecar; it neither widens the
-legacy CSV contract nor adds a second Finnhub fetch path.
+fiscal-period identity. The sidecar marks identity completeness explicitly and
+cannot claim schedule coverage when any in-horizon provider row lacks a stable
+fiscal identity. The calendar reads the sidecar; it neither widens the legacy
+CSV contract nor adds a second Finnhub fetch path.
 
 Brokerage sync consumers call `services/*` for raw provider payloads, then
 normalize and materialize their own ledger artifacts under `SFP_DATA_DIR`.

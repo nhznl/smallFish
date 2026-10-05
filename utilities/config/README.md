@@ -14,3 +14,5 @@ clocks, named risk rules, and ETF exposure channels. Those files do not contain
 credentials or price forecasts. Primary source URLs select official
 machine-readable surfaces where available; coverage is derived from each
 official document and fails closed when the requested horizon is not proved.
+Cluster rules compare exact event times with the inclusive configured interval
+from strategy entry through hard exit; being on the same session is not enough.
