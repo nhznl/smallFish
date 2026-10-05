@@ -10,11 +10,11 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R8
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-008
+CURRENT_ROUND: M2-R9
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-008
 M1_STATUS: ACCEPTED
-M2_STATUS: READY_FOR_REVIEW
+M2_STATUS: CHANGES_REQUESTED
 M3_STATUS: PLANNED
 OWNER_DECISION_REQUIRED: NO
 STOP_REASON: NONE
@@ -103,6 +103,80 @@ KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
 ```
 
 ## Reviewer outbox
+
+```text
+HANDOFF_ID: R-008
+MILESTONE: M2
+DECISION: CHANGES_REQUESTED
+REVIEWED_BASE: 08f20b2
+REVIEWED_COMMITS: 6b292c7, 1aa9d97
+FINDINGS_VERIFIED_RESOLVED: M2-R6-F3, M2-R6-F4
+
+M2-R8-F1 [P1] Finnhub fiscal identity validation still does not fail closed for
+malformed values. run_fetch converts year and quarter with int(...), which
+silently turns 2026.5/3.5 into 2026-Q3 and booleans into 1-Q1. Reproduced with
+one in-horizon malformed row: earnings.json declared identityComplete true,
+claimed full coverage, and published the invented identity. Accept only valid
+integral identity tokens before conversion: reject booleans, fractional
+numbers, invalid or non-four-digit years, and quarters outside 1..4. Add
+sidecar-generation and primary-sync regressions for each malformed class.
+
+M2-R8-F2 [P1] A fresh legacy earnings cache cannot self-upgrade to the required
+schema-2 calendar sidecar. _calendar_is_fresh validates only events.csv and
+events_meta.json, so ensure_fresh_events reuses a missing or schema-1 sidecar
+without calling Finnhub; run_primary_sync then rejects that same generation as
+identity-incomplete. Reproduced by downgrading only earnings.json: ensure
+returned fresh, made zero provider calls, and left schema 1. Make sidecar
+existence, schema, matching generation, and identity completeness part of the
+calendar-capable freshness path while preserving legacy consumers. Add a
+pre-schema-2 upgrade regression and clear no-key capability diagnostics.
+
+M2-R8-F3 [P1] M2-R6-F1's stable-identity requirement is incomplete. The new
+Federal Reserve source IDs and canonical keys are derived from scheduled civil
+date for the decision/press conference and scheduled release month for G.17.
+Changing the fixture's meeting day from October 28 to 29 changed both IDs; a
+G.17 move from October 16 to November 1 changed its identity from 2026-10 to
+2026-11. Those become replacement/cancelled occurrences instead of one event
+with appended schedule history, contrary to the canonical identity contract.
+Use a schedule-independent official record or reference-period identity and
+add cross-day and cross-month reschedule regressions for all three new Federal
+Reserve occurrences. Do not infer a reference period without documented
+provider semantics.
+
+M2-R8-F4 [P1] Finnhub freshness is internally contradictory. The sync accepts
+an events_fetched_as_of date that is one calendar day old, then records its
+last_success_utc as midnight Eastern with freshness_hours=24. Reproduced with
+a 2026-10-04 cache scanned late on 2026-10-05: run_primary_sync exited 0 and
+stored status fresh, while the read API immediately evaluated the same required
+source as stale. Use one timestamp-based freshness contract for ingestion,
+stored provenance, and API evaluation; if only a date exists, fail
+conservatively rather than report successful-but-stale output. Add a boundary
+regression proving command status and API effective status agree.
+```
+
+Reviewer verification for R-008:
+
+- independently verified the current official Federal Reserve JSON produces
+  G.17, separate decision and press-conference occurrences, and official times;
+- independently verified identity-incomplete sidecars fail closed, obsolete
+  same-session relationships are removed, and pre-entry events do not receive
+  the actual-overlap rule;
+- independently reproduced malformed fiscal values being coerced into a
+  complete, covered Finnhub sidecar;
+- independently reproduced a fresh schema-1 sidecar being reused without an
+  upgrade and then rejected by the calendar;
+- independently reproduced all three new Federal Reserve identities changing
+  when only their scheduled day or month moves;
+- independently reproduced the calendar command publishing while the API
+  immediately labels the required Finnhub source stale;
+- utilities suite: 794 passed;
+- backend suite: 600 passed;
+- Angular suite under Node 24: 200 passed;
+- Angular production build under Node 24 passed; and
+- documentation check, secret scan of 620 tracked objects, and commit-range
+  `git diff --check` passed.
+
+Prior review records:
 
 ```text
 HANDOFF_ID: R-007
