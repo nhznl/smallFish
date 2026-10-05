@@ -501,6 +501,86 @@ def test_price_cache_and_as_of_change_rematerialize_offline(tmp_path: Path):
     assert materialized["as_of_date"] == "2026-10-05"
 
 
+def test_parser_version_change_fetches_full_body_and_replaces_snapshot_provenance(tmp_path: Path):
+    schedule = (FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8")
+    transport = SequenceTransport(_response(schedule, etag='"v1"'), _response(schedule, etag='"v2"'))
+    config_dir = _config_copy(tmp_path)
+    _prices(tmp_path / "cache")
+    common = dict(
+        database=tmp_path / "calendar.sqlite", universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache", horizon_start=START, horizon_end=END,
+        as_of=datetime(2026, 10, 4).date(), transport=transport, config_dir=config_dir,
+    )
+    assert run_sync(**common, now=NOW).status == "published"
+    sources_path = config_dir / "market_calendar_sources.yaml"
+    sources_path.write_text(
+        sources_path.read_text(encoding="utf-8").replace("bls-ics-1", "bls-ics-2"),
+        encoding="utf-8",
+    )
+
+    changed = run_sync(**common, now=NOW + timedelta(hours=1))
+
+    assert changed.status == "published"
+    assert "If-None-Match" not in transport.headers[1]
+    assert "If-Modified-Since" not in transport.headers[1]
+    snapshot = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT parser_version, source_url, etag FROM provider_snapshot_state WHERE provider = 'bls'",
+    )[0]
+    assert dict(snapshot) == {
+        "parser_version": "bls-ics-2",
+        "source_url": "https://www.bls.gov/schedule/news_release/bls.ics",
+        "etag": '"v2"',
+    }
+    fact_versions = {
+        row["parser_version"] for row in _rows(
+            tmp_path / "calendar.sqlite",
+            "SELECT parser_version FROM event_source_facts WHERE provider = 'bls'",
+        )
+    }
+    assert fact_versions == {"bls-ics-2"}
+
+
+def test_parser_version_change_rejects_unconditional_304_without_relabeling_snapshot(tmp_path: Path):
+    schedule = (FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8")
+    transport = SequenceTransport(_response(schedule, etag='"v1"'), _response("", status=304))
+    config_dir = _config_copy(tmp_path)
+    _prices(tmp_path / "cache")
+    common = dict(
+        database=tmp_path / "calendar.sqlite", universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache", horizon_start=START, horizon_end=END,
+        as_of=datetime(2026, 10, 4).date(), transport=transport, config_dir=config_dir,
+    )
+    assert run_sync(**common, now=NOW).status == "published"
+    sources_path = config_dir / "market_calendar_sources.yaml"
+    sources_path.write_text(
+        sources_path.read_text(encoding="utf-8").replace("bls-ics-1", "bls-ics-2"),
+        encoding="utf-8",
+    )
+
+    changed = run_sync(**common, now=NOW + timedelta(hours=1))
+
+    assert changed.status == "failed"
+    assert "If-None-Match" not in transport.headers[1]
+    assert "If-Modified-Since" not in transport.headers[1]
+    snapshot_version = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT parser_version FROM provider_snapshot_state WHERE provider = 'bls'",
+    )[0]["parser_version"]
+    source_version = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT parser_version FROM source_sync_state WHERE provider = 'bls'",
+    )[0]["parser_version"]
+    fact_versions = {
+        row["parser_version"] for row in _rows(
+            tmp_path / "calendar.sqlite",
+            "SELECT parser_version FROM event_source_facts WHERE provider = 'bls'",
+        )
+    }
+    assert snapshot_version == source_version == "bls-ics-1"
+    assert fact_versions == {"bls-ics-1"}
+
+
 def test_credentialed_provider_urls_are_rejected():
     with pytest.raises(TransportError):
         public_https_url("https://user:secret@example.test/bls.ics")

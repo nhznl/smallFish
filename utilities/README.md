@@ -59,8 +59,9 @@ materialization freshness. A normalized BLS schedule snapshot can be rescored
 without a provider request when versioned policy, ETF mappings,
 price-cache/as-of state, universe, or supplied measurements change. An omitted
 optional measurement update preserves prior measurement facts and source
-state. A wider horizon still requires a full provider response before coverage
-is widened.
+state. The snapshot is bound to its parser version and source endpoint; a
+change to either requires a full response. A wider horizon likewise requires a
+full provider response before coverage is widened.
 
 See [`options/README.md`](options/README.md).
 

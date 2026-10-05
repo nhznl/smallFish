@@ -122,7 +122,7 @@ def _write_source(
             observed_at,
             observed_at if success else (current["last_success_utc"] if current else None),
             result_count if result_count is not None else (current["result_count"] if current else 0),
-            spec.parser_version,
+            spec.parser_version if success or current is None else current["parser_version"],
             status,
             error_category,
             detail,
@@ -229,10 +229,34 @@ def _load_provider_snapshot(connection: sqlite3.Connection, provider: str) -> Pa
     return ParseReport(observations)
 
 
+def _provider_snapshot_matches(
+    connection: sqlite3.Connection,
+    provider: str,
+    parser_version: str,
+    source_url: str,
+) -> bool:
+    row = connection.execute(
+        "SELECT parser_version, source_url FROM provider_snapshot_state WHERE provider = ?",
+        (provider,),
+    ).fetchone()
+    return bool(
+        row is not None
+        and row["parser_version"] == parser_version
+        and row["source_url"] == source_url
+    )
+
+
 def _replace_provider_snapshot(
     connection: sqlite3.Connection,
     provider: str,
     report: ParseReport,
+    *,
+    parser_version: str,
+    source_url: str,
+    digest: str,
+    fetched_at: str,
+    etag: str | None,
+    last_modified: str | None,
 ) -> None:
     connection.execute("DELETE FROM provider_schedule_observations WHERE provider = ?", (provider,))
     for item in report.observations:
@@ -253,6 +277,22 @@ def _replace_provider_snapshot(
                 json.dumps(item.provenance, sort_keys=True),
             ),
         )
+    connection.execute(
+        """
+        INSERT INTO provider_snapshot_state (
+            provider, parser_version, source_url, payload_sha256, fetched_at_utc,
+            etag, last_modified
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (provider) DO UPDATE SET
+            parser_version = excluded.parser_version,
+            source_url = excluded.source_url,
+            payload_sha256 = excluded.payload_sha256,
+            fetched_at_utc = excluded.fetched_at_utc,
+            etag = excluded.etag,
+            last_modified = excluded.last_modified
+        """,
+        (provider, parser_version, source_url, digest, fetched_at, etag, last_modified),
+    )
 
 
 def _materialization_matches(connection: sqlite3.Connection, provider: str, digest: str) -> bool:
@@ -436,6 +476,7 @@ def run_sync(
     connection = connect(database)
     try:
         bls = sources["bls"]
+        source_url = bls.schedule_url or BLS_SCHEDULE_URL
         values_spec = sources["bls_released_values"]
         current = _source(connection, "bls")
         measurements = (
@@ -466,10 +507,16 @@ def run_sync(
             + timedelta(hours=bls.freshness_hours or 0) >= now.astimezone(timezone.utc)
         )
         snapshot = _load_provider_snapshot(connection, "bls")
+        snapshot_reusable = (
+            snapshot is not None
+            and _provider_snapshot_matches(
+                connection, "bls", bls.parser_version, source_url,
+            )
+        )
         materialization_fresh = _materialization_matches(
             connection, "bls", materialization_sha256,
         )
-        if provider_fresh and snapshot is not None and materialization_fresh:
+        if provider_fresh and snapshot_reusable and materialization_fresh:
             count = connection.execute("SELECT count(*) AS n FROM events").fetchone()["n"]
             return SyncResult(0, "fresh", count, (
                 "bls: reused a fresh normalized CPI schedule; no provider request was made.",
@@ -485,13 +532,13 @@ def run_sync(
         body = b""
         headers: dict[str, str] = {}
         report: ParseReport
-        if provider_fresh and snapshot is not None:
+        if provider_fresh and snapshot_reusable:
             report = snapshot
         else:
             can_conditionally_reuse = (
                 current is not None
                 and _covers(current, horizon_start, horizon_end)
-                and snapshot is not None
+                and snapshot_reusable
             )
             etag = current["etag"] if can_conditionally_reuse else None
             modified = current["last_modified"] if can_conditionally_reuse else None
@@ -502,7 +549,7 @@ def run_sync(
                 else:
                     response = fetch_schedule(
                         transport or UrllibTransport(),
-                        bls.schedule_url or BLS_SCHEDULE_URL,
+                        source_url,
                         etag=etag,
                         last_modified=modified,
                     )
@@ -523,7 +570,7 @@ def run_sync(
                 return SyncResult(code, "failed", 0, (f"bls: failed ({exc.error_type}). Previous rows were kept.",))
 
             if status == 304:
-                if not can_conditionally_reuse or current is None or snapshot is None:
+                if not can_conditionally_reuse or current is None or not snapshot_reusable:
                     connection.execute("BEGIN IMMEDIATE")
                     _write_source(
                         connection, bls, status="failed", observed_at=observed_at, success=False,
@@ -543,7 +590,7 @@ def run_sync(
                     decoded = body.decode("utf-8", errors="replace")
                     if "BEGIN:VCALENDAR" not in decoded.upper():
                         raise ValueError("not_calendar")
-                    report = parse_ics(decoded, source_url=bls.schedule_url or BLS_SCHEDULE_URL)
+                    report = parse_ics(decoded, source_url=source_url)
                     provider_result = "published"
                 except Exception as exc:
                     LOGGER.warning("CPI schedule parse failed: %s", type(exc).__name__)
@@ -607,7 +654,15 @@ def run_sync(
             )
             _rescore_cancelled(connection, cancelled, windows, policy, observed_at)
             if provider_result == "published":
-                _replace_provider_snapshot(connection, "bls", report)
+                _replace_provider_snapshot(
+                    connection, "bls", report,
+                    parser_version=bls.parser_version,
+                    source_url=source_url,
+                    digest=digest,
+                    fetched_at=observed_at,
+                    etag=_header(headers, "etag"),
+                    last_modified=_header(headers, "last-modified"),
+                )
                 detail = (
                     f"CPI schedule rows in horizon: {len(scored)}. "
                     f"Other BLS releases skipped: {report.skipped_other_releases}. "
