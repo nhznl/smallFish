@@ -10,11 +10,11 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R6
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-007
+CURRENT_ROUND: M2-R7
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-007
 M1_STATUS: ACCEPTED
-M2_STATUS: READY_FOR_REVIEW
+M2_STATUS: CHANGES_REQUESTED
 M3_STATUS: PLANNED
 OWNER_DECISION_REQUIRED: NO
 STOP_REASON: NONE
@@ -103,6 +103,78 @@ KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
 ```
 
 ## Reviewer outbox
+
+```text
+HANDOFF_ID: R-007
+MILESTONE: M2
+DECISION: CHANGES_REQUESTED
+REVIEWED_BASE: d22b04a
+REVIEWED_COMMITS: 05f7250, 655edf3
+FINDINGS_VERIFIED_RESOLVED: M2-R4-F2, M2-R4-F3, M2-R4-F4,
+  M2-R4-F5, M2-R4-F6
+
+M2-R6-F1 [P1] The official Federal Reserve adapter still does not implement
+the approved primary-event scope. A live parse for 2026-10-05 through
+2026-11-05 produced FOMC, Beige Book, and speech rows but silently omitted the
+official October 16 G.17 Industrial Production and Capacity Utilization event,
+even though INDUSTRIAL_PRODUCTION is a configured M2 event type. The same
+official FOMC item advertises a press conference, but the adapter publishes
+only the 2:00 p.m. decision; the design requires the statement/decision and
+press conference to remain separate related occurrences because their risk
+windows differ. Extend the official adapter and event model/rules as needed,
+using official timing and stable identity, and add live-shape regressions that
+would fail if either occurrence disappears.
+
+M2-R6-F2 [P1] The new Finnhub sidecar can claim complete covered-empty earnings
+when provider rows lack fiscal identity. _validated_events treats fiscal_year
+and fiscal_quarter as optional, and run_fetch silently skips such rows while
+still writing full coverageStart/coverageEnd. Reproduced with one valid legacy
+earnings row lacking those optional columns: events.csv contained one row,
+earnings.json contained zero events, and the sidecar claimed the full
+2026-10-04 through 2026-12-13 horizon. Preserve the legacy CSV behavior, but
+make the calendar projection explicitly incomplete/failing whenever any
+in-horizon provider row cannot receive a stable identity. Test partial and
+all-missing identity cases plus the successful complete case.
+
+M2-R6-F3 [P1] Upgrading an existing M2 database preserves the obsolete
+same_session_cluster relationships. _rebuild_clusters deletes only
+strategy_exposure_overlap:* rows, while the API reads every relationship
+without filtering. Reproduced by inserting a prior-round same_session_cluster
+link between two after-close events and rerunning the new implementation: the
+legacy link remained and can still trigger a false overlap warning. Remove or
+migrate the obsolete relationship rows transactionally and add an upgrade-path
+regression starting from the old relationship name.
+
+M2-R6-F4 [P1] M2-R4-F7 is not fully resolved because _overlaps_exposure checks
+only that an event is at or before hard_exit; it never checks the configured
+entry time. An exact 8:30 a.m. release therefore returns true for all three
+9:30 a.m.-entry strategies and is labeled as an actual strategy-window
+overlap. Require entry <= event time <= hard exit for this named rule and test
+pre-entry, in-window, and post-exit events. If pre-open clustering is desired,
+define a separate named rule and explanation rather than calling it an actual
+window overlap.
+```
+
+Reviewer verification for R-007:
+
+- independently parsed the current official Federal Reserve JSON for the live
+  smoke horizon and verified that the adapter omits the listed G.17 release
+  and does not materialize a separate press conference;
+- independently reproduced a nonempty legacy earnings cache producing an
+  empty, fully covered calendar sidecar when fiscal identity is absent;
+- independently reproduced an obsolete same_session_cluster relationship
+  surviving a rerun of the new overlap implementation;
+- directly verified that an exact 8:30 a.m. release is classified as
+  overlapping every strategy whose configured entry is 9:30 a.m.;
+- targeted calendar, events, and service tests: 43 passed;
+- utilities suite: 791 passed;
+- backend suite: 599 passed;
+- Angular suite under Node 24: 200 passed;
+- Angular production build under Node 24 passed; and
+- documentation check, secret scan of 620 tracked objects, and commit-range
+  `git diff --check` passed.
+
+Prior review records:
 
 ```text
 HANDOFF_ID: R-006
