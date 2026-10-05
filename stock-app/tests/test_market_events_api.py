@@ -33,6 +33,20 @@ def _database(path: Path, *, fresh: bool) -> None:
         """,
         (success, success, hours),
     )
+    for provider in (
+        "federal_reserve", "treasury", "bea", "census", "dol_claims", "finnhub_earnings",
+    ):
+        connection.execute(
+            """
+            INSERT INTO source_sync_state (
+                provider, required, configured, coverage_start, coverage_end, last_attempt_utc,
+                last_success_utc, result_count, parser_version, status, error_category, detail,
+                etag, last_modified, payload_sha256, scope, freshness_hours
+            ) VALUES (?, 1, 1, '2020-01-01', '2035-01-01', ?, ?, 0, 'synthetic-1', 'fresh', NULL,
+                      'Synthetic full-primary coverage.', NULL, NULL, 'abc', 'primary_schedule', ?)
+            """,
+            (provider, success, success, hours),
+        )
     connection.execute(
         """
         INSERT INTO source_sync_state (
@@ -182,6 +196,24 @@ def test_stale_coverage_is_not_reported_as_an_empty_day(tmp_path, monkeypatch):
     assert body["coverageStatus"] == "stale"
     assert body["days"][1]["coverage"] == "unknown"
     assert body["days"][1]["coverage"] != "covered_empty"
+
+
+def test_missing_required_m2_source_prevents_complete_coverage(tmp_path, monkeypatch):
+    database = tmp_path / "calendar.sqlite"
+    _database(database, fresh=True)
+    connection = sqlite3.connect(database)
+    connection.execute("DELETE FROM source_sync_state WHERE provider = 'treasury'")
+    connection.commit()
+    connection.close()
+    monkeypatch.setenv("SFP_MARKET_CALENDAR_DB", str(database))
+
+    body = CLIENT.get(
+        "/api/market-events", params={"from": "2026-10-14", "to": "2026-10-15"},
+    ).json()
+
+    assert body["available"] is False
+    assert body["coverageStatus"] == "unavailable"
+    assert body["days"] == []
 
 
 def test_min_importance_filter_hides_the_event_without_calling_it_absent_coverage(tmp_path, monkeypatch):

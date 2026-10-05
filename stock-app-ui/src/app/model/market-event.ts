@@ -1,4 +1,4 @@
-/** Published CPI event-risk scan. Values describe exposure, not a price forecast. */
+/** Published primary event-risk scan. Values describe exposure, not a price forecast. */
 
 export interface StrategyEventAssessment {
   strategyId: string;

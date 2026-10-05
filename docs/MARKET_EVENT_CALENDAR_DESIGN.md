@@ -1,6 +1,7 @@
 # Market Event Risk Calendar design
 
-**Status:** Milestone 1 accepted. Milestone 2 is in progress; Milestone 3 is not started.
+**Status:** Milestone 1 accepted. Milestone 2 implementation is in progress and
+its first provider-coverage slice is awaiting review; Milestone 3 is not started.
 
 **Primary user:** a local smallFish user planning SPY and QQQ 0-DTE trades
 

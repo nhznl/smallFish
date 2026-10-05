@@ -158,7 +158,7 @@ that a cache has been refreshed today.
 | `GET /stocks/{symbol}/analysis` | Focused cached-analysis data for Stock Detail. |
 | `GET /stocks` | Legacy collection using the same focused analysis contract. |
 | `GET /momentumStocks` | Compact, setup-ranked payload for the merged Momentum Scanner, including days to the next cached earnings date. |
-| `GET /api/market-events` | Published CPI event-risk scan. Read-only. Distinguishes a covered day with no CPI release from a stale or missing scan. |
+| `GET /api/market-events` | Published primary event-risk scan. Read-only. Distinguishes covered-empty from stale, failed, unconfigured, and insufficient source coverage. |
 | `GET /api/market-events/daily-summary` | The same horizon grouped by session. |
 | `GET /api/market-events/sources` | Per-source freshness. An unconfigured measurement feed stays `not_configured`. |
 | `GET /api/market-events/{event_id}` | One occurrence, including strategy assessments and ETF price-cache state. |

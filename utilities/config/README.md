@@ -9,6 +9,6 @@ so one domain cannot silently reuse or overwrite another's settings.
 Paths and credentials do not belong here. They remain in root `app.env` and are
 passed to utility processes by `commands.sh`.
 
-`market_calendar_*.yaml` holds the CPI event-risk source, importance, strategy
+`market_calendar_*.yaml` holds primary event-risk sources, importance, strategy
 clocks, named risk rules, and ETF exposure channels. Those files do not contain
 credentials or price forecasts.

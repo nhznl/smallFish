@@ -1,4 +1,4 @@
-"""Publish one CPI calendar scan. Provider failures keep the last successful rows."""
+"""Publish the BLS portion of the primary calendar. Failures keep prior rows."""
 
 from __future__ import annotations
 
@@ -519,7 +519,7 @@ def run_sync(
         if provider_fresh and snapshot_reusable and materialization_fresh:
             count = connection.execute("SELECT count(*) AS n FROM events").fetchone()["n"]
             return SyncResult(0, "fresh", count, (
-                "bls: reused a fresh normalized CPI schedule; no provider request was made.",
+                "bls: reused a fresh normalized primary-release schedule; no provider request was made.",
                 "bls_released_values: " + (
                     _source(connection, "bls_released_values")["detail"]
                     if _source(connection, "bls_released_values") is not None
@@ -664,9 +664,9 @@ def run_sync(
                     last_modified=_header(headers, "last-modified"),
                 )
                 detail = (
-                    f"CPI schedule rows in horizon: {len(scored)}. "
-                    f"Other BLS releases skipped: {report.skipped_other_releases}. "
-                    "Those releases are outside this scan and are not shown as absent."
+                    f"Required BLS primary-release rows in horizon: {len(scored)}. "
+                    f"Unsupported BLS releases skipped: {report.skipped_other_releases}. "
+                    "Skipped releases are not shown as absent."
                 )
                 _write_source(
                     connection, bls, status="fresh", observed_at=observed_at, success=True,
@@ -684,7 +684,7 @@ def run_sync(
                     error_category=None,
                 )
             else:
-                detail = f"Locally rematerialized {len(scored)} CPI schedule rows from the normalized BLS snapshot."
+                detail = f"Locally rematerialized {len(scored)} BLS primary-release rows from the normalized snapshot."
 
             values_current = _source(connection, "bls_released_values")
             if supplied_measurements is not None:

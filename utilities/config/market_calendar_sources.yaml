@@ -1,5 +1,4 @@
-# Market-event source coverage. Milestone 1 ingests the BLS CPI schedule only.
-# A successful empty CPI day is not coverage of the rest of the macro calendar.
+# Market-event source coverage for the primary broad-market calendar.
 schema_version: 1
 horizon_calendar_days: 31
 sources:
@@ -10,10 +9,10 @@ sources:
     parser_version: bls-ics-1
     schedule_url: https://www.bls.gov/schedule/news_release/bls.ics
     freshness_hours: 192
-    scope: cpi_schedule
+    scope: required_bls_primary_releases
     detail: >-
-      Consumer Price Index rows from the official BLS iCalendar.
-      Other BLS releases are outside this scan and are not treated as absent.
+      Required CPI, PPI, Employment Situation, JOLTS, and ECI rows from the
+      official BLS iCalendar. Unsupported BLS releases remain an explicit gap.
   bls_released_values:
     provider: bls_released_values
     required: false
@@ -23,3 +22,52 @@ sources:
     detail: >-
       Not configured. The official iCalendar does not publish CPI actuals or
       consensus, and no released-values provider is wired in this milestone.
+  federal_reserve:
+    required: true
+    configured: true
+    parser_version: fed-calendar-1
+    schedule_url: https://www.federalreserve.gov/newsevents/calendar.htm
+    freshness_hours: 24
+    scope: fomc_calendar_speeches_beige_book
+    detail: Official Federal Reserve calendar, FOMC, speech, and Beige Book schedule.
+  treasury:
+    required: true
+    configured: true
+    parser_version: treasury-auctions-1
+    schedule_url: https://home.treasury.gov/resource-center/data-chart-center/quarterly-refunding
+    freshness_hours: 24
+    scope: refunding_and_material_auctions
+    detail: Official Treasury refunding and material auction schedule.
+  bea:
+    required: true
+    configured: true
+    parser_version: bea-calendar-1
+    schedule_url: https://apps.bea.gov/news/schedule.htm
+    freshness_hours: 24
+    scope: bea_primary_releases
+    detail: Official BEA schedule for GDP, personal income, and PCE releases.
+  census:
+    required: true
+    configured: true
+    parser_version: census-calendar-1
+    schedule_url: https://www.census.gov/economic-indicators/calendar-listview.html
+    freshness_hours: 24
+    scope: census_economic_indicators
+    detail: Official Census schedule for retail sales, durable goods, and related indicators.
+  dol_claims:
+    required: true
+    configured: true
+    parser_version: dol-claims-1
+    schedule_url: https://www.dol.gov/ui/data.pdf
+    freshness_hours: 168
+    scope: weekly_jobless_claims
+    detail: Official Department of Labor weekly unemployment-insurance claims schedule.
+  finnhub_earnings:
+    required: true
+    configured: true
+    parser_version: finnhub-legacy-cache-1
+    freshness_hours: 24
+    scope: private_local_index_member_earnings
+    detail: >-
+      Private local Finnhub earnings cache for personal use only. Dataset
+      access follows the configured account plan; redistribution is prohibited.

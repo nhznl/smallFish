@@ -104,12 +104,14 @@ SnapTrade service suite runs in the API environment only.
    `stock-app/static/`.
 5. **UI** — Angular fetches JSON and renders it.
 
-The CPI event-risk calendar is the same shape. `./commands.sh market-calendar`
-fetches the public BLS iCalendar through `services/market_events`, and
+The primary event-risk calendar is the same shape. `./commands.sh market-calendar`
+fetches official schedules through `services/market_events`, and
 `utilities/market_calendar` normalizes, scores, and writes
 `data/market_calendar/calendar.sqlite`. FastAPI reads that file only. It does
 not import `utilities/` or `studies/`, and opening Event Risk does not contact
-a provider. The legacy `events.csv` earnings calendar is a separate artifact.
+a provider. The primary calendar reads normalized fields from the legacy
+`events.csv` earnings artifact; it neither changes that contract nor adds a
+second Finnhub fetch path.
 
 Brokerage sync consumers call `services/*` for raw provider payloads, then
 normalize and materialize their own ledger artifacts under `SFP_DATA_DIR`.

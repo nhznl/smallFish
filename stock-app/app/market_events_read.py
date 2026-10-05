@@ -25,11 +25,15 @@ SCHEMA_VERSION = "001"
 CAVEAT = (
     "A forward scan cannot anticipate geopolitical shocks, emergency central-bank "
     "actions, unexpected company announcements, or other unscheduled news. This "
-    "scan covers the BLS Consumer Price Index schedule only, so an empty day is "
-    "not an all-clear for other releases. Nothing here predicts whether prices "
+    "scan covers configured scheduled primary sources only, so an empty day is "
+    "not an all-clear for unscheduled or uncovered events. Nothing here predicts whether prices "
     "will rise or fall."
 )
 RISK_LABELS = {5: "EXTREME", 4: "HIGH", 3: "MODERATE"}
+REQUIRED_PRIMARY_SOURCES = frozenset({
+    "bls", "federal_reserve", "treasury", "bea", "census", "dol_claims",
+    "finnhub_earnings",
+})
 
 
 class MarketCalendarError(RuntimeError):
@@ -320,7 +324,7 @@ def _session_text(events: list[dict]) -> str:
         if event["lifecycleStatus"] != "cancelled" and event["priority"] == "primary"
     ]
     if not active:
-        return "No direct SPY/QQQ release is recorded for this session in the CPI scan."
+        return "No direct SPY/QQQ release is recorded for this session in the covered primary calendar."
     assessment = next(
         item for item in active[0]["strategyAssessments"]
         if item["strategyId"] == "short-premium-20d-0dte"
@@ -362,12 +366,16 @@ def _days(start: date, end: date, events: list[dict], zone: str, coverage_status
             state = "covered_empty"
         primary = [event for event in day_events if event["priority"] == "primary"]
         secondary = [event for event in day_events if event["priority"] == "secondary"]
+        clustered = [event for event in primary if event["relatedEventIds"]]
         days.append({
             "date": iso,
             "sessionState": _session_state(cursor),
             "riskLabel": _risk_label(day_events),
             "eventCount": len(day_events),
-            "clusterWarning": None,
+            "clusterWarning": (
+                "Multiple scheduled broad-market events share this session. Their risk windows may overlap; this is a named clustering rule, not a directional forecast."
+                if len(clustered) >= 2 else None
+            ),
             "sessionAssessment": _session_text(day_events),
             "coverage": state,
             "primaryEvents": primary,
@@ -416,6 +424,21 @@ def collection(
                 bls_status = status
                 generated = row["last_success_utc"]
             sources.append(_source_wire(row, status))
+        required_statuses = [source["status"] for source in sources if source["required"]]
+        present_required = {source["provider"] for source in sources if source["required"]}
+        if REQUIRED_PRIMARY_SOURCES - present_required:
+            bls_status = "unavailable"
+        elif required_statuses:
+            if all(status == "fresh" for status in required_statuses):
+                bls_status = "fresh"
+            elif "failed" in required_statuses:
+                bls_status = "failed"
+            elif "insufficient" in required_statuses:
+                bls_status = "insufficient"
+            elif "stale" in required_statuses:
+                bls_status = "stale"
+            else:
+                bls_status = "unavailable"
         if not any(row["provider"] == "bls" for row in source_rows):
             payload = _empty(moment)
             payload["sources"] = sources

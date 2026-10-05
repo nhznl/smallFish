@@ -125,7 +125,7 @@ describe('MarketCalendarComponent', () => {
       days: []
     }));
     fixture.detectChanges();
-    expect(text()).toContain('The CPI scan is unavailable');
+    expect(text()).toContain('The primary event-risk scan is unavailable');
     const stats = [...fixture.nativeElement.querySelectorAll('.stat-value')].map(node => node.textContent?.trim());
     expect(stats).toContain('—');
     expect(stats).not.toContain('0');
@@ -137,7 +137,7 @@ describe('MarketCalendarComponent', () => {
     stale.coverageStatus = 'stale';
     requests.next(stale);
     fixture.detectChanges();
-    expect(text()).toContain('CPI coverage is incomplete');
+    expect(text()).toContain('Primary-calendar coverage is incomplete');
     expect(text()).toContain('stale');
   });
 
@@ -149,7 +149,7 @@ describe('MarketCalendarComponent', () => {
     ) as HTMLButtonElement;
     tomorrow.click();
     fixture.detectChanges();
-    expect(text()).toContain('No CPI risk days in this range');
+    expect(text()).toContain('No covered primary risk days in this range');
 
     const today = [...fixture.nativeElement.querySelectorAll('button')].find(
       (button: HTMLButtonElement) => button.textContent?.trim() === 'Today'

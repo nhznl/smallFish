@@ -12,8 +12,17 @@ from zoneinfo import ZoneInfo
 
 SCHEMA_VERSION = 1
 
-EVENT_TYPES = frozenset({"CPI"})
-EVENT_CATEGORIES = frozenset({"inflation"})
+EVENT_TYPES = frozenset({
+    "CPI", "PPI", "EMPLOYMENT_SITUATION", "JOLTS", "ECI",
+    "JOBLESS_CLAIMS", "FOMC_DECISION", "FOMC_MINUTES", "FED_SPEECH",
+    "BEIGE_BOOK", "TREASURY_REFUNDING", "TREASURY_AUCTION", "PCE",
+    "GDP", "RETAIL_SALES", "DURABLE_GOODS", "INDUSTRIAL_PRODUCTION",
+    "EARNINGS",
+})
+EVENT_CATEGORIES = frozenset({
+    "inflation", "labor", "central_bank", "rates", "growth",
+    "consumption", "production", "earnings",
+})
 TIME_PRECISIONS = frozenset({"exact", "date_only", "estimated", "unknown"})
 SCHEDULE_STATUSES = frozenset({"confirmed", "tentative", "estimated", "unscheduled"})
 LIFECYCLE_STATUSES = frozenset({"scheduled", "released", "cancelled", "rescheduled"})

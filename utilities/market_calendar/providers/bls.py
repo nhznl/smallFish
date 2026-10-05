@@ -1,8 +1,4 @@
-"""Parse the BLS news-release iCalendar into CPI schedule observations.
-
-Milestone 1 keeps Consumer Price Index rows only. Other releases are counted
-and omitted so a day without CPI is not described as a fully covered macro day.
-"""
+"""Parse required BLS news releases from the official iCalendar."""
 
 from __future__ import annotations
 
@@ -22,7 +18,13 @@ _MONTH_PATTERN = re.compile(
     r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(20\d{2})\b",
     re.IGNORECASE,
 )
-_CPI_TITLE = re.compile(r"^Consumer Price Index\b", re.IGNORECASE)
+_BLS_TYPES = (
+    (re.compile(r"^Consumer Price Index\b", re.I), "CPI", "Consumer Price Index"),
+    (re.compile(r"^Producer Price Index\b", re.I), "PPI", "Producer Price Index"),
+    (re.compile(r"^Employment Situation\b", re.I), "EMPLOYMENT_SITUATION", "Employment Situation"),
+    (re.compile(r"^Job Openings and Labor Turnover|^JOLTS\b", re.I), "JOLTS", "Job Openings and Labor Turnover"),
+    (re.compile(r"^Employment Cost Index\b", re.I), "ECI", "Employment Cost Index"),
+)
 _PROPERTY = re.compile(r"^([A-Z0-9-]+)((?:;[A-Za-z0-9-]+=(?:\"[^\"]*\"|[^:;]*))*):(.*)$")
 
 
@@ -105,19 +107,21 @@ def parse_ics(text: str, *, source_url: str) -> ParseReport:
     for props in _events(text):
         summary = props.get("SUMMARY", ({}, ""))[1]
         description = props.get("DESCRIPTION", ({}, ""))[1]
-        if not _CPI_TITLE.match(summary.strip()):
+        recognized = next((item for item in _BLS_TYPES if item[0].match(summary.strip())), None)
+        if recognized is None:
             skipped_other += 1
             continue
+        _, event_type, canonical_title = recognized
         reference = _reference(summary, description)
         if reference is None:
-            raise BLSCalendarParseError("CPI row has no usable reference period")
+            raise BLSCalendarParseError("recognized BLS row has no usable reference period")
         reference_period, reference_label = reference
         uid = props.get("UID", ({}, ""))[1].strip()
         start = props.get("DTSTART")
         if not uid:
-            raise BLSCalendarParseError("CPI row has no source identifier")
+            raise BLSCalendarParseError("recognized BLS row has no source identifier")
         if start is None:
-            raise BLSCalendarParseError("CPI row has no schedule time")
+            raise BLSCalendarParseError("recognized BLS row has no schedule time")
         params, raw_start = start
         schedule_status, lifecycle = _schedule_bits(props)
         if params.get("VALUE", "").upper() == "DATE" or "T" not in raw_start:
@@ -129,9 +133,9 @@ def parse_ics(text: str, *, source_url: str) -> ParseReport:
                 provider="bls",
                 source_record_id=uid,
                 source_url=source_url,
-                canonical_key=f"US:BLS:CPI:{reference_period}",
-                title="Consumer Price Index",
-                event_type="CPI",
+                canonical_key=f"US:BLS:{event_type}:{reference_period}",
+                title=canonical_title,
+                event_type=event_type,
                 reference_period=reference_period,
                 reference_label=reference_label,
                 scheduled_at_utc=None,
@@ -165,9 +169,9 @@ def parse_ics(text: str, *, source_url: str) -> ParseReport:
             provider="bls",
             source_record_id=uid,
             source_url=source_url,
-            canonical_key=f"US:BLS:CPI:{reference_period}",
-            title="Consumer Price Index",
-            event_type="CPI",
+            canonical_key=f"US:BLS:{event_type}:{reference_period}",
+            title=canonical_title,
+            event_type=event_type,
             reference_period=reference_period,
             reference_label=reference_label,
             scheduled_at_utc=utc,

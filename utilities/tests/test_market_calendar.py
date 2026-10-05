@@ -20,6 +20,7 @@ from services.market_events.http import HttpResponse, TransportError, public_htt
 from utilities.market_calendar.config import CalendarConfigError, load_risk_policy
 from utilities.market_calendar.etf import load_etf_mappings, validate_mappings
 from utilities.market_calendar.providers.bls import parse_ics
+from utilities.market_calendar.primary_sync import run_primary_sync
 from utilities.market_calendar.risk import assess, rank_key
 from utilities.market_calendar.sync import run_sync
 from utilities.market_calendar.config import load_strategy_windows
@@ -97,6 +98,44 @@ def _rows(path: Path, sql: str) -> list[sqlite3.Row]:
         connection.close()
 
 
+def _primary_documents() -> dict[str, str]:
+    rows = {
+        "federal_reserve": [{
+            "id": "fomc-2026-10-28", "title": "FOMC Decision",
+            "eventType": "FOMC_DECISION", "referencePeriod": "2026-10-28",
+            "scheduledAt": "2026-10-28T14:00:00", "timezone": "America/New_York",
+        }],
+        "treasury": [{
+            "id": "10y-2026-10-28", "title": "10-Year Treasury Auction",
+            "eventType": "TREASURY_AUCTION", "referencePeriod": "2026-10-28",
+            "scheduledAt": "2026-10-28T13:00:00", "timezone": "America/New_York",
+        }],
+        "bea": [{
+            "id": "gdp-2026-q3", "title": "Gross Domestic Product",
+            "eventType": "GDP", "referencePeriod": "2026-Q3",
+            "scheduledAt": "2026-10-29T08:30:00", "timezone": "America/New_York",
+        }],
+        "census": [{
+            "id": "retail-2026-09", "title": "Retail Sales",
+            "eventType": "RETAIL_SALES", "referencePeriod": "2026-09",
+            "scheduledAt": "2026-10-15T08:30:00", "timezone": "America/New_York",
+        }],
+        "dol_claims": [{
+            "id": "claims-2026-10-08", "title": "Jobless Claims",
+            "eventType": "JOBLESS_CLAIMS", "referencePeriod": "2026-10-03",
+            "scheduledAt": "2026-10-08T08:30:00", "timezone": "America/New_York",
+        }],
+    }
+    return {
+        provider: json.dumps({
+            "coverageStart": START.isoformat(),
+            "coverageEnd": END.isoformat(),
+            "events": events,
+        })
+        for provider, events in rows.items()
+    }
+
+
 def test_dst_clocks_use_zoneinfo_not_a_fixed_offset():
     winter = display_clocks("2026-01-13T13:30:00Z")
     summer = display_clocks("2026-07-14T12:30:00Z")
@@ -129,11 +168,12 @@ def test_decimal_measurements_reject_binary_floats_and_zero_fill():
         })
 
 
-def test_bls_parser_keeps_one_cpi_occurrence_and_skips_other_releases():
+def test_bls_parser_keeps_cpi_and_required_employment_releases():
     report = parse_ics((FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"), source_url="https://example.test/bls.ics")
     keys = [item.canonical_key for item in report.observations]
     assert keys.count("US:BLS:CPI:2026-09") == 1
-    assert report.skipped_other_releases == 1
+    assert report.skipped_other_releases == 0
+    assert "US:BLS:EMPLOYMENT_SITUATION:2026-09" in keys
     october = next(item for item in report.observations if item.canonical_key == "US:BLS:CPI:2026-09")
     january = next(item for item in report.observations if item.canonical_key == "US:BLS:CPI:2026-01")
     july = next(item for item in report.observations if item.canonical_key == "US:BLS:CPI:2026-07")
@@ -214,7 +254,11 @@ def test_sync_publishes_one_cpi_with_both_measurements_and_price_states(tmp_path
     database = tmp_path / "calendar.sqlite"
     assert database.stat().st_mode & 0o777 == 0o600
     events = _rows(database, "SELECT * FROM events ORDER BY session_date")
-    assert [row["canonical_key"] for row in events] == ["US:BLS:CPI:2026-09", "US:BLS:CPI:2026-10"]
+    assert [row["canonical_key"] for row in events] == [
+        "US:BLS:EMPLOYMENT_SITUATION:2026-09",
+        "US:BLS:CPI:2026-09",
+        "US:BLS:CPI:2026-10",
+    ]
     september = next(row for row in events if row["canonical_key"] == "US:BLS:CPI:2026-09")
     measurements = _rows(database, "SELECT metric, value_kind, value FROM event_measurements WHERE event_id = 'US:BLS:CPI:2026-09' ORDER BY metric, value_kind")
     assert {(row["metric"], row["value_kind"]) for row in measurements} == {
@@ -579,6 +623,110 @@ def test_parser_version_change_rejects_unconditional_304_without_relabeling_snap
     }
     assert snapshot_version == source_version == "bls-ics-1"
     assert fact_versions == {"bls-ics-1"}
+
+
+def test_m2_primary_sources_publish_with_coverage_and_named_clusters(tmp_path: Path):
+    _prices(tmp_path / "cache")
+    result = run_primary_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=datetime(2026, 10, 4).date(),
+        now=NOW,
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        provider_documents=_primary_documents(),
+        earnings_csv_text=(
+            "ticker,event_type,event_date,source,fetched_as_of\n"
+            "AAA,earnings,2026-10-20,finnhub,2026-10-04\n"
+        ),
+        earnings_meta_text=json.dumps({
+            "events_fetched_as_of": START.isoformat(),
+            "events_coverage_end": END.isoformat(),
+        }),
+    )
+
+    assert result.exit_code == 0
+    assert result.status == "published"
+    sources = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT provider, status FROM source_sync_state WHERE required = 1 ORDER BY provider",
+    )
+    assert {row["provider"] for row in sources} == {
+        "bea", "bls", "census", "dol_claims", "federal_reserve",
+        "finnhub_earnings", "treasury",
+    }
+    assert {row["status"] for row in sources} == {"fresh"}
+    event_types = {
+        row["event_type"] for row in _rows(
+            tmp_path / "calendar.sqlite", "SELECT event_type FROM events",
+        )
+    }
+    assert {
+        "CPI", "EMPLOYMENT_SITUATION", "FOMC_DECISION", "TREASURY_AUCTION",
+        "GDP", "RETAIL_SALES", "JOBLESS_CLAIMS", "EARNINGS",
+    }.issubset(event_types)
+    relationships = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT relationship FROM event_relationships",
+    )
+    assert relationships and {row["relationship"] for row in relationships} == {"same_session_cluster"}
+    earnings = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT source_url, parser_version FROM event_source_facts WHERE provider = 'finnhub'",
+    )
+    assert earnings[0]["source_url"] == "https://finnhub.io/docs/api/earnings-calendar"
+    assert earnings[0]["parser_version"] == "finnhub-legacy-cache-1"
+
+
+def test_m2_failed_required_provider_keeps_rows_and_marks_calendar_incomplete(tmp_path: Path):
+    _prices(tmp_path / "cache")
+    common = dict(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=datetime(2026, 10, 4).date(),
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        earnings_csv_text=(
+            "ticker,event_type,event_date,source,fetched_as_of\n"
+            "AAA,earnings,2026-10-20,finnhub,2026-10-04\n"
+        ),
+        earnings_meta_text=json.dumps({
+            "events_fetched_as_of": START.isoformat(),
+            "events_coverage_end": END.isoformat(),
+        }),
+    )
+    assert run_primary_sync(**common, now=NOW, provider_documents=_primary_documents()).exit_code == 0
+    before = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT id, scheduled_at_utc FROM events WHERE event_type = 'TREASURY_AUCTION'",
+    )
+    broken = _primary_documents()
+    broken["treasury"] = json.dumps({
+        "coverageStart": START.isoformat(), "coverageEnd": "2026-10-10", "events": [],
+    })
+
+    failed = run_primary_sync(
+        **common,
+        now=NOW + timedelta(hours=1),
+        provider_documents=broken,
+    )
+
+    assert failed.status == "incomplete"
+    assert failed.exit_code == 1
+    after = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT id, scheduled_at_utc FROM events WHERE event_type = 'TREASURY_AUCTION'",
+    )
+    assert [dict(row) for row in after] == [dict(row) for row in before]
+    source = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT status, error_category FROM source_sync_state WHERE provider = 'treasury'",
+    )[0]
+    assert dict(source) == {"status": "failed", "error_category": "insufficient_coverage"}
 
 
 def test_credentialed_provider_urls_are_rejected():

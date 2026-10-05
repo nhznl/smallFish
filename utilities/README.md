@@ -48,7 +48,7 @@ utilities/.venv/bin/python -m utilities.scraper --help
 | `audit_price_cache.py` | Whole-history rewrite when an adjustment vintage goes stale |
 | `indicators/ta.py` | Technical indicators |
 | `sector_rotation.py` | The live 11-sector leadership snapshot against SPY |
-| `market_calendar/` | CPI event-risk calendar: parse the BLS iCalendar, score strategy exposure, and write `calendar.sqlite` |
+| `market_calendar/` | Primary event-risk calendar: normalize official schedules plus the private local earnings cache, score strategy exposure, cluster overlapping sessions, and write `calendar.sqlite` |
 | `events.py` | Validated, atomic upcoming-earnings cache plus conditional Finnhub refresh |
 | `fetch_earnings_history.py` | Separately maintained multi-year Yahoo/yfinance earnings dates |
 | `manifest.py` | Artifact manifests and provenance |
@@ -59,9 +59,13 @@ materialization freshness. A normalized BLS schedule snapshot can be rescored
 without a provider request when versioned policy, ETF mappings,
 price-cache/as-of state, universe, or supplied measurements change. An omitted
 optional measurement update preserves prior measurement facts and source
-state. The snapshot is bound to its parser version and source endpoint; a
+state. Each snapshot is bound to its parser version and source endpoint; a
 change to either requires a full response. A wider horizon likewise requires a
-full provider response before coverage is widened.
+full provider response before coverage is widened. Milestone 2 adds independent
+BLS, Federal Reserve, Treasury, BEA, Census, DOL claims, and local Finnhub-cache
+diagnostics. Finnhub-derived rows are private single-user data, retain
+attribution, are not a redistribution surface, and must be deleted if dataset
+access ends. The legacy earnings job remains the only active Finnhub fetcher.
 
 See [`options/README.md`](options/README.md).
 

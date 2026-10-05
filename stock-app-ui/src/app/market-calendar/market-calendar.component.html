@@ -4,7 +4,7 @@
       <p class="page-eyebrow">Research</p>
       <h1 class="page-title">Event Risk</h1>
       <p class="page-subtitle">
-        Scheduled CPI risk for SPY and QQQ 0-DTE exposure over the next 31 days.
+        Scheduled broad-market event risk for SPY and QQQ 0-DTE exposure over the next 31 days.
         This is a risk scan, not a forecast of direction or a trade recommendation.
       </p>
     </div>
@@ -54,7 +54,7 @@
     @if (requiredProblems().length) {
       <div class="banner banner-warn" role="status">
         <div>
-          <strong>CPI coverage is incomplete.</strong>
+          <strong>Primary-calendar coverage is incomplete.</strong>
           @for (source of requiredProblems(); track source.provider) {
             <span> {{ source.provider }} is {{ source.status }}. {{ source.detail }}</span>
           }
@@ -78,7 +78,7 @@
       <article class="stat-card">
         <span class="stat-label">Primary risk days</span>
         <span class="stat-value">{{ stat(scan.summary.primaryRiskDays) }}</span>
-        <span class="stat-delta">CPI scope only</span>
+        <span class="stat-delta">Covered primary sources</span>
       </article>
       <article class="stat-card">
         <span class="stat-label">High or extreme</span>
@@ -109,17 +109,17 @@
     <div [attr.aria-busy]="reloading || loading">
       @if (!scan.available) {
         <div class="empty-state">
-          <p class="empty-title">The CPI scan is unavailable</p>
+          <p class="empty-title">The primary event-risk scan is unavailable</p>
           <p class="empty-hint">Run <span class="mono">./commands.sh market-calendar</span> to publish a scan. An empty page is not a session with no event risk.</p>
         </div>
       } @else if (!visibleDays().length) {
         <div class="empty-state">
-          <p class="empty-title">{{ view === 'upcoming' ? 'No CPI risk days in this range' : 'No CPI releases in this range' }}</p>
+          <p class="empty-title">{{ view === 'upcoming' ? 'No covered primary risk days in this range' : 'No covered events in this range' }}</p>
           <p class="empty-hint">
             @if (unknownCount()) {
               Coverage is incomplete for {{ unknownCount() }} day{{ unknownCount() === 1 ? '' : 's' }}. Missing coverage is not the same as a quiet session.
             } @else {
-              {{ coveredEmptyCount() }} day{{ coveredEmptyCount() === 1 ? '' : 's' }} in this range {{ coveredEmptyCount() === 1 ? 'has' : 'have' }} CPI coverage and no release. Other scheduled releases are outside this scan.
+              {{ coveredEmptyCount() }} day{{ coveredEmptyCount() === 1 ? '' : 's' }} in this range {{ coveredEmptyCount() === 1 ? 'has' : 'have' }} complete configured-source coverage and no event. Unscheduled events remain outside this scan.
             }
           </p>
         </div>
@@ -129,7 +129,7 @@
             <div class="panel-heading day-heading">
               <div>
                 <h2>{{ formatDay(day.date) }}</h2>
-                <small>{{ sessionLabel(day.sessionState) }} · {{ day.eventCount }} event{{ day.eventCount === 1 ? '' : 's' }} · {{ day.coverage === 'covered' ? 'CPI covered' : day.coverage }}</small>
+                <small>{{ sessionLabel(day.sessionState) }} · {{ day.eventCount }} event{{ day.eventCount === 1 ? '' : 's' }} · {{ day.coverage === 'covered' ? 'Primary sources covered' : day.coverage }}</small>
               </div>
               <span [class]="riskClass(day.riskLabel)">{{ day.riskLabel }} RISK</span>
             </div>
@@ -215,7 +215,7 @@
           </section>
         }
         @if (view === 'all' && coveredEmptyCount()) {
-          <p class="source-note">{{ coveredEmptyCount() }} additional day{{ coveredEmptyCount() === 1 ? '' : 's' }} in this range {{ coveredEmptyCount() === 1 ? 'has' : 'have' }} CPI coverage and no release.</p>
+          <p class="source-note">{{ coveredEmptyCount() }} additional day{{ coveredEmptyCount() === 1 ? '' : 's' }} in this range {{ coveredEmptyCount() === 1 ? 'has' : 'have' }} configured-source coverage and no event.</p>
         }
       }
     </div>
