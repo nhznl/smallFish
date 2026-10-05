@@ -9,12 +9,12 @@ before doing work and immediately before editing it.
 ```text
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
-CURRENT_MILESTONE: M1
-CURRENT_ROUND: M1-R6
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-004
-M1_STATUS: READY_FOR_REVIEW
-M2_STATUS: PLANNED
+CURRENT_MILESTONE: M2
+CURRENT_ROUND: M2-R1
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-004
+M1_STATUS: ACCEPTED
+M2_STATUS: IN_PROGRESS
 M3_STATUS: PLANNED
 OWNER_DECISION_REQUIRED: NO
 STOP_REASON: NONE
@@ -89,6 +89,76 @@ KNOWN_GAPS: None for M1-R4-F1. Milestones 2 and 3 remain planned.
 ## Reviewer outbox
 
 ```text
+HANDOFF_ID: R-004
+MILESTONE: M1
+DECISION: ACCEPTED
+REVIEWED_BASE: cdb46dc
+REVIEWED_COMMITS: c220273, a41dd9f
+FINDINGS_VERIFIED_RESOLVED: M1-R4-F1
+ACCEPTED_SCOPE: All Milestone 1 design and verification criteria.
+```
+
+Reviewer verification for R-004:
+
+- independently reproduced the former parser-version/304 failure and verified
+  that the request is now unconditional, the unexpected 304 fails safely, and
+  snapshot/source/event-fact provenance remains at the last successful parser;
+- targeted calendar/service tests: 24 passed;
+- utilities suite: 780 passed;
+- backend suite: 598 passed;
+- Angular suite under Node 24: 200 passed;
+- Angular production build under Node 24 passed;
+- documentation check and `git diff --check cdb46dc..c220273` passed;
+- secret scan: 603 tracked working-tree objects passed; and
+- the UI was unchanged by this fix; the implementer repeated dedicated desktop
+  and narrow route inspection against the v004 artifact, supplementing the
+  earlier independent M1 route inspection recorded below.
+
+M2 kickoff for the implementer:
+
+```text
+Implement Milestone 2: primary broad-market coverage. Extend the provider-
+neutral calendar with the remaining required BLS releases; Federal Reserve
+calendar/FOMC events; Treasury refunding and material auctions; BEA; Census;
+DOL weekly claims; an earnings-provider abstraction with the existing Finnhub
+implementation; event clustering; and source coverage diagnostics for the
+full primary calendar.
+
+Keep schedule acquisition separate from released-value acquisition and prefer
+the official surfaces listed in the design. Preserve the M1 provider snapshot,
+parser/source provenance, freshness, fail-closed refresh, stable identity,
+multi-measurement, strategy-assessment, and transaction contracts. The
+31-calendar-day scan must distinguish covered-empty from stale, failed,
+unconfigured, or insufficient coverage source by source. A failed provider
+must retain its last known-good state without making the whole calendar appear
+complete.
+
+Rank Priority 1 broad-index risk ahead of secondary events. Add overlap-based
+event clustering without a directional forecast or opaque aggregate score;
+retain named rules and plain-language benefits/risks for all three strategies.
+For earnings, index membership may establish relevance, but do not claim a
+company has material SPY/QQQ weight without dated weight data and provenance.
+Do not change or widen the legacy events.csv contract, and do not leave a
+duplicate active earnings fetch implementation after any approved migration.
+
+Use injected offline fixtures for every provider and add degradation,
+coverage, DST, identity/reschedule, deduplication/conflict, clustering, API,
+and Angular coverage. Preserve the repository dependency boundary: services
+is raw transport, utilities is the only writer, and stock-app remains read-
+only with no utilities/studies import. Update documentation and visually
+inspect representative desktop and narrow Event Risk states after the full
+required test/build checks.
+
+Apply every design stop rule. In particular, stop for an owner decision rather
+than guessing if Finnhub storage/display rights are unclear, a source cannot
+prove the requested horizon, broad-index earnings importance would require
+unavailable weights, authoritative sources conflict without precedence, or
+legacy events.csv behavior would change.
+```
+
+Prior review records:
+
+```text
 HANDOFF_ID: R-003
 MILESTONE: M1
 DECISION: CHANGES_REQUESTED
@@ -123,7 +193,7 @@ Reviewer verification for R-003:
 - documentation check and `git diff --check 29227ed..bf88bbb` passed; and
 - secret scan: 602 tracked working-tree objects passed.
 
-Prior review records:
+Earlier review records:
 
 ```text
 HANDOFF_ID: R-002
