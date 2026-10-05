@@ -10,9 +10,9 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R10
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-009
+CURRENT_ROUND: M2-R11
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-009
 M1_STATUS: ACCEPTED
 M2_STATUS: CHANGES_REQUESTED
 M3_STATUS: PLANNED
@@ -103,6 +103,92 @@ KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
 ```
 
 ## Reviewer outbox
+
+```text
+HANDOFF_ID: R-009
+MILESTONE: M2
+DECISION: CHANGES_REQUESTED
+REVIEWED_BASE: 393ba58
+REVIEWED_COMMITS: 78876ab, e7412ae
+FINDINGS_VERIFIED_RESOLVED: M2-R8-F1, M2-R8-F4
+FINDINGS_PARTIALLY_RESOLVED: M2-R8-F2, M2-R8-F3
+
+M2-R10-F1 [P1] Calendar-capable Finnhub freshness is not bound to the exact
+legacy artifact generation, and the refresh path does not validate the result
+it just produced. fetchedAsOf is only a date, so two same-day fetches can mix a
+new events.csv with an old schema-2 sidecar and still return fresh. Reproduced
+by fetching AAPL, saving its sidecar, fetching MSFT with the same as-of date,
+restoring the AAPL sidecar, and calling ensure_fresh_events: it returned fresh,
+made zero provider calls, and accepted the mismatched symbols. Separately, a
+credentialed refresh whose row contained fiscal year 2026.5 returned refreshed
+and ok=true even though the new sidecar was identity-incomplete with null
+coverage. Bind the sidecar to the exact legacy generation with a digest or
+generation token while preserving legacy consumers, and revalidate calendar
+capability after run_fetch before reporting success. Add interrupted/same-day
+generation and post-fetch identity-incomplete regressions.
+
+M2-R10-F2 [P1] The new Federal Reserve annual ordinals are still derived from
+the schedule: the parser sorts current civil dates and assigns Mnn/Rnn ranks.
+Moving the October FOMC pair ahead of the September meeting changed the moved
+pair from M07 to M06 and reassigned M07 to the unchanged September meeting;
+moving October G.17 ahead of September similarly swapped R10/R09. Inserting an
+earlier record renumbers every later record, and a cross-year move changes the
+year prefix. This can attach one occurrence's history to another. The current
+test moves only final annual records without crossing a neighbor and therefore
+does not prove stable identity. Use a provider-stable official anchor or a
+persisted, conflict-safe reconciliation independent of current schedule order,
+and add neighbor-crossing, insertion, and cross-year regressions for decision,
+press conference, and G.17. If the source cannot support a defensible anchor,
+invoke the design stop rule instead of redefining scheduled rank as stable.
+
+M2-R10-F3 [P1] The Federal Reserve identity algorithm changed without bumping
+fed-calendar-json-3 or migrating the date/month identities already materialized
+by the preceding M2 implementation. A fresh old snapshot is therefore reused
+under the new parser behavior; after expiry, the old keys are cancelled and
+new Mnn/Rnn keys are inserted, splitting schedule history and leaving duplicate
+cancelled/replacement occurrences. Bump the parser version and implement a
+transactional migration or an explicit documented pre-acceptance rebuild that
+cannot expose both identity generations. Add an upgrade regression starting
+from the 6b292c7 database shape and prove identity/history continuity.
+
+M2-R10-F4 [P1] The calendar prerequisite still uses legacy date-age freshness
+instead of the new UTC timestamp contract. A complete sidecar fetched on
+2026-10-04 was reported fresh by ensure_fresh_events for 2026-10-05 with zero
+provider calls, although its midnight-Eastern success instant is stale after
+2026-10-05T04:00:00Z. Keep legacy consumers' documented day semantics if
+required, but evaluate the calendar capability using the shared inclusive UTC
+window and an injectable current instant. Add exact-boundary and one-second-
+expired prerequisite tests so ensure-events cannot claim calendar freshness
+that market-calendar immediately rejects.
+
+M2-R10-F5 [P1] The shared freshness contract is not used by the accepted base
+BLS sync. utilities/market_calendar/sync.py checks only success + TTL >= now,
+so a future last_success_utc is reused as fresh while within_freshness_window
+and the API reject it. Reproduced by setting BLS last success to 2030 and
+scanning in 2026: run_sync returned fresh/0 without requesting the provider.
+Use the shared helper for the base sync and add a future-timestamp regression;
+the command and API must agree for every required primary source.
+```
+
+Reviewer verification for R-009:
+
+- verified malformed Finnhub identity tokens now fail closed and valid
+  integral tokens retain their intended identity;
+- verified schema-2 upgrade with a key, the explicit no-key legacy-only state,
+  and the exact Finnhub ingestion/API timestamp boundary;
+- independently reproduced same-day mixed-generation sidecar acceptance and
+  unconditional post-fetch success for an identity-incomplete sidecar;
+- independently reproduced FOMC and G.17 ordinal swaps across neighboring
+  occurrences and confirmed the parser version was not changed;
+- independently reproduced calendar-prerequisite date freshness accepting an
+  expired sidecar and base BLS sync accepting a future success timestamp;
+- utilities suite: 810 passed;
+- backend suite: 601 passed;
+- focused calendar/event tests: 59 passed; focused backend API tests: 7 passed;
+- documentation check, secret scan of 620 tracked objects, and commit-range
+  git diff --check passed.
+
+Prior review records:
 
 ```text
 HANDOFF_ID: R-008
