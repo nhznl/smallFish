@@ -8,16 +8,16 @@ before doing work and immediately before editing it.
 
 ```text
 PROTOCOL_VERSION: 1
-LOOP_STATUS: BLOCKED
+LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R2
-NEXT_ACTOR: NONE
-LAST_HANDOFF_ID: I-005
+CURRENT_ROUND: M2-R3
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-005
 M1_STATUS: ACCEPTED
-M2_STATUS: OWNER_DECISION_REQUIRED
+M2_STATUS: IN_PROGRESS
 M3_STATUS: PLANNED
-OWNER_DECISION_REQUIRED: YES
-STOP_REASON: FINNHUB_STORAGE_DISPLAY_RIGHTS_UNCONFIRMED
+OWNER_DECISION_REQUIRED: NO
+STOP_REASON: NONE
 ```
 
 ## Lock and ownership rules
@@ -78,6 +78,33 @@ KNOWN_GAPS: All M2 implementation remains pending the owner decision.
 ```
 
 ## Reviewer outbox
+
+```text
+HANDOFF_ID: R-005
+MILESTONE: M2
+DECISION: RESUME_IMPLEMENTATION
+OWNER_DECISION: Use the current Finnhub personal/free-plan access for the
+  private, single-user smallFish installation.
+EVIDENCE: The existing local cache contains 1,498 Finnhub earnings rows fetched
+  on 2026-10-04 with coverage through 2026-12-13. Finnhub documents the
+  earnings-calendar capability and states that dataset access follows the
+  account plan. Its terms permit personal use but prohibit redistribution and
+  require deletion when access to the subscribed data ends.
+IMPLEMENTATION_CONSTRAINTS:
+  - Retrieve and display Finnhub-derived earnings data only inside the private
+    local smallFish installation.
+  - Persist only normalized calendar fields needed by Event Risk; do not expose
+    Finnhub data through a public or third-party redistribution surface.
+  - Preserve Finnhub source attribution and plan/capability diagnostics.
+  - Delete Finnhub-derived persisted data if access to that data ends.
+  - Stop for a new owner decision before any shared, business, commercial, or
+    redistributed use, or if the endpoint rejects the current plan.
+NEXT_ACTION: Resume the full M2 kickoff recorded under R-004, including the
+  earnings-provider abstraction and existing Finnhub implementation, subject
+  to these constraints.
+```
+
+Prior review records:
 
 ```text
 HANDOFF_ID: R-004
