@@ -25,7 +25,7 @@ sources:
   federal_reserve:
     required: true
     configured: true
-    parser_version: fed-calendar-json-3
+    parser_version: fed-calendar-json-4
     schedule_url: https://www.federalreserve.gov/json/calendar.json
     freshness_hours: 24
     scope: fomc_calendar_speeches_beige_book_industrial_production

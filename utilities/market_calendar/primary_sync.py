@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import replace
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from models.market_events import EASTERN, format_utc, parse_utc, within_freshness_window
@@ -122,6 +123,17 @@ def _calendar_identity_complete(calendar_text: str | None) -> bool:
         return False
 
 
+def _calendar_legacy_digest(calendar_text: str | None) -> str | None:
+    if not calendar_text:
+        return None
+    try:
+        raw = json.loads(calendar_text)
+        value = str(raw["legacyArtifactSha256"])
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return value if len(value) == 64 else None
+
+
 def _fresh(row, spec, start: date, end: date, now: datetime) -> bool:
     if row is None or row["status"] != "fresh" or row["parser_version"] != spec.parser_version:
         return False
@@ -129,6 +141,125 @@ def _fresh(row, spec, start: date, end: date, now: datetime) -> bool:
         return False
     return within_freshness_window(
         row["last_success_utc"], spec.freshness_hours or 0, now,
+    )
+
+
+def _reconcile_federal_reserve_occurrences(
+    previous: ParseReport | None, current: ParseReport,
+) -> ParseReport:
+    """Carry persisted occurrence identities across schedule-only changes.
+
+    The Federal Reserve feed exposes no record ids for FOMC meetings, press
+    conferences, or G.17 releases. Initial date/month keys are therefore only
+    seeds. Once a normalized snapshot exists, unchanged records are anchored
+    first and the remaining one-to-one move is reconciled conservatively. Any
+    ambiguous many-record change fails closed instead of swapping identities.
+    """
+    if previous is None:
+        return current
+    observations = list(current.observations)
+
+    for event_type in ("FOMC_DECISION", "INDUSTRIAL_PRODUCTION"):
+        old = [item for item in previous.observations if item.event_type == event_type]
+        new_indices = [
+            index for index, item in enumerate(observations)
+            if item.event_type == event_type
+        ]
+        unmatched_old = set(range(len(old)))
+        unmatched_new = set(new_indices)
+        matches: list[tuple[int, int]] = []
+
+        def match_unique(key_fn) -> None:
+            old_by_key: dict[str, list[int]] = {}
+            new_by_key: dict[str, list[int]] = {}
+            for old_index in unmatched_old:
+                old_by_key.setdefault(key_fn(old[old_index]), []).append(old_index)
+            for new_index in unmatched_new:
+                new_by_key.setdefault(key_fn(observations[new_index]), []).append(new_index)
+            for key in sorted(old_by_key.keys() & new_by_key.keys()):
+                if len(old_by_key[key]) == len(new_by_key[key]) == 1:
+                    old_index = old_by_key[key][0]
+                    new_index = new_by_key[key][0]
+                    unmatched_old.remove(old_index)
+                    unmatched_new.remove(new_index)
+                    matches.append((old_index, new_index))
+
+        match_unique(lambda item: item.civil_date)
+        match_unique(lambda item: item.civil_date[:7])
+
+        if unmatched_old and unmatched_new:
+            if len(unmatched_old) != len(unmatched_new):
+                raise PrimaryCalendarParseError(
+                    f"ambiguous persisted identity reconciliation for {event_type}"
+                )
+            while unmatched_old:
+                pairs = []
+                for old_index in unmatched_old:
+                    old_date = date.fromisoformat(old[old_index].civil_date)
+                    for new_index in unmatched_new:
+                        new_date = date.fromisoformat(observations[new_index].civil_date)
+                        pairs.append((abs((new_date - old_date).days), old_index, new_index))
+                minimum = min(item[0] for item in pairs)
+                nearest = [item for item in pairs if item[0] == minimum]
+                if len(nearest) != 1:
+                    raise PrimaryCalendarParseError(
+                        f"ambiguous persisted identity reconciliation for {event_type}"
+                    )
+                _, old_index, new_index = nearest[0]
+                unmatched_old.remove(old_index)
+                unmatched_new.remove(new_index)
+                matches.append((old_index, new_index))
+
+        for old_index, new_index in matches:
+            observations[new_index] = replace(
+                observations[new_index],
+                source_record_id=old[old_index].source_record_id,
+                canonical_key=old[old_index].canonical_key,
+            )
+
+    decisions_by_date = {
+        item.civil_date: item for item in observations
+        if item.event_type == "FOMC_DECISION"
+    }
+    for index, item in enumerate(observations):
+        if item.event_type != "FOMC_PRESS_CONFERENCE":
+            continue
+        decision = decisions_by_date.get(item.civil_date)
+        if decision is None:
+            raise PrimaryCalendarParseError(
+                "Federal Reserve press conference has no reconciled FOMC meeting"
+            )
+        observations[index] = replace(
+            item,
+            source_record_id=decision.source_record_id.replace(
+                "FOMC_DECISION:", "FOMC_PRESS_CONFERENCE:", 1,
+            ),
+            canonical_key=decision.canonical_key.replace(
+                ":FOMC_DECISION:", ":FOMC_PRESS_CONFERENCE:", 1,
+            ),
+        )
+
+    target = {
+        item.source_record_id for item in observations
+        if item.event_type in {
+            "FOMC_DECISION", "FOMC_PRESS_CONFERENCE", "INDUSTRIAL_PRODUCTION",
+        }
+    }
+    target_count = sum(
+        item.event_type in {
+            "FOMC_DECISION", "FOMC_PRESS_CONFERENCE", "INDUSTRIAL_PRODUCTION",
+        }
+        for item in observations
+    )
+    if len(target) != target_count:
+        raise PrimaryCalendarParseError(
+            "Federal Reserve persisted identity reconciliation produced a collision"
+        )
+    return ParseReport(
+        tuple(observations),
+        skipped_other_releases=current.skipped_other_releases,
+        skipped_without_reference_period=current.skipped_without_reference_period,
+        skipped_unresolved_timezone=current.skipped_unresolved_timezone,
     )
 
 
@@ -446,6 +577,7 @@ def run_primary_sync(
             current = _source(connection, key)
             source_url = spec.schedule_url or ""
             report = _load_provider_snapshot(connection, key)
+            previous_report = report
             reusable = report is not None and _provider_snapshot_matches(
                 connection, key, spec.parser_version, source_url,
             )
@@ -550,6 +682,10 @@ def run_primary_sync(
                         report = parse_document(text, provider=key, source_url=source_url)
                 elif report is None:
                     raise PrimaryCalendarParseError("missing_snapshot")
+                if key == "federal_reserve":
+                    report = _reconcile_federal_reserve_occurrences(
+                        previous_report, report,
+                    )
                 if coverage is None or coverage[0] > horizon_start.isoformat() or coverage[1] < horizon_end.isoformat():
                     raise PrimaryCalendarParseError("insufficient_coverage")
                 count = _publish_provider(
@@ -603,6 +739,7 @@ def run_primary_sync(
         earnings_metadata = _earnings_metadata(earnings_meta_text)
         calendar_coverage = _document_coverage(earnings_calendar_text or "")
         calendar_fetched = _calendar_fetched_as_of(earnings_calendar_text)
+        calendar_legacy_digest = _calendar_legacy_digest(earnings_calendar_text)
         if earnings_csv_text is None or earnings_metadata is None:
             _mark_failure(
                 connection,
@@ -644,6 +781,18 @@ def run_primary_sync(
                 observed_at,
                 "artifact_generation_mismatch",
                 "The Finnhub calendar sidecar and legacy metadata are from different generations. Previous rows were kept.",
+            )
+            lines.append("finnhub_earnings: artifact generation mismatch; previous rows were kept.")
+            required_failures += 1
+        elif calendar_legacy_digest != hashlib.sha256(
+            earnings_csv_text.encode("utf-8")
+        ).hexdigest():
+            _mark_failure(
+                connection,
+                spec,
+                observed_at,
+                "artifact_generation_mismatch",
+                "The Finnhub calendar sidecar is not bound to this exact legacy CSV generation. Previous rows were kept.",
             )
             lines.append("finnhub_earnings: artifact generation mismatch; previous rows were kept.")
             required_failures += 1

@@ -16,6 +16,7 @@
   "fetchedAsOf": "2026-10-04",
   "identityComplete": true,
   "identityFailureCount": 0,
+  "legacyArtifactSha256": "0bb93d716de731de5a30d6de26be79eedd7343a922947b51c49a54273f9d7180",
   "provider": "finnhub",
   "requestedCoverageEnd": "2026-11-15",
   "requestedCoverageStart": "2026-10-04",

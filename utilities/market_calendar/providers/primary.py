@@ -220,37 +220,16 @@ def _fed_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, s
         raise PrimaryCalendarParseError("Federal Reserve calendar has no events list")
     rows = []
     months = []
-    occurrence_slots: dict[tuple[int, str], str] = {}
-    meeting_by_date: dict[str, str] = {}
-    for record_type, title_match, prefix in (
-        ("meeting", "FOMC Meeting", "M"),
-        ("g17", "G.17 - Industrial Production", "R"),
-    ):
-        dated_records = []
-        for item_index, item in enumerate(entries):
-            if not isinstance(item, dict):
-                continue
-            month = str(item.get("month") or "")
-            title = _plain_text(item.get("title"))
-            if not re.fullmatch(r"20\d{2}-\d{2}", month):
-                continue
-            if title != title_match and not (
-                record_type == "g17" and title.startswith(title_match)
-            ):
-                continue
-            for raw_day in str(item.get("days") or "").split(","):
-                if raw_day.strip().isdigit():
-                    dated_records.append((f"{month}-{int(raw_day):02d}", item_index))
-        per_year: dict[str, int] = {}
-        for civil, item_index in sorted(dated_records):
-            year = civil[:4]
-            per_year[year] = per_year.get(year, 0) + 1
-            occurrence = f"{year}-{prefix}{per_year[year]:02d}"
-            occurrence_slots[(item_index, civil)] = occurrence
-            if record_type == "meeting":
-                meeting_by_date[civil] = occurrence
+    meeting_dates = {
+        f"{str(item.get('month'))}-{int(raw_day):02d}"
+        for item in entries
+        if isinstance(item, dict)
+        and _plain_text(item.get("title")) == "FOMC Meeting"
+        for raw_day in str(item.get("days") or "").split(",")
+        if raw_day.strip().isdigit()
+    }
 
-    for item_index, item in enumerate(entries):
+    for item in entries:
         if not isinstance(item, dict):
             continue
         month = str(item.get("month") or "")
@@ -298,23 +277,20 @@ def _fed_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, s
                     date.fromisoformat(civil), parsed_clock, ZoneInfo("America/New_York")
                 ).isoformat()
             if event_type == "FOMC_DECISION":
-                occurrence = occurrence_slots[(item_index, civil)]
-                source_id = f"FOMC_DECISION:{occurrence}"
+                source_id = f"FOMC_DECISION:{civil}"
             elif event_type == "FOMC_PRESS_CONFERENCE":
-                occurrence = meeting_by_date.get(civil)
-                if occurrence is None:
+                if civil not in meeting_dates:
                     raise PrimaryCalendarParseError(
                         "Federal Reserve press conference has no matching FOMC meeting"
                     )
-                source_id = f"FOMC_PRESS_CONFERENCE:{occurrence}"
+                source_id = f"FOMC_PRESS_CONFERENCE:{civil}"
             elif event_type == "INDUSTRIAL_PRODUCTION":
-                occurrence = occurrence_slots[(item_index, civil)]
-                source_id = f"INDUSTRIAL_PRODUCTION:{occurrence}"
+                source_id = f"INDUSTRIAL_PRODUCTION:{month}"
             canonical_subject = source_id
             if event_type in {"FOMC_DECISION", "FOMC_PRESS_CONFERENCE"}:
-                canonical_subject = occurrence
+                canonical_subject = civil
             elif event_type == "INDUSTRIAL_PRODUCTION":
-                canonical_subject = occurrence
+                canonical_subject = month
             rows.append({
                 "id": source_id,
                 "title": title,

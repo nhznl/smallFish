@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -13,6 +14,8 @@ from utilities.events import (
     main,
     run_fetch,
 )
+
+NOW = datetime(2026, 7, 16, 4, 0, tzinfo=timezone.utc)
 
 
 def _events(symbol: str = "AAPL", event_date: str = "2026-08-01") -> pd.DataFrame:
@@ -150,7 +153,7 @@ def test_ensure_fresh_events_reuses_recent_covered_cache_without_a_key(tmp_path:
 
     result = ensure_fresh_events(
         "2026-07-16", api_key=None, output_root=tmp_path,
-        fetch_fn=unexpected_fetch)
+        fetch_fn=unexpected_fetch, now=NOW)
 
     assert result.status == "fresh"
     assert result.ok is True
@@ -179,7 +182,7 @@ def test_ensure_fresh_events_upgrades_non_schema2_sidecar_when_key_is_available(
 
     result = ensure_fresh_events(
         "2026-07-16", api_key="test-key", output_root=tmp_path,
-        fetch_fn=fake_fetch,
+        fetch_fn=fake_fetch, now=NOW,
     )
 
     assert result.status == "refreshed"
@@ -200,12 +203,83 @@ def test_ensure_fresh_events_reports_legacy_only_capability_without_key(
     result = ensure_fresh_events(
         "2026-07-16", api_key=None, output_root=tmp_path,
         fetch_fn=lambda *_: (_ for _ in ()).throw(AssertionError("network")),
+        now=NOW,
     )
 
     assert result.status == "legacy_fresh"
-    assert result.ok is True
+    assert result.ok is False
+    assert result.legacy_ok is True
     assert "schema-2 sidecar is missing, outdated, or identity-incomplete" in result.message
     assert "FINNHUB_API_KEY is not configured" in result.message
+
+
+def test_ensure_fresh_events_rejects_mixed_same_day_artifact_generations(
+    tmp_path: Path,
+) -> None:
+    run_fetch(
+        "2026-07-16", 70, lambda *_: _events("AAPL"),
+        api_key="test-key", output_root=tmp_path,
+    )
+    old_sidecar = (tmp_path / "market_calendar" / "earnings.json").read_bytes()
+    run_fetch(
+        "2026-07-16", 70, lambda *_: _events("MSFT"),
+        api_key="test-key", output_root=tmp_path,
+    )
+    (tmp_path / "market_calendar" / "earnings.json").write_bytes(old_sidecar)
+    calls = []
+
+    def fake_fetch(*_args):
+        calls.append(True)
+        return _events("GOOG")
+
+    result = ensure_fresh_events(
+        "2026-07-16", api_key="test-key", output_root=tmp_path,
+        fetch_fn=fake_fetch, now=NOW,
+    )
+
+    assert result.status == "refreshed"
+    assert calls == [True]
+    assert pd.read_csv(tmp_path / "events.csv")["ticker"].tolist() == ["GOOG"]
+
+
+def test_ensure_fresh_events_does_not_report_incomplete_refresh_as_success(
+    tmp_path: Path,
+) -> None:
+    malformed = _events()
+    malformed["fiscal_year"] = 2026.5
+
+    result = ensure_fresh_events(
+        "2026-07-16", api_key="test-key", output_root=tmp_path,
+        fetch_fn=lambda *_: malformed, now=NOW,
+    )
+
+    assert result.status == "calendar_incomplete"
+    assert result.ok is False
+    assert result.legacy_ok is True
+    assert "sidecar is not complete and current" in result.message
+
+
+def test_ensure_fresh_events_uses_exact_calendar_timestamp_boundary(
+    tmp_path: Path,
+) -> None:
+    run_fetch(
+        "2026-10-04", 70, lambda *_: _events("AAPL", "2026-10-20"),
+        api_key="test-key", output_root=tmp_path,
+    )
+    exact = ensure_fresh_events(
+        "2026-10-05", api_key=None, output_root=tmp_path,
+        now=datetime(2026, 10, 5, 4, 0, tzinfo=timezone.utc),
+    )
+    expired = ensure_fresh_events(
+        "2026-10-05", api_key=None, output_root=tmp_path,
+        now=datetime(2026, 10, 5, 4, 0, 1, tzinfo=timezone.utc),
+    )
+
+    assert exact.status == "fresh"
+    assert exact.ok is True
+    assert expired.status == "legacy_fresh"
+    assert expired.ok is False
+    assert expired.legacy_ok is True
 
 
 def test_ensure_fresh_events_refreshes_stale_cache_when_key_is_available(tmp_path: Path) -> None:
@@ -217,7 +291,7 @@ def test_ensure_fresh_events_refreshes_stale_cache_when_key_is_available(tmp_pat
 
     result = ensure_fresh_events(
         "2026-07-16", api_key="test-key", output_root=tmp_path,
-        fetch_fn=fake_fetch)
+        fetch_fn=fake_fetch, now=NOW)
 
     assert result.status == "refreshed"
     assert calls == [("2026-07-16", "2026-09-24", "test-key")]
@@ -231,7 +305,7 @@ def test_ensure_fresh_events_without_key_keeps_stale_cache(tmp_path: Path) -> No
     before = (tmp_path / "events.csv").read_bytes()
 
     result = ensure_fresh_events(
-        "2026-07-16", api_key=None, output_root=tmp_path)
+        "2026-07-16", api_key=None, output_root=tmp_path, now=NOW)
 
     assert result.status == "unavailable"
     assert result.ok is False
@@ -251,6 +325,7 @@ def test_failed_refresh_never_replaces_last_good_calendar(tmp_path: Path) -> Non
         "2026-07-16", api_key="test-key", output_root=tmp_path,
         fetch_fn=lambda *_: pd.DataFrame(columns=[
             "ticker", "event_type", "event_date", "source"]),
+        now=NOW,
     )
 
     assert result.status == "error"

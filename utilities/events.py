@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 import fcntl
+import hashlib
 import json
 import math
 import numbers
@@ -25,6 +26,8 @@ from urllib.parse import quote
 
 import pandas as pd
 import requests
+
+from models.market_events import EASTERN, format_utc, within_freshness_window
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = "https://finnhub.io/api/v1"
@@ -47,7 +50,13 @@ class EventRefreshResult:
 
     @property
     def ok(self) -> bool:
-        return self.status in {"fresh", "legacy_fresh", "refreshed"}
+        return self.status in {"fresh", "refreshed"}
+
+    @property
+    def legacy_ok(self) -> bool:
+        return self.status in {
+            "fresh", "legacy_fresh", "refreshed", "calendar_incomplete",
+        }
 
 
 class EventDataError(ValueError):
@@ -190,7 +199,7 @@ def _legacy_calendar_is_fresh(root: Path, as_of: str, required_coverage_days: in
 
 
 def _calendar_is_fresh(root: Path, as_of: str, required_coverage_days: int,
-                       max_age_days: int) -> bool:
+                       max_age_days: int, now: datetime) -> bool:
     """Validate the legacy cache and the schema-2 calendar capability."""
     if not _legacy_calendar_is_fresh(
         root, as_of, required_coverage_days, max_age_days,
@@ -202,12 +211,18 @@ def _calendar_is_fresh(root: Path, as_of: str, required_coverage_days: int,
             (root / "market_calendar" / "earnings.json").read_text(encoding="utf-8")
         )
         as_of_date = pd.to_datetime(as_of)
+        fetched_at = format_utc(datetime.combine(
+            pd.to_datetime(calendar["fetchedAsOf"]).date(), datetime.min.time(), EASTERN,
+        ))
         return (
             calendar.get("schemaVersion") == 2
             and calendar.get("fetchedAsOf") == metadata["events_fetched_as_of"]
+            and calendar.get("legacyArtifactSha256")
+            == hashlib.sha256((root / "events.csv").read_bytes()).hexdigest()
             and calendar.get("identityComplete") is True
             and type(calendar.get("identityFailureCount")) is int
             and calendar["identityFailureCount"] == 0
+            and within_freshness_window(fetched_at, max_age_days * 24, now)
             and pd.to_datetime(calendar["coverageStart"]) <= as_of_date
             and pd.to_datetime(calendar["coverageEnd"])
             >= as_of_date + timedelta(days=required_coverage_days)
@@ -272,6 +287,7 @@ def run_fetch(as_of: str, lookahead_days: int,
     root.mkdir(parents=True, exist_ok=True)
     events_path = root / "events.csv"
     csv_content = events.to_csv(index=False)
+    legacy_digest = hashlib.sha256(csv_content.encode("utf-8")).hexdigest()
     calendar_rows = []
     if set(CALENDAR_IDENTITY_COLUMNS).issubset(normalized.columns):
         for item in normalized.to_dict("records"):
@@ -297,6 +313,7 @@ def run_fetch(as_of: str, lookahead_days: int,
         "schemaVersion": 2,
         "provider": "finnhub",
         "fetchedAsOf": as_of,
+        "legacyArtifactSha256": legacy_digest,
         "coverageStart": as_of if identity_complete else None,
         "coverageEnd": end_date if identity_complete else None,
         "requestedCoverageStart": as_of,
@@ -329,6 +346,7 @@ def ensure_fresh_events(as_of: str, lookahead_days: int = DEFAULT_LOOKAHEAD_DAYS
                         fetch_fn: Callable[
                             [str, str, FinnhubConfig], pd.DataFrame
                         ] = fetch_earnings_calendar,
+                        now: datetime | None = None,
                         ) -> EventRefreshResult:
     """Reuse a safe calendar or refresh it once when missing/stale.
 
@@ -337,12 +355,15 @@ def ensure_fresh_events(as_of: str, lookahead_days: int = DEFAULT_LOOKAHEAD_DAYS
     """
     root = output_root or strategy_data_root()
     api_key = (api_key or "").strip() or None
-    if _calendar_is_fresh(root, as_of, required_coverage_days, max_age_days):
+    moment = now or datetime.now().astimezone()
+    if _calendar_is_fresh(root, as_of, required_coverage_days, max_age_days, moment):
         return EventRefreshResult("fresh", "Upcoming earnings calendar is fresh.")
 
     with _refresh_lock(root):
         # Another request may have refreshed while this process waited.
-        if _calendar_is_fresh(root, as_of, required_coverage_days, max_age_days):
+        if _calendar_is_fresh(
+            root, as_of, required_coverage_days, max_age_days, moment,
+        ):
             return EventRefreshResult("fresh", "Upcoming earnings calendar is fresh.")
         if not api_key and _legacy_calendar_is_fresh(
             root, as_of, required_coverage_days, max_age_days,
@@ -369,6 +390,14 @@ def ensure_fresh_events(as_of: str, lookahead_days: int = DEFAULT_LOOKAHEAD_DAYS
                 f"Upcoming earnings refresh failed ({type(exc).__name__}); "
                 "the previous cache was kept.",
             )
+    if not _calendar_is_fresh(
+        root, as_of, required_coverage_days, max_age_days, moment,
+    ):
+        return EventRefreshResult(
+            "calendar_incomplete",
+            f"Refreshed the legacy earnings cache with {len(events)} events, but "
+            "the market-calendar sidecar is not complete and current.",
+        )
     return EventRefreshResult(
         "refreshed", f"Refreshed upcoming earnings calendar with {len(events)} events.")
 
@@ -397,7 +426,7 @@ def main(argv: list[str] | None = None) -> int:
             args.as_of, args.lookahead_days, args.required_coverage_days,
             args.max_age_days, api_key=api_key)
         print(result.message)
-        return 0 if result.ok else 3
+        return 0 if result.legacy_ok else 3
     if not api_key:
         print("FINNHUB_API_KEY environment variable is required for `fetch events`")
         return 2

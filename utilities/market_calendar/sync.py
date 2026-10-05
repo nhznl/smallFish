@@ -7,9 +7,9 @@ import json
 import logging
 import sqlite3
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 
-from models.market_events import EventMeasurement, format_utc
+from models.market_events import EventMeasurement, format_utc, within_freshness_window
 from services.market_events.bls import BLS_SCHEDULE_URL, fetch_schedule
 from services.market_events.http import HttpTransport, TransportError, UrllibTransport
 from utilities.market_calendar.config import (
@@ -510,8 +510,9 @@ def run_sync(
             and _covers(current, horizon_start, horizon_end)
             and current["parser_version"] == bls.parser_version
             and current["last_success_utc"]
-            and datetime.strptime(current["last_success_utc"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-            + timedelta(hours=bls.freshness_hours or 0) >= now.astimezone(timezone.utc)
+            and within_freshness_window(
+                current["last_success_utc"], bls.freshness_hours or 0, now,
+            )
         )
         snapshot = _load_provider_snapshot(connection, "bls")
         snapshot_reusable = (

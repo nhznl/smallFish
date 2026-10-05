@@ -113,11 +113,20 @@ a provider. The existing Finnhub fetch writes the unchanged legacy
 `events.csv` projection plus a private calendar-only normalized sidecar with
 fiscal-period identity. The sidecar marks identity completeness explicitly and
 cannot claim schedule coverage when any in-horizon provider row lacks a stable
-fiscal identity. Calendar-capable freshness requires a matching schema-2
-sidecar; a still-fresh legacy cache remains usable by legacy consumers but is
-reported as calendar-incapable until a credentialed refresh upgrades it. The
-calendar reads the sidecar; it neither widens the legacy CSV contract nor adds
-a second Finnhub fetch path.
+fiscal identity. Calendar-capable freshness requires a schema-2 sidecar bound
+to the exact legacy CSV bytes by SHA-256, not merely the same fetch date; a
+still-fresh legacy cache remains usable by legacy consumers but is reported as
+calendar-incapable until a credentialed refresh upgrades it. The calendar
+reads the sidecar; it neither widens the legacy CSV contract nor adds a second
+Finnhub fetch path.
+
+The Federal Reserve calendar does not expose stable ids for FOMC meetings,
+their press conferences, or G.17 releases. Their first observed date/month key
+is a seed only. Later successful feeds are reconciled against the persisted
+normalized snapshot: unchanged occurrences anchor the match, a unique
+remaining move retains its seed, and ambiguous many-record changes fail closed.
+The parser-version-4 upgrade performs event changes and snapshot replacement in
+one transaction, preserving pre-upgrade keys and schedule history.
 
 Brokerage sync consumers call `services/*` for raw provider payloads, then
 normalize and materialize their own ledger artifacts under `SFP_DATA_DIR`.

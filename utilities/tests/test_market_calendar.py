@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 import sqlite3
 import urllib.request
@@ -22,9 +23,11 @@ from utilities.events import run_fetch
 from utilities.market_calendar.config import CalendarConfigError, load_risk_policy
 from utilities.market_calendar.etf import load_etf_mappings, validate_mappings
 from utilities.market_calendar.providers.bls import parse_ics
+from utilities.market_calendar.providers.primary import parse_official_document
 from utilities.market_calendar.primary_sync import (
     CLUSTER_BENEFIT,
     CLUSTER_RISK,
+    _reconcile_federal_reserve_occurrences,
     run_primary_sync,
 )
 from utilities.market_calendar.risk import assess, rank_key
@@ -154,7 +157,9 @@ def _primary_documents() -> dict[str, str]:
     }
 
 
-def _earnings_calendar(*events: dict[str, str]) -> str:
+def _earnings_calendar(
+    *events: dict[str, str], legacy_csv_text: str | None = None,
+) -> str:
     rows = list(events) or [{
         "id": "AAA:2026-Q3",
         "title": "AAA earnings",
@@ -164,10 +169,18 @@ def _earnings_calendar(*events: dict[str, str]) -> str:
         "referencePeriod": "2026-Q3",
         "canonicalKey": "US:EARNINGS:AAA:2026-Q3",
     }]
+    if legacy_csv_text is None:
+        legacy_csv_text = "ticker,event_type,event_date,source,fetched_as_of\n" + "".join(
+            f"{item['symbol']},earnings,{item['civilDate']},finnhub,2026-10-04\n"
+            for item in rows
+        )
     return json.dumps({
         "schemaVersion": 2,
         "provider": "finnhub",
         "fetchedAsOf": "2026-10-04",
+        "legacyArtifactSha256": hashlib.sha256(
+            legacy_csv_text.encode("utf-8")
+        ).hexdigest(),
         "coverageStart": "2026-10-04",
         "coverageEnd": END.isoformat(),
         "requestedCoverageStart": "2026-10-04",
@@ -422,6 +435,42 @@ def test_fresh_cache_does_not_call_the_transport(tmp_path: Path):
     )
     assert again.exit_code == 0
     assert again.status == "fresh"
+
+
+def test_future_bls_success_timestamp_is_not_reused_as_fresh(tmp_path: Path):
+    schedule = (FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8")
+    _sync(tmp_path, schedule)
+    connection = sqlite3.connect(tmp_path / "calendar.sqlite")
+    try:
+        connection.execute(
+            "UPDATE source_sync_state SET last_success_utc = ? WHERE provider = 'bls'",
+            ("2030-01-01T00:00:00Z",),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    class CountingFailure:
+        calls = 0
+
+        def get(self, url, headers=None):
+            self.calls += 1
+            raise TransportError("URLError")
+
+    transport = CountingFailure()
+    result = run_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        now=NOW + timedelta(hours=1),
+        transport=transport,
+    )
+
+    assert transport.calls == 1
+    assert result.status == "failed"
 
 
 def test_wider_horizon_fetches_unconditionally_and_materializes_new_cpi(tmp_path: Path):
@@ -794,13 +843,13 @@ def test_m2_official_source_shapes_prove_coverage_without_network(tmp_path: Path
     assert [tuple(row) for row in fed_occurrences] == [
         (
             "INDUSTRIAL_PRODUCTION",
-            "US:FED:INDUSTRIAL_PRODUCTION:2026-R10",
+            "US:FED:INDUSTRIAL_PRODUCTION:2026-10",
             "2026-10-16T13:15:00Z",
         ),
-        ("FOMC_DECISION", "US:FED:FOMC_DECISION:2026-M07", "2026-10-28T18:00:00Z"),
+        ("FOMC_DECISION", "US:FED:FOMC_DECISION:2026-10-28", "2026-10-28T18:00:00Z"),
         (
             "FOMC_PRESS_CONFERENCE",
-            "US:FED:FOMC_PRESS_CONFERENCE:2026-M07",
+            "US:FED:FOMC_PRESS_CONFERENCE:2026-10-28",
             "2026-10-28T18:30:00Z",
         ),
     ]
@@ -821,6 +870,14 @@ def test_m2_official_fed_occurrence_identity_survives_day_and_month_reschedules(
     original_fed = official_path.read_text(encoding="utf-8")
     documents = _primary_documents()
     documents["federal_reserve"] = original_fed
+    config_dir = _config_copy(tmp_path)
+    sources_path = config_dir / "market_calendar_sources.yaml"
+    sources_path.write_text(
+        sources_path.read_text(encoding="utf-8").replace(
+            "fed-calendar-json-4", "fed-calendar-json-3",
+        ),
+        encoding="utf-8",
+    )
     _prices(tmp_path / "cache")
     common = dict(
         database=tmp_path / "calendar.sqlite",
@@ -833,10 +890,17 @@ def test_m2_official_fed_occurrence_identity_survives_day_and_month_reschedules(
         earnings_csv_text=(FIXTURES / "earnings.csv").read_text(encoding="utf-8"),
         earnings_meta_text=(FIXTURES / "earnings_meta.json").read_text(encoding="utf-8"),
         earnings_calendar_text=(FIXTURES / "earnings_calendar.json").read_text(encoding="utf-8"),
+        config_dir=config_dir,
     )
     assert run_primary_sync(
         **common, now=NOW, provider_documents=documents,
     ).exit_code == 0
+    sources_path.write_text(
+        sources_path.read_text(encoding="utf-8").replace(
+            "fed-calendar-json-3", "fed-calendar-json-4",
+        ),
+        encoding="utf-8",
+    )
 
     moved = json.loads(original_fed)
     for item in moved["events"]:
@@ -866,17 +930,17 @@ def test_m2_official_fed_occurrence_identity_survives_day_and_month_reschedules(
           'FOMC_DECISION', 'FOMC_PRESS_CONFERENCE', 'INDUSTRIAL_PRODUCTION'
         )
           AND canonical_key IN (
-            'US:FED:FOMC_DECISION:2026-M07',
-            'US:FED:FOMC_PRESS_CONFERENCE:2026-M07',
-            'US:FED:INDUSTRIAL_PRODUCTION:2026-R10'
+            'US:FED:FOMC_DECISION:2026-10-28',
+            'US:FED:FOMC_PRESS_CONFERENCE:2026-10-28',
+            'US:FED:INDUSTRIAL_PRODUCTION:2026-10'
           )
         ORDER BY canonical_key
         """,
     )
     assert [(row["canonical_key"], row["lifecycle_status"]) for row in occurrences] == [
-        ("US:FED:FOMC_DECISION:2026-M07", "rescheduled"),
-        ("US:FED:FOMC_PRESS_CONFERENCE:2026-M07", "rescheduled"),
-        ("US:FED:INDUSTRIAL_PRODUCTION:2026-R10", "rescheduled"),
+        ("US:FED:FOMC_DECISION:2026-10-28", "rescheduled"),
+        ("US:FED:FOMC_PRESS_CONFERENCE:2026-10-28", "rescheduled"),
+        ("US:FED:INDUSTRIAL_PRODUCTION:2026-10", "rescheduled"),
     ]
     assert len({row["id"] for row in occurrences}) == 3
     histories = _rows(
@@ -889,9 +953,9 @@ def test_m2_official_fed_occurrence_identity_survives_day_and_month_reschedules(
           'FOMC_DECISION', 'FOMC_PRESS_CONFERENCE', 'INDUSTRIAL_PRODUCTION'
         )
           AND e.canonical_key IN (
-            'US:FED:FOMC_DECISION:2026-M07',
-            'US:FED:FOMC_PRESS_CONFERENCE:2026-M07',
-            'US:FED:INDUSTRIAL_PRODUCTION:2026-R10'
+            'US:FED:FOMC_DECISION:2026-10-28',
+            'US:FED:FOMC_PRESS_CONFERENCE:2026-10-28',
+            'US:FED:INDUSTRIAL_PRODUCTION:2026-10'
           )
         ORDER BY e.canonical_key, h.scheduled_at_utc
         """,
@@ -900,9 +964,88 @@ def test_m2_official_fed_occurrence_identity_survives_day_and_month_reschedules(
     assert {
         row["canonical_key"] for row in histories
     } == {
-        "US:FED:FOMC_DECISION:2026-M07",
-        "US:FED:FOMC_PRESS_CONFERENCE:2026-M07",
-        "US:FED:INDUSTRIAL_PRODUCTION:2026-R10",
+        "US:FED:FOMC_DECISION:2026-10-28",
+        "US:FED:FOMC_PRESS_CONFERENCE:2026-10-28",
+        "US:FED:INDUSTRIAL_PRODUCTION:2026-10",
+    }
+    parser = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT parser_version FROM provider_snapshot_state WHERE provider = 'federal_reserve'",
+    )[0]
+    assert parser["parser_version"] == "fed-calendar-json-4"
+    assert not _rows(
+        tmp_path / "calendar.sqlite",
+        """
+        SELECT id FROM events
+        WHERE event_type IN (
+          'FOMC_DECISION', 'FOMC_PRESS_CONFERENCE', 'INDUSTRIAL_PRODUCTION'
+        ) AND lifecycle_status = 'cancelled'
+        """,
+    )
+
+
+def test_fed_persisted_identity_survives_neighbor_insertion_and_cross_year_moves():
+    source_url = "https://www.federalreserve.gov/json/calendar.json"
+    original = json.loads(
+        (FIXTURES / "official_sources" / "federal_reserve.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    def parsed(payload: dict):
+        return parse_official_document(
+            json.dumps(payload), provider="federal_reserve", source_url=source_url,
+            horizon_start=date(2025, 1, 1), horizon_end=date(2027, 12, 31),
+        )[0]
+
+    base = parsed(original)
+    moved = json.loads(json.dumps(original))
+    for item in moved["events"]:
+        if item.get("month") == "2026-10" and item["title"] in {
+            "FOMC Meeting", "FOMC Press Conference",
+        }:
+            item["month"], item["days"] = "2026-09", "1"
+        elif (
+            item.get("month") == "2026-10"
+            and item["title"].startswith("G.17 - Industrial Production")
+        ):
+            item["month"], item["days"] = "2026-09", "1"
+    reconciled = _reconcile_federal_reserve_occurrences(base, parsed(moved))
+
+    inserted = json.loads(json.dumps(moved))
+    inserted["events"].extend([
+        {"title": "FOMC Meeting", "time": "2:00 p.m.", "month": "2025-12", "days": "3", "type": "FOMC"},
+        {"title": "FOMC Press Conference", "time": "2:30 p.m.", "month": "2025-12", "days": "3", "type": "FOMC"},
+        {"title": "G.17 - Industrial Production and Capacity Utilization", "time": "9:15 a.m.", "month": "2025-12", "days": "4", "type": "Stat"},
+    ])
+    reconciled = _reconcile_federal_reserve_occurrences(
+        reconciled, parsed(inserted),
+    )
+
+    cross_year = json.loads(json.dumps(inserted))
+    for item in cross_year["events"]:
+        if item.get("month") == "2026-09" and item.get("days") == "1":
+            item["month"], item["days"] = "2027-01", "5"
+    reconciled = _reconcile_federal_reserve_occurrences(
+        reconciled, parsed(cross_year),
+    )
+    targets = {
+        item.event_type: (item.source_record_id, item.canonical_key)
+        for item in reconciled.observations
+        if item.civil_date == "2027-01-05"
+    }
+    assert targets == {
+        "FOMC_DECISION": (
+            "FOMC_DECISION:2026-10-28", "US:FED:FOMC_DECISION:2026-10-28",
+        ),
+        "FOMC_PRESS_CONFERENCE": (
+            "FOMC_PRESS_CONFERENCE:2026-10-28",
+            "US:FED:FOMC_PRESS_CONFERENCE:2026-10-28",
+        ),
+        "INDUSTRIAL_PRODUCTION": (
+            "INDUSTRIAL_PRODUCTION:2026-10",
+            "US:FED:INDUSTRIAL_PRODUCTION:2026-10",
+        ),
     }
 
 
@@ -1062,6 +1205,10 @@ def test_m2_earnings_cache_freshness_and_coverage(
     expected_status: str, expected_error: str | None,
 ):
     _prices(tmp_path / "cache")
+    legacy_csv = (
+        "ticker,event_type,event_date,source,fetched_as_of\n"
+        f"AAA,earnings,2026-10-20,finnhub,{fetched}\n"
+    )
     result = run_primary_sync(
         database=tmp_path / "calendar.sqlite",
         universe_path=FIXTURES / "universe.csv",
@@ -1072,13 +1219,13 @@ def test_m2_earnings_cache_freshness_and_coverage(
         now=NOW,
         schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
         provider_documents=_primary_documents(),
-        earnings_csv_text=f"ticker,event_type,event_date,source,fetched_as_of\nAAA,earnings,2026-10-20,finnhub,{fetched}\n",
+        earnings_csv_text=legacy_csv,
         earnings_meta_text=json.dumps({
             "events_fetched_as_of": fetched,
             "events_coverage_end": coverage_end,
         }),
         earnings_calendar_text=(
-            _earnings_calendar()
+            _earnings_calendar(legacy_csv_text=legacy_csv)
             .replace(END.isoformat(), coverage_end)
             .replace('"fetchedAsOf": "2026-10-04"', f'"fetchedAsOf": "{fetched}"')
         ),
@@ -1179,6 +1326,56 @@ def test_m2_earnings_identity_incompleteness_fails_closed(tmp_path: Path):
         "SELECT status, error_category FROM source_sync_state WHERE provider = 'finnhub_earnings'",
     )[0]
     assert dict(source) == {"status": "failed", "error_category": "stable_identity_unavailable"}
+
+
+def test_m2_earnings_sidecar_must_match_exact_legacy_generation(tmp_path: Path):
+    artifact_root = tmp_path / "artifacts"
+
+    def row(symbol: str):
+        return pd.DataFrame([{
+            "ticker": symbol, "event_type": "earnings",
+            "event_date": "2026-10-20", "source": "finnhub",
+            "fiscal_year": 2026, "fiscal_quarter": 3,
+        }])
+
+    run_fetch(
+        "2026-10-04", 70, lambda *_: row("AAPL"),
+        api_key="test-key", output_root=artifact_root,
+    )
+    old_sidecar = (
+        artifact_root / "market_calendar" / "earnings.json"
+    ).read_text(encoding="utf-8")
+    run_fetch(
+        "2026-10-04", 70, lambda *_: row("MSFT"),
+        api_key="test-key", output_root=artifact_root,
+    )
+    _prices(tmp_path / "cache")
+    result = run_primary_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        now=NOW,
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        provider_documents=_primary_documents(),
+        earnings_csv_text=(artifact_root / "events.csv").read_text(encoding="utf-8"),
+        earnings_meta_text=(artifact_root / "events_meta.json").read_text(encoding="utf-8"),
+        earnings_calendar_text=old_sidecar,
+    )
+
+    assert result.exit_code == 1
+    source = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT status, error_category FROM source_sync_state WHERE provider = 'finnhub_earnings'",
+    )[0]
+    assert dict(source) == {
+        "status": "failed", "error_category": "artifact_generation_mismatch",
+    }
+    assert not _rows(
+        tmp_path / "calendar.sqlite", "SELECT id FROM events WHERE event_type = 'EARNINGS'",
+    )
 
 
 @pytest.mark.parametrize(

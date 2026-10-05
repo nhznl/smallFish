@@ -31,6 +31,14 @@ def test_api_freshness_uses_same_exact_timestamp_boundary_as_ingestion(tmp_path:
         row = connection.execute(
             "SELECT * FROM source_sync_state WHERE provider = 'finnhub_earnings'"
         ).fetchone()
+        connection.execute(
+            "UPDATE source_sync_state SET last_success_utc = ? "
+            "WHERE provider = 'finnhub_earnings'",
+            ("2030-01-01T00:00:00Z",),
+        )
+        future_row = connection.execute(
+            "SELECT * FROM source_sync_state WHERE provider = 'finnhub_earnings'"
+        ).fetchone()
     finally:
         connection.close()
 
@@ -40,6 +48,10 @@ def test_api_freshness_uses_same_exact_timestamp_boundary_as_ingestion(tmp_path:
     ) == "fresh"
     assert _effective_status(
         row, datetime(2026, 10, 5, 4, 0, 1, tzinfo=timezone.utc),
+        date(2026, 10, 5), date(2026, 10, 31),
+    ) == "stale"
+    assert _effective_status(
+        future_row, datetime(2026, 10, 5, 4, 0, tzinfo=timezone.utc),
         date(2026, 10, 5), date(2026, 10, 31),
     ) == "stale"
 
