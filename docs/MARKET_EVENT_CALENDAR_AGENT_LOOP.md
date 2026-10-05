@@ -10,11 +10,11 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R4
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-006
+CURRENT_ROUND: M2-R5
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-006
 M1_STATUS: ACCEPTED
-M2_STATUS: READY_FOR_REVIEW
+M2_STATUS: CHANGES_REQUESTED
 M3_STATUS: PLANNED
 OWNER_DECISION_REQUIRED: NO
 STOP_REASON: NONE
@@ -100,6 +100,76 @@ KNOWN_GAPS: The configured live official HTML/PDF endpoints do not yet have
 ## Reviewer outbox
 
 ```text
+HANDOFF_ID: R-006
+MILESTONE: M2
+DECISION: CHANGES_REQUESTED
+REVIEWED_BASE: 7360d27
+REVIEWED_COMMITS: bcc31e1, 9e973ef
+
+M2-R4-F1 [P1] The configured live Federal Reserve, Treasury, BEA, Census, and
+DOL URLs are HTML or PDF, but the only new parser accepts normalized JSON,
+iCalendar, or simple XML and coverage is accepted only from synthetic JSON
+coverageStart/coverageEnd fields. The default live command therefore cannot
+produce complete M2 coverage; the implementation handoff acknowledges this.
+Implement and test provider-specific official-source acquisition/parsing (or
+select documented official machine-readable surfaces), derive defensible
+31-day coverage for each source, and perform a private manual live smoke test.
+Keep raw provider payloads out of the repository.
+
+M2-R4-F2 [P1] A successful covered-empty provider refresh does not cancel
+previous rows. _publish_provider calls cancel_missing only for provider names
+encountered in observations, so an empty report leaves old scheduled events
+active. Reproduced by publishing one Treasury event and then a covered empty
+Treasury document: the old event remained scheduled. Reconcile the requested
+source/provider even when its seen set is empty and add the exact regression.
+
+M2-R4-F3 [P1] Local rematerialization rewrites provider fetch provenance and
+extends provider freshness without any network response. When the provider is
+fresh but the materialization identity changes, the cached snapshot is passed
+through _publish_provider, which records the current scan time as fetched_at
+and last_success_utc. Reproduced over two offline daily rematerializations with
+a transport that raises if called: a 2026-10-04 fetch became a purported
+2026-10-06 provider success. Separate provider revalidation state from local
+rescoring and preserve original source-fact fetch provenance. Add a regression
+that advances beyond the freshness interval and proves a network refresh is
+then required.
+
+M2-R4-F4 [P1] Finnhub cache age is ignored. events_fetched_as_of is treated as
+the beginning of schedule coverage, and every calendar scan records the scan
+time as a fresh Finnhub success. Reproduced with a cache fetched on 2026-09-20
+and a 2026-10-04 scan: the source was published fresh with last_success_utc on
+2026-10-04. Derive provider freshness and event-fact provenance from the
+legacy cache metadata, retain its 24-hour rule, and never re-age the cache
+during local ingestion. Add fresh, stale, and insufficient-horizon tests.
+
+M2-R4-F5 [P1] Earnings relevance is filtered against every symbol in
+universe.csv, not SPY/QQQ constituent membership, and every retained earnings
+row is then classified as INDIRECT_BROAD_INDEX for SPY and QQQ. The registry
+already exposes membership tags, so a universe-only stock is currently
+misrepresented as an index member and can crowd the Priority 1 calendar.
+Select entries using applicable index memberships with their available dated
+provenance; keep unproven names SINGLE_STOCK/secondary and do not claim a
+material weight. Add fixtures covering an index member and a universe-only
+stock.
+
+M2-R4-F6 [P1] Earnings identity is based on ticker plus scheduled date for both
+source_record_id and canonical key. A reschedule therefore creates a second
+event instead of updating the same occurrence and appending schedule history.
+Use a stable provider record or fiscal-period identity where the source proves
+one. If the legacy artifact cannot provide it, expose the limitation without
+publishing false reschedule history and follow the design stop rule before
+guessing. Add an earnings-reschedule regression.
+
+M2-R4-F7 [P1] Clustering links every pair of broad events on the same session,
+without comparing configured exposure windows, and it does not feed a named
+strategy rule. The API nevertheless says the windows may overlap. Implement
+the designed overlap-based cluster rule, retain its rule ID and explanation in
+strategy assessments, and test same-day non-overlap versus true overlap.
+```
+
+Prior review records:
+
+```text
 HANDOFF_ID: R-005
 MILESTONE: M2
 DECISION: RESUME_IMPLEMENTATION
@@ -124,7 +194,25 @@ NEXT_ACTION: Resume the full M2 kickoff recorded under R-004, including the
   to these constraints.
 ```
 
-Prior review records:
+Reviewer verification for R-006:
+
+- independently reproduced the covered-empty retention bug;
+- independently reproduced provider freshness and source-fact provenance being
+  rewritten by offline local rematerialization;
+- independently reproduced a stale Finnhub cache being published as fresh;
+- verified from the code and live source configuration that the default HTML
+  and PDF providers have no applicable parser or coverage proof;
+- verified from the registry contract that membership tags are available but
+  the earnings filter uses the entire generated universe;
+- targeted calendar/service tests: 27 passed;
+- utilities suite: 782 passed;
+- backend targeted tests: 5 passed; full backend suite: 599 passed;
+- Angular suite under Node 24: 200 passed;
+- Angular production build under Node 24 passed; and
+- documentation check, secret scan of 613 tracked objects, and
+  `git diff --check` passed.
+
+Earlier review records:
 
 ```text
 HANDOFF_ID: R-004
