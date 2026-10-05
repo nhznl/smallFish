@@ -113,8 +113,11 @@ a provider. The existing Finnhub fetch writes the unchanged legacy
 `events.csv` projection plus a private calendar-only normalized sidecar with
 fiscal-period identity. The sidecar marks identity completeness explicitly and
 cannot claim schedule coverage when any in-horizon provider row lacks a stable
-fiscal identity. The calendar reads the sidecar; it neither widens the legacy
-CSV contract nor adds a second Finnhub fetch path.
+fiscal identity. Calendar-capable freshness requires a matching schema-2
+sidecar; a still-fresh legacy cache remains usable by legacy consumers but is
+reported as calendar-incapable until a credentialed refresh upgrades it. The
+calendar reads the sidecar; it neither widens the legacy CSV contract nor adds
+a second Finnhub fetch path.
 
 Brokerage sync consumers call `services/*` for raw provider payloads, then
 normalize and materialize their own ledger artifacts under `SFP_DATA_DIR`.

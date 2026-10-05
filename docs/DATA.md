@@ -110,7 +110,7 @@ never touches another symbol's cache.
 | `data/premiums/` | Immutable timestamped quote archives | `chains` |
 | `data/sector_rotation/` | Sector leadership snapshots | `sector_rotation` |
 | `data/events.csv`, `data/events_meta.json`, `data/events_history/` | Upcoming earnings calendar, freshness/coverage, and dated snapshots | `fetch` or the conditional scan prerequisite (Finnhub) |
-| `data/market_calendar/earnings.json` | Private calendar-only Finnhub projection with fiscal-period identity and an explicit identity-completeness marker. It claims coverage only when every in-horizon provider row has stable identity; generated atomically by the existing earnings fetch and never redistributed. | `fetch` or the conditional scan prerequisite (Finnhub) |
+| `data/market_calendar/earnings.json` | Private schema-2 calendar-only Finnhub projection with fiscal-period identity and an explicit identity-completeness marker. It claims coverage only when every in-horizon provider row has a valid four-digit fiscal year and integral quarter 1-4, and its generation must match `events_meta.json`; generated atomically by the existing earnings fetch and never redistributed. | `fetch` or the conditional scan prerequisite (Finnhub) |
 | `data/market_calendar/calendar.sqlite` | Primary event-risk calendar, normalized provider snapshots, local materialization identity, schedule history, clusters, and source-by-source diagnostics. It reads but does not replace `events.csv`. | `market-calendar` |
 | `data/earnings_history.csv` | Multi-year realized earnings dates; not refreshed in the live scan path | `earnings-history` (Yahoo/yfinance) |
 | `data/backtest/`, `data/sector_rotation_study/` | Study runs and pinned evidence | study commands |

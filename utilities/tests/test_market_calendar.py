@@ -9,6 +9,7 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from models.market_events import (
@@ -17,6 +18,7 @@ from models.market_events import (
     display_clocks,
 )
 from services.market_events.http import HttpResponse, TransportError, public_https_url
+from utilities.events import run_fetch
 from utilities.market_calendar.config import CalendarConfigError, load_risk_policy
 from utilities.market_calendar.etf import load_etf_mappings, validate_mappings
 from utilities.market_calendar.providers.bls import parse_ics
@@ -792,13 +794,13 @@ def test_m2_official_source_shapes_prove_coverage_without_network(tmp_path: Path
     assert [tuple(row) for row in fed_occurrences] == [
         (
             "INDUSTRIAL_PRODUCTION",
-            "US:FED:INDUSTRIAL_PRODUCTION:2026-10",
+            "US:FED:INDUSTRIAL_PRODUCTION:2026-R10",
             "2026-10-16T13:15:00Z",
         ),
-        ("FOMC_DECISION", "US:FED:FOMC_DECISION:2026-10-28", "2026-10-28T18:00:00Z"),
+        ("FOMC_DECISION", "US:FED:FOMC_DECISION:2026-M07", "2026-10-28T18:00:00Z"),
         (
             "FOMC_PRESS_CONFERENCE",
-            "US:FED:FOMC_PRESS_CONFERENCE:2026-10-28",
+            "US:FED:FOMC_PRESS_CONFERENCE:2026-M07",
             "2026-10-28T18:30:00Z",
         ),
     ]
@@ -810,6 +812,98 @@ def test_m2_official_source_shapes_prove_coverage_without_network(tmp_path: Path
         """,
     )
     assert len(fomc_links) == 2
+
+
+def test_m2_official_fed_occurrence_identity_survives_day_and_month_reschedules(
+    tmp_path: Path,
+):
+    official_path = FIXTURES / "official_sources" / "federal_reserve.json"
+    original_fed = official_path.read_text(encoding="utf-8")
+    documents = _primary_documents()
+    documents["federal_reserve"] = original_fed
+    _prices(tmp_path / "cache")
+    common = dict(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        earnings_csv_text=(FIXTURES / "earnings.csv").read_text(encoding="utf-8"),
+        earnings_meta_text=(FIXTURES / "earnings_meta.json").read_text(encoding="utf-8"),
+        earnings_calendar_text=(FIXTURES / "earnings_calendar.json").read_text(encoding="utf-8"),
+    )
+    assert run_primary_sync(
+        **common, now=NOW, provider_documents=documents,
+    ).exit_code == 0
+
+    moved = json.loads(original_fed)
+    for item in moved["events"]:
+        if (
+            item["month"] == "2026-10"
+            and item["title"] in {"FOMC Meeting", "FOMC Press Conference"}
+        ):
+            item["days"] = "29"
+        elif (
+            item["month"] == "2026-10"
+            and item["title"].startswith("G.17 - Industrial Production")
+        ):
+            item["month"] = "2026-11"
+            item["days"] = "1"
+    moved_documents = _primary_documents()
+    moved_documents["federal_reserve"] = json.dumps(moved)
+    assert run_primary_sync(
+        **common, now=NOW + timedelta(hours=1), provider_documents=moved_documents,
+    ).exit_code == 0
+
+    occurrences = _rows(
+        tmp_path / "calendar.sqlite",
+        """
+        SELECT id, canonical_key, lifecycle_status, scheduled_at_utc
+        FROM events
+        WHERE event_type IN (
+          'FOMC_DECISION', 'FOMC_PRESS_CONFERENCE', 'INDUSTRIAL_PRODUCTION'
+        )
+          AND canonical_key IN (
+            'US:FED:FOMC_DECISION:2026-M07',
+            'US:FED:FOMC_PRESS_CONFERENCE:2026-M07',
+            'US:FED:INDUSTRIAL_PRODUCTION:2026-R10'
+          )
+        ORDER BY canonical_key
+        """,
+    )
+    assert [(row["canonical_key"], row["lifecycle_status"]) for row in occurrences] == [
+        ("US:FED:FOMC_DECISION:2026-M07", "rescheduled"),
+        ("US:FED:FOMC_PRESS_CONFERENCE:2026-M07", "rescheduled"),
+        ("US:FED:INDUSTRIAL_PRODUCTION:2026-R10", "rescheduled"),
+    ]
+    assert len({row["id"] for row in occurrences}) == 3
+    histories = _rows(
+        tmp_path / "calendar.sqlite",
+        """
+        SELECT e.canonical_key, h.scheduled_at_utc
+        FROM event_schedule_history h
+        JOIN events e ON e.id = h.event_id
+        WHERE e.event_type IN (
+          'FOMC_DECISION', 'FOMC_PRESS_CONFERENCE', 'INDUSTRIAL_PRODUCTION'
+        )
+          AND e.canonical_key IN (
+            'US:FED:FOMC_DECISION:2026-M07',
+            'US:FED:FOMC_PRESS_CONFERENCE:2026-M07',
+            'US:FED:INDUSTRIAL_PRODUCTION:2026-R10'
+          )
+        ORDER BY e.canonical_key, h.scheduled_at_utc
+        """,
+    )
+    assert len(histories) == 6
+    assert {
+        row["canonical_key"] for row in histories
+    } == {
+        "US:FED:FOMC_DECISION:2026-M07",
+        "US:FED:FOMC_PRESS_CONFERENCE:2026-M07",
+        "US:FED:INDUSTRIAL_PRODUCTION:2026-R10",
+    }
 
 
 def test_m2_failed_required_provider_keeps_rows_and_marks_calendar_incomplete(tmp_path: Path):
@@ -1007,6 +1101,49 @@ def test_m2_earnings_cache_freshness_and_coverage(
         assert result.exit_code == 1
 
 
+def test_m2_earnings_timestamp_boundary_is_exact_and_conservative(tmp_path: Path):
+    def run_at(root: Path, now: datetime):
+        _prices(root / "cache")
+        return run_primary_sync(
+            database=root / "calendar.sqlite",
+            universe_path=FIXTURES / "universe.csv",
+            price_cache=root / "cache",
+            horizon_start=START,
+            horizon_end=END,
+            as_of=date(2026, 10, 4),
+            now=now,
+            schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+            provider_documents=_primary_documents(),
+            earnings_csv_text=(
+                "ticker,event_type,event_date,source,fetched_as_of\n"
+                "AAA,earnings,2026-10-20,finnhub,2026-10-04\n"
+            ),
+            earnings_meta_text=json.dumps({
+                "events_fetched_as_of": "2026-10-04",
+                "events_coverage_end": END.isoformat(),
+            }),
+            earnings_calendar_text=_earnings_calendar(),
+        )
+
+    exact = run_at(tmp_path / "exact", datetime(2026, 10, 5, 4, 0, tzinfo=timezone.utc))
+    expired = run_at(
+        tmp_path / "expired", datetime(2026, 10, 5, 4, 0, 1, tzinfo=timezone.utc),
+    )
+
+    assert exact.exit_code == 0
+    exact_source = _rows(
+        tmp_path / "exact" / "calendar.sqlite",
+        "SELECT status, error_category FROM source_sync_state WHERE provider = 'finnhub_earnings'",
+    )[0]
+    assert dict(exact_source) == {"status": "fresh", "error_category": None}
+    assert expired.exit_code == 1
+    expired_source = _rows(
+        tmp_path / "expired" / "calendar.sqlite",
+        "SELECT status, error_category FROM source_sync_state WHERE provider = 'finnhub_earnings'",
+    )[0]
+    assert dict(expired_source) == {"status": "failed", "error_category": "stale_cache"}
+
+
 def test_m2_earnings_identity_incompleteness_fails_closed(tmp_path: Path):
     _prices(tmp_path / "cache")
     incomplete = json.loads(_earnings_calendar())
@@ -1042,6 +1179,51 @@ def test_m2_earnings_identity_incompleteness_fails_closed(tmp_path: Path):
         "SELECT status, error_category FROM source_sync_state WHERE provider = 'finnhub_earnings'",
     )[0]
     assert dict(source) == {"status": "failed", "error_category": "stable_identity_unavailable"}
+
+
+@pytest.mark.parametrize(
+    ("fiscal_year", "fiscal_quarter"),
+    [(True, 3), (2026.5, 3), ("026", 3), (2026, 3.5), (2026, 5)],
+)
+def test_m2_malformed_fiscal_identity_fails_closed_in_primary_sync(
+    tmp_path: Path, fiscal_year: object, fiscal_quarter: object,
+):
+    artifact_root = tmp_path / "artifacts"
+    provider_row = {
+        "ticker": "AAA", "event_type": "earnings", "event_date": "2026-10-20",
+        "source": "finnhub", "fiscal_year": fiscal_year,
+        "fiscal_quarter": fiscal_quarter,
+    }
+    run_fetch(
+        "2026-10-04", 70, lambda *_: pd.DataFrame([provider_row]),
+        api_key="test-key", output_root=artifact_root,
+    )
+    _prices(tmp_path / "cache")
+    result = run_primary_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        now=NOW,
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        provider_documents=_primary_documents(),
+        earnings_csv_text=(artifact_root / "events.csv").read_text(encoding="utf-8"),
+        earnings_meta_text=(artifact_root / "events_meta.json").read_text(encoding="utf-8"),
+        earnings_calendar_text=(
+            artifact_root / "market_calendar" / "earnings.json"
+        ).read_text(encoding="utf-8"),
+    )
+
+    assert result.exit_code == 1
+    source = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT status, error_category FROM source_sync_state WHERE provider = 'finnhub_earnings'",
+    )[0]
+    assert dict(source) == {
+        "status": "failed", "error_category": "stable_identity_unavailable",
+    }
 
 
 def test_m2_earnings_membership_controls_relevance_with_dated_provenance(tmp_path: Path):

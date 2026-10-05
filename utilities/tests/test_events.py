@@ -101,6 +101,44 @@ def test_run_fetch_marks_calendar_projection_incomplete_when_identity_is_missing
     assert len(calendar["events"]) == (1 if with_identity_columns else 0)
 
 
+@pytest.mark.parametrize(
+    ("fiscal_year", "fiscal_quarter"),
+    [
+        (True, 3),
+        (2026.5, 3),
+        ("20x6", 3),
+        ("026", 3),
+        (2026, 3.5),
+        (2026, 5),
+    ],
+)
+def test_run_fetch_rejects_malformed_fiscal_identity_tokens(
+    tmp_path: Path, fiscal_year: object, fiscal_quarter: object,
+) -> None:
+    malformed = pd.DataFrame([{
+        "ticker": "AAPL",
+        "event_type": "earnings",
+        "event_date": "2026-08-01",
+        "source": "finnhub",
+        "fiscal_year": fiscal_year,
+        "fiscal_quarter": fiscal_quarter,
+    }])
+
+    run_fetch(
+        "2026-07-16", 70, lambda *_: malformed,
+        api_key="test-key", output_root=tmp_path,
+    )
+
+    calendar = json.loads(
+        (tmp_path / "market_calendar" / "earnings.json").read_text(encoding="utf-8")
+    )
+    assert calendar["events"] == []
+    assert calendar["identityComplete"] is False
+    assert calendar["identityFailureCount"] == 1
+    assert calendar["coverageStart"] is None
+    assert calendar["coverageEnd"] is None
+
+
 def test_ensure_fresh_events_reuses_recent_covered_cache_without_a_key(tmp_path: Path) -> None:
     run_fetch(
         # `NA` is a real ticker and must not be parsed as pandas' default NA token.
@@ -116,6 +154,58 @@ def test_ensure_fresh_events_reuses_recent_covered_cache_without_a_key(tmp_path:
 
     assert result.status == "fresh"
     assert result.ok is True
+
+
+@pytest.mark.parametrize("sidecar_state", ["missing", "schema1"])
+def test_ensure_fresh_events_upgrades_non_schema2_sidecar_when_key_is_available(
+    tmp_path: Path, sidecar_state: str,
+) -> None:
+    run_fetch(
+        "2026-07-15", 70, lambda *_: _events("AAPL"),
+        api_key="test-key", output_root=tmp_path,
+    )
+    sidecar = tmp_path / "market_calendar" / "earnings.json"
+    if sidecar_state == "missing":
+        sidecar.unlink()
+    else:
+        content = json.loads(sidecar.read_text(encoding="utf-8"))
+        content["schemaVersion"] = 1
+        sidecar.write_text(json.dumps(content), encoding="utf-8")
+    calls = []
+
+    def fake_fetch(start: str, end: str, config: FinnhubConfig) -> pd.DataFrame:
+        calls.append((start, end, config.api_key))
+        return _events("MSFT")
+
+    result = ensure_fresh_events(
+        "2026-07-16", api_key="test-key", output_root=tmp_path,
+        fetch_fn=fake_fetch,
+    )
+
+    assert result.status == "refreshed"
+    assert calls == [("2026-07-16", "2026-09-24", "test-key")]
+    assert json.loads(sidecar.read_text(encoding="utf-8"))["schemaVersion"] == 2
+
+
+def test_ensure_fresh_events_reports_legacy_only_capability_without_key(
+    tmp_path: Path,
+) -> None:
+    run_fetch(
+        "2026-07-15", 70, lambda *_: _events(),
+        api_key="test-key", output_root=tmp_path,
+    )
+    sidecar = tmp_path / "market_calendar" / "earnings.json"
+    sidecar.unlink()
+
+    result = ensure_fresh_events(
+        "2026-07-16", api_key=None, output_root=tmp_path,
+        fetch_fn=lambda *_: (_ for _ in ()).throw(AssertionError("network")),
+    )
+
+    assert result.status == "legacy_fresh"
+    assert result.ok is True
+    assert "schema-2 sidecar is missing, outdated, or identity-incomplete" in result.message
+    assert "FINNHUB_API_KEY is not configured" in result.message
 
 
 def test_ensure_fresh_events_refreshes_stale_cache_when_key_is_available(tmp_path: Path) -> None:

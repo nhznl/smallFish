@@ -72,9 +72,17 @@ its `events.csv` contract is unchanged.
 
 The Federal Reserve adapter retains G.17 industrial production and represents
 the 2:00 p.m. FOMC statement and advertised 2:30 p.m. press conference as
-separate related occurrences. The earnings sidecar claims coverage only when
-every retained Finnhub row has fiscal-year and fiscal-quarter identity; an
-incomplete projection fails closed without changing the legacy CSV contract.
+separate related occurrences. FOMC and G.17 identities use official annual
+occurrence order rather than their scheduled day or month, so reschedules
+append history without replacing the event. The earnings sidecar claims
+coverage only when every retained Finnhub row has a four-digit fiscal year and
+an integral quarter from 1 through 4; malformed identities fail closed without
+changing the legacy CSV contract. Conditional refresh treats a missing,
+pre-schema-2, generation-mismatched, or identity-incomplete sidecar as needing
+an upgrade. Without a key, a fresh legacy cache remains usable and the command
+reports that only the calendar capability is unavailable. Finnhub freshness is
+the same inclusive UTC timestamp interval during sync and API reads; the
+date-only generation timestamp is midnight Eastern.
 
 See [`options/README.md`](options/README.md).
 

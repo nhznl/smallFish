@@ -220,7 +220,37 @@ def _fed_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, s
         raise PrimaryCalendarParseError("Federal Reserve calendar has no events list")
     rows = []
     months = []
-    for item in entries:
+    occurrence_slots: dict[tuple[int, str], str] = {}
+    meeting_by_date: dict[str, str] = {}
+    for record_type, title_match, prefix in (
+        ("meeting", "FOMC Meeting", "M"),
+        ("g17", "G.17 - Industrial Production", "R"),
+    ):
+        dated_records = []
+        for item_index, item in enumerate(entries):
+            if not isinstance(item, dict):
+                continue
+            month = str(item.get("month") or "")
+            title = _plain_text(item.get("title"))
+            if not re.fullmatch(r"20\d{2}-\d{2}", month):
+                continue
+            if title != title_match and not (
+                record_type == "g17" and title.startswith(title_match)
+            ):
+                continue
+            for raw_day in str(item.get("days") or "").split(","):
+                if raw_day.strip().isdigit():
+                    dated_records.append((f"{month}-{int(raw_day):02d}", item_index))
+        per_year: dict[str, int] = {}
+        for civil, item_index in sorted(dated_records):
+            year = civil[:4]
+            per_year[year] = per_year.get(year, 0) + 1
+            occurrence = f"{year}-{prefix}{per_year[year]:02d}"
+            occurrence_slots[(item_index, civil)] = occurrence
+            if record_type == "meeting":
+                meeting_by_date[civil] = occurrence
+
+    for item_index, item in enumerate(entries):
         if not isinstance(item, dict):
             continue
         month = str(item.get("month") or "")
@@ -268,16 +298,23 @@ def _fed_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, s
                     date.fromisoformat(civil), parsed_clock, ZoneInfo("America/New_York")
                 ).isoformat()
             if event_type == "FOMC_DECISION":
-                source_id = f"FOMC_DECISION:{civil}"
+                occurrence = occurrence_slots[(item_index, civil)]
+                source_id = f"FOMC_DECISION:{occurrence}"
             elif event_type == "FOMC_PRESS_CONFERENCE":
-                source_id = f"FOMC_PRESS_CONFERENCE:{civil}"
+                occurrence = meeting_by_date.get(civil)
+                if occurrence is None:
+                    raise PrimaryCalendarParseError(
+                        "Federal Reserve press conference has no matching FOMC meeting"
+                    )
+                source_id = f"FOMC_PRESS_CONFERENCE:{occurrence}"
             elif event_type == "INDUSTRIAL_PRODUCTION":
-                source_id = f"INDUSTRIAL_PRODUCTION:{month}"
+                occurrence = occurrence_slots[(item_index, civil)]
+                source_id = f"INDUSTRIAL_PRODUCTION:{occurrence}"
             canonical_subject = source_id
             if event_type in {"FOMC_DECISION", "FOMC_PRESS_CONFERENCE"}:
-                canonical_subject = civil
+                canonical_subject = occurrence
             elif event_type == "INDUSTRIAL_PRODUCTION":
-                canonical_subject = month
+                canonical_subject = occurrence
             rows.append({
                 "id": source_id,
                 "title": title,

@@ -4,17 +4,44 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.market_events_read import _has_strategy_overlap
+from app.market_events_read import _effective_status, _has_strategy_overlap
 from models.market_events import display_clocks
 
 MIGRATION = Path(__file__).resolve().parents[2] / "utilities" / "market_calendar" / "migrations" / "001_initial.sql"
 CLIENT = TestClient(app)
+
+
+def test_api_freshness_uses_same_exact_timestamp_boundary_as_ingestion(tmp_path: Path):
+    database = tmp_path / "calendar.sqlite"
+    _database(database, fresh=True)
+    connection = sqlite3.connect(database)
+    connection.row_factory = sqlite3.Row
+    try:
+        connection.execute(
+            "UPDATE source_sync_state SET last_success_utc = ?, freshness_hours = 24 "
+            "WHERE provider = 'finnhub_earnings'",
+            ("2026-10-04T04:00:00Z",),
+        )
+        row = connection.execute(
+            "SELECT * FROM source_sync_state WHERE provider = 'finnhub_earnings'"
+        ).fetchone()
+    finally:
+        connection.close()
+
+    assert _effective_status(
+        row, datetime(2026, 10, 5, 4, 0, tzinfo=timezone.utc),
+        date(2026, 10, 5), date(2026, 10, 31),
+    ) == "fresh"
+    assert _effective_status(
+        row, datetime(2026, 10, 5, 4, 0, 1, tzinfo=timezone.utc),
+        date(2026, 10, 5), date(2026, 10, 31),
+    ) == "stale"
 
 
 def test_cluster_warning_requires_named_strategy_overlap_rule():

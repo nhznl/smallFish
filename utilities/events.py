@@ -12,6 +12,8 @@ import argparse
 from contextlib import contextmanager
 import fcntl
 import json
+import math
+import numbers
 import os
 import re
 import tempfile
@@ -45,7 +47,7 @@ class EventRefreshResult:
 
     @property
     def ok(self) -> bool:
-        return self.status in {"fresh", "refreshed"}
+        return self.status in {"fresh", "legacy_fresh", "refreshed"}
 
 
 class EventDataError(ValueError):
@@ -156,8 +158,8 @@ def _validated_events(events: pd.DataFrame, as_of: str, end_date: str) -> pd.Dat
     return validated.reset_index(drop=True)
 
 
-def _calendar_is_fresh(root: Path, as_of: str, required_coverage_days: int,
-                       max_age_days: int) -> bool:
+def _legacy_calendar_is_fresh(root: Path, as_of: str, required_coverage_days: int,
+                              max_age_days: int) -> bool:
     events_path = root / "events.csv"
     meta_path = root / "events_meta.json"
     if not events_path.exists() or not meta_path.exists():
@@ -185,6 +187,60 @@ def _calendar_is_fresh(root: Path, as_of: str, required_coverage_days: int,
             metadata["events_fetched_as_of"]).all()
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError, pd.errors.ParserError):
         return False
+
+
+def _calendar_is_fresh(root: Path, as_of: str, required_coverage_days: int,
+                       max_age_days: int) -> bool:
+    """Validate the legacy cache and the schema-2 calendar capability."""
+    if not _legacy_calendar_is_fresh(
+        root, as_of, required_coverage_days, max_age_days,
+    ):
+        return False
+    try:
+        metadata = json.loads((root / "events_meta.json").read_text(encoding="utf-8"))
+        calendar = json.loads(
+            (root / "market_calendar" / "earnings.json").read_text(encoding="utf-8")
+        )
+        as_of_date = pd.to_datetime(as_of)
+        return (
+            calendar.get("schemaVersion") == 2
+            and calendar.get("fetchedAsOf") == metadata["events_fetched_as_of"]
+            and calendar.get("identityComplete") is True
+            and type(calendar.get("identityFailureCount")) is int
+            and calendar["identityFailureCount"] == 0
+            and pd.to_datetime(calendar["coverageStart"]) <= as_of_date
+            and pd.to_datetime(calendar["coverageEnd"])
+            >= as_of_date + timedelta(days=required_coverage_days)
+        )
+    except (
+        KeyError, OSError, TypeError, ValueError, json.JSONDecodeError,
+        pd.errors.ParserError,
+    ):
+        return False
+
+
+def _identity_integer(value: object, *, year: bool) -> int | None:
+    """Accept only lossless Finnhub fiscal identity tokens."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, numbers.Integral):
+        parsed = int(value)
+    elif isinstance(value, numbers.Real):
+        numeric = float(value)
+        if not math.isfinite(numeric) or not numeric.is_integer():
+            return None
+        parsed = int(numeric)
+    elif isinstance(value, str):
+        text = value.strip()
+        pattern = r"[0-9]{4}" if year else r"[1-4]"
+        if not re.fullmatch(pattern, text):
+            return None
+        parsed = int(text)
+    else:
+        return None
+    if year:
+        return parsed if 1000 <= parsed <= 9999 else None
+    return parsed if 1 <= parsed <= 4 else None
 
 
 @contextmanager
@@ -219,12 +275,9 @@ def run_fetch(as_of: str, lookahead_days: int,
     calendar_rows = []
     if set(CALENDAR_IDENTITY_COLUMNS).issubset(normalized.columns):
         for item in normalized.to_dict("records"):
-            try:
-                fiscal_year = int(item["fiscal_year"])
-                fiscal_quarter = int(item["fiscal_quarter"])
-            except (TypeError, ValueError, OverflowError):
-                continue
-            if not 1 <= fiscal_quarter <= 4:
+            fiscal_year = _identity_integer(item["fiscal_year"], year=True)
+            fiscal_quarter = _identity_integer(item["fiscal_quarter"], year=False)
+            if fiscal_year is None or fiscal_quarter is None:
                 continue
             symbol = str(item["ticker"])
             period = f"{fiscal_year}-Q{fiscal_quarter}"
@@ -291,6 +344,15 @@ def ensure_fresh_events(as_of: str, lookahead_days: int = DEFAULT_LOOKAHEAD_DAYS
         # Another request may have refreshed while this process waited.
         if _calendar_is_fresh(root, as_of, required_coverage_days, max_age_days):
             return EventRefreshResult("fresh", "Upcoming earnings calendar is fresh.")
+        if not api_key and _legacy_calendar_is_fresh(
+            root, as_of, required_coverage_days, max_age_days,
+        ):
+            return EventRefreshResult(
+                "legacy_fresh",
+                "Upcoming earnings legacy cache is fresh, but the market-calendar "
+                "schema-2 sidecar is missing, outdated, or identity-incomplete and "
+                "FINNHUB_API_KEY is not configured.",
+            )
         if not api_key:
             return EventRefreshResult(
                 "unavailable",

@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from models.market_events import EASTERN, format_utc, parse_utc
+from models.market_events import EASTERN, format_utc, parse_utc, within_freshness_window
 from services.market_events.http import HttpTransport, TransportError, UrllibTransport
 from services.market_events.primary import fetch_schedule
 from utilities.market_calendar.config import (
@@ -127,8 +127,9 @@ def _fresh(row, spec, start: date, end: date, now: datetime) -> bool:
         return False
     if not _covers(row, start, end) or not row["last_success_utc"]:
         return False
-    success = datetime.strptime(row["last_success_utc"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    return success + timedelta(hours=spec.freshness_hours or 0) >= now.astimezone(timezone.utc)
+    return within_freshness_window(
+        row["last_success_utc"], spec.freshness_hours or 0, now,
+    )
 
 
 def _publish_provider(
@@ -656,9 +657,9 @@ def run_primary_sync(
             )
             lines.append("finnhub_earnings: insufficient coverage.")
             required_failures += 1
-        elif not 0 <= (
-            now.astimezone(EASTERN).date() - date.fromisoformat(earnings_metadata[0])
-        ).days <= max(1, (spec.freshness_hours or 0) // 24):
+        elif not within_freshness_window(
+            earnings_metadata[2], spec.freshness_hours or 0, now,
+        ):
             _mark_failure(
                 connection,
                 spec,

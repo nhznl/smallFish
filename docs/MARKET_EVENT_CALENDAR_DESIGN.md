@@ -559,7 +559,7 @@ would create a false new event. Example canonical keys:
 ```text
 US:BLS:CPI:2026-09
 US:BLS:EMPLOYMENT_SITUATION:2026-09
-US:FED:FOMC_DECISION:2026-10-28
+US:FED:FOMC_DECISION:2026-M07
 US:TREASURY:AUCTION:10Y:<CUSIP>
 US:EIA:WPSR:2026-10-02
 US:EARNINGS:NVDA:2027-FY-Q3
@@ -576,7 +576,11 @@ Deduplication order:
 Every schedule change is appended to `event_schedule_history`. FOMC statement
 and press conference, Treasury announcement/auction/result, and earnings
 release/call remain separate related occurrences because their risk windows
-differ.
+differ. Federal Reserve FOMC and G.17 records use their schedule-independent
+ordinal within the official annual record sequence (`Mnn` and `Rnn`), so moving
+an occurrence to another day or month updates schedule history instead of
+creating a replacement identity. Those ordinals identify official records;
+they do not infer an economic reference period.
 
 Named strategy-exposure clusters require an exact event time within the
 configured inclusive interval from strategy entry through hard exit. Pre-entry
@@ -594,7 +598,14 @@ The existing Finnhub fetch also writes a private calendar-only normalized
 sidecar with fiscal-period identity. This does not replace or widen the legacy
 CSV artifact and does not add a second provider fetch. The sidecar fails closed
 for calendar use and does not claim coverage if any in-horizon provider row
-lacks fiscal-period identity. A later migration may derive a
+lacks a valid integral identity token: booleans and fractional values are
+rejected, fiscal years must have four digits, and quarters must be 1 through 4.
+Calendar-capable freshness also requires a schema-2 sidecar from the same
+generation as the legacy metadata with complete identity and sufficient
+coverage. A fresh legacy cache remains valid for legacy consumers when that
+sidecar is missing or outdated; without a Finnhub key the refresh prerequisite
+reports this limited capability explicitly instead of claiming calendar
+freshness. A later migration may derive a
 legacy-compatible earnings projection from the canonical database only after
 all consumers, freshness behavior, failure behavior, and historical workflows
 have been audited. No duplicate active fetch implementation should remain after
@@ -617,6 +628,11 @@ Default behavior:
 - preserve the previous successful data for a source when refresh fails; and
 - exit nonzero only when the primary broad-market calendar cannot be safely
   produced.
+
+Freshness is evaluated from one stored UTC success instant through an inclusive
+timestamp window in both ingestion and the API. A date-only Finnhub generation
+is conservatively interpreted as midnight Eastern: it is fresh exactly through
+the configured boundary and stale immediately after it.
 
 An explicit UI action may invoke the allowlisted command through a job endpoint
 later. It must show ready, running, success, and failure states, disable

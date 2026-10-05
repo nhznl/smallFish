@@ -7,7 +7,7 @@ provider parsing, and database access stay in the runtimes that own them.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 SCHEMA_VERSION = 1
@@ -118,6 +118,17 @@ def parse_utc(value: str) -> datetime:
     except ValueError as exc:
         raise MarketEventContractError("timestamps must be YYYY-MM-DDTHH:MM:SSZ") from exc
     return parsed.replace(tzinfo=timezone.utc)
+
+
+def within_freshness_window(
+    last_success_utc: str, freshness_hours: int, now: datetime,
+) -> bool:
+    """Return whether one UTC success instant is current at ``now``."""
+    success = parse_utc(last_success_utc)
+    if now.tzinfo is None:
+        raise MarketEventContractError("freshness evaluation requires an aware datetime")
+    current = now.astimezone(timezone.utc)
+    return success <= current <= success + timedelta(hours=freshness_hours)
 
 
 def clock_label(moment: datetime, suffix: str) -> str:

@@ -14,7 +14,7 @@ from models.market_events import (
     EASTERN,
     display_clocks,
     is_broad_index,
-    parse_utc,
+    within_freshness_window,
     session_date_for,
 )
 from models.nyse_calendar import is_nyse_early_close, is_nyse_session
@@ -75,10 +75,12 @@ def _effective_status(row: sqlite3.Row, now: datetime, start: date, end: date) -
         return "failed"
     if row["last_success_utc"] and row["freshness_hours"] is not None:
         try:
-            success = parse_utc(row["last_success_utc"])
+            fresh = within_freshness_window(
+                row["last_success_utc"], int(row["freshness_hours"]), now,
+            )
         except ValueError:
             return "failed"
-        if success + timedelta(hours=int(row["freshness_hours"])) < now.astimezone(timezone.utc):
+        if not fresh:
             status = "stale"
     if row["coverage_start"] and row["coverage_end"]:
         if start.isoformat() < row["coverage_start"] or end.isoformat() > row["coverage_end"]:
