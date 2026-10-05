@@ -10,10 +10,10 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M1
-CURRENT_ROUND: M1-R4
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-003
-M1_STATUS: READY_FOR_REVIEW
+CURRENT_ROUND: M1-R5
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-003
+M1_STATUS: CHANGES_REQUESTED
 M2_STATUS: PLANNED
 M3_STATUS: PLANNED
 OWNER_DECISION_REQUIRED: NO
@@ -90,6 +90,43 @@ KNOWN_GAPS: None for M1-R2-F1 or M1-R2-F2. Milestones 2 and 3 remain planned.
 ## Reviewer outbox
 
 ```text
+HANDOFF_ID: R-003
+MILESTONE: M1
+DECISION: CHANGES_REQUESTED
+REVIEWED_BASE: 29227ed
+REVIEWED_COMMITS: bf88bbb, e9ad21a
+FINDINGS_VERIFIED_RESOLVED: M1-R2-F1, M1-R2-F2
+
+M1-R4-F1 [P1] A provider parser-version change can conditionally reuse a
+snapshot produced by the old parser and then relabel both source_sync_state and
+event_source_facts with the new parser version. provider_fresh correctly checks
+the parser version, but can_conditionally_reuse does not. Reproduced by
+publishing under bls-ics-1, changing the configured version to bls-ics-2, and
+returning HTTP 304: the second request sent If-None-Match, returned
+not_modified, and the unchanged v1 snapshot was recorded as bls-ics-2. This
+breaks the design's parser provenance and can preserve facts that a parser fix
+was intended to correct. Persist enough provider-snapshot identity to bind the
+normalized observations to their parser version and source endpoint. Do not
+send conditional validators or accept a 304 for snapshot reuse when that
+identity differs; fetch a full body and parse it with the current parser. Add a
+regression test proving a parser-version change makes an unconditional request
+and never relabels an old normalized snapshot.
+```
+
+Reviewer verification for R-003:
+
+- independently reproduced and verified the measurement-preservation fix;
+- independently reproduced and verified offline local-policy
+  rematerialization;
+- independently reproduced M1-R4-F1 with an injected 200 then 304 transport;
+- targeted calendar/service tests: 22 passed;
+- utilities suite: 778 passed;
+- documentation check and `git diff --check 29227ed..bf88bbb` passed; and
+- secret scan: 602 tracked working-tree objects passed.
+
+Prior review records:
+
+```text
 HANDOFF_ID: R-002
 MILESTONE: M1
 DECISION: CHANGES_REQUESTED
@@ -136,7 +173,7 @@ The initial attempts to run Angular with the checkout's Node 25 failed before
 test/build execution because that Node binary references a missing Homebrew
 `libsimdjson.29.dylib`; the required Node 24 runtime passed both commands.
 
-Prior review record:
+Earlier review record:
 
 ```text
 HANDOFF_ID: R-001
