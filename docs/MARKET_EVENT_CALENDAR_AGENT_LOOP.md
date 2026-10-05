@@ -10,11 +10,11 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R7
-NEXT_ACTOR: IMPLEMENTER
-LAST_HANDOFF_ID: R-007
+CURRENT_ROUND: M2-R8
+NEXT_ACTOR: REVIEWER
+LAST_HANDOFF_ID: I-008
 M1_STATUS: ACCEPTED
-M2_STATUS: CHANGES_REQUESTED
+M2_STATUS: READY_FOR_REVIEW
 M3_STATUS: PLANNED
 OWNER_DECISION_REQUIRED: NO
 STOP_REASON: NONE
@@ -57,45 +57,45 @@ or required owner decision.
 ## Implementer outbox
 
 ```text
-HANDOFF_ID: I-007
+HANDOFF_ID: I-008
 MILESTONE: M2
 STATE: READY_FOR_REVIEW
-BASE_COMMIT: d22b04a
-IMPLEMENTATION_COMMITS: 05f7250
-SCOPE: Resolved M2-R4-F1 through M2-R4-F7. Added provider-specific official
-  Federal Reserve, Treasury, BEA, Census, and DOL schedule adapters with
-  defensible coverage proof; covered-empty cancellation; immutable network
-  provenance across local rematerialization; cache-date Finnhub freshness;
-  stable fiscal-period earnings identity and dated index-membership relevance;
-  actual strategy-exposure overlap clustering with named rules; live-shape
-  offline fixtures, regressions, documentation, and plain-text provider labels.
+BASE_COMMIT: 08f20b2
+IMPLEMENTATION_COMMITS: 6b292c7
+SCOPE: Resolved M2-R6-F1 through M2-R6-F4. The official Federal Reserve
+  adapter now retains G.17 industrial production and separate official 2:00
+  p.m. FOMC statement and 2:30 p.m. press-conference occurrences with stable
+  identities and an explicit occurrence relationship. The private Finnhub
+  sidecar now marks fiscal-identity completeness and withholds coverage when
+  any row cannot be projected safely while preserving the legacy CSV. Calendar
+  rematerialization removes obsolete same_session_cluster links, and named
+  strategy-overlap rules now require exact entry-through-hard-exit timing.
 CHANGED_FILES: docs/ARCHITECTURE.md; docs/DATA.md;
-  docs/MARKET_EVENT_CALENDAR_DESIGN.md; services/README.md;
-  stock-app/app/market_events_read.py; utilities/README.md;
-  utilities/config/README.md; utilities/config/market_calendar_sources.yaml;
-  utilities/events.py; utilities/market_calendar/__main__.py;
-  utilities/market_calendar/etf.py; utilities/market_calendar/primary_sync.py;
-  utilities/market_calendar/providers/primary.py;
-  utilities/market_calendar/sync.py; earnings, universe, and official-source
-  fixtures; utilities/tests/test_events.py; utilities/tests/test_market_calendar.py.
-FINDINGS_RESOLVED: M2-R4-F1, M2-R4-F2, M2-R4-F3, M2-R4-F4, M2-R4-F5,
-  M2-R4-F6, M2-R4-F7.
-TESTS_AND_RESULTS: Final focused official-source and overlap regressions 2
-  passed; full utilities suite 791 passed; full backend suite 599 passed;
+  docs/MARKET_EVENT_CALENDAR_DESIGN.md; models/market_events.py;
+  stock-app/app/market_events_read.py; stock-app/tests/test_market_events_api.py;
+  utilities/README.md; utilities/config/README.md; market-calendar importance
+  and source config; utilities/events.py; primary sync and official provider
+  modules; earnings and live-shape Federal Reserve fixtures;
+  utilities/tests/test_events.py; utilities/tests/test_market_calendar.py.
+FINDINGS_RESOLVED: M2-R6-F1, M2-R6-F2, M2-R6-F3, M2-R6-F4.
+TESTS_AND_RESULTS: Final focused calendar/events/backend regressions 19 passed;
+  full utilities suite 794 passed; full backend suite 600 passed;
   Angular Node 24 suite 200 passed; Angular production build and
   ./commands.sh build-ui passed; documentation check passed for 57 files;
-  Python compileall, secret scan of 613 pre-commit tracked objects, and
+  Python compileall, secret scan of 620 pre-commit tracked objects, and
   git diff --check passed.
 LIVE_SMOKE: Private manual live scan for 2026-10-05 through 2026-11-05 fetched
-  all five official sources without persisting raw payloads: Federal Reserve 5
+  all five official sources without persisting raw payloads: Federal Reserve 7
   rows, Treasury 10, BEA 2, Census 2, and DOL 5. All required sources proved
-  horizon coverage and the command exited 0. BLS and Finnhub inputs were local
-  fixtures for this acquisition-specific smoke test.
+  horizon coverage and the command exited 0. The live Federal Reserve parse
+  independently produced G.17 at 9:15 a.m., the FOMC statement at 2:00 p.m.,
+  and the press conference at 2:30 p.m. with stable canonical keys. BLS and
+  Finnhub inputs were local fixtures for this acquisition-specific smoke test.
 VISUAL_VERIFICATION: Served the normalized live-smoke database from a dedicated
-  commands.sh process on port 8012 and inspected Event Risk at desktop and
-  390x844. Coverage diagnostics, official-provider events, fiscal-period
-  earnings, Treasury refunding, and named overlap warnings rendered; the only
-  UI source change remains the corrected overlap-warning wording.
+  commands.sh process on port 8013 and inspected Event Risk at desktop and
+  390x844. G.17, the distinct FOMC statement and press conference, and valid
+  in-window cluster warnings rendered. Pre-entry multi-event days no longer
+  displayed the actual-exposure-overlap warning.
 DESIGN_DEVIATIONS: None.
 KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
   explicitly unconfigured capability; M2 schedule coverage no longer depends
