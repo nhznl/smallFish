@@ -10,10 +10,10 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M1
-CURRENT_ROUND: M1-R2
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-002
-M1_STATUS: READY_FOR_REVIEW
+CURRENT_ROUND: M1-R3
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-002
+M1_STATUS: CHANGES_REQUESTED
 M2_STATUS: PLANNED
 M3_STATUS: PLANNED
 OWNER_DECISION_REQUIRED: NO
@@ -92,6 +92,55 @@ KNOWN_GAPS: None for M1 or the R-001 findings. Milestones 2 and 3 remain planned
 ```
 
 ## Reviewer outbox
+
+```text
+HANDOFF_ID: R-002
+MILESTONE: M1
+DECISION: CHANGES_REQUESTED
+REVIEWED_BASE: 42ed219
+REVIEWED_COMMITS: 03ae668, 791a73a
+
+M1-R2-F1 [P1] A normal schedule refresh without --released-values deletes all
+previously persisted measurements. run_sync parses omission as an empty
+measurement set, _replace_children deletes event_measurements, and the sync
+then marks bls_released_values not_configured. Reproduced by publishing the CPI
+fixture with its released-values fixture, then publishing the same schedule
+one hour later without the optional file: three measurement rows became zero.
+Omitting an optional update must preserve the last successful measurement
+facts and their source state; clearing or superseding them needs an explicit
+operation. Add this exact two-run regression test.
+
+M1-R2-F2 [P1] Provider freshness and local materialization freshness remain
+coupled, so M1-R1-F3 is not fully resolved. Any local input change, including
+the daily as-of date, disables provider-cache reuse and forces an unconditional
+BLS request. Reproduced by changing the importance policy inside the provider
+freshness window and making the transport fail: the cached, covered schedule
+was not rematerialized and the stored importance stayed at 5 rather than 4.
+Persist/reconstruct the normalized provider observations separately from
+derived policy, strategy, ETF, and measurement state. A fresh, sufficiently
+covered provider snapshot must be locally rematerializable without network
+access; provider conditional-refresh decisions must not depend on the derived
+materialization identity. A wider horizon must still fetch enough source data
+before claiming coverage. Add offline local-policy and price/as-of
+rematerialization tests, plus a test that unchanged local inputs still make no
+provider request.
+```
+
+Reviewer verification for R-002:
+
+- independently reproduced both findings using temporary databases and
+  injected transports;
+- utilities suite: 776 passed;
+- backend suite: 598 passed;
+- Angular suite under Node 24: 200 passed;
+- Angular production build under Node 24 passed; and
+- `git diff --check 42ed219..03ae668` and documentation checks passed.
+
+The initial attempts to run Angular with the checkout's Node 25 failed before
+test/build execution because that Node binary references a missing Homebrew
+`libsimdjson.29.dylib`; the required Node 24 runtime passed both commands.
+
+Prior review record:
 
 ```text
 HANDOFF_ID: R-001
