@@ -10,11 +10,11 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R5
-NEXT_ACTOR: IMPLEMENTER
-LAST_HANDOFF_ID: R-006
+CURRENT_ROUND: M2-R6
+NEXT_ACTOR: REVIEWER
+LAST_HANDOFF_ID: I-007
 M1_STATUS: ACCEPTED
-M2_STATUS: CHANGES_REQUESTED
+M2_STATUS: READY_FOR_REVIEW
 M3_STATUS: PLANNED
 OWNER_DECISION_REQUIRED: NO
 STOP_REASON: NONE
@@ -57,44 +57,49 @@ or required owner decision.
 ## Implementer outbox
 
 ```text
-HANDOFF_ID: I-006
+HANDOFF_ID: I-007
 MILESTONE: M2
 STATE: READY_FOR_REVIEW
-BASE_COMMIT: 7360d27
-IMPLEMENTATION_COMMITS: bcc31e1
-SCOPE: Added the remaining required BLS releases, provider-neutral raw schedule
-  transport and normalized primary-source adapters, independent transactional
-  refreshes for Federal Reserve, Treasury, BEA, Census, and DOL claims,
-  private-local Finnhub legacy-cache ingestion filtered to universe members,
-  same-session cluster relationships, full-primary source diagnostics, API/UI
-  wording, offline fixtures, tests, and documentation.
-CHANGED_FILES: README.md; docs/ARCHITECTURE.md; docs/DATA.md;
-  docs/MARKET_EVENT_CALENDAR_DESIGN.md; models/market_events.py;
-  services/README.md; services/market_events/primary.py;
-  services/tests/test_market_events.py; stock-app/README.md;
-  stock-app/app/market_events_read.py;
-  stock-app/tests/test_market_events_api.py; the market-calendar Angular
-  component, model, and tests; utilities/README.md; utilities/config/README.md;
-  market-calendar source and importance config; calendar CLI, sync,
-  primary-sync, BLS and primary-provider modules; and synthetic calendar
-  fixtures/tests.
-TESTS_AND_RESULTS: Targeted utility/service tests 27 passed; targeted backend
-  API tests 5 passed; full utilities suite 782 passed; full backend suite 599
-  passed; Angular Node 24 suite 200 passed; Angular production build and
+BASE_COMMIT: d22b04a
+IMPLEMENTATION_COMMITS: 05f7250
+SCOPE: Resolved M2-R4-F1 through M2-R4-F7. Added provider-specific official
+  Federal Reserve, Treasury, BEA, Census, and DOL schedule adapters with
+  defensible coverage proof; covered-empty cancellation; immutable network
+  provenance across local rematerialization; cache-date Finnhub freshness;
+  stable fiscal-period earnings identity and dated index-membership relevance;
+  actual strategy-exposure overlap clustering with named rules; live-shape
+  offline fixtures, regressions, documentation, and plain-text provider labels.
+CHANGED_FILES: docs/ARCHITECTURE.md; docs/DATA.md;
+  docs/MARKET_EVENT_CALENDAR_DESIGN.md; services/README.md;
+  stock-app/app/market_events_read.py; utilities/README.md;
+  utilities/config/README.md; utilities/config/market_calendar_sources.yaml;
+  utilities/events.py; utilities/market_calendar/__main__.py;
+  utilities/market_calendar/etf.py; utilities/market_calendar/primary_sync.py;
+  utilities/market_calendar/providers/primary.py;
+  utilities/market_calendar/sync.py; earnings, universe, and official-source
+  fixtures; utilities/tests/test_events.py; utilities/tests/test_market_calendar.py.
+FINDINGS_RESOLVED: M2-R4-F1, M2-R4-F2, M2-R4-F3, M2-R4-F4, M2-R4-F5,
+  M2-R4-F6, M2-R4-F7.
+TESTS_AND_RESULTS: Final focused official-source and overlap regressions 2
+  passed; full utilities suite 791 passed; full backend suite 599 passed;
+  Angular Node 24 suite 200 passed; Angular production build and
   ./commands.sh build-ui passed; documentation check passed for 57 files;
-  Python compileall and git diff --check passed.
-VISUAL_VERIFICATION: Served a fixture-backed calendar from a dedicated process
-  on port 8012 and inspected the Event Risk route at desktop and 390x844.
-  Broad wording, six risk days, source caveat, multiple-provider events, and
-  same-session cluster warnings were visible and readable.
+  Python compileall, secret scan of 613 pre-commit tracked objects, and
+  git diff --check passed.
+LIVE_SMOKE: Private manual live scan for 2026-10-05 through 2026-11-05 fetched
+  all five official sources without persisting raw payloads: Federal Reserve 5
+  rows, Treasury 10, BEA 2, Census 2, and DOL 5. All required sources proved
+  horizon coverage and the command exited 0. BLS and Finnhub inputs were local
+  fixtures for this acquisition-specific smoke test.
+VISUAL_VERIFICATION: Served the normalized live-smoke database from a dedicated
+  commands.sh process on port 8012 and inspected Event Risk at desktop and
+  390x844. Coverage diagnostics, official-provider events, fiscal-period
+  earnings, Treasury refunding, and named overlap warnings rendered; the only
+  UI source change remains the corrected overlap-warning wording.
 DESIGN_DEVIATIONS: None.
-KNOWN_GAPS: The configured live official HTML/PDF endpoints do not yet have
-  provider-specific parsers that can prove the complete requested horizon.
-  They therefore fail closed as insufficient coverage unless an injected
-  normalized JSON, iCalendar, or simple XML document proves coverage. Released
-  values beyond the existing BLS path also remain a separate unconfigured
-  capability. These gaps block claiming complete live M2 coverage and require
-  reviewer disposition or a follow-up implementation round.
+KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
+  explicitly unconfigured capability; M2 schedule coverage no longer depends
+  on that optional path. No known blocking M2 implementation gap remains.
 ```
 
 ## Reviewer outbox
