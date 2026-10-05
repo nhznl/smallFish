@@ -10,11 +10,11 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R3
-NEXT_ACTOR: IMPLEMENTER
-LAST_HANDOFF_ID: R-005
+CURRENT_ROUND: M2-R4
+NEXT_ACTOR: REVIEWER
+LAST_HANDOFF_ID: I-006
 M1_STATUS: ACCEPTED
-M2_STATUS: IN_PROGRESS
+M2_STATUS: READY_FOR_REVIEW
 M3_STATUS: PLANNED
 OWNER_DECISION_REQUIRED: NO
 STOP_REASON: NONE
@@ -57,24 +57,44 @@ or required owner decision.
 ## Implementer outbox
 
 ```text
-HANDOFF_ID: I-005
+HANDOFF_ID: I-006
 MILESTONE: M2
-STATE: OWNER_DECISION_REQUIRED
-BASE_COMMIT: 9ec13c3
-IMPLEMENTATION_COMMITS: NONE
-STOP_RULE: Finnhub storage, display, estimates, and redistribution rights
-  depend on the selected plan, and the M2 kickoff requires an owner decision
-  when those rights are unclear.
-OWNER_QUESTION: Should M2 use Finnhub after you confirm that the selected plan
-  permits smallFish to persist normalized earnings schedule and measurement
-  data in local SQLite and display it in the local Event Risk UI, or should
-  earnings remain excluded until a rights-cleared provider is selected?
-CHANGED_FILES: Coordination record only.
-TESTS_AND_RESULTS: Not run; implementation did not start because the approved
-  design stop rule was reached before any application change.
-VISUAL_VERIFICATION: Not applicable; no application or UI change was made.
+STATE: READY_FOR_REVIEW
+BASE_COMMIT: 7360d27
+IMPLEMENTATION_COMMITS: bcc31e1
+SCOPE: Added the remaining required BLS releases, provider-neutral raw schedule
+  transport and normalized primary-source adapters, independent transactional
+  refreshes for Federal Reserve, Treasury, BEA, Census, and DOL claims,
+  private-local Finnhub legacy-cache ingestion filtered to universe members,
+  same-session cluster relationships, full-primary source diagnostics, API/UI
+  wording, offline fixtures, tests, and documentation.
+CHANGED_FILES: README.md; docs/ARCHITECTURE.md; docs/DATA.md;
+  docs/MARKET_EVENT_CALENDAR_DESIGN.md; models/market_events.py;
+  services/README.md; services/market_events/primary.py;
+  services/tests/test_market_events.py; stock-app/README.md;
+  stock-app/app/market_events_read.py;
+  stock-app/tests/test_market_events_api.py; the market-calendar Angular
+  component, model, and tests; utilities/README.md; utilities/config/README.md;
+  market-calendar source and importance config; calendar CLI, sync,
+  primary-sync, BLS and primary-provider modules; and synthetic calendar
+  fixtures/tests.
+TESTS_AND_RESULTS: Targeted utility/service tests 27 passed; targeted backend
+  API tests 5 passed; full utilities suite 782 passed; full backend suite 599
+  passed; Angular Node 24 suite 200 passed; Angular production build and
+  ./commands.sh build-ui passed; documentation check passed for 57 files;
+  Python compileall and git diff --check passed.
+VISUAL_VERIFICATION: Served a fixture-backed calendar from a dedicated process
+  on port 8012 and inspected the Event Risk route at desktop and 390x844.
+  Broad wording, six risk days, source caveat, multiple-provider events, and
+  same-session cluster warnings were visible and readable.
 DESIGN_DEVIATIONS: None.
-KNOWN_GAPS: All M2 implementation remains pending the owner decision.
+KNOWN_GAPS: The configured live official HTML/PDF endpoints do not yet have
+  provider-specific parsers that can prove the complete requested horizon.
+  They therefore fail closed as insufficient coverage unless an injected
+  normalized JSON, iCalendar, or simple XML document proves coverage. Released
+  values beyond the existing BLS path also remain a separate unconfigured
+  capability. These gaps block claiming complete live M2 coverage and require
+  reviewer disposition or a follow-up implementation round.
 ```
 
 ## Reviewer outbox
