@@ -68,6 +68,14 @@ installed only in the backend environment. Credential entry and verification
 belong to `tools/brokerages.py`; normalization and artifact writes belong to the
 brokerage importers.
 
+## Market-event schedules
+
+`services.market_events` is raw HTTP for official calendars. Milestone 1 fetches
+the public BLS iCalendar. It does not parse events, score risk, store a
+database, or read `app.env`. Callers inject the transport; tests never open a
+socket. Normalization and the calendar database belong to
+`utilities/market_calendar`.
+
 ## Consumers
 
 | Consumer | Owns after transport returns |

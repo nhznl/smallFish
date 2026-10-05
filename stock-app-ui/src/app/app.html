@@ -26,6 +26,9 @@
       <a routerLink="/studies" routerLinkActive="active" #strategyLink="routerLinkActive"
          [routerLinkActiveOptions]="{ exact: false }"
          [attr.aria-current]="strategyLink.isActive ? 'page' : null">Studies</a>
+      <a routerLink="/market-calendar" routerLinkActive="active" #eventRiskLink="routerLinkActive"
+         [routerLinkActiveOptions]="{ exact: false }"
+         [attr.aria-current]="eventRiskLink.isActive ? 'page' : null">Event Risk</a>
     </div>
 
     <span class="nav-sep" aria-hidden="true"></span>

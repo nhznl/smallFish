@@ -1,0 +1,42 @@
+{
+  "observations": [
+    {
+      "canonicalKey": "US:BLS:CPI:2026-09",
+      "measurements": [
+        {
+          "metric": "CPI_U_ALL_ITEMS_MOM",
+          "label": "CPI-U all items",
+          "value": "4.44",
+          "numericValue": "4.44",
+          "unit": "percent",
+          "scale": "month_over_month",
+          "seasonalAdjustment": "seasonally_adjusted",
+          "valueKind": "actual",
+          "provider": "synthetic"
+        },
+        {
+          "metric": "CPI_U_ALL_ITEMS_MOM",
+          "label": "CPI-U all items",
+          "value": "3.33",
+          "numericValue": "3.33",
+          "unit": "percent",
+          "scale": "month_over_month",
+          "seasonalAdjustment": "seasonally_adjusted",
+          "valueKind": "previous",
+          "provider": "synthetic"
+        },
+        {
+          "metric": "CPI_U_CORE_MOM",
+          "label": "CPI-U all items less food and energy",
+          "value": "5.55",
+          "numericValue": "5.55",
+          "unit": "percent",
+          "scale": "month_over_month",
+          "seasonalAdjustment": "seasonally_adjusted",
+          "valueKind": "actual",
+          "provider": "synthetic"
+        }
+      ]
+    }
+  ]
+}

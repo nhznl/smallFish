@@ -1,0 +1,14 @@
+# General event importance. This is a risk classification, not a price forecast.
+policy_version: "2026-10-04.1"
+events:
+  CPI:
+    score: 5
+    portfolio_relevance: DIRECT_BROAD_INDEX
+    category: inflation
+    asset_classes: [equities, rates]
+    instruments: [SPY, QQQ]
+    rule_id: importance-cpi-extreme
+    rationale: >-
+      CPI is a scheduled inflation release that can reprice broad equity
+      indexes and interest rates. The rating does not say whether prices
+      will rise or fall.

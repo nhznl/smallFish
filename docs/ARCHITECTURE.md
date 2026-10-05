@@ -104,6 +104,13 @@ SnapTrade service suite runs in the API environment only.
    `stock-app/static/`.
 5. **UI** — Angular fetches JSON and renders it.
 
+The CPI event-risk calendar is the same shape. `./commands.sh market-calendar`
+fetches the public BLS iCalendar through `services/market_events`, and
+`utilities/market_calendar` normalizes, scores, and writes
+`data/market_calendar/calendar.sqlite`. FastAPI reads that file only. It does
+not import `utilities/` or `studies/`, and opening Event Risk does not contact
+a provider. The legacy `events.csv` earnings calendar is a separate artifact.
+
 Brokerage sync consumers call `services/*` for raw provider payloads, then
 normalize and materialize their own ledger artifacts under `SFP_DATA_DIR`.
 Brokerage adapters read those artifacts only; they never call `services/`.
@@ -278,6 +285,7 @@ app.
 | Brokerage/provider I/O | `services/<provider>/` for raw transport; `services.options_market` for neutral quotes/Greeks/beta. Keep artifact writes in the consumer runtime. |
 | A brokerage sync resource | A single-purpose command under `stock-app/app/brokerages/importers/`, wired to the registry. Holdings must not fetch activity or market data. |
 | A brokerage setup/CLI step | `tools/brokerages.py`, kept standard-library-only so setup works before either application runtime is available. Provider calls used for verification execute through the appropriate runtime's `services/` transport. |
+| A market-event provider | Raw HTTP in `services/market_events`, parsing and the SQLite write in `utilities/market_calendar`, a read-only route in `stock-app`. |
 | A UI view | Read `stock-app-ui/AGENTS.md` and `stock-app-ui/docs/UX_GUIDANCE.md` first; reuse the shared primitives. |
 | An optional integration | A capability in `stock-app/app/capabilities.py` and a provider adapter in `tools/brokerages.py`, so it degrades gracefully. |
 | A study | A new pre-registered definition. Never edit a published one. |

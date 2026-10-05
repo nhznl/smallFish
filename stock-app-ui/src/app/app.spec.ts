@@ -26,6 +26,7 @@ describe('App', () => {
       'Wheel',
       'Sectors',
       'Studies',
+      'Event Risk',
       'Pre-Earnings Momentum',
       'Trading',
       'Retirement',

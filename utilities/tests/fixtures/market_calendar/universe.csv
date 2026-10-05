@@ -1,0 +1,5 @@
+symbol,name,type,memberships,source,pinned,last_seen,sector
+QQQ,Synthetic QQQ,ETF,,curated,false,,
+SPY,Synthetic SPY,ETF,,curated,false,,
+TIP,Synthetic TIP,ETF,,curated,false,,
+TLT,Synthetic TLT,ETF,,curated,false,,

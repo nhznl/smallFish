@@ -96,6 +96,11 @@ def studies_dir() -> Path:
     return _under("SFP_STUDIES_DIR", data_dir(), "studies")
 
 
+def market_calendar_db() -> Path:
+    """Read-only CPI calendar published by ``./commands.sh market-calendar``."""
+    return _under("SFP_MARKET_CALENDAR_DB", data_dir(), "market_calendar/calendar.sqlite")
+
+
 def bundled_studies_dir() -> Path:
     """Read-only Research Studies artifacts packaged with the repository.
 

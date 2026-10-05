@@ -103,6 +103,7 @@ specific artifact.
 
 | Setting | Default |
 |---|---|
+| `SFP_MARKET_CALENDAR_DB` | `$SFP_DATA_DIR/market_calendar/calendar.sqlite` |
 | `SFP_STUDIES_DIR` | `$SFP_DATA_DIR/studies` |
 | `SFP_PRICE_CACHE` | `$SFP_DATA_DIR` |
 | `SFP_REPORTS_DIR` | `$SFP_DATA_DIR/reports/pre_earnings_momentum` |
@@ -157,6 +158,7 @@ Behavioural parameters live in YAML next to the code that reads them, not in
 | `utilities/config/universe.local.yaml` | Your own pins. Git-ignored; merged over the defaults. Optional. |
 | `utilities/config/starter_data.yaml` | Starter universe and the bootstrap failure policy |
 | `utilities/config/scraper.yaml` | Throttle, thread pool, staleness threshold |
+| `utilities/config/market_calendar_*.yaml` | CPI source coverage, importance, strategy clocks, risk rules, and ETF exposure channels |
 | `utilities/config/sector_rotation.yaml` | Sector leadership parameters |
 | `utilities/options/config/wheel.yaml` | Wheel screen gates |
 | `utilities/options/config/chains.yaml` | Quote collection |

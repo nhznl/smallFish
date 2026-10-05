@@ -29,6 +29,7 @@
 #   scrape-history  - full-year backfill
 #     e.g: ./commands.sh scrape-history --year 2025 --symbols AAPL MSFT NVDA  
 #   scrape-retry    - re-run the previous run's errorStocks.txt
+#   market-calendar - publish the CPI event-risk calendar for the next 31 days
 #   sector-rotation - Select Sector SPDR price-leadership snapshot vs SPY
 #                     (rotation/relative-strength proxy, not measured fund flow)
 #   sector-rotation-study - frozen legacy-nine forward-leadership study
@@ -233,6 +234,9 @@ case "$1" in
   scrape-retry)
     cd "$ROOT" && "$UTILITIES_PYTHON" -m utilities.scraper --mode retry "${@:2}"
     ;;
+  market-calendar)
+    cd "$ROOT" && "$UTILITIES_PYTHON" -m utilities.market_calendar "${@:2}"
+    ;;
   sector-rotation)
     cd "$ROOT" && "$UTILITIES_PYTHON" -m utilities.sector_rotation "${@:2}"
     ;;
@@ -306,7 +310,7 @@ case "$1" in
     cd "$ROOT" && "$UTILITIES_PYTHON" -m utilities.fetch_earnings_history "${@:2}"
     ;;
   *)
-    echo "Usage: $0 {doctor|bootstrap-data|server|build-ui|studies|fetch|ensure-events|scan|wheel|chains|verify-premiums|universe|scrape|scrape-history|scrape-retry|sector-rotation|sector-rotation-study|sector-rotation-study-v2|rsi-supertrend-study|market-regime-study|market-regime-compare|market-regime-holdout|pre-earnings-daily-study|pre-earnings-post-event-study|pre-earnings-post-event-low-fee-study|pre-earnings-post-event-low-fee-holdout|pre-earnings-post-event-weekly-batch|pre-earnings-post-event-weekly-batch-comparison|pre-earnings-post-event-weekly-batch-extension|pre-earnings-post-event-weekly-open-decision|pre-earnings-post-event-weekly-open-decision-comparison|pre-earnings-regime-staging|pre-earnings-regime-staging-comparison|pre-earnings-defensive-regime-staging|pre-earnings-defensive-regime-staging-comparison|study4-live-evaluate|backtest|event-backtest|earnings-history}"
+    echo "Usage: $0 {doctor|bootstrap-data|server|build-ui|studies|fetch|ensure-events|scan|wheel|chains|verify-premiums|universe|scrape|scrape-history|scrape-retry|market-calendar|sector-rotation|sector-rotation-study|sector-rotation-study-v2|rsi-supertrend-study|market-regime-study|market-regime-compare|market-regime-holdout|pre-earnings-daily-study|pre-earnings-post-event-study|pre-earnings-post-event-low-fee-study|pre-earnings-post-event-low-fee-holdout|pre-earnings-post-event-weekly-batch|pre-earnings-post-event-weekly-batch-comparison|pre-earnings-post-event-weekly-batch-extension|pre-earnings-post-event-weekly-open-decision|pre-earnings-post-event-weekly-open-decision-comparison|pre-earnings-regime-staging|pre-earnings-regime-staging-comparison|pre-earnings-defensive-regime-staging|pre-earnings-defensive-regime-staging-comparison|study4-live-evaluate|backtest|event-backtest|earnings-history}"
     exit 1
     ;;
 esac

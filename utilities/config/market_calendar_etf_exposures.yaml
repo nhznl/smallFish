@@ -1,0 +1,33 @@
+# Exposure channels for ingested event families. These name instruments a
+# user can observe. They do not assign a price direction.
+policy_version: "2026-10-04.1"
+families:
+  cpi:
+    event_type: CPI
+    exposures:
+      - symbol: SPY
+        relationship: direct_underlying
+        relevance: primary
+        channel: >-
+          S&P 500 prices can reprice when a CPI release changes broad
+          inflation and discount-rate expectations. Direction is unknown
+          before the release.
+      - symbol: QQQ
+        relationship: direct_underlying
+        relevance: primary
+        channel: >-
+          Nasdaq-100 prices can reprice with the same broad inflation
+          release. Direction is unknown before the release.
+      - symbol: TIP
+        relationship: rate_sensitive
+        relevance: secondary
+        channel: >-
+          Treasury inflation-protected securities are priced off inflation
+          compensation. This is a rates channel, not an equity-direction claim.
+      - symbol: TLT
+        relationship: rate_sensitive
+        relevance: secondary
+        channel: >-
+          Long-duration Treasury prices can reprice when inflation changes
+          expected policy rates. This is not an equity proxy and has no
+          implied direction.

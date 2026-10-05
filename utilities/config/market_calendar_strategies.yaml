@@ -1,0 +1,15 @@
+# Strategy exposure clocks. Interpreted with America/New_York and the NYSE
+# calendar. A timing change requires a new policy_version in the risk file.
+policy_version: "2026-10-04.1"
+strategies:
+  short-premium-20d-0dte:
+    entry_time_et: "09:30"
+    typical_exit_time_et: "11:30"
+    hard_exit_time_et: "12:00"
+  long-premium-20d-0-or-1dte:
+    entry_time_et: "09:30"
+    exposure_end_et: "16:00"
+  long-wings-repeated-0dte-premium:
+    short_leg_entry_time_et: "09:30"
+    short_leg_exposure_end_et: "16:00"
+    long_wing_horizon_days: 30

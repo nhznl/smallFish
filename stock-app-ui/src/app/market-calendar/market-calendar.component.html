@@ -1,0 +1,299 @@
+<div class="event-risk">
+  <header class="page-header">
+    <div>
+      <p class="page-eyebrow">Research</p>
+      <h1 class="page-title">Event Risk</h1>
+      <p class="page-subtitle">
+        Scheduled CPI risk for SPY and QQQ 0-DTE exposure over the next 31 days.
+        This is a risk scan, not a forecast of direction or a trade recommendation.
+      </p>
+    </div>
+    <div class="page-actions">
+      <button type="button" class="btn btn-primary" (click)="load(false)"
+              [disabled]="loading || reloading"
+              [attr.aria-busy]="reloading"
+              matTooltip="Reload the published scan. Provider refresh is ./commands.sh market-calendar and does not run from this page."
+              matTooltipPosition="above">
+        @if (reloading) {
+          <span class="btn-spinner" aria-hidden="true"></span>
+        }
+        {{ reloading ? 'Reloading…' : 'Reload scan' }}
+      </button>
+      @if (snapshot?.generatedAtUtc) {
+        <span class="snapshot-chip">
+          Published
+          <strong>{{ snapshot?.generatedAtUtc | date:'MMM d, y, h:mm a':'UTC' }} UTC</strong>
+        </span>
+      } @else if (!loading) {
+        <span class="snapshot-chip">Published <strong>Unavailable</strong></span>
+      }
+    </div>
+  </header>
+
+  @if (loading && !snapshot) {
+    <div class="skeleton skeleton-row" aria-hidden="true"></div>
+    <div class="skeleton skeleton-row" aria-hidden="true"></div>
+    <div class="skeleton skeleton-row" aria-hidden="true"></div>
+  }
+
+  @if (error) {
+    <p class="banner banner-neg" role="alert">{{ error }}</p>
+  }
+
+  @if (snapshot; as scan) {
+    <p class="banner">{{ scan.caveat }}</p>
+
+    @if (reloading) {
+      <p class="banner banner-warn" role="status">
+        Refreshing the published scan. The rows below are the last successful snapshot, not a new result.
+      </p>
+    }
+    @if (reloadError) {
+      <p class="banner banner-neg" role="alert">{{ reloadError }} The last successful snapshot is still shown.</p>
+    }
+    @if (requiredProblems().length) {
+      <div class="banner banner-warn" role="status">
+        <div>
+          <strong>CPI coverage is incomplete.</strong>
+          @for (source of requiredProblems(); track source.provider) {
+            <span> {{ source.provider }} is {{ source.status }}. {{ source.detail }}</span>
+          }
+        </div>
+      </div>
+    }
+    @if (optionalGaps().length) {
+      <p class="source-note">
+        @for (source of optionalGaps(); track source.provider) {
+          <span>{{ source.detail }}</span>
+        }
+      </p>
+    }
+
+    <section class="stat-strip" aria-label="Scan summary">
+      <article class="stat-card">
+        <span class="stat-label">Horizon</span>
+        <span class="stat-value">{{ scan.horizon ? (formatSpan(scan.horizon.from) + ' – ' + formatSpan(scan.horizon.to)) : '—' }}</span>
+        <span class="stat-delta">{{ stat(scan.summary.horizonDays) }} calendar days</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Primary risk days</span>
+        <span class="stat-value">{{ stat(scan.summary.primaryRiskDays) }}</span>
+        <span class="stat-delta">CPI scope only</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">High or extreme</span>
+        <span class="stat-value">{{ stat(scan.summary.highOrExtremeEvents) }}</span>
+      </article>
+      <article class="stat-card">
+        <span class="stat-label">Secondary events</span>
+        <span class="stat-value">{{ stat(scan.summary.secondaryEvents) }}</span>
+      </article>
+    </section>
+
+    <div class="tab-bar" role="tablist" aria-label="Event risk views">
+      <button type="button" class="tab" role="tab" [class.active]="view === 'upcoming'"
+              [attr.aria-selected]="view === 'upcoming'" (click)="view = 'upcoming'">Upcoming Risk Days</button>
+      <button type="button" class="tab" role="tab" [class.active]="view === 'all'"
+              [attr.aria-selected]="view === 'all'" (click)="view = 'all'">All Events</button>
+    </div>
+
+    <div class="range-bar" role="group" aria-label="Date range">
+      @for (option of ranges; track option.id) {
+        <button type="button" class="btn" [class.btn-primary]="range === option.id"
+                [class.btn-ghost]="range !== option.id"
+                [attr.aria-pressed]="range === option.id"
+                (click)="range = option.id">{{ option.label }}</button>
+      }
+    </div>
+
+    <div [attr.aria-busy]="reloading || loading">
+      @if (!scan.available) {
+        <div class="empty-state">
+          <p class="empty-title">The CPI scan is unavailable</p>
+          <p class="empty-hint">Run <span class="mono">./commands.sh market-calendar</span> to publish a scan. An empty page is not a session with no event risk.</p>
+        </div>
+      } @else if (!visibleDays().length) {
+        <div class="empty-state">
+          <p class="empty-title">{{ view === 'upcoming' ? 'No CPI risk days in this range' : 'No CPI releases in this range' }}</p>
+          <p class="empty-hint">
+            @if (unknownCount()) {
+              Coverage is incomplete for {{ unknownCount() }} day{{ unknownCount() === 1 ? '' : 's' }}. Missing coverage is not the same as a quiet session.
+            } @else {
+              {{ coveredEmptyCount() }} day{{ coveredEmptyCount() === 1 ? '' : 's' }} in this range {{ coveredEmptyCount() === 1 ? 'has' : 'have' }} CPI coverage and no release. Other scheduled releases are outside this scan.
+            }
+          </p>
+        </div>
+      } @else {
+        @for (day of visibleDays(); track day.date) {
+          <section class="panel day-panel">
+            <div class="panel-heading day-heading">
+              <div>
+                <h2>{{ formatDay(day.date) }}</h2>
+                <small>{{ sessionLabel(day.sessionState) }} · {{ day.eventCount }} event{{ day.eventCount === 1 ? '' : 's' }} · {{ day.coverage === 'covered' ? 'CPI covered' : day.coverage }}</small>
+              </div>
+              <span [class]="riskClass(day.riskLabel)">{{ day.riskLabel }} RISK</span>
+            </div>
+            <div class="panel-body">
+              <p class="session-note">{{ day.sessionAssessment }}</p>
+              @if (day.clusterWarning) {
+                <p class="banner banner-warn">{{ day.clusterWarning }}</p>
+              }
+              <div class="table-shell">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th class="col-sticky" scope="col">Time</th>
+                      <th scope="col">Event</th>
+                      <th scope="col">Importance</th>
+                      <th scope="col">Relevance</th>
+                      <th scope="col">Assets</th>
+                      <th scope="col">Previous / consensus / actual</th>
+                      <th scope="col">Primary ETFs</th>
+                      <th scope="col">Strategy</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (event of day.primaryEvents; track event.id) {
+                      <tr>
+                        <td class="col-sticky">
+                          <button type="button" class="row-button time-button" (click)="selected = event">
+                            <span class="mono">{{ dash(event.pacificTime) }}</span>
+                            <small>{{ dash(event.easternTime) }}</small>
+                          </button>
+                        </td>
+                        <td>
+                          <button type="button" class="row-button" (click)="selected = event">
+                            <strong>{{ event.title }}</strong>
+                            <small>{{ event.referencePeriodLabel || '—' }} · {{ event.scheduleStatus }} · {{ event.lifecycleStatus }}</small>
+                          </button>
+                        </td>
+                        <td><span [class]="riskClass(event.importance.label === 'Extreme' ? 'EXTREME' : event.importance.label === 'High' ? 'HIGH' : event.importance.label === 'Moderate' ? 'MODERATE' : 'ROUTINE')">{{ event.importance.label }}</span></td>
+                        <td>{{ relevanceLabel(event.portfolioRelevance) }}</td>
+                        <td>{{ event.affectedAssetClasses.length ? event.affectedAssetClasses.join(', ') : '—' }}</td>
+                        <td>
+                          @for (metric of metrics(event); track metric.metric) {
+                            <div class="measure">
+                              <span>{{ metric.label }}</span>
+                              <span class="mono">{{ dash(measurementValue(event, metric.metric, 'previous')) }} / {{ dash(measurementValue(event, metric.metric, 'consensus')) }} / {{ dash(measurementValue(event, metric.metric, 'actual')) }}</span>
+                            </div>
+                          } @empty {
+                            <span class="mono">— / — / —</span>
+                          }
+                        </td>
+                        <td>
+                          @for (exposure of event.etfExposures; track exposure.symbol) {
+                            @if (exposure.relevance === 'primary') {
+                              <span class="badge badge-neutral">{{ exposure.symbol }}</span>
+                              <span [class]="priceClass(exposure.priceDataState)">{{ exposure.priceDataState }}</span>
+                            }
+                          }
+                        </td>
+                        <td>
+                          @if (strongest(event); as top) {
+                            <span [class]="assessmentClass(top.assessment)">{{ assessmentLabel(top.assessment) }}</span>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              @if (day.secondaryEvents.length) {
+                <h3 class="secondary-title">Secondary events</h3>
+                <ul class="secondary-list">
+                  @for (event of day.secondaryEvents; track event.id) {
+                    <li>
+                      <button type="button" class="row-button" (click)="selected = event">
+                        {{ dash(event.pacificTime) }} / {{ dash(event.easternTime) }} {{ event.title }}
+                        · {{ relevanceLabel(event.portfolioRelevance) }}
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          </section>
+        }
+        @if (view === 'all' && coveredEmptyCount()) {
+          <p class="source-note">{{ coveredEmptyCount() }} additional day{{ coveredEmptyCount() === 1 ? '' : 's' }} in this range {{ coveredEmptyCount() === 1 ? 'has' : 'have' }} CPI coverage and no release.</p>
+        }
+      }
+    </div>
+  }
+
+  @if (selected; as event) {
+    <app-drawer [ariaLabel]="event.title + ' event risk'" (closed)="selected = null">
+      <div drawerHeader>
+        <h2>{{ event.title }}</h2>
+        <p>{{ formatDay(event.easternDate || event.civilDate || '') }} · {{ dash(event.pacificTime) }} / {{ dash(event.easternTime) }}</p>
+      </div>
+      <p class="banner">This describes scheduled event risk. It does not predict whether prices will rise or fall, and elevated premium is not an edge.</p>
+      @if (event.reviewRequired) {
+        <p class="banner banner-warn">Needs review. {{ event.reviewReason }}</p>
+      }
+      @for (assessment of event.strategyAssessments; track assessment.strategyId) {
+        <section class="drawer-block">
+          <h3>{{ strategyName(assessment.strategyId) }}</h3>
+          <p>
+            <span [class]="assessmentClass(assessment.assessment)">{{ assessmentLabel(assessment.assessment) }}</span>
+            <span class="badge badge-neutral">{{ timingLabel(assessment.timingRelationship) }}</span>
+          </p>
+          <h4>Potential benefits</h4>
+          @if (assessment.potentialBenefits.length) {
+            <ul>
+              @for (benefit of assessment.potentialBenefits; track benefit) {
+                <li>{{ benefit }}</li>
+              }
+            </ul>
+          } @else {
+            <p>—</p>
+          }
+          <h4>Potential risks</h4>
+          <ul>
+            @for (risk of assessment.potentialRisks; track risk) {
+              <li>{{ risk }}</li>
+            }
+          </ul>
+          <p class="rule-ids">Rules {{ assessment.ruleIds.join(', ') }} · policy {{ assessment.policyVersion }}</p>
+        </section>
+      }
+      <section class="drawer-block">
+        <h3>ETF exposure</h3>
+        @for (group of exposureGroups(event); track group.relationship) {
+          <h4>{{ relationshipLabel(group.relationship) }}</h4>
+          <ul>
+            @for (exposure of group.items; track exposure.symbol) {
+              <li>
+                <span class="mono">{{ exposure.symbol }}</span>
+                <span [class]="priceClass(exposure.priceDataState)">{{ exposure.priceDataState }}</span>
+                {{ exposure.impactChannel }}
+                @if (exposure.latestPriceSession) {
+                  <small>Last cached session {{ exposure.latestPriceSession }}</small>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </section>
+      <section class="drawer-block">
+        <h3>Source</h3>
+        @for (source of event.sources; track source.sourceRecordId) {
+          <p>{{ source.provider }} · {{ source.parserVersion }} · fetched {{ source.fetchedAtUtc }}</p>
+          <p class="mono">{{ source.sourceUrl }}</p>
+          @if (sourceState(source.provider); as state) {
+            <p>
+              Freshness: <strong>{{ state.status }}</strong> · Coverage
+              <span class="mono">{{ state.coverageStart || '—' }}</span> to
+              <span class="mono">{{ state.coverageEnd || '—' }}</span>
+            </p>
+            <p>{{ state.detail }}</p>
+            <p>Last successful refresh: {{ state.lastSuccessUtc || '—' }}</p>
+          }
+        }
+        @if (!event.relatedEventIds.length) {
+          <p>Related events: —</p>
+        }
+      </section>
+    </app-drawer>
+  }
+</div>

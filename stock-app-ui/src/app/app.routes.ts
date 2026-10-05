@@ -11,6 +11,7 @@ export const routes: Routes = [
   { path: 'momentum', title: 'Momentum · smallFish', loadComponent: () => import('./momentum-scanner/momentum-scanner.component').then(m => m.MomentumScannerComponent) },
   { path: 'study4', title: 'Pre-Earnings Momentum · smallFish', loadComponent: () => import('./study4-manager/study4-manager.component').then(m => m.Study4ManagerComponent) },
   { path: 'preEarningsExplainer', title: 'Pre-Earnings Momentum · How this works · smallFish', loadComponent: () => import('./pre-earnings-explainer/pre-earnings-explainer.component').then(m => m.PreEarningsExplainerComponent) },
+  { path: 'market-calendar', title: 'Event Risk · smallFish', loadComponent: () => import('./market-calendar/market-calendar.component').then(m => m.MarketCalendarComponent) },
   { path: 'studies', title: 'Research Studies · smallFish', loadComponent: () => import('./studies/studies.component').then(m => m.StudiesComponent) },
   { path: 'studies/:studyId', title: 'Research Studies · smallFish', loadComponent: () => import('./studies/studies.component').then(m => m.StudiesComponent) },
   { path: 'sectors', title: 'Sectors · smallFish', loadComponent: () => import('./sector-rotation/sector-rotation.component').then(m => m.SectorRotationComponent) },

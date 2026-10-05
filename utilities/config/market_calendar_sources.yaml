@@ -1,0 +1,25 @@
+# Market-event source coverage. Milestone 1 ingests the BLS CPI schedule only.
+# A successful empty CPI day is not coverage of the rest of the macro calendar.
+schema_version: 1
+horizon_calendar_days: 31
+sources:
+  bls:
+    provider: bls
+    required: true
+    configured: true
+    parser_version: bls-ics-1
+    schedule_url: https://www.bls.gov/schedule/news_release/bls.ics
+    freshness_hours: 192
+    scope: cpi_schedule
+    detail: >-
+      Consumer Price Index rows from the official BLS iCalendar.
+      Other BLS releases are outside this scan and are not treated as absent.
+  bls_released_values:
+    provider: bls_released_values
+    required: false
+    configured: false
+    parser_version: bls-values-none
+    scope: cpi_measurements
+    detail: >-
+      Not configured. The official iCalendar does not publish CPI actuals or
+      consensus, and no released-values provider is wired in this milestone.

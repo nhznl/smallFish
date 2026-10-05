@@ -1,0 +1,139 @@
+# Named strategy rules. First match wins. Benefits and risks stay separate.
+# Do not describe a release as bullish, bearish, or a guaranteed profit.
+policy_version: "2026-10-04.1"
+assessment_rank:
+  avoid: 5
+  high_risk: 4
+  mixed_opportunity: 3
+  conditional: 2
+  low_direct_relevance: 1
+timing_rank:
+  during_typical_hold: 4
+  before_entry: 3
+  after_typical_exit_before_hard_exit: 2
+  all_day_exposure: 2
+  after_planned_exit: 1
+required_risk_text:
+  long-premium-20d-0-or-1dte: "Movement is not profit."
+  long-wings-repeated-0dte-premium: "Different expirations mean maximum loss is not simply strike width minus credit."
+strategies:
+  short-premium-20d-0dte:
+    - id: s1-broad-after-planned-exit
+      relevance: [DIRECT_BROAD_INDEX, INDIRECT_BROAD_INDEX]
+      timing: [after_planned_exit]
+      min_importance: 1
+      assessment: conditional
+      benefits:
+        - "The configured hard exit is before this release, so a position closed on that rule is no longer in the typical same-day hold."
+      risks:
+        - "A position still open after the hard exit remains exposed to the release."
+    - id: s1-broad-high-while-exposed
+      relevance: [DIRECT_BROAD_INDEX, INDIRECT_BROAD_INDEX]
+      timing: [before_entry, during_typical_hold, after_typical_exit_before_hard_exit, all_day_exposure]
+      min_importance: 4
+      assessment: high_risk
+      benefits:
+        - "Option premium may be elevated around the release. Elevated premium is not an edge."
+      risks:
+        - "A large realized move or volatility expansion can overwhelm a short-premium position if the release is still being digested between the open and the hard exit."
+    - id: s1-broad-lower-while-exposed
+      relevance: [DIRECT_BROAD_INDEX, INDIRECT_BROAD_INDEX]
+      timing: [before_entry, during_typical_hold, after_typical_exit_before_hard_exit, all_day_exposure]
+      min_importance: 1
+      max_importance: 3
+      assessment: conditional
+      benefits:
+        - "Option premium may be elevated. Elevated premium is not an edge."
+      risks:
+        - "The release can still move the index while a short-premium position is open."
+    - id: s1-outside-broad-index
+      relevance: [SECTOR_OR_COMMODITY, SINGLE_STOCK, LOW_RELEVANCE]
+      timing: [before_entry, during_typical_hold, after_typical_exit_before_hard_exit, after_planned_exit, all_day_exposure]
+      min_importance: 1
+      assessment: low_direct_relevance
+      benefits: []
+      risks:
+        - "Direct exposure is outside SPY and QQQ, so this release does not describe the index short-premium position."
+  long-premium-20d-0-or-1dte:
+    - id: s2-outside-broad-index
+      relevance: [SECTOR_OR_COMMODITY, SINGLE_STOCK, LOW_RELEVANCE]
+      timing: [before_entry, during_typical_hold, after_typical_exit_before_hard_exit, after_planned_exit, all_day_exposure]
+      min_importance: 1
+      assessment: low_direct_relevance
+      benefits: []
+      risks:
+        - "Direct exposure is outside SPY and QQQ."
+        - "Movement is not profit."
+    - id: s2-broad-after-planned-exit
+      relevance: [DIRECT_BROAD_INDEX, INDIRECT_BROAD_INDEX]
+      timing: [after_planned_exit]
+      min_importance: 1
+      assessment: conditional
+      benefits:
+        - "The configured exposure ends before this release."
+      risks:
+        - "A position held past the configured end remains exposed."
+        - "Movement is not profit."
+    - id: s2-broad-before-entry
+      relevance: [DIRECT_BROAD_INDEX, INDIRECT_BROAD_INDEX]
+      timing: [before_entry]
+      min_importance: 1
+      assessment: mixed_opportunity
+      benefits:
+        - "Price can keep moving after the open."
+      risks:
+        - "The initial move may already have occurred before entry, and implied volatility can contract after the release."
+        - "The result still depends on direction and path."
+        - "Movement is not profit."
+    - id: s2-broad-during-exposure
+      relevance: [DIRECT_BROAD_INDEX, INDIRECT_BROAD_INDEX]
+      timing: [during_typical_hold, after_typical_exit_before_hard_exit, all_day_exposure]
+      min_importance: 1
+      assessment: mixed_opportunity
+      benefits:
+        - "A scheduled release can produce movement during the configured exposure."
+      risks:
+        - "The purchased option can lose if the direction is wrong, the path reverses, or the event premium is already priced in."
+        - "Movement is not profit."
+  long-wings-repeated-0dte-premium:
+    - id: s3-outside-broad-index
+      relevance: [SECTOR_OR_COMMODITY, SINGLE_STOCK, LOW_RELEVANCE]
+      timing: [before_entry, during_typical_hold, after_typical_exit_before_hard_exit, after_planned_exit, all_day_exposure]
+      min_importance: 1
+      assessment: low_direct_relevance
+      benefits: []
+      risks:
+        - "Direct exposure is outside SPY and QQQ."
+        - "Different expirations mean maximum loss is not simply strike width minus credit."
+    - id: s3-broad-after-planned-exit
+      relevance: [DIRECT_BROAD_INDEX, INDIRECT_BROAD_INDEX]
+      timing: [after_planned_exit]
+      min_importance: 1
+      assessment: conditional
+      benefits:
+        - "The configured short-leg exposure ends before this release."
+      risks:
+        - "The daily short legs remain exposed if they are still open."
+        - "The longer-dated wings can help in a tail move, but they do not make the session safe."
+        - "Different expirations mean maximum loss is not simply strike width minus credit."
+    - id: s3-broad-while-exposed
+      relevance: [DIRECT_BROAD_INDEX, INDIRECT_BROAD_INDEX]
+      timing: [before_entry, during_typical_hold, after_typical_exit_before_hard_exit, all_day_exposure]
+      min_importance: 3
+      assessment: high_risk
+      benefits:
+        - "The longer-dated wings can help if the session produces a tail move or volatility expansion."
+      risks:
+        - "The daily short legs can still be overwhelmed by a large move."
+        - "Different expirations mean maximum loss is not simply strike width minus credit."
+    - id: s3-broad-low-importance
+      relevance: [DIRECT_BROAD_INDEX, INDIRECT_BROAD_INDEX]
+      timing: [before_entry, during_typical_hold, after_typical_exit_before_hard_exit, all_day_exposure]
+      min_importance: 1
+      max_importance: 2
+      assessment: conditional
+      benefits:
+        - "The longer-dated wings can help if the session produces a tail move."
+      risks:
+        - "The daily short legs can still be overwhelmed."
+        - "Different expirations mean maximum loss is not simply strike width minus credit."

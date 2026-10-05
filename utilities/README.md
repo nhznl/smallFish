@@ -48,10 +48,18 @@ utilities/.venv/bin/python -m utilities.scraper --help
 | `audit_price_cache.py` | Whole-history rewrite when an adjustment vintage goes stale |
 | `indicators/ta.py` | Technical indicators |
 | `sector_rotation.py` | The live 11-sector leadership snapshot against SPY |
+| `market_calendar/` | CPI event-risk calendar: parse the BLS iCalendar, score strategy exposure, and write `calendar.sqlite` |
 | `events.py` | Validated, atomic upcoming-earnings cache plus conditional Finnhub refresh |
 | `fetch_earnings_history.py` | Separately maintained multi-year Yahoo/yfinance earnings dates |
 | `manifest.py` | Artifact manifests and provenance |
 | `options/` | Wheel screen, quote normalization and archives; Tastytrade DXLink transport comes from `services.tastytrade` |
+
+The market-calendar cache separates provider freshness from local
+materialization freshness. It reuses a conditional BLS response only when the
+requested horizon is already covered and the versioned policy, ETF mappings,
+price-cache/as-of state, universe, and supplied measurements match the
+persisted materialization identity. A wider horizon or changed local input is
+fetched with a full response before rows are replaced.
 
 See [`options/README.md`](options/README.md).
 
@@ -70,6 +78,11 @@ parameters live in `config/`, next to the code that reads them.
 | `config/universe.local.yaml` | Optional, git-ignored per-user pin overlay merged over the defaults |
 | `config/starter_data.yaml` | Starter universe and bootstrap failure policy |
 | `config/scraper.yaml` | Throttle, thread pool, staleness threshold |
+| `config/market_calendar_sources.yaml` | Which event sources are configured, and how fresh a CPI schedule remains |
+| `config/market_calendar_importance.yaml` | Event importance and broad-index relevance |
+| `config/market_calendar_strategies.yaml` | Strategy entry and exit clocks in Eastern time |
+| `config/market_calendar_risk.yaml` | Named strategy risk rules |
+| `config/market_calendar_etf_exposures.yaml` | ETF exposure channels checked against the universe |
 | `config/sector_rotation.yaml` | Sector leadership parameters |
 | `options/config/` | Wheel and quote-collection parameters |
 

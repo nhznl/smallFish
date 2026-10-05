@@ -209,6 +209,16 @@ other textual state.
 - Keep diagnostic horizons and risk evidence visible even when they feed the
   setup or strategy score.
 
+### Event Risk
+
+- Event Risk is a Research route at `/market-calendar`. It is not a strategy
+  page and not a Research Study.
+- The page reports scheduled event exposure for the configured 0-DTE profiles.
+  It does not predict direction, rank a trade, or treat elevated premium as an
+  edge.
+- Missing measurements, missing price cache, and incomplete source coverage
+  stay visible. An unavailable scan is not rendered as zero risk days.
+
 ### Ledgers and portfolio risk
 
 - Trading and Retirement expose the same four brokerage tabs in the same

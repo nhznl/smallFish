@@ -1,0 +1,89 @@
+.event-risk {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.range-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.day-heading {
+  align-items: center;
+}
+
+.session-note {
+  margin: 0 0 12px;
+}
+
+.row-button {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-button small,
+.measure {
+  display: block;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.measure {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.time-button {
+  white-space: nowrap;
+}
+
+.secondary-title {
+  margin: 16px 0 8px;
+  font-size: var(--text-base);
+}
+
+.secondary-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.drawer-block {
+  margin-bottom: 18px;
+}
+
+.drawer-block h3,
+.drawer-block h4 {
+  margin: 0 0 6px;
+}
+
+.rule-ids,
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.day-panel .badge {
+  margin-right: 4px;
+}
+
+@media (max-width: 720px) {
+  .day-heading {
+    align-items: flex-start;
+  }
+}

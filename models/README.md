@@ -13,7 +13,9 @@ Models must not contain:
 
 Each model is added only after its existing file and API consumers have been
 inventoried and its exact fields, units, optionality, and compatibility behavior
-have been reviewed.
+have been reviewed. `market_events.py` is the CPI event-risk contract:
+timestamps, measurements, and assessment labels. Scoring stays in
+`utilities/market_calendar`.
 
 ## Why the restriction
 

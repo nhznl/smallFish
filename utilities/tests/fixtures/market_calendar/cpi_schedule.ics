@@ -1,0 +1,34 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//smallFish synthetic//EN
+BEGIN:VEVENT
+UID:synthetic-cpi-2026-09@example.test
+DTSTART;TZID=US-Eastern:20261014T083000
+SUMMARY:Consumer Price Index
+DESCRIPTION:Synthetic Consumer Price Index for September 2026. Not an official print.
+END:VEVENT
+BEGIN:VEVENT
+UID:synthetic-cpi-2026-01@example.test
+DTSTART;TZID=US-Eastern:20260113T083000
+SUMMARY:Consumer Price Index
+DESCRIPTION:Synthetic Consumer Price Index for January 2026. Not an official print.
+END:VEVENT
+BEGIN:VEVENT
+UID:synthetic-cpi-2026-07@example.test
+DTSTART;TZID=US-Eastern:20260714T083000
+SUMMARY:Consumer Price Index
+DESCRIPTION:Synthetic Consumer Price Index for July 2026. Not an official print.
+END:VEVENT
+BEGIN:VEVENT
+UID:synthetic-employment@example.test
+DTSTART;TZID=US-Eastern:20261002T083000
+SUMMARY:Employment Situation
+DESCRIPTION:Synthetic Employment Situation for September 2026.
+END:VEVENT
+BEGIN:VEVENT
+UID:synthetic-cpi-date-only@example.test
+DTSTART;VALUE=DATE:20261110
+SUMMARY:Consumer Price Index
+DESCRIPTION:Synthetic Consumer Price Index for October 2026. Not an official print.
+END:VEVENT
+END:VCALENDAR
