@@ -10,9 +10,9 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R9
-NEXT_ACTOR: IMPLEMENTER
-LAST_HANDOFF_ID: R-008
+CURRENT_ROUND: M2-R10
+NEXT_ACTOR: REVIEWER
+LAST_HANDOFF_ID: I-009
 M1_STATUS: ACCEPTED
 M2_STATUS: CHANGES_REQUESTED
 M3_STATUS: PLANNED
@@ -57,45 +57,45 @@ or required owner decision.
 ## Implementer outbox
 
 ```text
-HANDOFF_ID: I-008
+HANDOFF_ID: I-009
 MILESTONE: M2
 STATE: READY_FOR_REVIEW
-BASE_COMMIT: 08f20b2
-IMPLEMENTATION_COMMITS: 6b292c7
-SCOPE: Resolved M2-R6-F1 through M2-R6-F4. The official Federal Reserve
-  adapter now retains G.17 industrial production and separate official 2:00
-  p.m. FOMC statement and 2:30 p.m. press-conference occurrences with stable
-  identities and an explicit occurrence relationship. The private Finnhub
-  sidecar now marks fiscal-identity completeness and withholds coverage when
-  any row cannot be projected safely while preserving the legacy CSV. Calendar
-  rematerialization removes obsolete same_session_cluster links, and named
-  strategy-overlap rules now require exact entry-through-hard-exit timing.
+BASE_COMMIT: 393ba58
+IMPLEMENTATION_COMMITS: 78876ab
+SCOPE: Resolved M2-R8-F1 through M2-R8-F4. Finnhub fiscal identity now accepts
+  only lossless integral tokens, with a four-digit year and quarter 1-4.
+  Calendar-capable freshness now requires a matching complete schema-2
+  sidecar, refreshes old or missing sidecars when a key is available, and
+  reports a distinct legacy-only capability without a key. Federal Reserve
+  decision, press-conference, and G.17 identities now use official annual
+  occurrence order rather than scheduled day or month. Ingestion and API
+  freshness now share one inclusive UTC timestamp contract, with date-only
+  Finnhub generations conservatively anchored at midnight Eastern.
 CHANGED_FILES: docs/ARCHITECTURE.md; docs/DATA.md;
   docs/MARKET_EVENT_CALENDAR_DESIGN.md; models/market_events.py;
   stock-app/app/market_events_read.py; stock-app/tests/test_market_events_api.py;
-  utilities/README.md; utilities/config/README.md; market-calendar importance
-  and source config; utilities/events.py; primary sync and official provider
-  modules; earnings and live-shape Federal Reserve fixtures;
+  utilities/README.md; utilities/events.py; primary sync and official provider
+  modules; expanded live-shape Federal Reserve fixture;
   utilities/tests/test_events.py; utilities/tests/test_market_calendar.py.
-FINDINGS_RESOLVED: M2-R6-F1, M2-R6-F2, M2-R6-F3, M2-R6-F4.
-TESTS_AND_RESULTS: Final focused calendar/events/backend regressions 19 passed;
-  full utilities suite 794 passed; full backend suite 600 passed;
+FINDINGS_RESOLVED: M2-R8-F1, M2-R8-F2, M2-R8-F3, M2-R8-F4.
+TESTS_AND_RESULTS: Final focused event/calendar regressions 20 passed;
+  focused complete event/calendar files 59 passed and backend API file 7
+  passed; full utilities suite 810 passed; full backend suite 601 passed;
   Angular Node 24 suite 200 passed; Angular production build and
   ./commands.sh build-ui passed; documentation check passed for 57 files;
   Python compileall, secret scan of 620 pre-commit tracked objects, and
   git diff --check passed.
-LIVE_SMOKE: Private manual live scan for 2026-10-05 through 2026-11-05 fetched
-  all five official sources without persisting raw payloads: Federal Reserve 7
-  rows, Treasury 10, BEA 2, Census 2, and DOL 5. All required sources proved
-  horizon coverage and the command exited 0. The live Federal Reserve parse
-  independently produced G.17 at 9:15 a.m., the FOMC statement at 2:00 p.m.,
-  and the press conference at 2:30 p.m. with stable canonical keys. BLS and
-  Finnhub inputs were local fixtures for this acquisition-specific smoke test.
-VISUAL_VERIFICATION: Served the normalized live-smoke database from a dedicated
-  commands.sh process on port 8013 and inspected Event Risk at desktop and
-  390x844. G.17, the distinct FOMC statement and press conference, and valid
-  in-window cluster warnings rendered. Pre-entry multi-event days no longer
-  displayed the actual-exposure-overlap warning.
+LIVE_SMOKE: Parsed the current official Federal Reserve JSON in memory without
+  persisting its raw payload. Coverage was 2017-01-01 through 2026-12-31. The
+  October G.17 row resolved to US:FED:INDUSTRIAL_PRODUCTION:2026-R10 at 9:15
+  a.m. ET, and the FOMC decision/press pair resolved to 2026-M07 at 2:00/2:30
+  p.m. ET. This matches the expanded annual-record fixture and uses no inferred
+  economic reference period.
+VISUAL_VERIFICATION: Rebuilt and inspected Event Risk from the verified local
+  commands.sh server at the default desktop viewport and 390x844. The
+  incomplete-primary state, source diagnostics, caveat, summary cards, tabs,
+  range controls, and unavailable-state guidance remained readable and
+  responsive. No UI source changed in this round.
 DESIGN_DEVIATIONS: None.
 KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
   explicitly unconfigured capability; M2 schedule coverage no longer depends
