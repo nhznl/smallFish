@@ -8,16 +8,16 @@ before doing work and immediately before editing it.
 
 ```text
 PROTOCOL_VERSION: 1
-LOOP_STATUS: ACTIVE
+LOOP_STATUS: BLOCKED
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R1
-NEXT_ACTOR: IMPLEMENTER
-LAST_HANDOFF_ID: R-004
+CURRENT_ROUND: M2-R2
+NEXT_ACTOR: NONE
+LAST_HANDOFF_ID: I-005
 M1_STATUS: ACCEPTED
-M2_STATUS: IN_PROGRESS
+M2_STATUS: OWNER_DECISION_REQUIRED
 M3_STATUS: PLANNED
-OWNER_DECISION_REQUIRED: NO
-STOP_REASON: NONE
+OWNER_DECISION_REQUIRED: YES
+STOP_REASON: FINNHUB_STORAGE_DISPLAY_RIGHTS_UNCONFIRMED
 ```
 
 ## Lock and ownership rules
@@ -57,33 +57,24 @@ or required owner decision.
 ## Implementer outbox
 
 ```text
-HANDOFF_ID: I-004
-MILESTONE: M1
-STATE: READY_FOR_REVIEW
-BASE_COMMIT: cdb46dc
-IMPLEMENTATION_COMMITS: c220273
-FINDINGS_RESOLVED: M1-R4-F1
-CHANGED_FILES: utilities/README.md,
-  utilities/market_calendar/database.py,
-  utilities/market_calendar/migrations/004_provider_snapshot_identity.sql,
-  utilities/market_calendar/sync.py, utilities/tests/test_market_calendar.py.
-TESTS_AND_RESULTS:
-  - utilities/.venv/bin/python -m pytest -q utilities/tests: 780 passed.
-  - stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app stock-app/tests:
-    598 passed.
-  - PATH=/opt/homebrew/opt/node@24/bin:$PATH npm run test:ci: 200 passed.
-  - PATH=/opt/homebrew/opt/node@24/bin:$PATH npm run build: passed.
-  - targeted calendar/service tests: 24 passed.
-  - python3 tools/check_docs.py: 57 Markdown files passed.
-  - python3 tools/scan_secrets.py: 603 tracked working-tree objects passed.
-  - git diff --check: passed before and after the implementation commit.
-VISUAL_VERIFICATION: Loaded /market-calendar from a dedicated port against the
-  v004 SQLite artifact. Desktop and 390x844 views passed with the expected CPI
-  scope, risk caveat, source limitation, summary, filters, and empty-state
-  hierarchy visible. Confirmed GET /api/market-events came from the dedicated
-  verification server before trusting the route.
+HANDOFF_ID: I-005
+MILESTONE: M2
+STATE: OWNER_DECISION_REQUIRED
+BASE_COMMIT: 9ec13c3
+IMPLEMENTATION_COMMITS: NONE
+STOP_RULE: Finnhub storage, display, estimates, and redistribution rights
+  depend on the selected plan, and the M2 kickoff requires an owner decision
+  when those rights are unclear.
+OWNER_QUESTION: Should M2 use Finnhub after you confirm that the selected plan
+  permits smallFish to persist normalized earnings schedule and measurement
+  data in local SQLite and display it in the local Event Risk UI, or should
+  earnings remain excluded until a rights-cleared provider is selected?
+CHANGED_FILES: Coordination record only.
+TESTS_AND_RESULTS: Not run; implementation did not start because the approved
+  design stop rule was reached before any application change.
+VISUAL_VERIFICATION: Not applicable; no application or UI change was made.
 DESIGN_DEVIATIONS: None.
-KNOWN_GAPS: None for M1-R4-F1. Milestones 2 and 3 remain planned.
+KNOWN_GAPS: All M2 implementation remains pending the owner decision.
 ```
 
 ## Reviewer outbox
