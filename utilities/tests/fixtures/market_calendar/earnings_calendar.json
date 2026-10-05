@@ -1,0 +1,19 @@
+{
+  "coverageEnd": "2026-11-15",
+  "coverageStart": "2026-10-04",
+  "events": [
+    {
+      "canonicalKey": "US:EARNINGS:AAA:2026-Q3",
+      "civilDate": "2026-10-20",
+      "eventType": "EARNINGS",
+      "id": "AAA:2026-Q3",
+      "referenceLabel": "2026-Q3",
+      "referencePeriod": "2026-Q3",
+      "symbol": "AAA",
+      "title": "AAA earnings"
+    }
+  ],
+  "fetchedAsOf": "2026-10-04",
+  "provider": "finnhub",
+  "schemaVersion": 1
+}

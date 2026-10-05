@@ -1,5 +1,6 @@
 symbol,name,type,memberships,source,pinned,last_seen,sector
-AAA,Synthetic index member,stock,SP500,synthetic,false,,Technology
+AAA,Synthetic index member,stock,sp500,synthetic,false,2026-10-04,Technology
+BBB,Synthetic universe-only stock,stock,,synthetic,false,2026-10-04,Technology
 QQQ,Synthetic QQQ,ETF,,curated,false,,
 SPY,Synthetic SPY,ETF,,curated,false,,
 TIP,Synthetic TIP,ETF,,curated,false,,

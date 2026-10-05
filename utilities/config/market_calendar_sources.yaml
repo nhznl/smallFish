@@ -25,31 +25,31 @@ sources:
   federal_reserve:
     required: true
     configured: true
-    parser_version: fed-calendar-1
-    schedule_url: https://www.federalreserve.gov/newsevents/calendar.htm
+    parser_version: fed-calendar-json-2
+    schedule_url: https://www.federalreserve.gov/json/calendar.json
     freshness_hours: 24
     scope: fomc_calendar_speeches_beige_book
     detail: Official Federal Reserve calendar, FOMC, speech, and Beige Book schedule.
   treasury:
     required: true
     configured: true
-    parser_version: treasury-auctions-1
-    schedule_url: https://home.treasury.gov/resource-center/data-chart-center/quarterly-refunding
+    parser_version: treasury-tentative-auctions-xml-2
+    schedule_url: https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents
     freshness_hours: 24
     scope: refunding_and_material_auctions
     detail: Official Treasury refunding and material auction schedule.
   bea:
     required: true
     configured: true
-    parser_version: bea-calendar-1
-    schedule_url: https://apps.bea.gov/news/schedule.htm
+    parser_version: bea-calendar-ics-2
+    schedule_url: https://www.bea.gov/news/schedule/ics/online-calendar-subscription.ics
     freshness_hours: 24
     scope: bea_primary_releases
     detail: Official BEA schedule for GDP, personal income, and PCE releases.
   census:
     required: true
     configured: true
-    parser_version: census-calendar-1
+    parser_version: census-calendar-html-2
     schedule_url: https://www.census.gov/economic-indicators/calendar-listview.html
     freshness_hours: 24
     scope: census_economic_indicators
@@ -57,17 +57,18 @@ sources:
   dol_claims:
     required: true
     configured: true
-    parser_version: dol-claims-1
-    schedule_url: https://www.dol.gov/ui/data.pdf
+    parser_version: dol-claims-publication-rule-html-2
+    schedule_url: https://oui.doleta.gov/unemploy/claims_arch.asp
     freshness_hours: 168
     scope: weekly_jobless_claims
     detail: Official Department of Labor weekly unemployment-insurance claims schedule.
   finnhub_earnings:
     required: true
     configured: true
-    parser_version: finnhub-legacy-cache-1
+    parser_version: finnhub-calendar-sidecar-1
     freshness_hours: 24
-    scope: private_local_index_member_earnings
+    scope: private_local_earnings_with_dated_membership
     detail: >-
-      Private local Finnhub earnings cache for personal use only. Dataset
-      access follows the configured account plan; redistribution is prohibited.
+      Private local Finnhub calendar sidecar for personal use only. Fiscal
+      period supplies stable identity; dated SPY/QQQ membership controls broad
+      relevance. Dataset access follows the account plan; redistribution is prohibited.

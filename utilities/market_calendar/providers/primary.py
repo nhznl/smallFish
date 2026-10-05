@@ -8,13 +8,15 @@ official XML calendars are accepted directly.
 
 from __future__ import annotations
 
-import csv
+import calendar
 import hashlib
-import io
+import html
 import json
 import re
 import xml.etree.ElementTree as ET
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from html.parser import HTMLParser
+from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 from models.market_events import EASTERN, EVENT_TYPES, format_utc
@@ -202,23 +204,339 @@ def parse_document(text: str, *, provider: str, source_url: str) -> ParseReport:
     return ParseReport(observations, skipped_other_releases=len(rows) - len(observations))
 
 
-def parse_legacy_earnings_csv(text: str, *, source_url: str) -> ParseReport:
-    observations: list[ScheduleObservation] = []
-    for row in csv.DictReader(io.StringIO(text)):
-        if str(row.get("event_type") or "").strip().lower() != "earnings":
+def _clock_text(value: str) -> str:
+    return value.strip().replace(".", "").upper()
+
+
+def _plain_text(value: object) -> str:
+    return " ".join(re.sub(r"<[^>]+>", " ", html.unescape(str(value or ""))).split())
+
+
+def _fed_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, str]]:
+    raw = json.loads(text.lstrip("\ufeff"))
+    entries = raw.get("events") if isinstance(raw, dict) else None
+    if not isinstance(entries, list):
+        raise PrimaryCalendarParseError("Federal Reserve calendar has no events list")
+    rows = []
+    months = []
+    for item in entries:
+        if not isinstance(item, dict):
             continue
-        symbol = str(row.get("ticker") or "").strip().upper()
-        day = str(row.get("event_date") or "").strip()
-        if not symbol or not day:
+        month = str(item.get("month") or "")
+        if not re.fullmatch(r"20\d{2}-\d{2}", month):
             continue
-        date.fromisoformat(day)
-        observations.append(_observation("finnhub", source_url, {
-            "id": f"{symbol}:{day}",
-            "title": f"{symbol} earnings",
-            "eventType": "EARNINGS",
-            "symbol": symbol,
-            "date": day,
-            "referencePeriod": day,
-            "canonicalKey": f"US:EARNINGS:{symbol}:{day}",
-        }))
-    return ParseReport(tuple(item for item in observations if item is not None))
+        months.append(month)
+        title = _plain_text(item.get("title"))
+        description = _plain_text(item.get("description"))
+        location = _plain_text(item.get("location"))
+        kind = str(item.get("type") or "").strip().lower()
+        if title == "FOMC Meeting":
+            event_type = "FOMC_DECISION"
+        elif title == "FOMC Minutes":
+            event_type = "FOMC_MINUTES"
+        elif title == "Beige Book":
+            event_type = "BEIGE_BOOK"
+        elif kind in {"speeches", "testimony"} or re.search(r"speech|testimony|remarks", title, re.I):
+            event_type = "FED_SPEECH"
+        else:
+            continue
+        for raw_day in str(item.get("days") or "").split(","):
+            if not raw_day.strip().isdigit():
+                continue
+            civil = f"{month}-{int(raw_day):02d}"
+            identity_seed = (
+                f"{event_type}|{item.get('link') or ''}|{title}|{description}|{location}|{month}"
+            )
+            source_id = hashlib.sha256(identity_seed.encode("utf-8")).hexdigest()[:24]
+            reference = description or civil
+            if event_type in {"FOMC_DECISION", "BEIGE_BOOK"}:
+                reference = civil
+            clock = _clock_text(str(item.get("time") or ""))
+            scheduled = None
+            if clock:
+                parsed_clock = datetime.strptime(clock, "%I:%M %p").time()
+                scheduled = datetime.combine(
+                    date.fromisoformat(civil), parsed_clock, ZoneInfo("America/New_York")
+                ).isoformat()
+            rows.append({
+                "id": source_id,
+                "title": title,
+                "eventType": event_type,
+                "referencePeriod": reference,
+                "civilDate": civil,
+                "scheduledAt": scheduled,
+                "timezone": "America/New_York",
+                "canonicalKey": f"US:FED:{event_type}:{source_id}",
+            })
+    if not months:
+        raise PrimaryCalendarParseError("Federal Reserve calendar has no dated coverage")
+    first = date.fromisoformat(min(months) + "-01")
+    last_month = date.fromisoformat(max(months) + "-01")
+    last = last_month.replace(day=calendar.monthrange(last_month.year, last_month.month)[1])
+    report = ParseReport(tuple(
+        item for item in (_observation("federal_reserve", source_url, row) for row in rows)
+        if item is not None
+    ))
+    return report, (first.isoformat(), last.isoformat())
+
+
+def treasury_landing_details(text: str, source_url: str) -> tuple[str, date]:
+    match = re.search(
+        r'href=["\']?([^"\' >]*TentativeAuctionSchedule[^"\' >]*\.xml)',
+        text,
+        re.I,
+    )
+    if match is None:
+        raise PrimaryCalendarParseError("Treasury landing page has no tentative auction XML link")
+    tail = text[match.end():match.end() + 3000]
+    dates = re.findall(
+        r"next release is scheduled for\s+(?:<[^>]+>|&nbsp;|\s)*([A-Za-z]+\s+\d{1,2}(?:<[^>]+>|,|&nbsp;|\s)+20\d{2})",
+        tail,
+        re.I,
+    )
+    if not dates:
+        raise PrimaryCalendarParseError("Treasury landing page has no next refunding date")
+    cleaned = re.sub(r"<[^>]+>|&nbsp;", " ", dates[0])
+    cleaned = " ".join(html.unescape(cleaned).replace(",", " ").split())
+    refunding_date = datetime.strptime(cleaned, "%B %d %Y").date()
+    return urljoin(source_url, html.unescape(match.group(1))), refunding_date
+
+
+def parse_treasury_document(
+    text: str,
+    source_url: str,
+    *,
+    refunding_date: date | None = None,
+) -> tuple[ParseReport, tuple[str, str]]:
+    root = ET.fromstring(text)
+    start = (root.findtext("StartDate") or "").strip()
+    end = (root.findtext("EndDate") or "").strip()
+    date.fromisoformat(start)
+    date.fromisoformat(end)
+    rows = []
+    if refunding_date is not None:
+        quarter = (refunding_date.month - 1) // 3 + 1
+        reference = f"{refunding_date.year}-Q{quarter}"
+        rows.append({
+            "id": f"quarterly-refunding:{reference}",
+            "title": "Treasury Quarterly Refunding",
+            "eventType": "TREASURY_REFUNDING",
+            "referencePeriod": reference,
+            "scheduledAt": f"{refunding_date.isoformat()}T08:30:00",
+            "timezone": "America/New_York",
+            "canonicalKey": f"US:TREASURY:REFUNDING:{reference}",
+        })
+    for node in root.findall("AuctionCalendarDate"):
+        security_type = (node.findtext("SecurityType") or "").strip().upper()
+        if security_type not in {"NOTE", "BOND", "TIPS", "FRN"}:
+            continue
+        term = (node.findtext("SecurityTermWeekYear") or "").strip()
+        auction_date = (node.findtext("AuctionDate") or "").strip()
+        if not term or not auction_date:
+            continue
+        date.fromisoformat(auction_date)
+        period = auction_date[:7]
+        if (node.findtext("TIPS") or "").strip().upper() == "Y":
+            instrument = "TIPS"
+        elif (node.findtext("FloatingRate") or "").strip().upper() == "Y":
+            instrument = "FRN"
+        else:
+            instrument = security_type
+        identity = f"{instrument}:{term}:{period}"
+        rows.append({
+            "id": identity,
+            "title": f"{term} Treasury Auction",
+            "eventType": "TREASURY_AUCTION",
+            "referencePeriod": period,
+            "civilDate": auction_date,
+            "scheduledAt": f"{auction_date}T13:00:00",
+            "timezone": "America/New_York",
+            "canonicalKey": f"US:TREASURY:AUCTION:{identity}",
+        })
+    report = ParseReport(tuple(
+        item for item in (_observation("treasury", source_url, row) for row in rows)
+        if item is not None
+    ))
+    return report, (start, end)
+
+
+def _bea_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, str]]:
+    raw_rows = _ics_rows(text)
+    dated = [
+        str(row.get("scheduledAt") or row.get("date") or "")[:10]
+        for row in raw_rows
+        if row.get("scheduledAt") or row.get("date")
+    ]
+    if not dated:
+        raise PrimaryCalendarParseError("BEA calendar has no dated coverage")
+    rows = []
+    for row in raw_rows:
+        title = str(row.get("title") or "")
+        if re.search(r"by state|by county|puerto rico", title, re.I):
+            continue
+        if re.search(r"gross domestic product|\bgdp\b", title, re.I):
+            event_type = "GDP"
+        elif re.search(r"personal income and outlays", title, re.I):
+            event_type = "PCE"
+        else:
+            continue
+        quarter = re.search(r"([1-4])(?:st|nd|rd|th) Quarter(?: and Year)?\s+(20\d{2})", title, re.I)
+        month = re.search(
+            r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(20\d{2})\b",
+            title,
+            re.I,
+        )
+        if quarter:
+            reference = f"{quarter.group(2)}-Q{quarter.group(1)}"
+        elif month:
+            reference = datetime.strptime(month.group(0), "%B %Y").strftime("%Y-%m")
+        else:
+            continue
+        row = dict(row)
+        row.update({
+            "eventType": event_type,
+            "referencePeriod": reference,
+            "canonicalKey": f"US:BEA:{event_type}:{reference}",
+        })
+        rows.append(row)
+    report = ParseReport(tuple(
+        item for item in (_observation("bea", source_url, row) for row in rows)
+        if item is not None
+    ))
+    return report, (min(dated), max(dated))
+
+
+class _TableRows(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[list[str]] = []
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag.lower() == "tr":
+            self._row = []
+        elif tag.lower() in {"td", "th"} and self._row is not None:
+            self._cell = []
+
+    def handle_data(self, data: str) -> None:
+        if self._cell is not None:
+            self._cell.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"td", "th"} and self._row is not None and self._cell is not None:
+            self._row.append(" ".join(" ".join(self._cell).split()))
+            self._cell = None
+        elif tag.lower() == "tr" and self._row is not None:
+            self.rows.append(self._row)
+            self._row = None
+
+
+def _census_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, str]]:
+    parser = _TableRows()
+    parser.feed(text)
+    rows = []
+    dated = []
+    for cells in parser.rows:
+        if len(cells) < 6:
+            continue
+        title, release, clock, reference, source_id = cells[:5]
+        try:
+            release_date = datetime.strptime(release, "%B %d, %Y").date()
+            release_time = datetime.strptime(clock, "%I:%M %p").time()
+        except ValueError:
+            continue
+        dated.append(release_date.isoformat())
+        if title == "Advance Monthly Sales for Retail and Food Services":
+            event_type = "RETAIL_SALES"
+        elif title.startswith("Advance Report on Durable Goods"):
+            event_type = "DURABLE_GOODS"
+        else:
+            continue
+        rows.append({
+            "id": f"{event_type}:{cells[5]}",
+            "title": title,
+            "eventType": event_type,
+            "referencePeriod": reference,
+            "scheduledAt": datetime.combine(
+                release_date, release_time, ZoneInfo("America/New_York")
+            ).isoformat(),
+            "timezone": "America/New_York",
+            "canonicalKey": f"US:CENSUS:{event_type}:{cells[5]}",
+        })
+    if not dated:
+        raise PrimaryCalendarParseError("Census calendar has no dated coverage")
+    report = ParseReport(tuple(
+        item for item in (_observation("census", source_url, row) for row in rows)
+        if item is not None
+    ))
+    return report, (min(dated), max(dated))
+
+
+def _dol_document(
+    text: str, source_url: str, start: date, end: date,
+) -> tuple[ParseReport, tuple[str, str]]:
+    marker = "published each week on Thursday morning at 8:30am EST"
+    if marker.lower() not in text.lower():
+        raise PrimaryCalendarParseError("DOL weekly publication rule is missing")
+    exception_dates = {
+        datetime.strptime(value, "%A, %B %d, %Y").date()
+        for value in re.findall(
+            r"(?:Monday|Tuesday|Wednesday|Friday),\s+[A-Z][a-z]+\s+\d{1,2},\s+20\d{2}",
+            text,
+        )
+    }
+    release_dates = []
+    cursor = start
+    while cursor <= end:
+        if cursor.weekday() == 3:
+            release_dates.append(cursor)
+        cursor += timedelta(days=1)
+    for exception in exception_dates:
+        normal = exception + timedelta(days=(3 - exception.weekday()) % 7)
+        if normal in release_dates:
+            release_dates.remove(normal)
+        if start <= exception <= end:
+            release_dates.append(exception)
+    rows = []
+    for release in sorted(release_dates):
+        week_ending = release - timedelta(days=(release.weekday() - 5) % 7)
+        rows.append({
+            "id": f"weekly-claims:{week_ending.isoformat()}",
+            "title": "Unemployment Insurance Weekly Claims",
+            "eventType": "JOBLESS_CLAIMS",
+            "referencePeriod": week_ending.isoformat(),
+            "scheduledAt": datetime.combine(
+                release, datetime.strptime("08:30 AM", "%I:%M %p").time(),
+                ZoneInfo("America/New_York"),
+            ).isoformat(),
+            "timezone": "America/New_York",
+            "canonicalKey": f"US:DOL:JOBLESS_CLAIMS:{week_ending.isoformat()}",
+        })
+    report = ParseReport(tuple(
+        item for item in (_observation("dol_claims", source_url, row) for row in rows)
+        if item is not None
+    ))
+    return report, (start.isoformat(), end.isoformat())
+
+
+def parse_official_document(
+    text: str,
+    *,
+    provider: str,
+    source_url: str,
+    horizon_start: date,
+    horizon_end: date,
+) -> tuple[ParseReport, tuple[str, str]]:
+    """Parse one documented official schedule surface and prove its coverage."""
+    if provider == "federal_reserve":
+        return _fed_document(text, source_url)
+    if provider == "treasury":
+        return parse_treasury_document(text, source_url)
+    if provider == "bea":
+        return _bea_document(text, source_url)
+    if provider == "census":
+        return _census_document(text, source_url)
+    if provider == "dol_claims":
+        return _dol_document(text, source_url, horizon_start, horizon_end)
+    raise PrimaryCalendarParseError(f"no official parser for {provider}")

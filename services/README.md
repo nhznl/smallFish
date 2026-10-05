@@ -71,9 +71,10 @@ brokerage importers.
 ## Market-event schedules
 
 `services.market_events` is raw HTTP for official primary calendars. It fetches
-the public BLS and other configured official schedule surfaces. It does not parse events, score risk, store a
-database, or read `app.env`. Callers inject the transport; tests never open a
-socket. Normalization and the calendar database belong to
+the public BLS and other configured official schedule surfaces, including the
+Treasury landing page and its discovered official XML schedule. It does not
+parse events, score risk, store a database, or read `app.env`. Callers inject
+the transport; tests never open a socket. Normalization and the calendar database belong to
 `utilities/market_calendar`. The legacy earnings cache remains the sole active
 Finnhub fetch path.
 

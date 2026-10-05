@@ -57,6 +57,19 @@ def universe_symbols(path: Path) -> set[str]:
     return set(parse_registry(path.read_text(encoding="utf-8")))
 
 
+def broad_index_members(path: Path) -> dict[str, str]:
+    """Return SPY/QQQ member symbols with dated registry provenance."""
+    if not path.is_file():
+        raise CalendarConfigError("generated universe is missing; index membership cannot be checked")
+    registry = parse_registry(path.read_text(encoding="utf-8"))
+    tags = {"sp500", "nasdaq100"}
+    return {
+        symbol: entry.last_seen
+        for symbol, entry in registry.items()
+        if entry.last_seen and tags.intersection(tag.lower() for tag in entry.memberships)
+    }
+
+
 def validate_mappings(mappings: dict[str, tuple[EtfMapping, ...]], symbols: set[str]) -> None:
     if not symbols:
         raise CalendarConfigError("generated universe has no symbols")

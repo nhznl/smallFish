@@ -85,6 +85,7 @@ def _write_source(
     last_modified: str | None = None,
     payload_sha256_value: str | None = None,
     success: bool = False,
+    success_at: str | None = None,
     configured: bool | None = None,
 ) -> None:
     current = _source(connection, spec.provider)
@@ -120,7 +121,7 @@ def _write_source(
             coverage_start if coverage_start is not None else (current["coverage_start"] if current else None),
             coverage_end if coverage_end is not None else (current["coverage_end"] if current else None),
             observed_at,
-            observed_at if success else (current["last_success_utc"] if current else None),
+            (success_at or observed_at) if success else (current["last_success_utc"] if current else None),
             result_count if result_count is not None else (current["result_count"] if current else 0),
             spec.parser_version if success or current is None else current["parser_version"],
             status,
@@ -353,12 +354,14 @@ def _score(
     fetched_at: str,
     etag: str | None,
     last_modified: str | None,
+    portfolio_relevance_override: str | None = None,
 ) -> ScoredEvent:
     importance = classify(observation.event_type, importance_rules)
+    relevance = portfolio_relevance_override or importance.portfolio_relevance
     assessments = assess(
         windows=windows,
         policy=policy,
-        portfolio_relevance=importance.portfolio_relevance,
+        portfolio_relevance=relevance,
         importance_score=importance.score,
         scheduled_at_utc=observation.scheduled_at_utc,
         time_precision=observation.time_precision,
@@ -367,13 +370,17 @@ def _score(
     return ScoredEvent(
         observation=observation,
         category=importance.category,
-        portfolio_relevance=importance.portfolio_relevance,
+        portfolio_relevance=relevance,
         importance_score=importance.score,
         importance_label=importance.label,
-        importance_rule=importance.rule_id,
+        importance_rule=(
+            "importance-single-stock-earnings"
+            if observation.event_type == "EARNINGS" and relevance == "SINGLE_STOCK"
+            else importance.rule_id
+        ),
         importance_policy=importance.policy_version,
         asset_classes=importance.asset_classes,
-        instruments=importance.instruments,
+        instruments=() if relevance == "SINGLE_STOCK" else importance.instruments,
         measurements=measurements,
         assessments=assessments,
         rank_keys={item.strategy_id: rank_key(policy, item, importance.score) for item in assessments},

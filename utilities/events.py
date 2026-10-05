@@ -30,6 +30,7 @@ DEFAULT_LOOKAHEAD_DAYS = 70
 DEFAULT_REQUIRED_COVERAGE_DAYS = 45
 DEFAULT_MAX_AGE_DAYS = 1
 EVENT_COLUMNS = ("ticker", "event_type", "event_date", "source")
+CALENDAR_IDENTITY_COLUMNS = ("fiscal_year", "fiscal_quarter")
 
 
 @dataclass(frozen=True)
@@ -65,8 +66,10 @@ def fetch_earnings_calendar(start_date: str, end_date: str,
         "event_type": "earnings",
         "event_date": item.get("date"),
         "source": "finnhub",
+        "fiscal_year": item.get("year"),
+        "fiscal_quarter": item.get("quarter"),
     } for item in response.json().get("earningsCalendar", [])]
-    events = pd.DataFrame(rows, columns=["ticker", "event_type", "event_date", "source"])
+    events = pd.DataFrame(rows, columns=[*EVENT_COLUMNS, *CALENDAR_IDENTITY_COLUMNS])
     if not events.empty:
         events["event_date"] = pd.to_datetime(events["event_date"], errors="coerce")
         events = events.dropna(subset=["event_date"]).copy()
@@ -128,7 +131,8 @@ def _validated_events(events: pd.DataFrame, as_of: str, end_date: str) -> pd.Dat
         raise EventDataError(
             f"earnings response is missing required columns: {', '.join(missing)}")
 
-    validated = events.loc[:, EVENT_COLUMNS].copy()
+    optional = [column for column in CALENDAR_IDENTITY_COLUMNS if column in events.columns]
+    validated = events.loc[:, (*EVENT_COLUMNS, *optional)].copy()
     validated["ticker"] = validated["ticker"].fillna("").astype(str).str.strip().str.upper()
     validated["event_type"] = validated["event_type"].fillna("").astype(str).str.strip()
     validated["source"] = validated["source"].fillna("").astype(str).str.strip()
@@ -204,13 +208,44 @@ def run_fetch(as_of: str, lookahead_days: int,
         print(f"WARNING: --lookahead-days {lookahead_days} < 70; the wheel "
               "scan's 45 DTE horizon will read UNKNOWN_STALE")
     end_date = (pd.to_datetime(as_of) + timedelta(days=lookahead_days)).strftime("%Y-%m-%d")
-    events = _validated_events(
+    normalized = _validated_events(
         fetch_fn(as_of, end_date, FinnhubConfig(api_key=api_key)), as_of, end_date)
+    events = normalized.loc[:, (*EVENT_COLUMNS, "fetched_as_of")].copy()
 
     root = output_root or strategy_data_root()
     root.mkdir(parents=True, exist_ok=True)
     events_path = root / "events.csv"
     csv_content = events.to_csv(index=False)
+    calendar_rows = []
+    if set(CALENDAR_IDENTITY_COLUMNS).issubset(normalized.columns):
+        for item in normalized.to_dict("records"):
+            try:
+                fiscal_year = int(item["fiscal_year"])
+                fiscal_quarter = int(item["fiscal_quarter"])
+            except (TypeError, ValueError):
+                continue
+            if not 1 <= fiscal_quarter <= 4:
+                continue
+            symbol = str(item["ticker"])
+            period = f"{fiscal_year}-Q{fiscal_quarter}"
+            calendar_rows.append({
+                "id": f"{symbol}:{period}",
+                "title": f"{symbol} earnings",
+                "eventType": "EARNINGS",
+                "symbol": symbol,
+                "civilDate": str(item["event_date"]),
+                "referencePeriod": period,
+                "referenceLabel": period,
+                "canonicalKey": f"US:EARNINGS:{symbol}:{period}",
+            })
+    calendar_content = json.dumps({
+        "schemaVersion": 1,
+        "provider": "finnhub",
+        "fetchedAsOf": as_of,
+        "coverageStart": as_of,
+        "coverageEnd": end_date,
+        "events": calendar_rows,
+    }, indent=2, sort_keys=True) + "\n"
     metadata_content = json.dumps({
         "events_fetched_as_of": as_of,
         "events_coverage_end": end_date,
@@ -222,6 +257,7 @@ def run_fetch(as_of: str, lookahead_days: int,
     # therefore fails stale rather than claiming fresh coverage for old rows.
     _atomic_write(snapshot_path, csv_content)
     _atomic_write(events_path, csv_content)
+    _atomic_write(root / "market_calendar" / "earnings.json", calendar_content)
     _atomic_write(root / "events_meta.json", metadata_content)
     return events, events_path, snapshot_path
 

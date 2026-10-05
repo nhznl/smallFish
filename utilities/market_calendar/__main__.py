@@ -35,6 +35,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--earnings-csv", type=Path, help="Existing Finnhub-backed legacy earnings cache.")
     parser.add_argument("--earnings-meta", type=Path, help="Coverage metadata for the existing earnings cache.")
+    parser.add_argument(
+        "--earnings-calendar",
+        type=Path,
+        help="Calendar-only normalized Finnhub sidecar with stable fiscal-period identity.",
+    )
     parser.add_argument("--database", type=Path)
     parser.add_argument("--universe", type=Path)
     parser.add_argument("--price-cache", type=Path)
@@ -61,6 +66,7 @@ def main(argv: list[str] | None = None) -> int:
         }
     earnings_csv = args.earnings_csv or (data_root / "events.csv")
     earnings_meta = args.earnings_meta or (data_root / "events_meta.json")
+    earnings_calendar = args.earnings_calendar or (data_root / "market_calendar" / "earnings.json")
     result = run_primary_sync(
         database=database,
         universe_path=universe,
@@ -74,6 +80,10 @@ def main(argv: list[str] | None = None) -> int:
         provider_documents=provider_documents,
         earnings_csv_text=(earnings_csv.read_text(encoding="utf-8") if earnings_csv.is_file() else None),
         earnings_meta_text=(earnings_meta.read_text(encoding="utf-8") if earnings_meta.is_file() else None),
+        earnings_calendar_text=(
+            earnings_calendar.read_text(encoding="utf-8")
+            if earnings_calendar.is_file() else None
+        ),
     )
     for line in result.lines:
         print(line)

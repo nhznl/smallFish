@@ -11,4 +11,6 @@ passed to utility processes by `commands.sh`.
 
 `market_calendar_*.yaml` holds primary event-risk sources, importance, strategy
 clocks, named risk rules, and ETF exposure channels. Those files do not contain
-credentials or price forecasts.
+credentials or price forecasts. Primary source URLs select official
+machine-readable surfaces where available; coverage is derived from each
+official document and fails closed when the requested horizon is not proved.

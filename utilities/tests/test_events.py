@@ -21,6 +21,8 @@ def _events(symbol: str = "AAPL", event_date: str = "2026-08-01") -> pd.DataFram
         "event_type": "earnings",
         "event_date": event_date,
         "source": "finnhub",
+        "fiscal_year": 2026,
+        "fiscal_quarter": 3,
     }])
 
 
@@ -42,6 +44,19 @@ def test_run_fetch_writes_current_history_and_freshness(tmp_path: Path) -> None:
     assert json.loads((tmp_path / "events_meta.json").read_text()) == {
         "events_fetched_as_of": "2026-07-16", "events_coverage_end": "2026-09-24",
     }
+    calendar = json.loads(
+        (tmp_path / "market_calendar" / "earnings.json").read_text(encoding="utf-8")
+    )
+    assert calendar["events"] == [{
+        "canonicalKey": "US:EARNINGS:AAPL:2026-Q3",
+        "civilDate": "2026-08-01",
+        "eventType": "EARNINGS",
+        "id": "AAPL:2026-Q3",
+        "referenceLabel": "2026-Q3",
+        "referencePeriod": "2026-Q3",
+        "symbol": "AAPL",
+        "title": "AAPL earnings",
+    }]
 
 
 def test_ensure_fresh_events_reuses_recent_covered_cache_without_a_key(tmp_path: Path) -> None:

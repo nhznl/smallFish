@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AuctionCalendar>
+  <AuctionCalendarName>Aug2026 Refunding Auction Calendar Official</AuctionCalendarName>
+  <StartDate>2026-08-05</StartDate>
+  <EndDate>2027-01-30</EndDate>
+  <AuctionCalendarDate>
+    <SecurityTermWeekYear>10-Year</SecurityTermWeekYear>
+    <SecurityType>NOTE</SecurityType>
+    <ReOpeningIndicator>Y</ReOpeningIndicator>
+    <TIPS>N</TIPS>
+    <FloatingRate>N</FloatingRate>
+    <AnnouncementDate>2026-10-01</AnnouncementDate>
+    <AuctionDate>2026-10-07</AuctionDate>
+    <SettlementDate>2026-10-15</SettlementDate>
+  </AuctionCalendarDate>
+</AuctionCalendar>

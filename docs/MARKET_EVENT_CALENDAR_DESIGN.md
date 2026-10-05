@@ -1,7 +1,7 @@
 # Market Event Risk Calendar design
 
-**Status:** Milestone 1 accepted. Milestone 2 implementation is in progress and
-its first provider-coverage slice is awaiting review; Milestone 3 is not started.
+**Status:** Milestone 1 accepted. Milestone 2 implementation changes are
+awaiting review; Milestone 3 is not started.
 
 **Primary user:** a local smallFish user planning SPY and QQQ 0-DTE trades
 
@@ -585,8 +585,9 @@ contract remains unchanged during the first calendar milestones. Wheel,
 Momentum, and Pre-Earnings Momentum already depend on its freshness and
 fail-closed semantics.
 
-The new calendar may read from the same Finnhub transport, but it must not
-silently replace or widen the legacy artifact. A later migration may derive a
+The existing Finnhub fetch also writes a private calendar-only normalized
+sidecar with fiscal-period identity. This does not replace or widen the legacy
+CSV artifact and does not add a second provider fetch. A later migration may derive a
 legacy-compatible earnings projection from the canonical database only after
 all consumers, freshness behavior, failure behavior, and historical workflows
 have been audited. No duplicate active fetch implementation should remain after

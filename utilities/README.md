@@ -48,8 +48,8 @@ utilities/.venv/bin/python -m utilities.scraper --help
 | `audit_price_cache.py` | Whole-history rewrite when an adjustment vintage goes stale |
 | `indicators/ta.py` | Technical indicators |
 | `sector_rotation.py` | The live 11-sector leadership snapshot against SPY |
-| `market_calendar/` | Primary event-risk calendar: normalize official schedules plus the private local earnings cache, score strategy exposure, cluster overlapping sessions, and write `calendar.sqlite` |
-| `events.py` | Validated, atomic upcoming-earnings cache plus conditional Finnhub refresh |
+| `market_calendar/` | Primary event-risk calendar: normalize official schedules plus the private local earnings sidecar, score strategy exposure, cluster actual strategy-window overlaps, and write `calendar.sqlite` |
+| `events.py` | Validated, atomic upcoming-earnings cache plus conditional Finnhub refresh and calendar-only fiscal-period sidecar |
 | `fetch_earnings_history.py` | Separately maintained multi-year Yahoo/yfinance earnings dates |
 | `manifest.py` | Artifact manifests and provenance |
 | `options/` | Wheel screen, quote normalization and archives; Tastytrade DXLink transport comes from `services.tastytrade` |
@@ -62,10 +62,13 @@ optional measurement update preserves prior measurement facts and source
 state. Each snapshot is bound to its parser version and source endpoint; a
 change to either requires a full response. A wider horizon likewise requires a
 full provider response before coverage is widened. Milestone 2 adds independent
-BLS, Federal Reserve, Treasury, BEA, Census, DOL claims, and local Finnhub-cache
-diagnostics. Finnhub-derived rows are private single-user data, retain
+BLS iCalendar, Federal Reserve JSON, Treasury refunding discovery and tentative
+auction XML, BEA iCalendar, Census HTML, DOL's weekly publication rule, and the
+local Finnhub sidecar have independent diagnostics. Finnhub-derived rows are
+private single-user data, retain
 attribution, are not a redistribution surface, and must be deleted if dataset
-access ends. The legacy earnings job remains the only active Finnhub fetcher.
+access ends. The legacy earnings job remains the only active Finnhub fetcher;
+its `events.csv` contract is unchanged.
 
 See [`options/README.md`](options/README.md).
 

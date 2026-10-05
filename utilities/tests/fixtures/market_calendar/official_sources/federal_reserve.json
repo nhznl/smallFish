@@ -1,0 +1,7 @@
+{
+  "events": [
+    {"title":"FOMC Meeting","description":"Two-day meeting, October 27 - 28","time":"2:00 p.m.","month":"2026-10","days":"28","type":"FOMC"},
+    {"title":"Beige Book","time":"2:00 p.m.","month":"2026-11","days":"5","type":"Beige"}
+  ],
+  "announcement": []
+}

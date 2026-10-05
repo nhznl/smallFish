@@ -6,7 +6,7 @@ import json
 import shutil
 import sqlite3
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -20,7 +20,11 @@ from services.market_events.http import HttpResponse, TransportError, public_htt
 from utilities.market_calendar.config import CalendarConfigError, load_risk_policy
 from utilities.market_calendar.etf import load_etf_mappings, validate_mappings
 from utilities.market_calendar.providers.bls import parse_ics
-from utilities.market_calendar.primary_sync import run_primary_sync
+from utilities.market_calendar.primary_sync import (
+    CLUSTER_BENEFIT,
+    CLUSTER_RISK,
+    run_primary_sync,
+)
 from utilities.market_calendar.risk import assess, rank_key
 from utilities.market_calendar.sync import run_sync
 from utilities.market_calendar.config import load_strategy_windows
@@ -49,6 +53,18 @@ class SequenceTransport:
     def get(self, url, headers=None):
         self.headers.append(dict(headers or {}))
         return self.responses.pop(0)
+
+
+class RoutingTransport:
+    def __init__(self, responses: dict[str, bytes]):
+        self.responses = responses
+        self.urls: list[str] = []
+
+    def get(self, url, headers=None):
+        self.urls.append(url)
+        if url not in self.responses:
+            raise AssertionError(f"unexpected URL {url}")
+        return HttpResponse(status=200, body=self.responses[url], headers={}, url=url)
 
 
 def _response(schedule: str, *, etag: str = '"schedule-v1"', status: int = 200) -> HttpResponse:
@@ -134,6 +150,26 @@ def _primary_documents() -> dict[str, str]:
         })
         for provider, events in rows.items()
     }
+
+
+def _earnings_calendar(*events: dict[str, str]) -> str:
+    rows = list(events) or [{
+        "id": "AAA:2026-Q3",
+        "title": "AAA earnings",
+        "eventType": "EARNINGS",
+        "symbol": "AAA",
+        "civilDate": "2026-10-20",
+        "referencePeriod": "2026-Q3",
+        "canonicalKey": "US:EARNINGS:AAA:2026-Q3",
+    }]
+    return json.dumps({
+        "schemaVersion": 1,
+        "provider": "finnhub",
+        "fetchedAsOf": "2026-10-04",
+        "coverageStart": "2026-10-04",
+        "coverageEnd": END.isoformat(),
+        "events": rows,
+    })
 
 
 def test_dst_clocks_use_zoneinfo_not_a_fixed_offset():
@@ -642,9 +678,10 @@ def test_m2_primary_sources_publish_with_coverage_and_named_clusters(tmp_path: P
             "AAA,earnings,2026-10-20,finnhub,2026-10-04\n"
         ),
         earnings_meta_text=json.dumps({
-            "events_fetched_as_of": START.isoformat(),
+            "events_fetched_as_of": "2026-10-04",
             "events_coverage_end": END.isoformat(),
         }),
+        earnings_calendar_text=_earnings_calendar(),
     )
 
     assert result.exit_code == 0
@@ -671,13 +708,71 @@ def test_m2_primary_sources_publish_with_coverage_and_named_clusters(tmp_path: P
         tmp_path / "calendar.sqlite",
         "SELECT relationship FROM event_relationships",
     )
-    assert relationships and {row["relationship"] for row in relationships} == {"same_session_cluster"}
+    assert relationships and {row["relationship"] for row in relationships} == {
+        "strategy_exposure_overlap:long-premium-20d-0-or-1dte",
+        "strategy_exposure_overlap:long-wings-repeated-0dte-premium",
+    }
     earnings = _rows(
         tmp_path / "calendar.sqlite",
         "SELECT source_url, parser_version FROM event_source_facts WHERE provider = 'finnhub'",
     )
     assert earnings[0]["source_url"] == "https://finnhub.io/docs/api/earnings-calendar"
-    assert earnings[0]["parser_version"] == "finnhub-legacy-cache-1"
+    assert earnings[0]["parser_version"] == "finnhub-calendar-sidecar-1"
+
+
+def test_m2_official_source_shapes_prove_coverage_without_network(tmp_path: Path):
+    official = FIXTURES / "official_sources"
+    urls = {
+        "https://www.federalreserve.gov/json/calendar.json": (official / "federal_reserve.json").read_bytes(),
+        "https://home.treasury.gov/policy-issues/financing-the-government/quarterly-refunding/most-recent-quarterly-refunding-documents": (official / "treasury_landing.html").read_bytes(),
+        "https://home.treasury.gov/system/files/221/TentativeAuctionScheduleQ32026.xml": (official / "treasury.xml").read_bytes(),
+        "https://www.bea.gov/news/schedule/ics/online-calendar-subscription.ics": (official / "bea.ics").read_bytes(),
+        "https://www.census.gov/economic-indicators/calendar-listview.html": (official / "census.html").read_bytes(),
+        "https://oui.doleta.gov/unemploy/claims_arch.asp": (official / "dol.html").read_bytes(),
+    }
+    transport = RoutingTransport(urls)
+    _prices(tmp_path / "cache")
+    result = run_primary_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        now=NOW,
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        earnings_csv_text=(FIXTURES / "earnings.csv").read_text(encoding="utf-8"),
+        earnings_meta_text=(FIXTURES / "earnings_meta.json").read_text(encoding="utf-8"),
+        earnings_calendar_text=(FIXTURES / "earnings_calendar.json").read_text(encoding="utf-8"),
+        transport=transport,
+    )
+    assert result.exit_code == 0
+    assert set(transport.urls) == set(urls)
+    sources = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT provider, status FROM source_sync_state WHERE required = 1",
+    )
+    assert {row["status"] for row in sources} == {"fresh"}
+    event_types = {
+        row["event_type"] for row in _rows(
+            tmp_path / "calendar.sqlite", "SELECT event_type FROM events",
+        )
+    }
+    assert {
+        "FOMC_DECISION", "BEIGE_BOOK", "TREASURY_REFUNDING", "TREASURY_AUCTION",
+        "GDP", "PCE", "RETAIL_SALES", "DURABLE_GOODS", "JOBLESS_CLAIMS",
+    }.issubset(event_types)
+    fed_labels = _rows(
+        tmp_path / "calendar.sqlite",
+        """
+        SELECT DISTINCT e.reference_label
+        FROM events AS e
+        JOIN event_source_facts AS f ON f.event_id = e.id
+        WHERE f.provider = 'federal_reserve'
+        """,
+    )
+    assert fed_labels
+    assert all("<" not in row["reference_label"] for row in fed_labels)
 
 
 def test_m2_failed_required_provider_keeps_rows_and_marks_calendar_incomplete(tmp_path: Path):
@@ -695,9 +790,10 @@ def test_m2_failed_required_provider_keeps_rows_and_marks_calendar_incomplete(tm
             "AAA,earnings,2026-10-20,finnhub,2026-10-04\n"
         ),
         earnings_meta_text=json.dumps({
-            "events_fetched_as_of": START.isoformat(),
+            "events_fetched_as_of": "2026-10-04",
             "events_coverage_end": END.isoformat(),
         }),
+        earnings_calendar_text=_earnings_calendar(),
     )
     assert run_primary_sync(**common, now=NOW, provider_documents=_primary_documents()).exit_code == 0
     before = _rows(
@@ -727,6 +823,302 @@ def test_m2_failed_required_provider_keeps_rows_and_marks_calendar_incomplete(tm
         "SELECT status, error_category FROM source_sync_state WHERE provider = 'treasury'",
     )[0]
     assert dict(source) == {"status": "failed", "error_category": "insufficient_coverage"}
+
+
+def test_m2_covered_empty_provider_cancels_prior_rows(tmp_path: Path):
+    _prices(tmp_path / "cache")
+    common = dict(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        earnings_csv_text="ticker,event_type,event_date,source,fetched_as_of\nAAA,earnings,2026-10-20,finnhub,2026-10-04\n",
+        earnings_meta_text=json.dumps({
+            "events_fetched_as_of": "2026-10-04",
+            "events_coverage_end": END.isoformat(),
+        }),
+        earnings_calendar_text=_earnings_calendar(),
+    )
+    assert run_primary_sync(**common, now=NOW, provider_documents=_primary_documents()).exit_code == 0
+    empty = _primary_documents()
+    empty["treasury"] = json.dumps({
+        "coverageStart": START.isoformat(), "coverageEnd": END.isoformat(), "events": [],
+    })
+
+    assert run_primary_sync(
+        **common, now=NOW + timedelta(hours=1), provider_documents=empty,
+    ).exit_code == 0
+    row = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT lifecycle_status FROM events WHERE event_type = 'TREASURY_AUCTION'",
+    )[0]
+    assert row["lifecycle_status"] == "cancelled"
+
+
+def test_m2_local_rematerialization_preserves_provider_fetch_provenance(tmp_path: Path):
+    _prices(tmp_path / "cache")
+    common = dict(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        earnings_csv_text="ticker,event_type,event_date,source,fetched_as_of\nAAA,earnings,2026-10-20,finnhub,2026-10-04\n",
+        earnings_meta_text=json.dumps({
+            "events_fetched_as_of": "2026-10-04",
+            "events_coverage_end": END.isoformat(),
+        }),
+        earnings_calendar_text=_earnings_calendar(),
+    )
+    assert run_primary_sync(
+        **common, as_of=date(2026, 10, 4), now=NOW,
+        provider_documents=_primary_documents(),
+    ).exit_code == 0
+    before_source = dict(_rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT last_success_utc FROM source_sync_state WHERE provider = 'federal_reserve'",
+    )[0])
+    before_fact = dict(_rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT fetched_at_utc FROM event_source_facts WHERE provider = 'federal_reserve'",
+    )[0])
+    (tmp_path / "cache" / "2026" / "QQQ.txt").write_text(
+        "10-05-2026,10,10,10,10,10,100\n", encoding="utf-8",
+    )
+
+    rematerialized = run_primary_sync(
+        **common, as_of=date(2026, 10, 5), now=NOW + timedelta(hours=1),
+        transport=BoomTransport(),
+    )
+    assert rematerialized.exit_code == 0
+    after_source = dict(_rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT last_success_utc FROM source_sync_state WHERE provider = 'federal_reserve'",
+    )[0])
+    after_fact = dict(_rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT fetched_at_utc FROM event_source_facts WHERE provider = 'federal_reserve'",
+    )[0])
+    assert after_source == before_source
+    assert after_fact == before_fact
+
+    stale = run_primary_sync(
+        **common, as_of=date(2026, 10, 6), now=NOW + timedelta(days=2),
+        transport=FailingTransport(),
+    )
+    assert stale.exit_code == 1
+    source = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT status FROM source_sync_state WHERE provider = 'federal_reserve'",
+    )[0]
+    assert source["status"] == "failed"
+
+
+@pytest.mark.parametrize(
+    ("fetched", "coverage_end", "expected_status", "expected_error"),
+    [
+        ("2026-10-04", END.isoformat(), "fresh", None),
+        ("2026-10-01", END.isoformat(), "failed", "stale_cache"),
+        ("2026-10-04", "2026-10-20", "failed", "insufficient_coverage"),
+    ],
+)
+def test_m2_earnings_cache_freshness_and_coverage(
+    tmp_path: Path, fetched: str, coverage_end: str,
+    expected_status: str, expected_error: str | None,
+):
+    _prices(tmp_path / "cache")
+    result = run_primary_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        now=NOW,
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        provider_documents=_primary_documents(),
+        earnings_csv_text=f"ticker,event_type,event_date,source,fetched_as_of\nAAA,earnings,2026-10-20,finnhub,{fetched}\n",
+        earnings_meta_text=json.dumps({
+            "events_fetched_as_of": fetched,
+            "events_coverage_end": coverage_end,
+        }),
+        earnings_calendar_text=(
+            _earnings_calendar()
+            .replace(END.isoformat(), coverage_end)
+            .replace('"fetchedAsOf": "2026-10-04"', f'"fetchedAsOf": "{fetched}"')
+        ),
+    )
+    row = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT status, error_category, last_success_utc FROM source_sync_state WHERE provider = 'finnhub_earnings'",
+    )[0]
+    assert row["status"] == expected_status
+    assert row["error_category"] == expected_error
+    if expected_status == "fresh":
+        assert row["last_success_utc"] == "2026-10-04T04:00:00Z"
+        fact = _rows(
+            tmp_path / "calendar.sqlite",
+            "SELECT fetched_at_utc FROM event_source_facts WHERE provider = 'finnhub'",
+        )[0]
+        assert fact["fetched_at_utc"] == "2026-10-04T04:00:00Z"
+        assert result.exit_code == 0
+    else:
+        assert result.exit_code == 1
+
+
+def test_m2_earnings_membership_controls_relevance_with_dated_provenance(tmp_path: Path):
+    _prices(tmp_path / "cache")
+    earnings = _earnings_calendar(
+        {
+            "id": "AAA:2026-Q3", "title": "AAA earnings", "eventType": "EARNINGS",
+            "symbol": "AAA", "civilDate": "2026-10-20", "referencePeriod": "2026-Q3",
+            "canonicalKey": "US:EARNINGS:AAA:2026-Q3",
+        },
+        {
+            "id": "BBB:2026-Q3", "title": "BBB earnings", "eventType": "EARNINGS",
+            "symbol": "BBB", "civilDate": "2026-10-21", "referencePeriod": "2026-Q3",
+            "canonicalKey": "US:EARNINGS:BBB:2026-Q3",
+        },
+    )
+    result = run_primary_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        now=NOW,
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        provider_documents=_primary_documents(),
+        earnings_csv_text=(
+            "ticker,event_type,event_date,source,fetched_as_of\n"
+            "AAA,earnings,2026-10-20,finnhub,2026-10-04\n"
+            "BBB,earnings,2026-10-21,finnhub,2026-10-04\n"
+        ),
+        earnings_meta_text=json.dumps({
+            "events_fetched_as_of": "2026-10-04", "events_coverage_end": END.isoformat(),
+        }),
+        earnings_calendar_text=earnings,
+    )
+    assert result.exit_code == 0
+    rows = _rows(
+        tmp_path / "calendar.sqlite",
+        """
+        SELECT e.canonical_key, e.portfolio_relevance, i.rule_id,
+               f.field_provenance_json
+        FROM events e
+        JOIN importance_assessments i ON i.event_id = e.id
+        JOIN event_source_facts f ON f.event_id = e.id
+        WHERE e.event_type = 'EARNINGS'
+        ORDER BY e.canonical_key
+        """,
+    )
+    assert [(row["canonical_key"], row["portfolio_relevance"], row["rule_id"]) for row in rows] == [
+        ("US:EARNINGS:AAA:2026-Q3", "INDIRECT_BROAD_INDEX", "importance-index-member-earnings"),
+        ("US:EARNINGS:BBB:2026-Q3", "SINGLE_STOCK", "importance-single-stock-earnings"),
+    ]
+    assert "last_seen=2026-10-04" in rows[0]["field_provenance_json"]
+    assert "no-dated-SPY-or-QQQ-membership" in rows[1]["field_provenance_json"]
+
+
+def test_m2_earnings_reschedule_uses_fiscal_period_identity(tmp_path: Path):
+    _prices(tmp_path / "cache")
+    common = dict(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        provider_documents=_primary_documents(),
+        earnings_csv_text="ticker,event_type,event_date,source,fetched_as_of\nAAA,earnings,2026-10-20,finnhub,2026-10-04\n",
+        earnings_meta_text=json.dumps({
+            "events_fetched_as_of": "2026-10-04", "events_coverage_end": END.isoformat(),
+        }),
+    )
+    assert run_primary_sync(
+        **common, now=NOW, earnings_calendar_text=_earnings_calendar(),
+    ).exit_code == 0
+    moved = _earnings_calendar().replace("2026-10-20", "2026-10-22")
+    assert run_primary_sync(
+        **common, now=NOW + timedelta(hours=1), earnings_calendar_text=moved,
+    ).exit_code == 0
+    events = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT id, civil_date, lifecycle_status FROM events WHERE event_type = 'EARNINGS'",
+    )
+    assert [dict(row) for row in events] == [{
+        "id": "US:EARNINGS:AAA:2026-Q3",
+        "civil_date": "2026-10-22",
+        "lifecycle_status": "rescheduled",
+    }]
+    history = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT civil_date FROM event_schedule_history WHERE event_id = 'US:EARNINGS:AAA:2026-Q3' ORDER BY civil_date",
+    )
+    assert [row["civil_date"] for row in history] == ["2026-10-20", "2026-10-22"]
+
+
+def test_m2_clusters_require_true_strategy_exposure_overlap(tmp_path: Path):
+    def run_at(root: Path, documents: dict[str, str]):
+        _prices(root / "cache")
+        return run_primary_sync(
+            database=root / "calendar.sqlite",
+            universe_path=FIXTURES / "universe.csv",
+            price_cache=root / "cache",
+            horizon_start=START,
+            horizon_end=END,
+            as_of=date(2026, 10, 4),
+            now=NOW,
+            schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+            provider_documents=documents,
+            earnings_csv_text="ticker,event_type,event_date,source,fetched_as_of\nAAA,earnings,2026-10-20,finnhub,2026-10-04\n",
+            earnings_meta_text=json.dumps({
+                "events_fetched_as_of": "2026-10-04", "events_coverage_end": END.isoformat(),
+            }),
+            earnings_calendar_text=_earnings_calendar(),
+        )
+
+    assert run_at(tmp_path / "overlap", _primary_documents()).exit_code == 0
+    relationships = _rows(
+        tmp_path / "overlap" / "calendar.sqlite",
+        "SELECT DISTINCT relationship FROM event_relationships ORDER BY relationship",
+    )
+    assert [row["relationship"] for row in relationships] == [
+        "strategy_exposure_overlap:long-premium-20d-0-or-1dte",
+        "strategy_exposure_overlap:long-wings-repeated-0dte-premium",
+    ]
+    assessment = _rows(
+        tmp_path / "overlap" / "calendar.sqlite",
+        """
+        SELECT benefits_json, risks_json, rule_ids_json FROM strategy_assessments
+        WHERE event_id = 'US:FEDERAL_RESERVE:FOMC_DECISION:2026-10-28'
+          AND strategy_id = 'long-premium-20d-0-or-1dte'
+        """,
+    )[0]
+    assert "cluster-exposure-overlap:long-premium-20d-0-or-1dte" in json.loads(
+        assessment["rule_ids_json"]
+    )
+    assert CLUSTER_BENEFIT in json.loads(assessment["benefits_json"])
+    assert CLUSTER_RISK in json.loads(assessment["risks_json"])
+
+    nonoverlap = _primary_documents()
+    for provider in ("federal_reserve", "treasury"):
+        raw = json.loads(nonoverlap[provider])
+        raw["events"][0]["scheduledAt"] = (
+            "2026-10-28T17:00:00" if provider == "federal_reserve"
+            else "2026-10-28T16:30:00"
+        )
+        nonoverlap[provider] = json.dumps(raw)
+    assert run_at(tmp_path / "nonoverlap", nonoverlap).exit_code == 0
+    assert not _rows(
+        tmp_path / "nonoverlap" / "calendar.sqlite", "SELECT * FROM event_relationships",
+    )
 
 
 def test_credentialed_provider_urls_are_rejected():

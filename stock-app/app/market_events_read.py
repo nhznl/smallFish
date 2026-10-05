@@ -373,7 +373,7 @@ def _days(start: date, end: date, events: list[dict], zone: str, coverage_status
             "riskLabel": _risk_label(day_events),
             "eventCount": len(day_events),
             "clusterWarning": (
-                "Multiple scheduled broad-market events share this session. Their risk windows may overlap; this is a named clustering rule, not a directional forecast."
+                "Multiple scheduled broad-market events overlap at least one configured strategy exposure window. This is a named clustering rule, not a directional forecast."
                 if len(clustered) >= 2 else None
             ),
             "sessionAssessment": _session_text(day_events),
