@@ -392,9 +392,9 @@ END:VCALENDAR
     assert dict(source) == {"status": "failed", "error_category": "parse_failure"}
 
 
-def test_policy_change_forces_rematerialization_inside_provider_freshness_window(tmp_path: Path):
+def test_policy_change_rematerializes_offline_inside_provider_freshness_window(tmp_path: Path):
     schedule = (FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8")
-    transport = SequenceTransport(_response(schedule), _response(schedule))
+    transport = SequenceTransport(_response(schedule))
     config_dir = _config_copy(tmp_path)
     _prices(tmp_path / "cache")
     common = dict(
@@ -405,10 +405,9 @@ def test_policy_change_forces_rematerialization_inside_provider_freshness_window
     assert run_sync(**common, now=NOW).status == "published"
     path = config_dir / "market_calendar_importance.yaml"
     path.write_text(path.read_text(encoding="utf-8").replace("score: 5", "score: 4"), encoding="utf-8")
-    changed = run_sync(**common, now=NOW + timedelta(hours=1))
-    assert changed.status == "published"
-    assert "If-None-Match" not in transport.headers[1]
-    assert "If-Modified-Since" not in transport.headers[1]
+    changed = run_sync(**{**common, "transport": BoomTransport()}, now=NOW + timedelta(hours=1))
+    assert changed.status == "rematerialized"
+    assert len(transport.headers) == 1
     rows = _rows(tmp_path / "calendar.sqlite", "SELECT score FROM importance_assessments ORDER BY rowid DESC")
     assert rows[-1]["score"] == 4
 
@@ -416,7 +415,7 @@ def test_policy_change_forces_rematerialization_inside_provider_freshness_window
 def test_new_measurements_force_rematerialization_inside_provider_freshness_window(tmp_path: Path):
     schedule = (FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8")
     released = (FIXTURES / "cpi_released_values.json").read_text(encoding="utf-8")
-    transport = SequenceTransport(_response(schedule), _response(schedule))
+    transport = SequenceTransport(_response(schedule))
     _prices(tmp_path / "cache")
     common = dict(
         database=tmp_path / "calendar.sqlite", universe_path=FIXTURES / "universe.csv",
@@ -424,14 +423,82 @@ def test_new_measurements_force_rematerialization_inside_provider_freshness_wind
         as_of=datetime(2026, 10, 4).date(), transport=transport,
     )
     assert run_sync(**common, now=NOW).status == "published"
-    changed = run_sync(**common, now=NOW + timedelta(hours=1), released_values_text=released)
-    assert changed.status == "published"
-    assert "If-None-Match" not in transport.headers[1]
-    assert "If-Modified-Since" not in transport.headers[1]
+    changed = run_sync(
+        **{**common, "transport": BoomTransport()},
+        now=NOW + timedelta(hours=1), released_values_text=released,
+    )
+    assert changed.status == "rematerialized"
+    assert len(transport.headers) == 1
     measurements = _rows(tmp_path / "calendar.sqlite", "SELECT metric FROM event_measurements")
     assert measurements
-    state = _rows(tmp_path / "calendar.sqlite", "SELECT materialization_sha256 FROM source_sync_state WHERE provider = 'bls'")[0]
-    assert len(state["materialization_sha256"]) == 64
+    state = _rows(tmp_path / "calendar.sqlite", "SELECT input_sha256 FROM materialization_state WHERE provider = 'bls'")[0]
+    assert len(state["input_sha256"]) == 64
+
+
+def test_omitted_measurement_update_preserves_facts_and_source_state(tmp_path: Path):
+    schedule = (FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8")
+    released = (FIXTURES / "cpi_released_values.json").read_text(encoding="utf-8")
+    assert _sync(tmp_path, schedule, released).status == "published"
+    before = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT metric, value_kind, value, observed_at_utc FROM event_measurements ORDER BY metric, value_kind",
+    )
+    source_before = dict(_rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT status, configured, last_success_utc, result_count, detail FROM source_sync_state WHERE provider = 'bls_released_values'",
+    )[0])
+
+    assert _sync(tmp_path, schedule, now=NOW + timedelta(hours=1)).status == "published"
+
+    after = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT metric, value_kind, value, observed_at_utc FROM event_measurements ORDER BY metric, value_kind",
+    )
+    source_after = dict(_rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT status, configured, last_success_utc, result_count, detail FROM source_sync_state WHERE provider = 'bls_released_values'",
+    )[0])
+    assert [dict(row) for row in after] == [dict(row) for row in before]
+    assert source_after == source_before
+
+
+def test_price_cache_and_as_of_change_rematerialize_offline(tmp_path: Path):
+    schedule = (FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8")
+    transport = SequenceTransport(_response(schedule))
+    _prices(tmp_path / "cache")
+    common = dict(
+        database=tmp_path / "calendar.sqlite", universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache", horizon_start=START, horizon_end=END,
+    )
+    assert run_sync(
+        **common, as_of=datetime(2026, 10, 4).date(), now=NOW, transport=transport,
+    ).status == "published"
+    before = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT price_data_state FROM event_etf_exposures WHERE symbol = 'QQQ' LIMIT 1",
+    )[0]["price_data_state"]
+    assert before == "stale"
+    (tmp_path / "cache" / "2026" / "QQQ.txt").write_text(
+        "10-05-2026,10,10,10,10,10,100\n", encoding="utf-8",
+    )
+
+    changed = run_sync(
+        **common, as_of=datetime(2026, 10, 5).date(), now=NOW + timedelta(hours=1),
+        transport=BoomTransport(),
+    )
+    assert changed.status == "rematerialized"
+    states = {
+        row["price_data_state"] for row in _rows(
+            tmp_path / "calendar.sqlite",
+            "SELECT price_data_state FROM event_etf_exposures WHERE symbol = 'QQQ'",
+        )
+    }
+    assert states == {"current"}
+    materialized = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT as_of_date FROM materialization_state WHERE provider = 'bls'",
+    )[0]
+    assert materialized["as_of_date"] == "2026-10-05"
 
 
 def test_credentialed_provider_urls_are_rejected():

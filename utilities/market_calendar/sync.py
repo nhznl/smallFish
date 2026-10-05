@@ -33,7 +33,7 @@ from utilities.market_calendar.deduplication import (
 from utilities.market_calendar.etf import exposures_for, load_etf_mappings, universe_symbols, validate_mappings
 from utilities.market_calendar.importance import classify
 from utilities.market_calendar.normalization import MeasurementDocumentError, parse_released_values
-from utilities.market_calendar.providers.base import ScheduleObservation
+from utilities.market_calendar.providers.base import ParseReport, ScheduleObservation
 from utilities.market_calendar.providers.bls import parse_ics, payload_sha256
 from utilities.market_calendar.risk import assess, rank_key
 
@@ -84,7 +84,6 @@ def _write_source(
     etag: str | None = None,
     last_modified: str | None = None,
     payload_sha256_value: str | None = None,
-    materialization_sha256: str | None = None,
     success: bool = False,
     configured: bool | None = None,
 ) -> None:
@@ -94,8 +93,8 @@ def _write_source(
         INSERT INTO source_sync_state (
             provider, required, configured, coverage_start, coverage_end, last_attempt_utc,
             last_success_utc, result_count, parser_version, status, error_category, detail,
-            etag, last_modified, payload_sha256, materialization_sha256, scope, freshness_hours
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            etag, last_modified, payload_sha256, scope, freshness_hours
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (provider) DO UPDATE SET
             required = excluded.required,
             configured = excluded.configured,
@@ -111,7 +110,6 @@ def _write_source(
             etag = excluded.etag,
             last_modified = excluded.last_modified,
             payload_sha256 = excluded.payload_sha256,
-            materialization_sha256 = excluded.materialization_sha256,
             scope = excluded.scope,
             freshness_hours = excluded.freshness_hours
         """,
@@ -131,7 +129,6 @@ def _write_source(
             etag if etag is not None else (current["etag"] if current else None),
             last_modified if last_modified is not None else (current["last_modified"] if current else None),
             payload_sha256_value if payload_sha256_value is not None else (current["payload_sha256"] if current else None),
-            materialization_sha256 if materialization_sha256 is not None else (current["materialization_sha256"] if current else None),
             spec.scope,
             spec.freshness_hours,
         ),
@@ -147,10 +144,11 @@ def _materialization_identity(
     as_of: date,
     stale_days: int,
     measurements: dict[str, tuple[EventMeasurement, ...]],
+    horizon_start: date,
+    horizon_end: date,
 ) -> str:
     """Fingerprint every local input that can change normalized CPI rows."""
     config_names = (
-        "market_calendar_sources.yaml",
         "market_calendar_importance.yaml",
         "market_calendar_risk.yaml",
         "market_calendar_strategies.yaml",
@@ -176,10 +174,120 @@ def _materialization_identity(
         "configs": config_payload,
         "universeSymbols": sorted(symbols),
         "asOf": as_of.isoformat(),
+        "horizon": {"from": horizon_start.isoformat(), "to": horizon_end.isoformat()},
         "exposures": exposure_payload,
         "measurements": measurement_payload,
     }, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _stored_measurements(connection: sqlite3.Connection) -> dict[str, tuple[EventMeasurement, ...]]:
+    grouped: dict[str, list[EventMeasurement]] = {}
+    rows = connection.execute(
+        "SELECT * FROM event_measurements ORDER BY event_id, id"
+    ).fetchall()
+    for row in rows:
+        grouped.setdefault(row["event_id"], []).append(EventMeasurement(
+            metric=row["metric"],
+            label=row["label"],
+            value=row["value"],
+            numeric_value=row["numeric_value"],
+            unit=row["unit"],
+            scale=row["scale"],
+            seasonal_adjustment=row["seasonal_adjustment"],
+            value_kind=row["value_kind"],
+            provider=row["provider"],
+            observed_at_utc=row["observed_at_utc"],
+        ))
+    return {key: tuple(items) for key, items in grouped.items()}
+
+
+def _load_provider_snapshot(connection: sqlite3.Connection, provider: str) -> ParseReport | None:
+    rows = connection.execute(
+        "SELECT * FROM provider_schedule_observations WHERE provider = ? ORDER BY source_record_id",
+        (provider,),
+    ).fetchall()
+    if not rows:
+        return None
+    observations = tuple(ScheduleObservation(
+        provider=row["provider"],
+        source_record_id=row["source_record_id"],
+        source_url=row["source_url"],
+        canonical_key=row["canonical_key"],
+        title=row["title"],
+        event_type=row["event_type"],
+        reference_period=row["reference_period"],
+        reference_label=row["reference_label"],
+        scheduled_at_utc=row["scheduled_at_utc"],
+        civil_date=row["civil_date"],
+        original_timezone=row["original_timezone"],
+        time_precision=row["time_precision"],
+        schedule_status=row["schedule_status"],
+        lifecycle_status=row["lifecycle_status"],
+        provenance=json.loads(row["provenance_json"]),
+    ) for row in rows)
+    return ParseReport(observations)
+
+
+def _replace_provider_snapshot(
+    connection: sqlite3.Connection,
+    provider: str,
+    report: ParseReport,
+) -> None:
+    connection.execute("DELETE FROM provider_schedule_observations WHERE provider = ?", (provider,))
+    for item in report.observations:
+        connection.execute(
+            """
+            INSERT INTO provider_schedule_observations (
+                provider, source_record_id, source_url, canonical_key, title, event_type,
+                reference_period, reference_label, scheduled_at_utc, civil_date,
+                original_timezone, time_precision, schedule_status, lifecycle_status,
+                provenance_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                provider, item.source_record_id, item.source_url, item.canonical_key,
+                item.title, item.event_type, item.reference_period, item.reference_label,
+                item.scheduled_at_utc, item.civil_date, item.original_timezone,
+                item.time_precision, item.schedule_status, item.lifecycle_status,
+                json.dumps(item.provenance, sort_keys=True),
+            ),
+        )
+
+
+def _materialization_matches(connection: sqlite3.Connection, provider: str, digest: str) -> bool:
+    row = connection.execute(
+        "SELECT input_sha256 FROM materialization_state WHERE provider = ?", (provider,)
+    ).fetchone()
+    return row is not None and row["input_sha256"] == digest
+
+
+def _write_materialization_state(
+    connection: sqlite3.Connection,
+    provider: str,
+    digest: str,
+    as_of: date,
+    horizon_start: date,
+    horizon_end: date,
+    observed_at: str,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO materialization_state (
+            provider, input_sha256, as_of_date, horizon_start, horizon_end, materialized_at_utc
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT (provider) DO UPDATE SET
+            input_sha256 = excluded.input_sha256,
+            as_of_date = excluded.as_of_date,
+            horizon_start = excluded.horizon_start,
+            horizon_end = excluded.horizon_end,
+            materialized_at_utc = excluded.materialized_at_utc
+        """,
+        (
+            provider, digest, as_of.isoformat(), horizon_start.isoformat(),
+            horizon_end.isoformat(), observed_at,
+        ),
+    )
 
 
 def _in_horizon(observation: ScheduleObservation, start: date, end: date) -> bool:
@@ -317,16 +425,9 @@ def run_sync(
         symbols = universe_symbols(universe_path)
         validate_mappings(mappings, symbols)
         stale_days = stale_after_calendar_days(**config_dir_arg)
-        measurements = parse_released_values(released_values_text) if released_values_text is not None else {}
-        resolved_config_dir = config_dir if config_dir is not None else CONFIG_DIR
-        materialization_sha256 = _materialization_identity(
-            config_dir=resolved_config_dir,
-            symbols=symbols,
-            mappings=mappings,
-            price_cache=price_cache,
-            as_of=as_of,
-            stale_days=stale_days,
-            measurements=measurements,
+        supplied_measurements = (
+            parse_released_values(released_values_text)
+            if released_values_text is not None else None
         )
     except (CalendarConfigError, MeasurementDocumentError) as exc:
         return SyncResult(2, "configuration_error", 0, (str(exc),))
@@ -337,117 +438,145 @@ def run_sync(
         bls = sources["bls"]
         values_spec = sources["bls_released_values"]
         current = _source(connection, "bls")
-        fresh = (
+        measurements = (
+            supplied_measurements
+            if supplied_measurements is not None
+            else _stored_measurements(connection)
+        )
+        resolved_config_dir = config_dir if config_dir is not None else CONFIG_DIR
+        materialization_sha256 = _materialization_identity(
+            config_dir=resolved_config_dir,
+            symbols=symbols,
+            mappings=mappings,
+            price_cache=price_cache,
+            as_of=as_of,
+            stale_days=stale_days,
+            measurements=measurements,
+            horizon_start=horizon_start,
+            horizon_end=horizon_end,
+        )
+        provider_fresh = (
             schedule_text is None
             and current is not None
             and current["status"] == "fresh"
             and _covers(current, horizon_start, horizon_end)
-            and current["materialization_sha256"] == materialization_sha256
+            and current["parser_version"] == bls.parser_version
             and current["last_success_utc"]
             and datetime.strptime(current["last_success_utc"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
             + timedelta(hours=bls.freshness_hours or 0) >= now.astimezone(timezone.utc)
         )
-        if fresh:
+        snapshot = _load_provider_snapshot(connection, "bls")
+        materialization_fresh = _materialization_matches(
+            connection, "bls", materialization_sha256,
+        )
+        if provider_fresh and snapshot is not None and materialization_fresh:
             count = connection.execute("SELECT count(*) AS n FROM events").fetchone()["n"]
             return SyncResult(0, "fresh", count, (
-                "bls: reused a fresh CPI schedule; no provider request was made.",
-                "bls_released_values: " + values_spec.detail,
+                "bls: reused a fresh normalized CPI schedule; no provider request was made.",
+                "bls_released_values: " + (
+                    _source(connection, "bls_released_values")["detail"]
+                    if _source(connection, "bls_released_values") is not None
+                    else values_spec.detail
+                ),
             ))
 
-        can_conditionally_reuse = (
-            current is not None
-            and _covers(current, horizon_start, horizon_end)
-            and current["materialization_sha256"] == materialization_sha256
-        )
-        etag = current["etag"] if can_conditionally_reuse else None
-        modified = current["last_modified"] if can_conditionally_reuse else None
-        try:
-            if schedule_text is not None:
-                status = 200
-                body = schedule_text.encode("utf-8")
-                headers: dict[str, str] = {}
-            else:
-                response = fetch_schedule(
-                    transport or UrllibTransport(),
-                    bls.schedule_url or BLS_SCHEDULE_URL,
-                    etag=etag,
-                    last_modified=modified,
-                )
-                status = response.status
-                body = response.body
-                headers = response.headers
-        except TransportError as exc:
-            LOGGER.warning("BLS schedule request failed: %s", exc.error_type)
-            connection.execute("BEGIN IMMEDIATE")
-            _write_source(
-                connection, bls, status="failed", observed_at=observed_at,
-                detail="The BLS schedule refresh failed. Previous CPI rows were kept.",
-                error_category=exc.error_type, success=False,
+        provider_result = "local"
+        status = 0
+        body = b""
+        headers: dict[str, str] = {}
+        report: ParseReport
+        if provider_fresh and snapshot is not None:
+            report = snapshot
+        else:
+            can_conditionally_reuse = (
+                current is not None
+                and _covers(current, horizon_start, horizon_end)
+                and snapshot is not None
             )
-            connection.execute("COMMIT")
-            checkpoint(connection)
-            code = 0 if _covers(_source(connection, "bls"), horizon_start, horizon_end) else 1
-            return SyncResult(code, "failed", 0, (f"bls: failed ({exc.error_type}). Previous rows were kept.",))
-
-        if status == 304:
-            if not can_conditionally_reuse or current is None:
+            etag = current["etag"] if can_conditionally_reuse else None
+            modified = current["last_modified"] if can_conditionally_reuse else None
+            try:
+                if schedule_text is not None:
+                    status = 200
+                    body = schedule_text.encode("utf-8")
+                else:
+                    response = fetch_schedule(
+                        transport or UrllibTransport(),
+                        bls.schedule_url or BLS_SCHEDULE_URL,
+                        etag=etag,
+                        last_modified=modified,
+                    )
+                    status = response.status
+                    body = response.body
+                    headers = response.headers
+            except TransportError as exc:
+                LOGGER.warning("BLS schedule request failed: %s", exc.error_type)
                 connection.execute("BEGIN IMMEDIATE")
                 _write_source(
-                    connection, bls, status="failed", observed_at=observed_at, success=False,
-                    detail="BLS returned no schedule body for a refresh that required rematerialization. Previous CPI rows were kept.",
-                    error_category="unexpected_not_modified",
+                    connection, bls, status="failed", observed_at=observed_at,
+                    detail="The BLS schedule refresh failed. Previous CPI rows were kept.",
+                    error_category=exc.error_type, success=False,
                 )
                 connection.execute("COMMIT")
                 checkpoint(connection)
                 code = 0 if _covers(_source(connection, "bls"), horizon_start, horizon_end) else 1
-                return SyncResult(code, "failed", 0, (
-                    "bls: failed (unexpected_not_modified). Previous rows were kept.",
-                ))
-            connection.execute("BEGIN IMMEDIATE")
-            _write_source(
-                connection, bls, status="fresh", observed_at=observed_at, success=True,
-                detail="BLS reported the schedule unchanged.",
-                coverage_start=current["coverage_start"], coverage_end=current["coverage_end"],
-                materialization_sha256=materialization_sha256,
-            )
-            connection.execute("COMMIT")
-            checkpoint(connection)
-            count = connection.execute("SELECT count(*) AS n FROM events").fetchone()["n"]
-            return SyncResult(0, "not_modified", count, ("bls: schedule unchanged.",))
+                return SyncResult(code, "failed", 0, (f"bls: failed ({exc.error_type}). Previous rows were kept.",))
 
-        if status != 200:
-            connection.execute("BEGIN IMMEDIATE")
-            _write_source(
-                connection, bls, status="failed", observed_at=observed_at, success=False,
-                detail="The BLS schedule refresh failed. Previous CPI rows were kept.",
-                error_category="http_status",
-            )
-            connection.execute("COMMIT")
-            checkpoint(connection)
-            code = 0 if _covers(_source(connection, "bls"), horizon_start, horizon_end) else 1
-            return SyncResult(code, "failed", 0, ("bls: failed (http_status). Previous rows were kept.",))
+            if status == 304:
+                if not can_conditionally_reuse or current is None or snapshot is None:
+                    connection.execute("BEGIN IMMEDIATE")
+                    _write_source(
+                        connection, bls, status="failed", observed_at=observed_at, success=False,
+                        detail="BLS returned no schedule body when no reusable normalized snapshot was available. Previous CPI rows were kept.",
+                        error_category="unexpected_not_modified",
+                    )
+                    connection.execute("COMMIT")
+                    checkpoint(connection)
+                    code = 0 if _covers(_source(connection, "bls"), horizon_start, horizon_end) else 1
+                    return SyncResult(code, "failed", 0, (
+                        "bls: failed (unexpected_not_modified). Previous rows were kept.",
+                    ))
+                report = snapshot
+                provider_result = "not_modified"
+            elif status == 200:
+                try:
+                    decoded = body.decode("utf-8", errors="replace")
+                    if "BEGIN:VCALENDAR" not in decoded.upper():
+                        raise ValueError("not_calendar")
+                    report = parse_ics(decoded, source_url=bls.schedule_url or BLS_SCHEDULE_URL)
+                    provider_result = "published"
+                except Exception as exc:
+                    LOGGER.warning("CPI schedule parse failed: %s", type(exc).__name__)
+                    connection.execute("BEGIN IMMEDIATE")
+                    _write_source(
+                        connection, bls, status="failed", observed_at=observed_at, success=False,
+                        detail="The CPI schedule could not be parsed. Previous CPI rows were kept.",
+                        error_category="parse_failure",
+                    )
+                    connection.execute("COMMIT")
+                    checkpoint(connection)
+                    code = 0 if _covers(_source(connection, "bls"), horizon_start, horizon_end) else 1
+                    return SyncResult(code, "failed", 0, ("bls: failed (parse_failure). Previous rows were kept.",))
+            else:
+                connection.execute("BEGIN IMMEDIATE")
+                _write_source(
+                    connection, bls, status="failed", observed_at=observed_at, success=False,
+                    detail="The BLS schedule refresh failed. Previous CPI rows were kept.",
+                    error_category="http_status",
+                )
+                connection.execute("COMMIT")
+                checkpoint(connection)
+                code = 0 if _covers(_source(connection, "bls"), horizon_start, horizon_end) else 1
+                return SyncResult(code, "failed", 0, ("bls: failed (http_status). Previous rows were kept.",))
 
-        try:
-            decoded = body.decode("utf-8", errors="replace")
-            if "BEGIN:VCALENDAR" not in decoded.upper():
-                raise ValueError("not_calendar")
-            report = parse_ics(decoded, source_url=bls.schedule_url or BLS_SCHEDULE_URL)
-        except MeasurementDocumentError as exc:
-            return SyncResult(2, "configuration_error", 0, (str(exc),))
-        except Exception as exc:
-            LOGGER.warning("CPI schedule parse failed: %s", type(exc).__name__)
-            connection.execute("BEGIN IMMEDIATE")
-            _write_source(
-                connection, bls, status="failed", observed_at=observed_at, success=False,
-                detail="The CPI schedule could not be parsed. Previous CPI rows were kept.",
-                error_category="parse_failure",
-            )
-            connection.execute("COMMIT")
-            checkpoint(connection)
-            code = 0 if _covers(_source(connection, "bls"), horizon_start, horizon_end) else 1
-            return SyncResult(code, "failed", 0, ("bls: failed (parse_failure). Previous rows were kept.",))
-
-        digest = payload_sha256(body)
+        digest = (
+            payload_sha256(body)
+            if provider_result == "published"
+            else (current["payload_sha256"] if current else "")
+        )
+        fetched_at = observed_at if provider_result != "local" else current["last_success_utc"]
+        source_etag = _header(headers, "etag") if provider_result == "published" else (current["etag"] if current else None)
+        source_modified = _header(headers, "last-modified") if provider_result == "published" else (current["last_modified"] if current else None)
         in_window = tuple(
             item for item in report.observations if _in_horizon(item, horizon_start, horizon_end)
         )
@@ -464,8 +593,8 @@ def run_sync(
                     measurements=measurements.get(observation.canonical_key, ()),
                     importance_rules=importance_rules, windows=windows, policy=policy,
                     mappings=mappings, cache_root=price_cache, as_of=as_of, stale_days=stale_days,
-                    digest=digest, parser_version=bls.parser_version, fetched_at=observed_at,
-                    etag=_header(headers, "etag"), last_modified=_header(headers, "last-modified"),
+                    digest=digest, parser_version=bls.parser_version, fetched_at=fetched_at,
+                    etag=source_etag, last_modified=source_modified,
                 ))
                 seen.add(observation.source_record_id)
                 seen.update(item.source_record_id for item in extras)
@@ -477,25 +606,33 @@ def run_sync(
                 observed_at=observed_at,
             )
             _rescore_cancelled(connection, cancelled, windows, policy, observed_at)
-            detail = (
-                f"CPI schedule rows in horizon: {len(scored)}. "
-                f"Other BLS releases skipped: {report.skipped_other_releases}. "
-                "Those releases are outside this scan and are not shown as absent."
-            )
-            _write_source(
-                connection, bls, status="fresh", observed_at=observed_at, success=True,
-                detail=detail, coverage_start=horizon_start.isoformat(),
-                coverage_end=horizon_end.isoformat(), result_count=len(scored),
-                etag=_header(headers, "etag"), last_modified=_header(headers, "last-modified"),
-                payload_sha256_value=digest, error_category=None,
-                materialization_sha256=materialization_sha256,
-            )
-            if released_values_text is None:
+            if provider_result == "published":
+                _replace_provider_snapshot(connection, "bls", report)
+                detail = (
+                    f"CPI schedule rows in horizon: {len(scored)}. "
+                    f"Other BLS releases skipped: {report.skipped_other_releases}. "
+                    "Those releases are outside this scan and are not shown as absent."
+                )
                 _write_source(
-                    connection, values_spec, status="not_configured", observed_at=observed_at,
-                    detail=values_spec.detail, result_count=0, success=False, configured=False,
+                    connection, bls, status="fresh", observed_at=observed_at, success=True,
+                    detail=detail, coverage_start=horizon_start.isoformat(),
+                    coverage_end=horizon_end.isoformat(), result_count=len(scored),
+                    etag=_header(headers, "etag"), last_modified=_header(headers, "last-modified"),
+                    payload_sha256_value=digest, error_category=None,
+                )
+            elif provider_result == "not_modified":
+                detail = current["detail"]
+                _write_source(
+                    connection, bls, status="fresh", observed_at=observed_at, success=True,
+                    detail=detail, coverage_start=current["coverage_start"],
+                    coverage_end=current["coverage_end"], result_count=current["result_count"],
+                    error_category=None,
                 )
             else:
+                detail = f"Locally rematerialized {len(scored)} CPI schedule rows from the normalized BLS snapshot."
+
+            values_current = _source(connection, "bls_released_values")
+            if supplied_measurements is not None:
                 count = sum(len(items) for items in measurements.values())
                 _write_source(
                     connection, values_spec, status="fresh", observed_at=observed_at, success=True,
@@ -503,6 +640,15 @@ def run_sync(
                     coverage_end=horizon_end.isoformat(),
                     detail="Local measurement observations were attached. They are not a BLS actuals feed.",
                 )
+            elif values_current is None:
+                _write_source(
+                    connection, values_spec, status="not_configured", observed_at=observed_at,
+                    detail=values_spec.detail, result_count=0, success=False, configured=False,
+                )
+            _write_materialization_state(
+                connection, "bls", materialization_sha256, as_of,
+                horizon_start, horizon_end, observed_at,
+            )
             connection.execute(
                 """
                 INSERT INTO ingestion_runs (
@@ -515,13 +661,6 @@ def run_sync(
         except Exception as exc:
             connection.execute("ROLLBACK")
             LOGGER.warning("CPI calendar merge failed: %s", type(exc).__name__)
-            connection.execute("BEGIN IMMEDIATE")
-            _write_source(
-                connection, bls, status="failed", observed_at=observed_at, success=False,
-                detail="The CPI calendar merge failed. Previous CPI rows were kept.",
-                error_category=type(exc).__name__,
-            )
-            connection.execute("COMMIT")
             checkpoint(connection)
             code = 0 if _covers(_source(connection, "bls"), horizon_start, horizon_end) else 1
             return SyncResult(code, "failed", 0, (f"bls: failed ({type(exc).__name__}). Previous rows were kept.",))
@@ -529,10 +668,14 @@ def run_sync(
         count = connection.execute(
             "SELECT count(*) AS n FROM events WHERE lifecycle_status != 'cancelled'"
         ).fetchone()["n"]
-        return SyncResult(0, "published", count, (
+        result_status = "rematerialized" if provider_result == "local" else provider_result
+        values_state = _source(connection, "bls_released_values")
+        return SyncResult(0, result_status, count, (
             detail,
             "bls_released_values: " + (
-                "local observations attached." if released_values_text is not None else values_spec.detail
+                "local observations attached."
+                if supplied_measurements is not None
+                else (values_state["detail"] if values_state is not None else values_spec.detail)
             ),
         ))
     finally:

@@ -110,7 +110,7 @@ never touches another symbol's cache.
 | `data/premiums/` | Immutable timestamped quote archives | `chains` |
 | `data/sector_rotation/` | Sector leadership snapshots | `sector_rotation` |
 | `data/events.csv`, `data/events_meta.json`, `data/events_history/` | Upcoming earnings calendar, freshness/coverage, and dated snapshots | `fetch` or the conditional scan prerequisite (Finnhub) |
-| `data/market_calendar/calendar.sqlite` | CPI event-risk calendar, schedule history, and source diagnostics. Not a replacement for `events.csv`. | `market-calendar` |
+| `data/market_calendar/calendar.sqlite` | CPI event-risk calendar, normalized provider snapshot, local materialization identity, schedule history, and source diagnostics. Not a replacement for `events.csv`. | `market-calendar` |
 | `data/earnings_history.csv` | Multi-year realized earnings dates; not refreshed in the live scan path | `earnings-history` (Yahoo/yfinance) |
 | `data/backtest/`, `data/sector_rotation_study/` | Study runs and pinned evidence | study commands |
 | `data/ledger_trading/`, `data/ledger_retirement/` | Broker data. **Real positions.** | brokerage syncs |

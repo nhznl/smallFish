@@ -55,11 +55,12 @@ utilities/.venv/bin/python -m utilities.scraper --help
 | `options/` | Wheel screen, quote normalization and archives; Tastytrade DXLink transport comes from `services.tastytrade` |
 
 The market-calendar cache separates provider freshness from local
-materialization freshness. It reuses a conditional BLS response only when the
-requested horizon is already covered and the versioned policy, ETF mappings,
-price-cache/as-of state, universe, and supplied measurements match the
-persisted materialization identity. A wider horizon or changed local input is
-fetched with a full response before rows are replaced.
+materialization freshness. A normalized BLS schedule snapshot can be rescored
+without a provider request when versioned policy, ETF mappings,
+price-cache/as-of state, universe, or supplied measurements change. An omitted
+optional measurement update preserves prior measurement facts and source
+state. A wider horizon still requires a full provider response before coverage
+is widened.
 
 See [`options/README.md`](options/README.md).
 
