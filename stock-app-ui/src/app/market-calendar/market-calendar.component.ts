@@ -15,6 +15,7 @@ import {
 
 type ViewId = 'upcoming' | 'all';
 type RangeId = 'today' | 'tomorrow' | 'week' | 'month';
+type PriorityId = 'all' | 'primary' | 'secondary';
 
 @Component({
   selector: 'app-market-calendar',
@@ -34,6 +35,7 @@ export class MarketCalendarComponent implements OnInit {
   reloadError = '';
   view: ViewId = 'upcoming';
   range: RangeId = 'month';
+  priority: PriorityId = 'all';
   selected: MarketEvent | null = null;
 
   readonly ranges: Array<{ id: RangeId; label: string }> = [
@@ -41,6 +43,11 @@ export class MarketCalendarComponent implements OnInit {
     { id: 'tomorrow', label: 'Tomorrow' },
     { id: 'week', label: 'This Week' },
     { id: 'month', label: 'Month' }
+  ];
+  readonly priorities: Array<{ id: PriorityId; label: string }> = [
+    { id: 'all', label: 'All priorities' },
+    { id: 'primary', label: 'Primary' },
+    { id: 'secondary', label: 'Secondary' }
   ];
 
   ngOnInit(): void {
@@ -79,15 +86,30 @@ export class MarketCalendarComponent implements OnInit {
   }
 
   optionalGaps() {
-    return (this.snapshot?.sources ?? []).filter(source => !source.required && source.status === 'not_configured');
+    return (this.snapshot?.sources ?? []).filter(source => !source.required && source.status !== 'fresh');
   }
 
   visibleDays(): RiskDay[] {
     const days = (this.snapshot?.days ?? []).filter(day => this.inRange(day.date));
     if (this.view === 'upcoming') {
-      return days.filter(day => day.riskLabel === 'EXTREME' || day.riskLabel === 'HIGH' || day.riskLabel === 'MODERATE');
+      return days.filter(day => this.visibleEventCount(day) > 0 && (
+        this.priority === 'secondary' || day.riskLabel === 'EXTREME' ||
+        day.riskLabel === 'HIGH' || day.riskLabel === 'MODERATE'
+      ));
     }
-    return days.filter(day => day.eventCount > 0);
+    return days.filter(day => this.visibleEventCount(day) > 0);
+  }
+
+  visiblePrimary(day: RiskDay): MarketEvent[] {
+    return this.priority === 'secondary' ? [] : day.primaryEvents;
+  }
+
+  visibleSecondary(day: RiskDay): MarketEvent[] {
+    return this.priority === 'primary' ? [] : day.secondaryEvents;
+  }
+
+  visibleEventCount(day: RiskDay): number {
+    return this.visiblePrimary(day).length + this.visibleSecondary(day).length;
   }
 
   coveredEmptyCount(): number {

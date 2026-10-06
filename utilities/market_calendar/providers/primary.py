@@ -47,6 +47,14 @@ TITLE_TYPES = (
     (re.compile(r"retail sales", re.I), "RETAIL_SALES"),
     (re.compile(r"durable goods", re.I), "DURABLE_GOODS"),
     (re.compile(r"industrial production", re.I), "INDUSTRIAL_PRODUCTION"),
+    (re.compile(r"weekly petroleum status", re.I), "EIA_PETROLEUM_STATUS"),
+    (re.compile(r"weekly natural gas storage", re.I), "EIA_NATURAL_GAS_STORAGE"),
+    (re.compile(r"world agricultural supply and demand|\bwasde\b", re.I), "USDA_WASDE"),
+    (re.compile(r"crop production", re.I), "USDA_CROP_PRODUCTION"),
+    (re.compile(r"grain stocks", re.I), "USDA_GRAIN_STOCKS"),
+    (re.compile(r"prospective plantings", re.I), "USDA_PROSPECTIVE_PLANTINGS"),
+    (re.compile(r"\bacreage\b", re.I), "USDA_ACREAGE"),
+    (re.compile(r"weekly export sales|export sales", re.I), "FAS_EXPORT_SALES"),
     (re.compile(r"earnings", re.I), "EARNINGS"),
 )
 
@@ -553,6 +561,283 @@ def _dol_document(
     return report, (start.isoformat(), end.isoformat())
 
 
+def _eia_weekly_document(
+    text: str, source_url: str, start: date, end: date, *, natural_gas: bool,
+) -> tuple[ParseReport, tuple[str, str]]:
+    weekday = 3 if natural_gas else 2
+    day_name = "Thursdays" if natural_gas else "Wednesday"
+    if "10:30 a.m." not in text or day_name.lower() not in text.lower():
+        raise PrimaryCalendarParseError("EIA weekly publication rule is missing")
+    parser = _TableRows()
+    parser.feed(text)
+    exceptions: dict[date, tuple[date, str]] = {}
+    exception_years: set[int] = set()
+    for cells in parser.rows:
+        if natural_gas:
+            if len(cells) < 3:
+                continue
+            release_text, clock = cells[0], cells[2]
+            try:
+                release = datetime.strptime(release_text, "%B %d, %Y").date()
+            except ValueError:
+                continue
+            nominal = release - timedelta(days=(release.weekday() - weekday) % 7)
+            reference = nominal - timedelta(days=6)
+        else:
+            if len(cells) < 4:
+                continue
+            reference_text, release_text, clock = cells[0], cells[1], cells[3]
+            try:
+                reference = datetime.strptime(reference_text, "%B %d, %Y").date()
+                release = datetime.strptime(release_text, "%B %d, %Y").date()
+            except ValueError:
+                continue
+            nominal = reference + timedelta(days=(weekday - reference.weekday()) % 7)
+        exception_years.add(release.year)
+        exceptions[nominal] = (release, clock)
+
+    requested_years = set(range(start.year, end.year + 1))
+    if not requested_years.issubset(exception_years):
+        raise PrimaryCalendarParseError("EIA holiday table does not cover the requested year")
+
+    release_rows = []
+    cursor = start - timedelta(days=7)
+    while cursor <= end + timedelta(days=7):
+        if cursor.weekday() == weekday:
+            release, clock = exceptions.get(cursor, (cursor, "10:30 a.m."))
+            if start <= release <= end:
+                reference = cursor - timedelta(days=6 if natural_gas else 5)
+                event_type = (
+                    "EIA_NATURAL_GAS_STORAGE" if natural_gas else "EIA_PETROLEUM_STATUS"
+                )
+                title = (
+                    "Weekly Natural Gas Storage Report"
+                    if natural_gas else "Weekly Petroleum Status Report"
+                )
+                try:
+                    release_time = datetime.strptime(
+                        clock.lower().replace(".", ""), "%I:%M %p"
+                    ).time()
+                except ValueError as exc:
+                    raise PrimaryCalendarParseError("invalid EIA release time") from exc
+                release_rows.append({
+                    "id": f"{event_type}:{reference.isoformat()}",
+                    "title": title,
+                    "eventType": event_type,
+                    "referencePeriod": reference.isoformat(),
+                    "scheduledAt": datetime.combine(
+                        release, release_time, ZoneInfo("America/New_York")
+                    ).isoformat(),
+                    "timezone": "America/New_York",
+                    "canonicalKey": f"US:EIA:{event_type}:{reference.isoformat()}",
+                })
+        cursor += timedelta(days=1)
+    provider = "eia_natural_gas" if natural_gas else "eia_petroleum"
+    report = ParseReport(tuple(
+        item for item in (_observation(provider, source_url, row) for row in release_rows)
+        if item is not None
+    ))
+    return report, (start.isoformat(), end.isoformat())
+
+
+def _nass_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, str]]:
+    rows = _ics_rows(text)
+    dated = [
+        str(row.get("scheduledAt") or row.get("date") or "")[:10]
+        for row in rows if row.get("scheduledAt") or row.get("date")
+    ]
+    if not dated:
+        raise PrimaryCalendarParseError("NASS calendar has no dated coverage")
+    selected = []
+    for raw in rows:
+        title = str(raw.get("title") or "")
+        event_type = _event_type(title)
+        if event_type not in {
+            "USDA_CROP_PRODUCTION", "USDA_GRAIN_STOCKS",
+            "USDA_PROSPECTIVE_PLANTINGS", "USDA_ACREAGE",
+        }:
+            continue
+        row = dict(raw)
+        civil = str(row.get("scheduledAt") or row.get("date") or "")[:10]
+        source_id = str(row.get("id") or "").strip()
+        row.update({
+            "eventType": event_type,
+            "referencePeriod": civil[:7],
+            "canonicalKey": f"US:USDA_NASS:{event_type}:{source_id}",
+        })
+        selected.append(row)
+    report = ParseReport(tuple(
+        item for item in (_observation("usda_nass", source_url, row) for row in selected)
+        if item is not None
+    ), skipped_other_releases=len(rows) - len(selected))
+    return report, (min(dated), max(dated))
+
+
+def _agency_table_document(
+    text: str, source_url: str, provider: str, event_type: str,
+) -> tuple[ParseReport, tuple[str, str]]:
+    """Normalize official WASDE/FAS HTML tables with explicit dated rows."""
+    parser = _TableRows()
+    parser.feed(text)
+    rows = []
+    dated = []
+    wanted = "wasde" if event_type == "USDA_WASDE" else "export sales"
+    for cells in parser.rows:
+        joined = " | ".join(cells)
+        if wanted not in joined.lower():
+            continue
+        match = re.search(
+            r"(?:Monday|Tuesday|Wednesday|Thursday|Friday)?[,]?\s*"
+            r"(January|February|March|April|May|June|July|August|September|October|November|December)"
+            r"\s+(\d{1,2}),?\s+(20\d{2})",
+            joined,
+            re.I,
+        )
+        if not match:
+            match = re.search(r"\b(\d{1,2}/\d{1,2}/20\d{2})\b", joined)
+        if not match:
+            continue
+        raw_date = match.group(0).strip(" ,")
+        parsed_date = None
+        for pattern in ("%A, %B %d, %Y", "%A %B %d, %Y", "%B %d, %Y", "%m/%d/%Y"):
+            try:
+                parsed_date = datetime.strptime(raw_date, pattern).date()
+                break
+            except ValueError:
+                continue
+        if parsed_date is None:
+            continue
+        clock_match = re.search(r"\b(\d{1,2}:\d{2}\s*[ap]\.?m\.?)\b", joined, re.I)
+        clock = clock_match.group(1).lower().replace(".", "") if clock_match else "08:30 am"
+        release_time = datetime.strptime(clock, "%I:%M %p").time()
+        civil = parsed_date.isoformat()
+        dated.append(civil)
+        rows.append({
+            "id": f"{event_type}:{civil}",
+            "title": "World Agricultural Supply and Demand Estimates" if event_type == "USDA_WASDE" else "Weekly Export Sales",
+            "eventType": event_type,
+            "referencePeriod": civil[:7] if event_type == "USDA_WASDE" else civil,
+            "scheduledAt": datetime.combine(
+                parsed_date, release_time, ZoneInfo("America/New_York")
+            ).isoformat(),
+            "timezone": "America/New_York",
+            "canonicalKey": f"US:{provider.upper()}:{event_type}:{civil}",
+        })
+    if not dated:
+        raise PrimaryCalendarParseError(f"{provider} calendar has no selected dated rows")
+    report = ParseReport(tuple(
+        item for item in (_observation(provider, source_url, row) for row in rows)
+        if item is not None
+    ))
+    return report, (min(dated), max(dated))
+
+
+def _wasde_document(text: str, source_url: str) -> tuple[ParseReport, tuple[str, str]]:
+    if "BEGIN:VCALENDAR" not in text[:300].upper():
+        return _agency_table_document(text, source_url, "usda_wasde", "USDA_WASDE")
+    raw_rows = _ics_rows(text)
+    dated = [
+        str(row.get("scheduledAt") or row.get("date") or "")[:10]
+        for row in raw_rows if row.get("scheduledAt") or row.get("date")
+    ]
+    if not dated:
+        raise PrimaryCalendarParseError("USDA calendar has no dated coverage")
+    rows = []
+    for raw in raw_rows:
+        if str(raw.get("title") or "").strip().lower() != "crop production":
+            continue
+        row = dict(raw)
+        civil = str(row.get("scheduledAt") or row.get("date") or "")[:10]
+        source_id = str(row.get("id") or "").strip()
+        row.update({
+            "id": f"wasde:{source_id}",
+            "title": "World Agricultural Supply and Demand Estimates",
+            "eventType": "USDA_WASDE",
+            "referencePeriod": civil[:7],
+            "canonicalKey": f"US:USDA:USDA_WASDE:{source_id}",
+        })
+        rows.append(row)
+    report = ParseReport(tuple(
+        item for item in (_observation("usda_wasde", source_url, row) for row in rows)
+        if item is not None
+    ), skipped_other_releases=len(raw_rows) - len(rows))
+    return report, (min(dated), max(dated))
+
+
+def _observed(day: date) -> date:
+    if day.weekday() == 5:
+        return day - timedelta(days=1)
+    if day.weekday() == 6:
+        return day + timedelta(days=1)
+    return day
+
+
+def _nth_weekday(year: int, month: int, weekday: int, occurrence: int) -> date:
+    first = date(year, month, 1)
+    return first + timedelta(days=(weekday - first.weekday()) % 7 + 7 * (occurrence - 1))
+
+
+def _last_weekday(year: int, month: int, weekday: int) -> date:
+    last = date(year, month, calendar.monthrange(year, month)[1])
+    return last - timedelta(days=(last.weekday() - weekday) % 7)
+
+
+def _federal_holidays(year: int) -> set[date]:
+    return {
+        _observed(date(year, 1, 1)),
+        _nth_weekday(year, 1, 0, 3),
+        _nth_weekday(year, 2, 0, 3),
+        _last_weekday(year, 5, 0),
+        _observed(date(year, 6, 19)),
+        _observed(date(year, 7, 4)),
+        _nth_weekday(year, 9, 0, 1),
+        _nth_weekday(year, 10, 0, 2),
+        _observed(date(year, 11, 11)),
+        _nth_weekday(year, 11, 3, 4),
+        _observed(date(year, 12, 25)),
+    }
+
+
+def _fas_document(
+    text: str, source_url: str, start: date, end: date,
+) -> tuple[ParseReport, tuple[str, str]]:
+    lower = " ".join(_plain_text(text).lower().split())
+    if "weekly summary" not in lower or "8:30" not in lower or "thursday" not in lower:
+        return _agency_table_document(text, source_url, "fas_export_sales", "FAS_EXPORT_SALES")
+    holidays = set().union(*(
+        _federal_holidays(year) for year in range(start.year - 1, end.year + 1)
+    ))
+    rows = []
+    cursor = start - timedelta(days=7)
+    while cursor <= end:
+        if cursor.weekday() == 3:
+            preceding_friday = cursor - timedelta(days=6)
+            preceding_monday = cursor - timedelta(days=3)
+            release = cursor + timedelta(days=1) if (
+                preceding_friday in holidays or preceding_monday in holidays
+            ) else cursor
+            if start <= release <= end:
+                reference = preceding_friday.isoformat()
+                rows.append({
+                    "id": f"weekly-export-sales:{reference}",
+                    "title": "Weekly Export Sales",
+                    "eventType": "FAS_EXPORT_SALES",
+                    "referencePeriod": reference,
+                    "scheduledAt": datetime.combine(
+                        release, datetime.strptime("08:30 AM", "%I:%M %p").time(),
+                        ZoneInfo("America/New_York"),
+                    ).isoformat(),
+                    "timezone": "America/New_York",
+                    "canonicalKey": f"US:FAS:FAS_EXPORT_SALES:{reference}",
+                })
+        cursor += timedelta(days=1)
+    report = ParseReport(tuple(
+        item for item in (_observation("fas_export_sales", source_url, row) for row in rows)
+        if item is not None
+    ))
+    return report, (start.isoformat(), end.isoformat())
+
+
 def parse_official_document(
     text: str,
     *,
@@ -572,4 +857,18 @@ def parse_official_document(
         return _census_document(text, source_url)
     if provider == "dol_claims":
         return _dol_document(text, source_url, horizon_start, horizon_end)
+    if provider == "eia_petroleum":
+        return _eia_weekly_document(
+            text, source_url, horizon_start, horizon_end, natural_gas=False,
+        )
+    if provider == "eia_natural_gas":
+        return _eia_weekly_document(
+            text, source_url, horizon_start, horizon_end, natural_gas=True,
+        )
+    if provider == "usda_nass":
+        return _nass_document(text, source_url)
+    if provider == "usda_wasde":
+        return _wasde_document(text, source_url)
+    if provider == "fas_export_sales":
+        return _fas_document(text, source_url, horizon_start, horizon_end)
     raise PrimaryCalendarParseError(f"no official parser for {provider}")

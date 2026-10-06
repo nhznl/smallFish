@@ -64,7 +64,7 @@
     @if (optionalGaps().length) {
       <p class="source-note">
         @for (source of optionalGaps(); track source.provider) {
-          <span>{{ source.detail }}</span>
+          <span class="source-gap">{{ source.detail }}</span>
         }
       </p>
     }
@@ -106,6 +106,15 @@
       }
     </div>
 
+    <div class="range-bar" role="group" aria-label="Event priority">
+      @for (option of priorities; track option.id) {
+        <button type="button" class="btn" [class.btn-primary]="priority === option.id"
+                [class.btn-ghost]="priority !== option.id"
+                [attr.aria-pressed]="priority === option.id"
+                (click)="priority = option.id">{{ option.label }}</button>
+      }
+    </div>
+
     <div [attr.aria-busy]="reloading || loading">
       @if (!scan.available) {
         <div class="empty-state">
@@ -129,7 +138,7 @@
             <div class="panel-heading day-heading">
               <div>
                 <h2>{{ formatDay(day.date) }}</h2>
-                <small>{{ sessionLabel(day.sessionState) }} · {{ day.eventCount }} event{{ day.eventCount === 1 ? '' : 's' }} · {{ day.coverage === 'covered' ? 'Primary sources covered' : day.coverage }}</small>
+                <small>{{ sessionLabel(day.sessionState) }} · {{ visibleEventCount(day) }} shown · {{ day.coverage === 'covered' ? 'Configured schedules covered' : day.coverage }}</small>
               </div>
               <span [class]="riskClass(day.riskLabel)">{{ day.riskLabel }} RISK</span>
             </div>
@@ -138,7 +147,8 @@
               @if (day.clusterWarning) {
                 <p class="banner banner-warn">{{ day.clusterWarning }}</p>
               }
-              <div class="table-shell">
+              @if (visiblePrimary(day).length) {
+              <div class="table-shell" aria-label="Primary events">
                 <table class="data-table">
                   <thead>
                     <tr>
@@ -153,7 +163,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    @for (event of day.primaryEvents; track event.id) {
+                    @for (event of visiblePrimary(day); track event.id) {
                       <tr>
                         <td class="col-sticky">
                           <button type="button" class="row-button time-button" (click)="selected = event">
@@ -198,14 +208,25 @@
                   </tbody>
                 </table>
               </div>
-              @if (day.secondaryEvents.length) {
+              }
+              @if (visibleSecondary(day).length) {
                 <h3 class="secondary-title">Secondary events</h3>
+                <p class="secondary-note">Sector and commodity exposures are grouped by channel and do not imply direction.</p>
                 <ul class="secondary-list">
-                  @for (event of day.secondaryEvents; track event.id) {
+                  @for (event of visibleSecondary(day); track event.id) {
                     <li>
                       <button type="button" class="row-button" (click)="selected = event">
-                        {{ dash(event.pacificTime) }} / {{ dash(event.easternTime) }} {{ event.title }}
-                        · {{ relevanceLabel(event.portfolioRelevance) }}
+                        <strong>{{ dash(event.pacificTime) }} / {{ dash(event.easternTime) }} {{ event.title }}</strong>
+                        <small>{{ relevanceLabel(event.portfolioRelevance) }} · {{ event.importance.label }}</small>
+                        @for (group of exposureGroups(event); track group.relationship) {
+                          <span class="exposure-group">
+                            {{ relationshipLabel(group.relationship) }}:
+                            @for (exposure of group.items; track exposure.symbol) {
+                              <span class="badge badge-neutral">{{ exposure.symbol }}</span>
+                              <span [class]="priceClass(exposure.priceDataState)">{{ exposure.priceDataState }}</span>
+                            }
+                          </span>
+                        }
                       </button>
                     </li>
                   }

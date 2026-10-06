@@ -72,3 +72,64 @@ sources:
       Private local Finnhub calendar sidecar for personal use only. Fiscal
       period supplies stable identity; dated SPY/QQQ membership controls broad
       relevance. Dataset access follows the account plan; redistribution is prohibited.
+  eia_petroleum:
+    required: false
+    configured: true
+    parser_version: eia-petroleum-schedule-html-1
+    schedule_url: https://www.eia.gov/petroleum/supply/weekly/schedule.php
+    freshness_hours: 168
+    scope: weekly_petroleum_status_schedule
+    detail: Official EIA Weekly Petroleum Status Report schedule, including published holiday exceptions. Schedule metadata is separate from released values.
+  eia_natural_gas:
+    required: false
+    configured: true
+    parser_version: eia-natural-gas-schedule-html-1
+    schedule_url: https://ir.eia.gov/ngs/schedule.html
+    freshness_hours: 168
+    scope: weekly_natural_gas_storage_schedule
+    detail: Official EIA Weekly Natural Gas Storage Report schedule, including published holiday exceptions. Schedule metadata is separate from released values.
+  usda_nass:
+    required: false
+    configured: true
+    parser_version: nass-asb-ical-1
+    schedule_url: https://www.nass.usda.gov/Publications/Calendar/2026/NassReleases2026.ics
+    freshness_hours: 168
+    scope: selected_market_sensitive_nass_reports
+    detail: Official NASS Agricultural Statistics Board iCalendar, limited to Crop Production, Grain Stocks, Prospective Plantings, and Acreage.
+  usda_wasde:
+    required: false
+    configured: true
+    parser_version: usda-wasde-nass-aligned-1
+    schedule_url: https://www.nass.usda.gov/Publications/Calendar/2026/NassReleases2026.ics
+    freshness_hours: 168
+    scope: monthly_wasde_schedule
+    detail: Official USDA WASDE occurrences aligned to the same-day Crop Production entries in the NASS Agricultural Statistics Board iCalendar; released ESMIS report files remain separate from schedule metadata.
+  fas_export_sales:
+    required: false
+    configured: true
+    parser_version: fas-export-sales-schedule-1
+    schedule_url: https://apps.fas.usda.gov/info/factsheets/expsls.asp
+    freshness_hours: 168
+    scope: weekly_export_sales_schedule
+    detail: Official FAS weekly Export Sales publication rule, including the published Friday shift when the preceding Friday or Monday is a national holiday. API values require a separate API.data.gov capability.
+  eia_released_values:
+    provider: eia_released_values
+    required: false
+    configured: false
+    parser_version: eia-values-none
+    scope: petroleum_and_natural_gas_measurements
+    detail: Not configured. EIA schedule coverage is independent of released values; values require an approved EIA API key or official CSV ingestion path.
+  fas_released_values:
+    provider: fas_released_values
+    required: false
+    configured: false
+    parser_version: fas-values-none
+    scope: export_sales_measurements
+    detail: Not configured. FAS Export Sales values require an API.data.gov key and remain separate from the public release schedule.
+  private_secondary_feeds:
+    provider: private_secondary_feeds
+    required: false
+    configured: false
+    parser_version: private-secondary-none
+    scope: ism_michigan_conference_board_nar
+    detail: Not configured. ISM, Michigan, Conference Board, and NAR calendars are excluded pending source-terms review.

@@ -16,6 +16,11 @@
   font-size: var(--text-sm);
 }
 
+.source-gap {
+  display: block;
+  margin-bottom: 4px;
+}
+
 .day-heading {
   align-items: center;
 }
@@ -60,7 +65,25 @@
 
 .secondary-list {
   margin: 0;
-  padding-left: 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.secondary-list li {
+  margin-bottom: 10px;
+}
+
+.secondary-note {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.exposure-group {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
 .drawer-block {

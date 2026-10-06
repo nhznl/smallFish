@@ -162,6 +162,49 @@ def _primary_documents() -> dict[str, str]:
     }
 
 
+def _secondary_documents() -> dict[str, str]:
+    rows = {
+        "eia_petroleum": [{
+            "id": "petroleum-2026-10-09", "title": "Weekly Petroleum Status Report",
+            "eventType": "EIA_PETROLEUM_STATUS", "referencePeriod": "2026-10-09",
+            "scheduledAt": "2026-10-15T12:00:00", "timezone": "America/New_York",
+            "canonicalKey": "US:EIA:EIA_PETROLEUM_STATUS:2026-10-09",
+        }],
+        "eia_natural_gas": [{
+            "id": "natural-gas-2026-10-09", "title": "Weekly Natural Gas Storage Report",
+            "eventType": "EIA_NATURAL_GAS_STORAGE", "referencePeriod": "2026-10-09",
+            "scheduledAt": "2026-10-16T10:30:00", "timezone": "America/New_York",
+            "canonicalKey": "US:EIA:EIA_NATURAL_GAS_STORAGE:2026-10-09",
+        }],
+        "usda_nass": [{
+            "id": "crop-production-2026-10", "title": "Crop Production",
+            "eventType": "USDA_CROP_PRODUCTION", "referencePeriod": "2026-10",
+            "scheduledAt": "2026-10-09T12:00:00", "timezone": "America/New_York",
+            "canonicalKey": "US:USDA_NASS:USDA_CROP_PRODUCTION:2026-10-09",
+        }],
+        "usda_wasde": [{
+            "id": "wasde-2026-10", "title": "World Agricultural Supply and Demand Estimates",
+            "eventType": "USDA_WASDE", "referencePeriod": "2026-10",
+            "scheduledAt": "2026-10-09T12:00:00", "timezone": "America/New_York",
+            "canonicalKey": "US:USDA:USDA_WASDE:2026-10",
+        }],
+        "fas_export_sales": [{
+            "id": "export-sales-2026-10-09", "title": "Weekly Export Sales",
+            "eventType": "FAS_EXPORT_SALES", "referencePeriod": "2026-10-02",
+            "scheduledAt": "2026-10-09T08:30:00", "timezone": "America/New_York",
+            "canonicalKey": "US:FAS:FAS_EXPORT_SALES:2026-10-02",
+        }],
+    }
+    return {
+        provider: json.dumps({
+            "coverageStart": START.isoformat(),
+            "coverageEnd": END.isoformat(),
+            "events": events,
+        })
+        for provider, events in rows.items()
+    }
+
+
 def _earnings_calendar(
     *events: dict[str, str], legacy_csv_text: str | None = None,
 ) -> str:
@@ -804,6 +847,7 @@ def test_m2_official_source_shapes_prove_coverage_without_network(tmp_path: Path
         earnings_csv_text=(FIXTURES / "earnings.csv").read_text(encoding="utf-8"),
         earnings_meta_text=(FIXTURES / "earnings_meta.json").read_text(encoding="utf-8"),
         earnings_calendar_text=(FIXTURES / "earnings_calendar.json").read_text(encoding="utf-8"),
+        provider_documents=_secondary_documents(),
         transport=transport,
     )
     assert result.exit_code == 0
@@ -868,6 +912,174 @@ def test_m2_official_source_shapes_prove_coverage_without_network(tmp_path: Path
     assert len(fomc_links) == 2
 
 
+def test_m3_eia_rules_apply_petroleum_and_natural_gas_holiday_exceptions():
+    petroleum = """
+      <p>The standard release time and day of the week will be at 10:30 a.m.
+      eastern time on Wednesday with the following exceptions.</p>
+      <table><tr><th>Data for the week ending</th><th>Alternate release date</th>
+      <th>Release day</th><th>Release time</th><th>Holiday</th></tr>
+      <tr><td>October 9, 2026</td><td>October 15, 2026</td><td>Thursday</td>
+      <td>12:00 p.m.</td><td>Federal holiday</td></tr></table>
+    """
+    gas = """
+      <p>The standard release time and day of the week will be at 10:30 a.m.
+      eastern time on Thursdays with the following exceptions.</p>
+      <table><tr><th>Alternate release date</th><th>Release day</th>
+      <th>Release time</th><th>Holiday</th></tr>
+      <tr><td>October 16, 2026</td><td>Friday</td><td>10:30 a.m.</td>
+      <td>Federal holiday</td></tr></table>
+    """
+    petroleum_report, coverage = parse_official_document(
+        petroleum, provider="eia_petroleum", source_url="https://www.eia.gov/petroleum",
+        horizon_start=date(2026, 10, 12), horizon_end=date(2026, 10, 18),
+    )
+    gas_report, gas_coverage = parse_official_document(
+        gas, provider="eia_natural_gas", source_url="https://ir.eia.gov/ngs",
+        horizon_start=date(2026, 10, 12), horizon_end=date(2026, 10, 18),
+    )
+    assert coverage == ("2026-10-12", "2026-10-18")
+    assert gas_coverage == coverage
+    assert petroleum_report.observations[0].scheduled_at_utc == "2026-10-15T16:00:00Z"
+    assert petroleum_report.observations[0].reference_period == "2026-10-09"
+    assert gas_report.observations[0].scheduled_at_utc == "2026-10-16T14:30:00Z"
+    assert gas_report.observations[0].reference_period == "2026-10-09"
+    with pytest.raises(PrimaryCalendarParseError, match="requested year"):
+        parse_official_document(
+            petroleum, provider="eia_petroleum", source_url="https://www.eia.gov/petroleum",
+            horizon_start=date(2027, 1, 1), horizon_end=date(2027, 1, 31),
+        )
+
+
+def test_m3_nass_and_agency_calendars_select_only_approved_reports():
+    nass = """BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:crop-2026-10
+DTSTART;TZID=America/New_York:20261009T120000
+SUMMARY:Crop Production
+END:VEVENT
+BEGIN:VEVENT
+UID:other-2026-10
+DTSTART;TZID=America/New_York:20261010T120000
+SUMMARY:Cattle on Feed
+END:VEVENT
+BEGIN:VEVENT
+UID:grain-2026-11
+DTSTART;TZID=America/New_York:20261130T120000
+SUMMARY:Grain Stocks
+END:VEVENT
+END:VCALENDAR
+"""
+    report, coverage = parse_official_document(
+        nass, provider="usda_nass", source_url="https://www.nass.usda.gov/calendar.ics",
+        horizon_start=START, horizon_end=END,
+    )
+    assert coverage == ("2026-10-09", "2026-11-30")
+    assert {item.event_type for item in report.observations} == {
+        "USDA_CROP_PRODUCTION", "USDA_GRAIN_STOCKS",
+    }
+    assert report.skipped_other_releases == 1
+
+    aligned_wasde, wasde_coverage = parse_official_document(
+        nass, provider="usda_wasde", source_url="https://www.nass.usda.gov/calendar.ics",
+        horizon_start=START, horizon_end=END,
+    )
+    assert wasde_coverage == coverage
+    assert [item.civil_date for item in aligned_wasde.observations] == ["2026-10-09"]
+    moved_nass = nass.replace("20261009T120000", "20261010T120000")
+    moved_report, _ = parse_official_document(
+        moved_nass, provider="usda_nass", source_url="https://www.nass.usda.gov/calendar.ics",
+        horizon_start=START, horizon_end=END,
+    )
+    moved_wasde, _ = parse_official_document(
+        moved_nass, provider="usda_wasde", source_url="https://www.nass.usda.gov/calendar.ics",
+        horizon_start=START, horizon_end=END,
+    )
+    crop = next(item for item in report.observations if item.event_type == "USDA_CROP_PRODUCTION")
+    moved_crop = next(
+        item for item in moved_report.observations
+        if item.event_type == "USDA_CROP_PRODUCTION"
+    )
+    assert moved_crop.canonical_key == crop.canonical_key
+    assert moved_wasde.observations[0].canonical_key == aligned_wasde.observations[0].canonical_key
+
+    wasde, _ = parse_official_document(
+        "<table><tr><td>WASDE</td><td>Friday, October 9, 2026</td><td>12:00 p.m.</td></tr></table>",
+        provider="usda_wasde", source_url="https://www.usda.gov/oce/commodity/wasde",
+        horizon_start=START, horizon_end=END,
+    )
+    exports, _ = parse_official_document(
+        "<table><tr><td>Weekly Export Sales</td><td>Friday, October 9, 2026</td><td>8:30 a.m.</td></tr></table>",
+        provider="fas_export_sales", source_url="https://www.fas.usda.gov/data/scheduled-reports",
+        horizon_start=START, horizon_end=END,
+    )
+    assert wasde.observations[0].event_type == "USDA_WASDE"
+    assert exports.observations[0].event_type == "FAS_EXPORT_SALES"
+
+    export_rule, export_coverage = parse_official_document(
+        "FAS publishes a weekly summary every Thursday at 8:30 a.m. ET. "
+        "If the preceding Friday or Monday is a national holiday, the weekly summary is published Friday.",
+        provider="fas_export_sales",
+        source_url="https://www.fas.usda.gov/programs/export-sales-reporting-program",
+        horizon_start=date(2026, 10, 12), horizon_end=date(2026, 10, 18),
+    )
+    assert export_coverage == ("2026-10-12", "2026-10-18")
+    assert export_rule.observations[0].scheduled_at_utc == "2026-10-16T12:30:00Z"
+
+
+def test_m3_secondary_publication_is_optional_and_preserves_distinct_capability_states(tmp_path: Path):
+    _prices(tmp_path / "cache")
+    (tmp_path / "cache" / "2026" / "USO.txt").write_text(
+        "10-03-2026,10,10,10,10,10,100\n", encoding="utf-8",
+    )
+    (tmp_path / "cache" / "2026" / "XLE.txt").write_text(
+        "09-01-2026,10,10,10,10,10,100\n", encoding="utf-8",
+    )
+    documents = _primary_documents() | _secondary_documents()
+    result = run_primary_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        now=NOW,
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        provider_documents=documents,
+        earnings_csv_text=(FIXTURES / "earnings.csv").read_text(encoding="utf-8"),
+        earnings_meta_text=(FIXTURES / "earnings_meta.json").read_text(encoding="utf-8"),
+        earnings_calendar_text=(FIXTURES / "earnings_calendar.json").read_text(encoding="utf-8"),
+        transport=BoomTransport(),
+    )
+    assert result.exit_code == 0
+    secondary = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT event_type, portfolio_relevance FROM events WHERE portfolio_relevance = 'SECTOR_OR_COMMODITY' ORDER BY event_type",
+    )
+    assert {row["event_type"] for row in secondary} == {
+        "EIA_NATURAL_GAS_STORAGE", "EIA_PETROLEUM_STATUS", "FAS_EXPORT_SALES",
+        "USDA_CROP_PRODUCTION", "USDA_WASDE",
+    }
+    states = {
+        row["symbol"]: row["price_data_state"] for row in _rows(
+            tmp_path / "calendar.sqlite",
+            """
+            SELECT x.symbol, x.price_data_state
+            FROM event_etf_exposures AS x
+            JOIN events AS e ON e.id = x.event_id
+            WHERE e.canonical_key = 'US:EIA:EIA_PETROLEUM_STATUS:2026-10-09'
+            """,
+        )
+    }
+    assert states == {"USO": "current", "XLE": "stale", "XOP": "missing"}
+    gaps = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT provider, status, configured FROM source_sync_state WHERE provider IN ('eia_released_values', 'fas_released_values', 'private_secondary_feeds') ORDER BY provider",
+    )
+    assert {(row["provider"], row["status"], row["configured"]) for row in gaps} == {
+        ("eia_released_values", "not_configured", 0),
+        ("fas_released_values", "not_configured", 0),
+        ("private_secondary_feeds", "not_configured", 0),
+    }
 def test_m2_official_fed_occurrence_identity_survives_day_and_month_reschedules(
     tmp_path: Path,
 ):

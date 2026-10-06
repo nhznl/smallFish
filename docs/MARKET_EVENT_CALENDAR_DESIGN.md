@@ -1,7 +1,7 @@
 # Market Event Risk Calendar design
 
-**Status:** Milestone 1 accepted. Milestone 2 implementation changes are
-awaiting review; Milestone 3 is not started.
+**Status:** Milestones 1 and 2 are accepted. Milestone 3 implementation is in
+review.
 
 **Primary user:** a local smallFish user planning SPY and QQQ 0-DTE trades
 
@@ -846,6 +846,17 @@ provenance. Without it, show membership and avoid fabricating a weight.
 - selected FAS export sales;
 - reviewed ETF exposure mappings; and
 - the secondary-event subsection and filters.
+
+Implementation keeps all five schedule families optional so their outages do
+not weaken accepted primary coverage. EIA weekly petroleum and natural-gas
+rules apply the official holiday tables. Selected NASS reports come from the
+annual ASB iCalendar; WASDE uses the same-day Crop Production entries in that
+official calendar, matching USDA's published 2026 WASDE schedule. FAS Export
+Sales uses the official Thursday 8:30 a.m. ET publication rule and its Friday
+holiday shift. Schedule acquisition remains separate from released values:
+EIA and FAS value capabilities are explicitly `not_configured` without an
+approved key-backed ingestion path. ISM, Michigan, Conference Board, and NAR
+remain an explicit terms-review gap.
 
 ### Deferred
 

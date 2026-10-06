@@ -132,6 +132,15 @@ cleanup of any already-diverged cancelled date/month generation, and snapshot
 replacement in one transaction, preserving the chosen keys and merged schedule
 history even when the obsolete occurrence is outside the current scan horizon.
 
+Optional secondary schedules use the same batch boundary. EIA weekly
+petroleum and natural-gas rules, the annual NASS calendar, USDA's synchronized
+WASDE dates, and the FAS Export Sales publication rule are normalized into the
+same SQLite artifact. Failures retain earlier rows and do not change primary
+availability. Released EIA/FAS values and privately published ISM, Michigan,
+Conference Board, and NAR calendars remain explicit capability gaps. The API
+continues to read only the artifact and groups sector or commodity events after
+primary broad-index events.
+
 Brokerage sync consumers call `services/*` for raw provider payloads, then
 normalize and materialize their own ledger artifacts under `SFP_DATA_DIR`.
 Brokerage adapters read those artifacts only; they never call `services/`.

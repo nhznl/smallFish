@@ -31,3 +31,45 @@ families:
           Long-duration Treasury prices can reprice when inflation changes
           expected policy rates. This is not an equity proxy and has no
           implied direction.
+  eia_petroleum:
+    event_type: EIA_PETROLEUM_STATUS
+    exposures:
+      - {symbol: USO, relationship: direct_underlying, relevance: primary, channel: "USO is an oil-futures exposure channel; the scheduled report does not imply a price direction."}
+      - {symbol: XLE, relationship: sector_equities, relevance: secondary, channel: "Energy-sector equities can react through the petroleum channel without a guaranteed direction."}
+      - {symbol: XOP, relationship: industry_equities, relevance: indirect, channel: "Exploration and production equities are an indirect petroleum-sensitive channel, not a forecast."}
+  eia_natural_gas:
+    event_type: EIA_NATURAL_GAS_STORAGE
+    exposures:
+      - {symbol: UNG, relationship: direct_underlying, relevance: primary, channel: "UNG is a natural-gas futures exposure channel; the storage report does not imply a price direction."}
+      - {symbol: XLE, relationship: sector_equities, relevance: secondary, channel: "Energy-sector equities are a broader sector channel with no guaranteed response."}
+      - {symbol: XOP, relationship: industry_equities, relevance: indirect, channel: "Exploration and production equities are an indirect natural-gas-sensitive channel."}
+  usda_agriculture:
+    event_type: USDA_WASDE
+    exposures:
+      - {symbol: DBA, relationship: direct_underlying, relevance: primary, channel: "DBA is a diversified agricultural-commodity exposure channel; the report does not imply direction."}
+      - {symbol: MOO, relationship: industry_equities, relevance: indirect, channel: "Agribusiness equities provide an indirect operational channel rather than a commodity-price forecast."}
+  usda_crop_production:
+    event_type: USDA_CROP_PRODUCTION
+    exposures:
+      - {symbol: DBA, relationship: direct_underlying, relevance: primary, channel: "DBA is a diversified agricultural-commodity exposure channel without an implied direction."}
+      - {symbol: MOO, relationship: industry_equities, relevance: indirect, channel: "Agribusiness equities are an indirect crop-production channel."}
+  usda_grain_stocks:
+    event_type: USDA_GRAIN_STOCKS
+    exposures:
+      - {symbol: DBA, relationship: direct_underlying, relevance: primary, channel: "DBA is a diversified agricultural-commodity exposure channel without an implied direction."}
+      - {symbol: MOO, relationship: industry_equities, relevance: indirect, channel: "Agribusiness equities are an indirect grain-inventory channel."}
+  usda_prospective_plantings:
+    event_type: USDA_PROSPECTIVE_PLANTINGS
+    exposures:
+      - {symbol: DBA, relationship: direct_underlying, relevance: primary, channel: "DBA is a diversified agricultural-commodity exposure channel without an implied direction."}
+      - {symbol: MOO, relationship: industry_equities, relevance: indirect, channel: "Agribusiness equities are an indirect planting-intentions channel."}
+  usda_acreage:
+    event_type: USDA_ACREAGE
+    exposures:
+      - {symbol: DBA, relationship: direct_underlying, relevance: primary, channel: "DBA is a diversified agricultural-commodity exposure channel without an implied direction."}
+      - {symbol: MOO, relationship: industry_equities, relevance: indirect, channel: "Agribusiness equities are an indirect acreage channel."}
+  fas_export_sales:
+    event_type: FAS_EXPORT_SALES
+    exposures:
+      - {symbol: DBA, relationship: direct_underlying, relevance: primary, channel: "DBA is a diversified agricultural-commodity exposure channel; export-sales data does not imply direction."}
+      - {symbol: MOO, relationship: industry_equities, relevance: indirect, channel: "Agribusiness equities are an indirect export-demand channel."}

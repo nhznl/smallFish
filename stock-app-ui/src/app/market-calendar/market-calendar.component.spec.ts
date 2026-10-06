@@ -186,6 +186,47 @@ describe('MarketCalendarComponent', () => {
     expect(reload.disabled).toBeTrue();
   });
 
+  it('filters secondary events and keeps exposure channels and price states visible', () => {
+    const petroleum = event({
+      id: 'US:EIA:EIA_PETROLEUM_STATUS:2026-10-09',
+      canonicalKey: 'US:EIA:EIA_PETROLEUM_STATUS:2026-10-09',
+      title: 'Weekly Petroleum Status Report',
+      eventType: 'EIA_PETROLEUM_STATUS',
+      category: 'energy',
+      portfolioRelevance: 'SECTOR_OR_COMMODITY',
+      priority: 'secondary',
+      importance: { score: 3, label: 'Moderate', ruleIds: ['importance-eia-petroleum-moderate'], policyVersion: '2026-10-04.1' },
+      etfExposures: [
+        { symbol: 'USO', relationship: 'direct_underlying', relevance: 'primary', impactChannel: 'Oil channel.', priceDataState: 'current', latestPriceSession: '2026-10-13' },
+        { symbol: 'XLE', relationship: 'sector_equities', relevance: 'secondary', impactChannel: 'Sector channel.', priceDataState: 'stale', latestPriceSession: '2026-10-01' },
+        { symbol: 'XOP', relationship: 'industry_equities', relevance: 'indirect', impactChannel: 'Industry channel.', priceDataState: 'missing', latestPriceSession: null }
+      ]
+    });
+    const scan = collection();
+    scan.days[0].secondaryEvents = [petroleum];
+    scan.days[0].eventCount = 2;
+    scan.summary.secondaryEvents = 1;
+    requests.next(scan);
+    fixture.detectChanges();
+
+    expect(text()).toContain('Secondary events');
+    expect(text()).toContain('Weekly Petroleum Status Report');
+    expect(text()).toContain('direct underlying:');
+    expect(text()).toContain('sector equities:');
+    expect(text()).toContain('industry equities:');
+    expect(text()).toContain('current');
+    expect(text()).toContain('stale');
+    expect(text()).toContain('missing');
+
+    const secondary = [...fixture.nativeElement.querySelectorAll('button')].find(
+      (button: HTMLButtonElement) => button.textContent?.trim() === 'Secondary'
+    ) as HTMLButtonElement;
+    secondary.click();
+    fixture.detectChanges();
+    expect(text()).not.toContain('Consumer Price Index');
+    expect(text()).toContain('Weekly Petroleum Status Report');
+  });
+
   it('shows a load failure without inventing an empty calendar', () => {
     const service = TestBed.inject(MarketCalendarService);
     (service as unknown as { getCollection: () => unknown }).getCollection = () => throwError(() => ({ error: { detail: 'unreadable' } }));

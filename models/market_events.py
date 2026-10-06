@@ -18,11 +18,13 @@ EVENT_TYPES = frozenset({
     "FOMC_MINUTES", "FED_SPEECH",
     "BEIGE_BOOK", "TREASURY_REFUNDING", "TREASURY_AUCTION", "PCE",
     "GDP", "RETAIL_SALES", "DURABLE_GOODS", "INDUSTRIAL_PRODUCTION",
-    "EARNINGS",
+    "EARNINGS", "EIA_PETROLEUM_STATUS", "EIA_NATURAL_GAS_STORAGE",
+    "USDA_WASDE", "USDA_CROP_PRODUCTION", "USDA_GRAIN_STOCKS",
+    "USDA_PROSPECTIVE_PLANTINGS", "USDA_ACREAGE", "FAS_EXPORT_SALES",
 })
 EVENT_CATEGORIES = frozenset({
     "inflation", "labor", "central_bank", "rates", "growth",
-    "consumption", "production", "earnings",
+    "consumption", "production", "earnings", "energy", "agriculture",
 })
 TIME_PRECISIONS = frozenset({"exact", "date_only", "estimated", "unknown"})
 SCHEDULE_STATUSES = frozenset({"confirmed", "tentative", "estimated", "unscheduled"})

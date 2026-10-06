@@ -243,6 +243,83 @@ def test_collection_distinguishes_covered_empty_and_renders_both_clocks(tmp_path
     assert CLIENT.get("/api/market-events/missing").status_code == 404
 
 
+def test_secondary_sector_event_stays_separate_and_filterable(tmp_path, monkeypatch):
+    database = tmp_path / "calendar.sqlite"
+    _database(database, fresh=True)
+    connection = sqlite3.connect(database)
+    connection.executescript(
+        """
+        INSERT INTO events (
+            id, canonical_key, schema_version, title, event_type, category, country,
+            reference_period, reference_label, scheduled_at_utc, civil_date, session_date,
+            original_timezone, time_precision, schedule_status, lifecycle_status,
+            portfolio_relevance, review_required, review_reason, updated_at
+        ) VALUES (
+            'eia-petroleum', 'US:EIA:EIA_PETROLEUM_STATUS:2026-10-09', 1,
+            'Weekly Petroleum Status Report', 'EIA_PETROLEUM_STATUS', 'energy', 'US',
+            '2026-10-09', 'Week ending October 9', '2026-10-14T14:30:00Z',
+            '2026-10-14', '2026-10-14', 'America/New_York', 'exact', 'confirmed',
+            'scheduled', 'SECTOR_OR_COMMODITY', 0, NULL, '2026-10-04T15:00:00Z'
+        );
+        INSERT INTO importance_assessments (event_id, score, label, rule_id, policy_version)
+        VALUES ('eia-petroleum', 3, 'Moderate', 'importance-eia-petroleum-moderate', '2026-10-04.1');
+        INSERT INTO strategy_assessments (
+            event_id, strategy_id, assessment, timing_relationship, benefits_json,
+            risks_json, rule_ids_json, policy_version, rank_key_json
+        )
+        SELECT 'eia-petroleum', strategy_id, 'low_direct_relevance', timing_relationship,
+               '[]', '["Sector or commodity evidence is not a broad-index signal."]',
+               '["secondary-sector-event"]', policy_version, '[1,1,1]'
+        FROM strategy_assessments WHERE event_id = 'US:BLS:CPI:2026-09';
+        INSERT INTO event_etf_exposures (
+            event_id, symbol, relationship, relevance, impact_channel,
+            price_data_state, latest_price_session
+        ) VALUES
+            ('eia-petroleum', 'USO', 'direct_underlying', 'primary',
+             'Oil-futures exposure channel without implied direction.', 'current', '2026-10-13'),
+            ('eia-petroleum', 'XLE', 'sector_equities', 'secondary',
+             'Energy-sector channel without implied direction.', 'stale', '2026-10-01'),
+            ('eia-petroleum', 'XOP', 'industry_equities', 'indirect',
+             'Industry channel without implied direction.', 'missing', NULL);
+        INSERT INTO event_source_facts (
+            event_id, provider, source_record_id, source_url, fetched_at_utc, etag,
+            last_modified, parser_version, payload_sha256, field_provenance_json
+        ) VALUES (
+            'eia-petroleum', 'eia_petroleum', 'week-2026-10-09',
+            'https://www.eia.gov/petroleum/supply/weekly/schedule.php',
+            '2026-10-04T15:00:00Z', NULL, NULL, 'eia-petroleum-schedule-html-1', 'abc', '{}'
+        );
+        """
+    )
+    connection.commit()
+    connection.close()
+    monkeypatch.setenv("SFP_MARKET_CALENDAR_DB", str(database))
+
+    body = CLIENT.get(
+        "/api/market-events",
+        params={"from": "2026-10-14", "to": "2026-10-14"},
+    ).json()
+    day = body["days"][0]
+    assert [item["eventType"] for item in day["primaryEvents"]] == ["CPI"]
+    assert [item["eventType"] for item in day["secondaryEvents"]] == ["EIA_PETROLEUM_STATUS"]
+    assert body["summary"]["secondaryEvents"] == 1
+    states = {
+        item["symbol"]: item["priceDataState"]
+        for item in day["secondaryEvents"][0]["etfExposures"]
+    }
+    assert states == {"USO": "current", "XLE": "stale", "XOP": "missing"}
+
+    filtered = CLIENT.get(
+        "/api/market-events",
+        params={
+            "from": "2026-10-14", "to": "2026-10-14",
+            "portfolioRelevance": "SECTOR_OR_COMMODITY",
+        },
+    ).json()
+    assert filtered["days"][0]["primaryEvents"] == []
+    assert len(filtered["days"][0]["secondaryEvents"]) == 1
+
+
 def test_stale_coverage_is_not_reported_as_an_empty_day(tmp_path, monkeypatch):
     database = tmp_path / "calendar.sqlite"
     _database(database, fresh=False)

@@ -1,4 +1,4 @@
-"""Milestone 2 primary-provider orchestration layered on the accepted M1 sync."""
+"""Official primary and optional secondary provider orchestration."""
 
 from __future__ import annotations
 
@@ -62,6 +62,14 @@ from utilities.market_calendar.sync import (
 
 LOGGER = logging.getLogger("smallfish.market_calendar.primary")
 PRIMARY_SOURCES = ("federal_reserve", "treasury", "bea", "census", "dol_claims")
+SECONDARY_SOURCES = (
+    "eia_petroleum", "eia_natural_gas", "usda_nass", "usda_wasde",
+    "fas_export_sales",
+)
+SCHEDULE_SOURCES = PRIMARY_SOURCES + SECONDARY_SOURCES
+UNCONFIGURED_CAPABILITIES = (
+    "eia_released_values", "fas_released_values", "private_secondary_feeds",
+)
 
 
 def _document_coverage(text: str) -> tuple[str, str] | None:
@@ -620,7 +628,7 @@ def run_primary_sync(
     transport: HttpTransport | None = None,
     config_dir: Path | None = None,
 ) -> SyncResult:
-    """Publish M1 plus every configured primary source, independently."""
+    """Publish configured official schedules, keeping optional failures isolated."""
     base = run_sync(
         database=database,
         universe_path=universe_path,
@@ -661,8 +669,25 @@ def run_primary_sync(
     required_failures = 1 if base.exit_code else 0
     connection = connect(database)
     try:
-        for key in PRIMARY_SOURCES:
+        for key in SCHEDULE_SOURCES:
             spec = sources[key]
+            if (
+                key in SECONDARY_SOURCES
+                and provider_documents is not None
+                and key not in documents
+            ):
+                connection.execute("BEGIN IMMEDIATE")
+                _write_source(
+                    connection, spec, status="unknown", observed_at=observed_at,
+                    detail=(
+                        f"{spec.detail} This injected offline run did not include a "
+                        "fixture for the optional source."
+                    ),
+                    result_count=0, success=False,
+                )
+                connection.execute("COMMIT")
+                lines.append(f"{key}: optional fixture omitted; primary coverage is unchanged.")
+                continue
             current = _source(connection, key)
             source_url = spec.schedule_url or ""
             report = _load_provider_snapshot(connection, key)
@@ -808,7 +833,8 @@ def run_primary_sync(
                     horizon_start, horizon_end, observed_at,
                 )
                 connection.execute("COMMIT")
-                lines.append(f"{key}: published {count} primary-calendar rows.")
+                layer = "primary" if key in PRIMARY_SOURCES else "secondary"
+                lines.append(f"{key}: published {count} {layer}-calendar rows.")
             except Exception as exc:
                 category = exc.error_type if isinstance(exc, TransportError) else str(exc) or type(exc).__name__
                 safe_category = "insufficient_coverage" if "insufficient_coverage" in category else type(exc).__name__
@@ -817,11 +843,24 @@ def run_primary_sync(
                     spec,
                     observed_at,
                     safe_category,
-                    f"{key} refresh failed. Previous rows were kept and full-primary coverage is incomplete.",
+                    (
+                        f"{key} refresh failed. Previous rows were kept and full-primary coverage is incomplete."
+                        if spec.required else
+                        f"{key} optional refresh failed. Previous rows were kept; primary coverage is unchanged."
+                    ),
                 )
                 lines.append(f"{key}: failed ({safe_category}); previous rows were kept.")
                 if spec.required:
                     required_failures += 1
+
+        for key in UNCONFIGURED_CAPABILITIES:
+            spec = sources[key]
+            connection.execute("BEGIN IMMEDIATE")
+            _write_source(
+                connection, spec, status="not_configured", observed_at=observed_at,
+                detail=spec.detail, result_count=0, success=False, configured=False,
+            )
+            connection.execute("COMMIT")
 
         earnings_key = "finnhub_earnings"
         spec = sources[earnings_key]

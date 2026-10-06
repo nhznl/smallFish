@@ -48,7 +48,7 @@ utilities/.venv/bin/python -m utilities.scraper --help
 | `audit_price_cache.py` | Whole-history rewrite when an adjustment vintage goes stale |
 | `indicators/ta.py` | Technical indicators |
 | `sector_rotation.py` | The live 11-sector leadership snapshot against SPY |
-| `market_calendar/` | Primary event-risk calendar: normalize official schedules plus the private local earnings sidecar, score strategy exposure, cluster actual strategy-window overlaps, and write `calendar.sqlite` |
+| `market_calendar/` | Event-risk calendar: normalize official primary and optional secondary schedules plus the private local earnings sidecar, score strategy exposure, cluster actual strategy-window overlaps, and write `calendar.sqlite` |
 | `events.py` | Validated, atomic upcoming-earnings cache plus conditional Finnhub refresh and calendar-only fiscal-period sidecar |
 | `fetch_earnings_history.py` | Separately maintained multi-year Yahoo/yfinance earnings dates |
 | `manifest.py` | Artifact manifests and provenance |
@@ -69,6 +69,16 @@ private single-user data, retain
 attribution, are not a redistribution surface, and must be deleted if dataset
 access ends. The legacy earnings job remains the only active Finnhub fetcher;
 its `events.csv` contract is unchanged.
+
+Milestone 3 adds optional EIA petroleum and natural-gas schedules, selected
+NASS and aligned WASDE occurrences, and the FAS weekly Export Sales publication
+rule. Holiday exceptions are normalized before publication. Their failures
+retain prior secondary rows and do not make the primary scan unavailable.
+EIA/FAS released-value APIs are separate `not_configured` capabilities; keys
+are never placed in URLs or source artifacts. The excluded ISM, Michigan,
+Conference Board, and NAR feeds stay visible as a terms-review coverage gap.
+ETF mappings use only generated-universe symbols and preserve current, stale,
+and missing cache states independently.
 
 The Federal Reserve adapter retains G.17 industrial production and represents
 the 2:00 p.m. FOMC statement and advertised 2:30 p.m. press conference as
@@ -113,8 +123,8 @@ parameters live in `config/`, next to the code that reads them.
 | `config/universe.local.yaml` | Optional, git-ignored per-user pin overlay merged over the defaults |
 | `config/starter_data.yaml` | Starter universe and bootstrap failure policy |
 | `config/scraper.yaml` | Throttle, thread pool, staleness threshold |
-| `config/market_calendar_sources.yaml` | Which event sources are configured, and how fresh a CPI schedule remains |
-| `config/market_calendar_importance.yaml` | Event importance and broad-index relevance |
+| `config/market_calendar_sources.yaml` | Configured primary and optional secondary schedule/value capabilities and freshness |
+| `config/market_calendar_importance.yaml` | Event importance and broad-index or sector relevance |
 | `config/market_calendar_strategies.yaml` | Strategy entry and exit clocks in Eastern time |
 | `config/market_calendar_risk.yaml` | Named strategy risk rules |
 | `config/market_calendar_etf_exposures.yaml` | ETF exposure channels checked against the universe |
