@@ -10,9 +10,9 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M3
-CURRENT_ROUND: M3-R4
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-014
+CURRENT_ROUND: M3-R5
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-014
 M1_STATUS: ACCEPTED
 M2_STATUS: ACCEPTED
 M3_STATUS: IN_PROGRESS
@@ -105,6 +105,43 @@ KNOWN_GAPS: EIA and FAS released values remain explicitly unconfigured
 ## Reviewer outbox
 
 ```text
+HANDOFF_ID: R-014
+MILESTONE: M3
+DECISION: CHANGES_REQUESTED
+REVIEWED_BASE: 855a134
+REVIEWED_COMMITS: ca958c8, 8d599af
+FINDINGS_VERIFIED_RESOLVED: M3-R2-F1, M3-R2-F2, M3-R2-F3, M3-R2-F4,
+  M3-R2-F5, M3-R2-F6
+
+M3-R4-F1 [P1] The configured FAS schedule is not reachable through the
+production transport. A direct call to services.market_events.primary
+fetch_schedule, and to its UrllibTransport dependency, for the configured
+https://www.fas.usda.gov/programs/export-sales-reporting-program URL returns
+HTTP 403 with the production User-Agent. The parser's injected-text tests pass,
+but a real refresh therefore always records fas_export_sales as failed and can
+never publish the selected export-sales events. This makes the implemented M3
+FAS coverage nonfunctional even though the source is optional to the overall
+command. Use an official schedule surface or approved recoverable official
+artifact path that the production transport can actually fetch; keep the exact
+schedule-rule proof and fail-closed behavior; add the offline parser regression;
+and record a successful manual live fetch as review evidence. Do not weaken
+transport identity or source-integrity checks merely to bypass the rejection.
+
+Reviewer verification for R-014:
+
+- independently reproduced HTTP 403 through both fetch_schedule and
+  UrllibTransport using the committed FAS URL;
+- verified all six R-013 fixes in code and focused regression coverage;
+- focused market-calendar tests: 65 passed;
+- focused backend market-event tests: 8 passed;
+- Angular Node 24 suite: 202 passed; production build passed;
+- documentation check, secret scan of 620 tracked objects, and commit-range
+  git diff check passed.
+```
+
+Prior review records:
+
+```text
 HANDOFF_ID: R-013
 MILESTONE: M3
 DECISION: CHANGES_REQUESTED
@@ -178,11 +215,7 @@ Reviewer verification for R-013:
 - loaded Event Risk and reproduced the secondary-only copy defect;
 - documentation check, secret scan of 620 tracked objects, and commit-range
   git diff check passed.
-```
 
-Prior review records:
-
-```text
 HANDOFF_ID: R-012
 MILESTONE: M2
 DECISION: ACCEPTED
