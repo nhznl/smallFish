@@ -10,9 +10,9 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M3
-CURRENT_ROUND: M3-R2
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-013
+CURRENT_ROUND: M3-R3
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-013
 M1_STATUS: ACCEPTED
 M2_STATUS: ACCEPTED
 M3_STATUS: IN_PROGRESS
@@ -107,6 +107,84 @@ KNOWN_GAPS: EIA and FAS released values remain explicitly unconfigured
 ```
 
 ## Reviewer outbox
+
+```text
+HANDOFF_ID: R-013
+MILESTONE: M3
+DECISION: CHANGES_REQUESTED
+REVIEWED_BASE: 688f57e
+REVIEWED_COMMITS: 1b478fc, a35b361
+
+M3-R2-F1 [P1] The live EIA natural-gas holiday table is normalized incorrectly.
+For an exception released before its nominal Thursday, line 584 maps the release
+back to the previous Thursday; rows suffixed with "- (Updated)" do not parse at
+all. Reproduced against the official live document: the 2025-06-15..2025-06-21
+horizon publishes both a June 18 noon event for reference week June 6 and a
+default June 19 event for reference week June 13, although the official table
+has one June 18 noon exception for the June 13 week. The 2025-12-22..2026-01-04
+horizon likewise skips the updated December 29 row, attaches December 31 to the
+wrong week, and invents a default January 1 occurrence. Normalize Wednesday
+exceptions to the following nominal Thursday, Monday/Friday exceptions to the
+appropriate prior nominal Thursday, accept the official annotation suffixes,
+and add live-shaped regressions for Wednesday, updated Monday, and Friday rows.
+
+M3-R2-F2 [P1] FAS occurrence identity and reference-period semantics are one
+week late. The official reporting period runs Friday through Thursday and is
+published the following Thursday (or Friday after the stated holiday shift),
+but _fas_document uses the Friday immediately preceding publication as the
+reference period and canonical-key seed. For the Friday October 16, 2026
+holiday release, it emits October 9 even though the report covers October 2-8.
+Use an unambiguous official period end or range, keep that identity stable when
+publication shifts, and add normal-Thursday and holiday-Friday regressions.
+
+M3-R2-F3 [P1] The configured FAS source does not prove the holiday rule that
+the parser applies. market_calendar_sources.yaml points to the 2006 fact sheet,
+which states Thursday at 8:30 but not the preceding-Friday/Monday holiday shift
+or the current "unless a change is announced" caveat. The parser checks only
+generic weekly-summary/time/day tokens and then synthesizes shifted dates,
+while every source fact cites that insufficient artifact. Bind the rule to the
+current official program/calendar evidence, require its exact rule markers (or
+consume the authoritative dated release calendar), and fail closed when the
+fetched artifact cannot prove the schedule and its exceptions.
+
+M3-R2-F4 [P1] The accepted M2 offline-fixture CLI contract is broken.
+--provider-fixtures now unconditionally reads every optional M3 JSON file from
+SCHEDULE_SOURCES before the sync can apply its optional-omission behavior.
+Reproduced with the repository's existing primary_sources fixture directory:
+the command raises FileNotFoundError for eia_petroleum.json. Continue requiring
+the accepted primary fixture set, load secondary fixtures only when present,
+and add a CLI regression that the M2-only directory still runs while omitted
+secondary capabilities are reported explicitly.
+
+M3-R2-F5 [P2] The UI does not expose the configured relevance distinction that
+marks an ETF as indirect. Both the list and drawer group only by relationship;
+for example XOP and MOO appear as industry_equities with no rendering of their
+indirect relevance. Display direct, sector, and indirect semantics explicitly
+and cover them in the component test, while preserving current/stale/missing
+labels.
+
+M3-R2-F6 [P2] The secondary-only empty state still says "No covered primary
+risk days," and covered-empty copy says all configured schedules are complete
+even when the optional-source diagnostics above are failed, unknown, or not
+configured. Reproduced on the loaded Event Risk route by selecting Secondary.
+Make the empty result filter-aware and describe primary coverage separately
+from optional secondary gaps so it cannot be read as an all-clear.
+
+Reviewer verification for R-013:
+
+- reproduced M3-R2-F1 with the live official EIA natural-gas schedule;
+- reproduced M3-R2-F4 with the committed M2 fixture directory;
+- verified the FAS reporting-period mismatch against current official FAS
+  program documentation and the configured source artifact;
+- focused market-calendar tests: 63 passed;
+- focused backend market-event tests: 8 passed;
+- Angular Node 24 suite: 201 passed; production build passed;
+- loaded Event Risk and reproduced the secondary-only copy defect;
+- documentation check, secret scan of 620 tracked objects, and commit-range
+  git diff check passed.
+```
+
+Prior review records:
 
 ```text
 HANDOFF_ID: R-012
