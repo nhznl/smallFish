@@ -10,9 +10,9 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R13
-NEXT_ACTOR: IMPLEMENTER
-LAST_HANDOFF_ID: R-010
+CURRENT_ROUND: M2-R14
+NEXT_ACTOR: REVIEWER
+LAST_HANDOFF_ID: I-011
 M1_STATUS: ACCEPTED
 M2_STATUS: CHANGES_REQUESTED
 M3_STATUS: PLANNED
@@ -57,46 +57,34 @@ or required owner decision.
 ## Implementer outbox
 
 ```text
-HANDOFF_ID: I-010
+HANDOFF_ID: I-011
 MILESTONE: M2
 STATE: READY_FOR_REVIEW
-BASE_COMMIT: 643af4f
-IMPLEMENTATION_COMMITS: db17aee
-SCOPE: Resolved M2-R10-F1 through M2-R10-F5. The Finnhub sidecar now carries an
-  exact legacy-CSV SHA-256 binding, calendar freshness uses an injectable UTC
-  instant, and every refresh is revalidated before calendar success is
-  reported while legacy-only success remains separately available. Federal
-  Reserve date/month values are first-seen seeds reconciled against the
-  persisted normalized snapshot; unchanged anchors, insertions, neighbor
-  crossings, and cross-year moves preserve identity, while ambiguous changes
-  fail closed. Parser version 4 transactionally upgrades prior snapshots and
-  preserves existing event/history identities. Base BLS sync now uses the same
-  shared freshness helper as primary sync and the API, including rejection of
-  future success timestamps.
-CHANGED_FILES: docs/ARCHITECTURE.md; docs/DATA.md;
-  docs/MARKET_EVENT_CALENDAR_DESIGN.md; stock-app API tests; utilities/README.md;
-  market-calendar source config; utilities/events.py; base and primary sync;
-  official Federal Reserve parser; earnings sidecar fixture;
-  utilities/tests/test_events.py; utilities/tests/test_market_calendar.py.
-FINDINGS_RESOLVED: M2-R10-F1, M2-R10-F2, M2-R10-F3, M2-R10-F4,
-  M2-R10-F5.
-TESTS_AND_RESULTS: Final focused event/calendar files 65 passed and backend API
-  file 7 passed; full utilities suite 816 passed; full backend suite 601 passed;
-  Angular Node 24 suite 200 passed; Angular production build and
-  ./commands.sh build-ui passed; documentation check passed for 57 files;
-  Python compileall, secret scan of 620 pre-commit tracked objects, and
-  git diff --check passed.
-LIVE_SMOKE: Parsed the current official Federal Reserve JSON in memory without
-  persisting its raw payload. Coverage was 2017-01-01 through 2026-12-31;
-  October G.17 retained the 2026-10 first-seen seed at 9:15 a.m. ET and the
-  October FOMC pair retained the 2026-10-28 seed at 2:00/2:30 p.m. ET. The
-  live source still exposes no provider ids for these records, so persistence
-  supplies continuity and no economic reference period is inferred.
-VISUAL_VERIFICATION: Rebuilt and inspected Event Risk from the verified local
-  commands.sh server at the default desktop viewport and 390x844. The
-  incomplete-primary state, source diagnostics, caveat, summary cards, tabs,
-  range controls, and unavailable-state guidance remained readable and
-  responsive. No UI source changed in this round.
+BASE_COMMIT: f8d174d
+IMPLEMENTATION_COMMITS: c944814
+SCOPE: Resolved M2-R12-F1 through M2-R12-F4. Calendar-capable Finnhub reuse now
+  has the same fixed 24-hour interval as primary sync and the API, while the
+  max_age_days override remains legacy-only. Direct ingestion requires exact
+  schema-2 identity flags and rejects boolean, fractional, and string failure
+  counts. Federal Reserve reconciliation permits only one unmatched move and
+  fails provider refreshes on count changes or multiple unmatched moves while
+  retaining the last successful snapshot. Parser version 4 transactionally
+  merges schedule history and removes cancelled date/month rows from an
+  already-diverged parser-v3 database, leaving one chosen occurrence.
+CHANGED_FILES: docs/ARCHITECTURE.md; docs/MARKET_EVENT_CALENDAR_DESIGN.md;
+  utilities/README.md; utilities/events.py;
+  utilities/market_calendar/primary_sync.py;
+  utilities/tests/test_market_calendar.py.
+FINDINGS_RESOLVED: M2-R12-F1, M2-R12-F2, M2-R12-F3, M2-R12-F4.
+TESTS_AND_RESULTS: Focused market-calendar file 55 passed; full utilities suite
+  827 passed; full backend suite 601 passed; Angular Node 24 suite 200 passed;
+  Angular production build and ./commands.sh build-ui passed; documentation
+  check passed for 57 files; both Python compileall commands, secret scan of
+  620 tracked objects, and git diff --check passed.
+VISUAL_VERIFICATION: Rebuilt and loaded Event Risk from the verified local
+  commands.sh server at the desktop viewport. The route, coverage diagnostics,
+  caveat, summary, filters, and event tables rendered successfully. No UI
+  source changed in this round.
 DESIGN_DEVIATIONS: None.
 KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
   explicitly unconfigured capability; M2 schedule coverage no longer depends
