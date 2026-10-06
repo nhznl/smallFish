@@ -116,8 +116,10 @@ def _calendar_identity_complete(calendar_text: str | None) -> bool:
     try:
         raw = json.loads(calendar_text)
         return (
-            raw.get("identityComplete") is True
-            and int(raw["identityFailureCount"]) == 0
+            raw.get("schemaVersion") == 2
+            and raw.get("identityComplete") is True
+            and type(raw.get("identityFailureCount")) is int
+            and raw["identityFailureCount"] == 0
         )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         return False
@@ -165,6 +167,10 @@ def _reconcile_federal_reserve_occurrences(
             index for index, item in enumerate(observations)
             if item.event_type == event_type
         ]
+        if old and len(old) != len(new_indices):
+            raise PrimaryCalendarParseError(
+                f"ambiguous persisted identity count change for {event_type}"
+            )
         unmatched_old = set(range(len(old)))
         unmatched_new = set(new_indices)
         matches: list[tuple[int, int]] = []
@@ -187,28 +193,15 @@ def _reconcile_federal_reserve_occurrences(
         match_unique(lambda item: item.civil_date)
         match_unique(lambda item: item.civil_date[:7])
 
-        if unmatched_old and unmatched_new:
-            if len(unmatched_old) != len(unmatched_new):
+        if unmatched_old or unmatched_new:
+            if len(unmatched_old) == len(unmatched_new) == 1:
+                old_index = unmatched_old.pop()
+                new_index = unmatched_new.pop()
+                matches.append((old_index, new_index))
+            elif unmatched_old and unmatched_new:
                 raise PrimaryCalendarParseError(
                     f"ambiguous persisted identity reconciliation for {event_type}"
                 )
-            while unmatched_old:
-                pairs = []
-                for old_index in unmatched_old:
-                    old_date = date.fromisoformat(old[old_index].civil_date)
-                    for new_index in unmatched_new:
-                        new_date = date.fromisoformat(observations[new_index].civil_date)
-                        pairs.append((abs((new_date - old_date).days), old_index, new_index))
-                minimum = min(item[0] for item in pairs)
-                nearest = [item for item in pairs if item[0] == minimum]
-                if len(nearest) != 1:
-                    raise PrimaryCalendarParseError(
-                        f"ambiguous persisted identity reconciliation for {event_type}"
-                    )
-                _, old_index, new_index = nearest[0]
-                unmatched_old.remove(old_index)
-                unmatched_new.remove(new_index)
-                matches.append((old_index, new_index))
 
         for old_index, new_index in matches:
             observations[new_index] = replace(
@@ -261,6 +254,89 @@ def _reconcile_federal_reserve_occurrences(
         skipped_without_reference_period=current.skipped_without_reference_period,
         skipped_unresolved_timezone=current.skipped_unresolved_timezone,
     )
+
+
+def _cleanup_obsolete_federal_reserve_generations(
+    connection, observations: tuple,
+) -> None:
+    """Merge a prior cancelled identity generation into the active events."""
+    chosen = {
+        item.canonical_key: item for item in observations
+        if item.event_type in {
+            "FOMC_DECISION", "FOMC_PRESS_CONFERENCE", "INDUSTRIAL_PRODUCTION",
+        }
+    }
+    if not chosen:
+        return
+
+    def signatures(event_id: str) -> set[tuple[str | None, str | None, str]]:
+        rows = connection.execute(
+            """
+            SELECT scheduled_at_utc, civil_date, time_precision
+            FROM event_schedule_history WHERE event_id = ?
+            UNION
+            SELECT scheduled_at_utc, civil_date, time_precision
+            FROM events WHERE id = ?
+            """,
+            (event_id, event_id),
+        ).fetchall()
+        return {
+            (row["scheduled_at_utc"], row["civil_date"], row["time_precision"])
+            for row in rows
+        }
+
+    chosen_signatures = {
+        key: signatures(key) for key in chosen
+        if connection.execute("SELECT 1 FROM events WHERE id = ?", (key,)).fetchone()
+    }
+    obsolete = connection.execute(
+        """
+        SELECT DISTINCT e.id, e.event_type
+        FROM events e
+        JOIN event_source_facts f ON f.event_id = e.id
+        WHERE f.provider = 'federal_reserve'
+          AND e.lifecycle_status = 'cancelled'
+          AND e.event_type IN (
+            'FOMC_DECISION', 'FOMC_PRESS_CONFERENCE', 'INDUSTRIAL_PRODUCTION'
+          )
+        """
+    ).fetchall()
+    for row in obsolete:
+        candidates = [
+            key for key, item in chosen.items()
+            if item.event_type == row["event_type"]
+            and signatures(row["id"]) & chosen_signatures.get(key, set())
+        ]
+        if not candidates:
+            continue
+        if len(candidates) != 1:
+            raise PrimaryCalendarParseError(
+                "ambiguous obsolete Federal Reserve identity generation"
+            )
+        target = candidates[0]
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO event_schedule_history (
+                event_id, scheduled_at_utc, civil_date, original_timezone,
+                time_precision, schedule_status, observed_at_utc, source_provider
+            )
+            SELECT ?, scheduled_at_utc, civil_date, original_timezone,
+                   time_precision, schedule_status, observed_at_utc, source_provider
+            FROM event_schedule_history WHERE event_id = ?
+            """,
+            (target, row["id"]),
+        )
+        connection.execute(
+            "DELETE FROM event_relationships WHERE event_id = ? OR related_event_id = ?",
+            (row["id"], row["id"]),
+        )
+        for table in (
+            "event_schedule_history", "event_measurements", "event_assets",
+            "event_instruments", "event_etf_exposures", "event_source_facts",
+            "importance_assessments", "strategy_assessments",
+        ):
+            connection.execute(f"DELETE FROM {table} WHERE event_id = ?", (row["id"],))
+        connection.execute("DELETE FROM events WHERE id = ?", (row["id"],))
 
 
 def _publish_provider(
@@ -330,6 +406,8 @@ def _publish_provider(
             seen.update(item.source_record_id for item in extras)
         for event in scored:
             merge_event(connection, event, observed_at)
+        if key == "federal_reserve" and spec.parser_version == "fed-calendar-json-4":
+            _cleanup_obsolete_federal_reserve_generations(connection, in_window)
         for provider, seen in seen_by_provider.items():
             cancelled = cancel_missing(
                 connection,
@@ -682,7 +760,7 @@ def run_primary_sync(
                         report = parse_document(text, provider=key, source_url=source_url)
                 elif report is None:
                     raise PrimaryCalendarParseError("missing_snapshot")
-                if key == "federal_reserve":
+                if key == "federal_reserve" and spec.parser_version == "fed-calendar-json-4":
                     report = _reconcile_federal_reserve_occurrences(
                         previous_report, report,
                     )

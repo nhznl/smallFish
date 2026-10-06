@@ -580,11 +580,14 @@ differ. The Federal Reserve feed has no stable record id for FOMC meetings,
 their press conferences, or G.17 releases. The first-seen date/month key is
 therefore persisted as a seed rather than recomputed as identity. On later
 feeds, unchanged records are anchored first and unique remaining moves retain
-their persisted seeds; insertions receive a new seed and ambiguous many-record
-changes fail closed. Statement and press-conference reconciliation remains
-paired. This process does not infer an economic reference period. Parser
-version changes must migrate the normalized snapshot and event rows in one
-transaction so old and replacement identity generations cannot coexist.
+their persisted seeds. Count changes and ambiguous many-record changes fail
+closed because a move plus an insertion cannot be distinguished safely from an
+unchanged occurrence plus a new one. Statement and press-conference
+reconciliation remains paired. This process does not infer an economic
+reference period. Parser version changes must migrate the normalized snapshot
+and event rows in one transaction; version 4 also merges and removes an
+already-diverged cancelled date/month generation so the API exposes one
+occurrence with the chosen identity and complete schedule history.
 
 Named strategy-exposure clusters require an exact event time within the
 configured inclusive interval from strategy entry through hard exit. Pre-entry
@@ -606,7 +609,10 @@ lacks a valid integral identity token: booleans and fractional values are
 rejected, fiscal years must have four digits, and quarters must be 1 through 4.
 Calendar-capable freshness also requires a schema-2 sidecar whose
 `legacyArtifactSha256` binds it to the exact legacy CSV bytes, with complete
-identity and sufficient coverage. A fresh legacy cache remains valid for legacy consumers when that
+identity and sufficient coverage. `schemaVersion` must equal integer `2`,
+`identityComplete` must be the boolean `true`, and `identityFailureCount` must
+be the integer `0`; coercible strings, booleans, and fractional values are not
+accepted. A fresh legacy cache remains valid for legacy consumers when that
 sidecar is missing or outdated; without a Finnhub key the refresh prerequisite
 reports this limited capability explicitly instead of claiming calendar
 freshness. A later migration may derive a
@@ -636,10 +642,11 @@ Default behavior:
 Freshness is evaluated from one stored UTC success instant through an inclusive
 timestamp window in every ingestion path and the API; future success timestamps
 are invalid rather than fresh. A date-only Finnhub generation is conservatively
-interpreted as midnight Eastern: it is fresh exactly through the configured
-boundary and stale immediately after it. Legacy consumers may retain their
-documented calendar-day behavior, but that state is reported separately and
-does not claim calendar capability.
+interpreted as midnight Eastern: calendar capability is fresh for the
+configured 24-hour interval and stale immediately after it. A larger legacy
+`max_age_days` override applies only to the legacy CSV capability. Legacy
+consumers may retain their documented calendar-day behavior, but that state is
+reported separately and does not claim calendar capability.
 
 An explicit UI action may invoke the allowlisted command through a job endpoint
 later. It must show ready, running, success, and failure states, disable

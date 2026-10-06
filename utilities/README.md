@@ -75,8 +75,11 @@ the 2:00 p.m. FOMC statement and advertised 2:30 p.m. press conference as
 separate related occurrences. Because the official feed supplies no stable ids
 for FOMC or G.17 records, the first-seen date/month key becomes a persisted seed.
 Later feeds reconcile unchanged anchors and unique remaining moves against the
-normalized snapshot; ambiguous changes fail closed. The parser-version-4
-upgrade preserves the prior date/month keys and schedule history transactionally.
+normalized snapshot; count changes and ambiguous many-record changes fail
+closed while retaining the last successful snapshot. The parser-version-4
+upgrade transactionally preserves the chosen identities and schedule history,
+including merging and removing an already-diverged cancelled date/month
+generation.
 The earnings sidecar claims
 coverage only when every retained Finnhub row has a four-digit fiscal year and
 an integral quarter from 1 through 4; malformed identities fail closed without
@@ -87,7 +90,10 @@ reported. Without a key, a fresh legacy cache remains usable and the command
 reports that only the calendar capability is unavailable. Finnhub and BLS
 freshness use the same inclusive UTC timestamp interval during sync and API
 reads, reject future success instants, and interpret the Finnhub date-only
-generation timestamp as midnight Eastern.
+generation timestamp as midnight Eastern. Finnhub calendar capability uses a
+fixed 24-hour interval; a larger `max_age_days` override widens only legacy CSV
+reuse. The sidecar identity flags are exact typed schema-2 fields rather than
+coercible values.
 
 See [`options/README.md`](options/README.md).
 

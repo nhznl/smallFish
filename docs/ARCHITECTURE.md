@@ -124,9 +124,11 @@ The Federal Reserve calendar does not expose stable ids for FOMC meetings,
 their press conferences, or G.17 releases. Their first observed date/month key
 is a seed only. Later successful feeds are reconciled against the persisted
 normalized snapshot: unchanged occurrences anchor the match, a unique
-remaining move retains its seed, and ambiguous many-record changes fail closed.
-The parser-version-4 upgrade performs event changes and snapshot replacement in
-one transaction, preserving pre-upgrade keys and schedule history.
+remaining move retains its seed, and count changes or ambiguous many-record
+changes fail closed while retaining the prior snapshot. The parser-version-4
+upgrade performs event changes, cleanup of any already-diverged cancelled
+date/month generation, and snapshot replacement in one transaction, preserving
+the chosen keys and merged schedule history.
 
 Brokerage sync consumers call `services/*` for raw provider payloads, then
 normalize and materialize their own ledger artifacts under `SFP_DATA_DIR`.

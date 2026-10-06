@@ -34,6 +34,7 @@ BASE_URL = "https://finnhub.io/api/v1"
 DEFAULT_LOOKAHEAD_DAYS = 70
 DEFAULT_REQUIRED_COVERAGE_DAYS = 45
 DEFAULT_MAX_AGE_DAYS = 1
+CALENDAR_FRESHNESS_HOURS = 24
 EVENT_COLUMNS = ("ticker", "event_type", "event_date", "source")
 CALENDAR_IDENTITY_COLUMNS = ("fiscal_year", "fiscal_quarter")
 
@@ -222,7 +223,7 @@ def _calendar_is_fresh(root: Path, as_of: str, required_coverage_days: int,
             and calendar.get("identityComplete") is True
             and type(calendar.get("identityFailureCount")) is int
             and calendar["identityFailureCount"] == 0
-            and within_freshness_window(fetched_at, max_age_days * 24, now)
+            and within_freshness_window(fetched_at, CALENDAR_FRESHNESS_HOURS, now)
             and pd.to_datetime(calendar["coverageStart"]) <= as_of_date
             and pd.to_datetime(calendar["coverageEnd"])
             >= as_of_date + timedelta(days=required_coverage_days)
