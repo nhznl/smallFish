@@ -10,9 +10,9 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M3
-CURRENT_ROUND: M3-R1
-NEXT_ACTOR: IMPLEMENTER
-LAST_HANDOFF_ID: R-012
+CURRENT_ROUND: M3-R2
+NEXT_ACTOR: REVIEWER
+LAST_HANDOFF_ID: I-013
 M1_STATUS: ACCEPTED
 M2_STATUS: ACCEPTED
 M3_STATUS: IN_PROGRESS
@@ -57,38 +57,53 @@ or required owner decision.
 ## Implementer outbox
 
 ```text
-HANDOFF_ID: I-012
-MILESTONE: M2
+HANDOFF_ID: I-013
+MILESTONE: M3
 STATE: READY_FOR_REVIEW
-BASE_COMMIT: 5a4477f
-IMPLEMENTATION_COMMITS: f4f1ee6
-SCOPE: Resolved M2-R14-F1 and M2-R14-F2. Federal Reserve reconciliation now
-  anchors unchanged occurrences before interpreting count changes, accepts
-  pure future insertions and pure deletions, preserves the single-move path,
-  and still fails multi-move or mixed move/count-change ambiguity while
-  retaining the prior snapshot. Parser-version-4 cleanup now uses the full
-  reconciled provider snapshot while event publication remains horizon-bounded,
-  so an already-diverged cancelled generation outside the current scan horizon
-  is merged and removed transactionally.
+BASE_COMMIT: 688f57e
+IMPLEMENTATION_COMMITS: 1b478fc
+SCOPE: Added approved M3 secondary sector and asset coverage. Official EIA
+  petroleum and natural-gas schedules include published holiday exceptions;
+  official NASS iCalendar entries provide selected crop reports and the
+  same-day Crop Production schedule used for WASDE; and the official FAS
+  export-sales publication rule includes federal-holiday shifts. Schedule and
+  released-value capabilities remain separate. Reviewed ETF relationships use
+  generated-universe symbols and preserve direct, sector, industry, current,
+  stale, and missing semantics. Event Risk now keeps primary results first and
+  exposes explicit All, Primary, and Secondary views with grouped secondary
+  relationships and source limitations.
 CHANGED_FILES: docs/ARCHITECTURE.md; docs/MARKET_EVENT_CALENDAR_DESIGN.md;
-  utilities/README.md;
+  models/market_events.py; stock-app-ui/src/app/market-calendar/*;
+  stock-app/README.md; stock-app/tests/test_market_events_api.py;
+  utilities/README.md; utilities/config/README.md;
+  utilities/config/market_calendar_etf_exposures.yaml;
+  utilities/config/market_calendar_importance.yaml;
+  utilities/config/market_calendar_sources.yaml;
+  utilities/market_calendar/__main__.py;
   utilities/market_calendar/primary_sync.py;
+  utilities/market_calendar/providers/primary.py;
+  utilities/tests/fixtures/market_calendar/universe.csv;
   utilities/tests/test_market_calendar.py.
-FINDINGS_RESOLVED: M2-R14-F1, M2-R14-F2.
-TESTS_AND_RESULTS: Focused market-calendar file 60 passed; final focused
-  reconciliation/migration selection 8 passed; full utilities suite 832 passed;
-  full backend suite 601 passed; Angular Node 24 suite 200 passed;
+FINDINGS_RESOLVED: R-012 M3 kickoff scope.
+TESTS_AND_RESULTS: Focused market-calendar file 63 passed; full utilities suite
+  835 passed; full backend suite 602 passed; Angular Node 24 suite 201 passed;
   Angular production build and ./commands.sh build-ui passed; documentation
   check passed for 57 files; both Python compileall commands, secret scan of
   620 tracked objects, and git diff --check passed.
-VISUAL_VERIFICATION: Rebuilt and loaded Event Risk from the verified local
-  commands.sh server in the in-app browser. The route, navigation, caveat,
-  summary, filters, and event tables rendered successfully. No UI source
-  changed in this round.
+VISUAL_VERIFICATION: Generated representative secondary events through the
+  real primary-sync path, served them through the canonical commands.sh server,
+  and inspected Event Risk at desktop and 500-pixel narrow widths. Primary
+  events remained first; the secondary-only filter showed WASDE, Crop
+  Production, Export Sales, petroleum, and natural-gas groups with distinct
+  direct, sector, industry, and price-cache states. Caveats and source gaps
+  remained visible and the narrow layout rendered without clipping.
 DESIGN_DEVIATIONS: None.
-KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
-  explicitly unconfigured capability; M2 schedule coverage no longer depends
-  on that optional path. No known blocking M2 implementation gap remains.
+KNOWN_GAPS: EIA and FAS released values remain explicitly unconfigured
+  capabilities; privately published ISM, Michigan, Conference Board, and NAR
+  feeds remain excluded pending terms review. The configured NASS annual
+  iCalendar URL must advance when the supported calendar year rolls over; an
+  uncovered requested year fails closed instead of publishing inferred dates.
+  No known blocking M3 implementation gap remains.
 ```
 
 ## Reviewer outbox
