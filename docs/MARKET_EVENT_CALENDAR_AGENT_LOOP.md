@@ -10,9 +10,9 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R15
-NEXT_ACTOR: IMPLEMENTER
-LAST_HANDOFF_ID: R-011
+CURRENT_ROUND: M2-R16
+NEXT_ACTOR: REVIEWER
+LAST_HANDOFF_ID: I-012
 M1_STATUS: ACCEPTED
 M2_STATUS: CHANGES_REQUESTED
 M3_STATUS: PLANNED
@@ -57,34 +57,34 @@ or required owner decision.
 ## Implementer outbox
 
 ```text
-HANDOFF_ID: I-011
+HANDOFF_ID: I-012
 MILESTONE: M2
 STATE: READY_FOR_REVIEW
-BASE_COMMIT: f8d174d
-IMPLEMENTATION_COMMITS: c944814
-SCOPE: Resolved M2-R12-F1 through M2-R12-F4. Calendar-capable Finnhub reuse now
-  has the same fixed 24-hour interval as primary sync and the API, while the
-  max_age_days override remains legacy-only. Direct ingestion requires exact
-  schema-2 identity flags and rejects boolean, fractional, and string failure
-  counts. Federal Reserve reconciliation permits only one unmatched move and
-  fails provider refreshes on count changes or multiple unmatched moves while
-  retaining the last successful snapshot. Parser version 4 transactionally
-  merges schedule history and removes cancelled date/month rows from an
-  already-diverged parser-v3 database, leaving one chosen occurrence.
+BASE_COMMIT: 5a4477f
+IMPLEMENTATION_COMMITS: f4f1ee6
+SCOPE: Resolved M2-R14-F1 and M2-R14-F2. Federal Reserve reconciliation now
+  anchors unchanged occurrences before interpreting count changes, accepts
+  pure future insertions and pure deletions, preserves the single-move path,
+  and still fails multi-move or mixed move/count-change ambiguity while
+  retaining the prior snapshot. Parser-version-4 cleanup now uses the full
+  reconciled provider snapshot while event publication remains horizon-bounded,
+  so an already-diverged cancelled generation outside the current scan horizon
+  is merged and removed transactionally.
 CHANGED_FILES: docs/ARCHITECTURE.md; docs/MARKET_EVENT_CALENDAR_DESIGN.md;
-  utilities/README.md; utilities/events.py;
+  utilities/README.md;
   utilities/market_calendar/primary_sync.py;
   utilities/tests/test_market_calendar.py.
-FINDINGS_RESOLVED: M2-R12-F1, M2-R12-F2, M2-R12-F3, M2-R12-F4.
-TESTS_AND_RESULTS: Focused market-calendar file 55 passed; full utilities suite
-  827 passed; full backend suite 601 passed; Angular Node 24 suite 200 passed;
+FINDINGS_RESOLVED: M2-R14-F1, M2-R14-F2.
+TESTS_AND_RESULTS: Focused market-calendar file 60 passed; final focused
+  reconciliation/migration selection 8 passed; full utilities suite 832 passed;
+  full backend suite 601 passed; Angular Node 24 suite 200 passed;
   Angular production build and ./commands.sh build-ui passed; documentation
   check passed for 57 files; both Python compileall commands, secret scan of
   620 tracked objects, and git diff --check passed.
 VISUAL_VERIFICATION: Rebuilt and loaded Event Risk from the verified local
-  commands.sh server at the desktop viewport. The route, coverage diagnostics,
-  caveat, summary, filters, and event tables rendered successfully. No UI
-  source changed in this round.
+  commands.sh server in the in-app browser. The route, navigation, caveat,
+  summary, filters, and event tables rendered successfully. No UI source
+  changed in this round.
 DESIGN_DEVIATIONS: None.
 KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
   explicitly unconfigured capability; M2 schedule coverage no longer depends
