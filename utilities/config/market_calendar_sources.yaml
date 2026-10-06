@@ -107,11 +107,16 @@ sources:
   fas_export_sales:
     required: false
     configured: true
-    parser_version: fas-export-sales-schedule-1
-    schedule_url: https://apps.fas.usda.gov/info/factsheets/expsls.asp
+    parser_version: fas-export-sales-schedule-2
+    schedule_url: https://www.fas.usda.gov/programs/export-sales-reporting-program
     freshness_hours: 168
     scope: weekly_export_sales_schedule
-    detail: Official FAS weekly Export Sales publication rule, including the published Friday shift when the preceding Friday or Monday is a national holiday. API values require a separate API.data.gov capability.
+    detail: >-
+      Current official FAS Export Sales Reporting Program rule: the reporting
+      period is Friday through Thursday, publication is Thursday at 8:30 a.m.
+      ET unless changed, and publication shifts to Friday when the preceding
+      Friday or Monday is a national holiday. API values require a separate
+      API.data.gov capability.
   eia_released_values:
     provider: eia_released_values
     required: false

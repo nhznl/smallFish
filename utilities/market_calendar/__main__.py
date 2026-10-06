@@ -14,7 +14,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from models.market_events import EASTERN
-from utilities.market_calendar.primary_sync import SCHEDULE_SOURCES, run_primary_sync
+from utilities.market_calendar.primary_sync import (
+    PRIMARY_SOURCES,
+    SECONDARY_SOURCES,
+    run_primary_sync,
+)
 
 
 def _date(value: str):
@@ -62,8 +66,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.provider_fixtures:
         provider_documents = {
             provider: (args.provider_fixtures / f"{provider}.json").read_text(encoding="utf-8")
-            for provider in SCHEDULE_SOURCES
+            for provider in PRIMARY_SOURCES
         }
+        for provider in SECONDARY_SOURCES:
+            fixture = args.provider_fixtures / f"{provider}.json"
+            if fixture.is_file():
+                provider_documents[provider] = fixture.read_text(encoding="utf-8")
     earnings_csv = args.earnings_csv or (data_root / "events.csv")
     earnings_meta = args.earnings_meta or (data_root / "events_meta.json")
     earnings_calendar = args.earnings_calendar or (data_root / "market_calendar" / "earnings.json")

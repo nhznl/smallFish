@@ -577,11 +577,24 @@ def _eia_weekly_document(
             if len(cells) < 3:
                 continue
             release_text, clock = cells[0], cells[2]
+            release_text = re.sub(
+                r"\s*[-–—]\s*\(updated\)\s*$", "", release_text, flags=re.I,
+            )
             try:
                 release = datetime.strptime(release_text, "%B %d, %Y").date()
             except ValueError:
                 continue
-            nominal = release - timedelta(days=(release.weekday() - weekday) % 7)
+            nominal_offsets = {
+                0: -4,  # Monday exception belongs to the preceding Thursday.
+                2: 1,   # Wednesday exception belongs to the following Thursday.
+                3: 0,
+                4: -1,  # Friday exception belongs to the preceding Thursday.
+            }
+            if release.weekday() not in nominal_offsets:
+                raise PrimaryCalendarParseError(
+                    "unsupported EIA natural-gas exception weekday"
+                )
+            nominal = release + timedelta(days=nominal_offsets[release.weekday()])
             reference = nominal - timedelta(days=6)
         else:
             if len(cells) < 4:
@@ -593,7 +606,7 @@ def _eia_weekly_document(
             except ValueError:
                 continue
             nominal = reference + timedelta(days=(weekday - reference.weekday()) % 7)
-        exception_years.add(release.year)
+        exception_years.update({release.year, nominal.year})
         exceptions[nominal] = (release, clock)
 
     requested_years = set(range(start.year, end.year + 1))
@@ -711,17 +724,21 @@ def _agency_table_document(
         clock = clock_match.group(1).lower().replace(".", "") if clock_match else "08:30 am"
         release_time = datetime.strptime(clock, "%I:%M %p").time()
         civil = parsed_date.isoformat()
+        if event_type == "FAS_EXPORT_SALES":
+            reference = _fas_reference_period_end(parsed_date).isoformat()
+        else:
+            reference = civil[:7]
         dated.append(civil)
         rows.append({
-            "id": f"{event_type}:{civil}",
+            "id": f"{event_type}:{reference}",
             "title": "World Agricultural Supply and Demand Estimates" if event_type == "USDA_WASDE" else "Weekly Export Sales",
             "eventType": event_type,
-            "referencePeriod": civil[:7] if event_type == "USDA_WASDE" else civil,
+            "referencePeriod": reference,
             "scheduledAt": datetime.combine(
                 parsed_date, release_time, ZoneInfo("America/New_York")
             ).isoformat(),
             "timezone": "America/New_York",
-            "canonicalKey": f"US:{provider.upper()}:{event_type}:{civil}",
+            "canonicalKey": f"US:{provider.upper()}:{event_type}:{reference}",
         })
     if not dated:
         raise PrimaryCalendarParseError(f"{provider} calendar has no selected dated rows")
@@ -798,12 +815,27 @@ def _federal_holidays(year: int) -> set[date]:
     }
 
 
+def _fas_reference_period_end(release: date) -> date:
+    if release.weekday() not in {3, 4}:
+        raise PrimaryCalendarParseError("FAS release must be Thursday or Friday")
+    nominal_thursday = release - timedelta(days=release.weekday() - 3)
+    return nominal_thursday - timedelta(days=7)
+
+
 def _fas_document(
     text: str, source_url: str, start: date, end: date,
 ) -> tuple[ParseReport, tuple[str, str]]:
     lower = " ".join(_plain_text(text).lower().split())
-    if "weekly summary" not in lower or "8:30" not in lower or "thursday" not in lower:
+    if "weekly summary" not in lower:
         return _agency_table_document(text, source_url, "fas_export_sales", "FAS_EXPORT_SALES")
+    required_markers = (
+        "weekly reporting period runs friday through thursday",
+        "publishes a weekly summary of export sales activity every thursday at 8:30 a.m. et, unless a change is announced",
+        "if the preceding friday or monday is a national holiday",
+        "weekly summary is published friday",
+    )
+    if any(marker not in lower for marker in required_markers):
+        raise PrimaryCalendarParseError("FAS publication rule is incomplete")
     holidays = set().union(*(
         _federal_holidays(year) for year in range(start.year - 1, end.year + 1)
     ))
@@ -817,7 +849,7 @@ def _fas_document(
                 preceding_friday in holidays or preceding_monday in holidays
             ) else cursor
             if start <= release <= end:
-                reference = preceding_friday.isoformat()
+                reference = _fas_reference_period_end(release).isoformat()
                 rows.append({
                     "id": f"weekly-export-sales:{reference}",
                     "title": "Weekly Export Sales",

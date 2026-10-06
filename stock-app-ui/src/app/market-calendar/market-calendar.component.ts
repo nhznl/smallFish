@@ -230,7 +230,24 @@ export class MarketCalendarComponent implements OnInit {
   }
 
   relationshipLabel(value: string): string {
-    return value.replaceAll('_', ' ');
+    const labels: Record<string, string> = {
+      direct_underlying: 'Direct',
+      sector_equities: 'Sector',
+      industry_equities: 'Industry',
+      rate_sensitive: 'Rate sensitive',
+      input_cost_exposure: 'Input cost exposure',
+      defensive_or_hedge_proxy: 'Defensive or hedge proxy'
+    };
+    return labels[value] ?? value.replaceAll('_', ' ');
+  }
+
+  exposureRelevanceLabel(value: string): string {
+    const labels: Record<string, string> = {
+      primary: 'Primary',
+      secondary: 'Secondary',
+      indirect: 'Indirect'
+    };
+    return labels[value] ?? value;
   }
 
   strategyName(id: string): string {

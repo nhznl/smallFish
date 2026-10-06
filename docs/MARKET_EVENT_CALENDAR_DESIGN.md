@@ -852,8 +852,11 @@ not weaken accepted primary coverage. EIA weekly petroleum and natural-gas
 rules apply the official holiday tables. Selected NASS reports come from the
 annual ASB iCalendar; WASDE uses the same-day Crop Production entries in that
 official calendar, matching USDA's published 2026 WASDE schedule. FAS Export
-Sales uses the official Thursday 8:30 a.m. ET publication rule and its Friday
-holiday shift. Schedule acquisition remains separate from released values:
+Sales uses the current official program page to prove the Friday-through-
+Thursday reporting period, Thursday 8:30 a.m. ET publication rule, the
+"unless a change is announced" caveat, and its Friday holiday shift. The
+reporting-period end is the stable occurrence identity, so a holiday shift
+does not create a new event. Schedule acquisition remains separate from released values:
 EIA and FAS value capabilities are explicitly `not_configured` without an
 approved key-backed ingestion path. ISM, Michigan, Conference Board, and NAR
 remain an explicit terms-review gap.

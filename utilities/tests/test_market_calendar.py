@@ -23,6 +23,7 @@ from models.market_events import (
 from services.market_events.http import HttpResponse, TransportError, public_https_url
 from utilities.events import ensure_fresh_events, run_fetch
 from utilities.market_calendar.config import CalendarConfigError, load_risk_policy
+from utilities.market_calendar import __main__ as market_calendar_cli
 from utilities.market_calendar.etf import load_etf_mappings, validate_mappings
 from utilities.market_calendar.providers.bls import parse_ics
 from utilities.market_calendar.providers.primary import (
@@ -950,6 +951,44 @@ def test_m3_eia_rules_apply_petroleum_and_natural_gas_holiday_exceptions():
         )
 
 
+def test_m3_eia_natural_gas_live_shaped_exceptions_keep_nominal_week_identity():
+    gas = """
+      <p>The standard release time and day of the week will be at 10:30 a.m.
+      eastern time on Thursdays with the following exceptions. All times are eastern.</p>
+      <table><tr><th>Alternate release date</th><th>Release day</th>
+      <th>Release time</th><th>Holiday</th></tr>
+      <tr><td>January 8, 2025 - (Updated)</td><td>Wednesday</td><td>12:00 p.m.</td><td>National Day of Mourning</td></tr>
+      <tr><td>June 18, 2025</td><td>Wednesday</td><td>12:00 p.m.</td><td>Juneteenth</td></tr>
+      <tr><td>November 14, 2025</td><td>Friday</td><td>10:30 a.m.</td><td>Veterans Day</td></tr>
+      <tr><td>December 29, 2025 - (Updated)</td><td>Monday</td><td>12:00 p.m.</td><td>Christmas Day</td></tr>
+      <tr><td>December 31, 2025</td><td>Wednesday</td><td>12:00 p.m.</td><td>New Year's Day</td></tr>
+      <tr><td>November 13, 2026</td><td>Friday</td><td>10:30 a.m.</td><td>Veterans Day</td></tr>
+      </table>
+    """
+    june, _ = parse_official_document(
+        gas, provider="eia_natural_gas", source_url="https://ir.eia.gov/ngs/schedule.html",
+        horizon_start=date(2025, 6, 15), horizon_end=date(2025, 6, 21),
+    )
+    assert [(item.civil_date, item.reference_period) for item in june.observations] == [
+        ("2025-06-18", "2025-06-13"),
+    ]
+    november, _ = parse_official_document(
+        gas, provider="eia_natural_gas", source_url="https://ir.eia.gov/ngs/schedule.html",
+        horizon_start=date(2025, 11, 10), horizon_end=date(2025, 11, 16),
+    )
+    assert [(item.civil_date, item.reference_period) for item in november.observations] == [
+        ("2025-11-14", "2025-11-07"),
+    ]
+    year_end, _ = parse_official_document(
+        gas, provider="eia_natural_gas", source_url="https://ir.eia.gov/ngs/schedule.html",
+        horizon_start=date(2025, 12, 22), horizon_end=date(2026, 1, 4),
+    )
+    assert [(item.civil_date, item.reference_period) for item in year_end.observations] == [
+        ("2025-12-29", "2025-12-19"),
+        ("2025-12-31", "2025-12-26"),
+    ]
+
+
 def test_m3_nass_and_agency_calendars_select_only_approved_reports():
     nass = """BEGIN:VCALENDAR
 BEGIN:VEVENT
@@ -1015,15 +1054,79 @@ END:VCALENDAR
     assert wasde.observations[0].event_type == "USDA_WASDE"
     assert exports.observations[0].event_type == "FAS_EXPORT_SALES"
 
+    current_fas_rule = (
+        "The weekly reporting period runs Friday through Thursday. "
+        "FAS publishes a weekly summary of export sales activity every Thursday at "
+        "8:30 a.m. ET, unless a change is announced. If the preceding Friday or "
+        "Monday is a national holiday, the reporting deadline moves to Tuesday and "
+        "the weekly summary is published Friday."
+    )
     export_rule, export_coverage = parse_official_document(
-        "FAS publishes a weekly summary every Thursday at 8:30 a.m. ET. "
-        "If the preceding Friday or Monday is a national holiday, the weekly summary is published Friday.",
+        current_fas_rule,
         provider="fas_export_sales",
         source_url="https://www.fas.usda.gov/programs/export-sales-reporting-program",
         horizon_start=date(2026, 10, 12), horizon_end=date(2026, 10, 18),
     )
     assert export_coverage == ("2026-10-12", "2026-10-18")
     assert export_rule.observations[0].scheduled_at_utc == "2026-10-16T12:30:00Z"
+    assert export_rule.observations[0].reference_period == "2026-10-08"
+    assert export_rule.observations[0].canonical_key == (
+        "US:FAS:FAS_EXPORT_SALES:2026-10-08"
+    )
+    normal_rule, _ = parse_official_document(
+        current_fas_rule,
+        provider="fas_export_sales",
+        source_url="https://www.fas.usda.gov/programs/export-sales-reporting-program",
+        horizon_start=date(2026, 10, 7), horizon_end=date(2026, 10, 9),
+    )
+    assert normal_rule.observations[0].civil_date == "2026-10-08"
+    assert normal_rule.observations[0].reference_period == "2026-10-01"
+    with pytest.raises(PrimaryCalendarParseError, match="publication rule is incomplete"):
+        parse_official_document(
+            "FAS publishes a weekly summary every Thursday at 8:30 a.m. ET.",
+            provider="fas_export_sales",
+            source_url="https://apps.fas.usda.gov/info/factsheets/expsls.asp",
+            horizon_start=date(2026, 10, 7), horizon_end=date(2026, 10, 9),
+        )
+
+
+def test_m3_cli_keeps_m2_fixture_directory_compatible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW if tz is None else NOW.astimezone(tz)
+
+    monkeypatch.setattr(market_calendar_cli, "datetime", FixedDateTime)
+    _prices(tmp_path / "cache")
+    result = market_calendar_cli.main([
+        "--from-date", START.isoformat(),
+        "--to-date", END.isoformat(),
+        "--as-of", "2026-10-04",
+        "--fixture", str(FIXTURES / "cpi_schedule.ics"),
+        "--provider-fixtures", str(FIXTURES / "primary_sources"),
+        "--earnings-csv", str(FIXTURES / "earnings.csv"),
+        "--earnings-meta", str(FIXTURES / "earnings_meta.json"),
+        "--earnings-calendar", str(FIXTURES / "earnings_calendar.json"),
+        "--database", str(tmp_path / "calendar.sqlite"),
+        "--universe", str(FIXTURES / "universe.csv"),
+        "--price-cache", str(tmp_path / "cache"),
+    ])
+    assert result == 0
+    optional = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT provider, status FROM source_sync_state "
+        "WHERE provider IN ('eia_petroleum', 'eia_natural_gas', 'usda_nass', "
+        "'usda_wasde', 'fas_export_sales') ORDER BY provider",
+    )
+    assert [(row["provider"], row["status"]) for row in optional] == [
+        ("eia_natural_gas", "unknown"),
+        ("eia_petroleum", "unknown"),
+        ("fas_export_sales", "unknown"),
+        ("usda_nass", "unknown"),
+        ("usda_wasde", "unknown"),
+    ]
 
 
 def test_m3_secondary_publication_is_optional_and_preserves_distinct_capability_states(tmp_path: Path):

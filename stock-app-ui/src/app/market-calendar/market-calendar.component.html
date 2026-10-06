@@ -123,12 +123,25 @@
         </div>
       } @else if (!visibleDays().length) {
         <div class="empty-state">
-          <p class="empty-title">{{ view === 'upcoming' ? 'No covered primary risk days in this range' : 'No covered events in this range' }}</p>
+          <p class="empty-title">
+            @if (priority === 'secondary') {
+              No secondary events in this range
+            } @else {
+              {{ view === 'upcoming' ? 'No covered primary risk days in this range' : 'No covered events in this range' }}
+            }
+          </p>
           <p class="empty-hint">
-            @if (unknownCount()) {
+            @if (priority === 'secondary') {
+              Primary-calendar day coverage is reported separately.
+              @if (optionalGaps().length) {
+                {{ optionalGaps().length }} optional secondary source{{ optionalGaps().length === 1 ? '' : 's' }} {{ optionalGaps().length === 1 ? 'has' : 'have' }} a coverage gap, so no result is not an all-clear.
+              } @else {
+                Configured optional secondary schedules returned no matching event. Unscheduled events remain outside this scan.
+              }
+            } @else if (unknownCount()) {
               Coverage is incomplete for {{ unknownCount() }} day{{ unknownCount() === 1 ? '' : 's' }}. Missing coverage is not the same as a quiet session.
             } @else {
-              {{ coveredEmptyCount() }} day{{ coveredEmptyCount() === 1 ? '' : 's' }} in this range {{ coveredEmptyCount() === 1 ? 'has' : 'have' }} complete configured-source coverage and no event. Unscheduled events remain outside this scan.
+              {{ coveredEmptyCount() }} day{{ coveredEmptyCount() === 1 ? '' : 's' }} in this range {{ coveredEmptyCount() === 1 ? 'has' : 'have' }} complete primary-source coverage and no primary event. Optional secondary coverage is reported separately. Unscheduled events remain outside this scan.
             }
           </p>
         </div>
@@ -138,7 +151,7 @@
             <div class="panel-heading day-heading">
               <div>
                 <h2>{{ formatDay(day.date) }}</h2>
-                <small>{{ sessionLabel(day.sessionState) }} · {{ visibleEventCount(day) }} shown · {{ day.coverage === 'covered' ? 'Configured schedules covered' : day.coverage }}</small>
+                <small>{{ sessionLabel(day.sessionState) }} · {{ visibleEventCount(day) }} shown · {{ day.coverage === 'covered' ? 'Primary schedules covered' : day.coverage }}</small>
               </div>
               <span [class]="riskClass(day.riskLabel)">{{ day.riskLabel }} RISK</span>
             </div>
@@ -223,6 +236,7 @@
                             {{ relationshipLabel(group.relationship) }}:
                             @for (exposure of group.items; track exposure.symbol) {
                               <span class="badge badge-neutral">{{ exposure.symbol }}</span>
+                              <span class="badge badge-info">{{ exposureRelevanceLabel(exposure.relevance) }}</span>
                               <span [class]="priceClass(exposure.priceDataState)">{{ exposure.priceDataState }}</span>
                             }
                           </span>
@@ -236,7 +250,7 @@
           </section>
         }
         @if (view === 'all' && coveredEmptyCount()) {
-          <p class="source-note">{{ coveredEmptyCount() }} additional day{{ coveredEmptyCount() === 1 ? '' : 's' }} in this range {{ coveredEmptyCount() === 1 ? 'has' : 'have' }} configured-source coverage and no event.</p>
+          <p class="source-note">{{ coveredEmptyCount() }} additional day{{ coveredEmptyCount() === 1 ? '' : 's' }} in this range {{ coveredEmptyCount() === 1 ? 'has' : 'have' }} complete primary-source coverage and no primary event. Optional secondary coverage is reported separately.</p>
         }
       }
     </div>
@@ -286,6 +300,7 @@
             @for (exposure of group.items; track exposure.symbol) {
               <li>
                 <span class="mono">{{ exposure.symbol }}</span>
+                <span class="badge badge-info">{{ exposureRelevanceLabel(exposure.relevance) }}</span>
                 <span [class]="priceClass(exposure.priceDataState)">{{ exposure.priceDataState }}</span>
                 {{ exposure.impactChannel }}
                 @if (exposure.latestPriceSession) {

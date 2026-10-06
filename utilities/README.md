@@ -72,13 +72,21 @@ its `events.csv` contract is unchanged.
 
 Milestone 3 adds optional EIA petroleum and natural-gas schedules, selected
 NASS and aligned WASDE occurrences, and the FAS weekly Export Sales publication
-rule. Holiday exceptions are normalized before publication. Their failures
+rule. Natural-gas Wednesday exceptions map to the following nominal Thursday;
+Monday and Friday exceptions map to the preceding nominal Thursday. FAS uses
+the current program rule, records the official Friday-through-Thursday period
+end as identity, and keeps that identity when publication shifts to Friday.
+Holiday exceptions are normalized before publication. Their failures
 retain prior secondary rows and do not make the primary scan unavailable.
 EIA/FAS released-value APIs are separate `not_configured` capabilities; keys
 are never placed in URLs or source artifacts. The excluded ISM, Michigan,
 Conference Board, and NAR feeds stay visible as a terms-review coverage gap.
 ETF mappings use only generated-universe symbols and preserve current, stale,
 and missing cache states independently.
+
+`--provider-fixtures` continues to require every M2 primary fixture. M3
+secondary fixtures are loaded when present; omitted optional fixtures are
+recorded as `unknown` instead of making an M2-only fixture directory fail.
 
 The Federal Reserve adapter retains G.17 industrial production and represents
 the 2:00 p.m. FOMC statement and advertised 2:30 p.m. press conference as

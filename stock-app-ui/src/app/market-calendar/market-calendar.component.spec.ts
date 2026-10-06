@@ -211,9 +211,12 @@ describe('MarketCalendarComponent', () => {
 
     expect(text()).toContain('Secondary events');
     expect(text()).toContain('Weekly Petroleum Status Report');
-    expect(text()).toContain('direct underlying:');
-    expect(text()).toContain('sector equities:');
-    expect(text()).toContain('industry equities:');
+    expect(text()).toContain('Direct:');
+    expect(text()).toContain('Sector:');
+    expect(text()).toContain('Industry:');
+    expect(text()).toContain('Direct');
+    expect(text()).toContain('Sector');
+    expect(text()).toContain('Indirect');
     expect(text()).toContain('current');
     expect(text()).toContain('stale');
     expect(text()).toContain('missing');
@@ -225,6 +228,31 @@ describe('MarketCalendarComponent', () => {
     fixture.detectChanges();
     expect(text()).not.toContain('Consumer Price Index');
     expect(text()).toContain('Weekly Petroleum Status Report');
+  });
+
+  it('keeps secondary empty results distinct from primary coverage and optional gaps', () => {
+    const scan = collection();
+    scan.sources.push({
+      provider: 'eia_natural_gas', status: 'unknown', required: false, configured: true,
+      scope: 'weekly_natural_gas_storage_schedule', detail: 'Optional fixture omitted.',
+      coverageStart: null, coverageEnd: null, lastAttemptUtc: '2026-10-04T15:00:00Z',
+      lastSuccessUtc: null, resultCount: 0, errorCategory: null,
+      parserVersion: 'eia-natural-gas-schedule-html-1'
+    });
+    requests.next(scan);
+    fixture.detectChanges();
+
+    const secondary = [...fixture.nativeElement.querySelectorAll('button')].find(
+      (button: HTMLButtonElement) => button.textContent?.trim() === 'Secondary'
+    ) as HTMLButtonElement;
+    secondary.click();
+    fixture.detectChanges();
+
+    expect(text()).toContain('No secondary events in this range');
+    expect(text()).toContain('Primary-calendar day coverage is reported separately');
+    expect(text()).toContain('1 optional secondary source has a coverage gap');
+    expect(text()).not.toContain('No covered primary risk days in this range');
+    expect(text()).not.toContain('complete configured-source coverage');
   });
 
   it('shows a load failure without inventing an empty calendar', () => {
