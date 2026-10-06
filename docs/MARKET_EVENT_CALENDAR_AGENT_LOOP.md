@@ -11,8 +11,8 @@ PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M3
 CURRENT_ROUND: M3-R5
-NEXT_ACTOR: IMPLEMENTER
-LAST_HANDOFF_ID: R-014
+NEXT_ACTOR: REVIEWER
+LAST_HANDOFF_ID: I-015
 M1_STATUS: ACCEPTED
 M2_STATUS: ACCEPTED
 M3_STATUS: IN_PROGRESS
@@ -57,42 +57,35 @@ or required owner decision.
 ## Implementer outbox
 
 ```text
-HANDOFF_ID: I-014
+HANDOFF_ID: I-015
 MILESTONE: M3
 STATE: READY_FOR_REVIEW
-BASE_COMMIT: 855a134
-IMPLEMENTATION_COMMITS: ca958c8
-SCOPE: Resolved all six R-013 findings. EIA natural-gas Wednesday, annotated
-  Monday, and Friday exceptions now retain the correct nominal Thursday and
-  reporting week. FAS identity now uses the Friday-through-Thursday period end,
-  survives Friday publication shifts, and requires every marker from the
-  current official program rule. M2-only provider-fixture directories remain
-  valid while omitted optional M3 sources become explicit unknown states. ETF
-  rows and the drawer expose relationship plus primary, secondary, or indirect
-  relevance, and secondary empty states distinguish primary coverage from
-  optional-source gaps.
+BASE_COMMIT: 20ef7e8
+IMPLEMENTATION_COMMITS: 78c755f
+SCOPE: Resolved M3-R4-F1 by replacing the WAF-blocked FAS program page with
+  the credential-free official ESRQS week-ending schedule API. The provider
+  consumes explicit period-end and scheduled-publication timestamps, validates
+  the complete ESRQS row contract and Thursday-to-Thursday/Friday weekly
+  relationship, preserves period-end identity across Friday shifts, and fails
+  closed on malformed, duplicate, misaligned, or insufficiently covering data.
 CHANGED_FILES: docs/ARCHITECTURE.md; docs/MARKET_EVENT_CALENDAR_DESIGN.md;
-  stock-app-ui/src/app/market-calendar/market-calendar.component.html;
-  stock-app-ui/src/app/market-calendar/market-calendar.component.spec.ts;
-  stock-app-ui/src/app/market-calendar/market-calendar.component.ts;
   utilities/README.md; utilities/config/README.md;
   utilities/config/market_calendar_sources.yaml;
-  utilities/market_calendar/__main__.py;
   utilities/market_calendar/providers/primary.py;
   utilities/tests/test_market_calendar.py.
-FINDINGS_RESOLVED: M3-R2-F1, M3-R2-F2, M3-R2-F3, M3-R2-F4, M3-R2-F5,
-  M3-R2-F6.
-TESTS_AND_RESULTS: Focused market-calendar file 65 passed; full utilities suite
-  837 passed; full backend suite 602 passed; Angular Node 24 suite 202 passed;
+FINDINGS_RESOLVED: M3-R4-F1.
+TESTS_AND_RESULTS: Focused market-calendar file 66 passed; full utilities suite
+  838 passed; full backend suite 602 passed; Angular Node 24 suite 202 passed;
   Angular production build and ./commands.sh build-ui passed; documentation
   check passed for 57 files; both Python compileall commands, secret scan of
   620 tracked objects, and git diff --check passed.
-VISUAL_VERIFICATION: Rebuilt and served the representative M3 artifact through
-  the canonical commands.sh server. Desktop inspection confirmed Direct,
-  Sector, Industry, Primary, Secondary, Indirect, current, stale, and missing
-  labels. Selecting Secondary plus Today showed the filter-aware empty state,
-  primary-coverage separation, and optional-gap warning. A 500-pixel narrow
-  screenshot rendered the route without clipping or control regressions.
+LIVE_FETCH_EVIDENCE: On 2026-10-06, fetch_schedule with UrllibTransport and the
+  unchanged production User-Agent returned HTTP 200 application/json from the
+  configured ESRQS URL (3,696,039 bytes). The production parser normalized nine
+  events for 2026-10-06 through 2026-12-05; the first bound period end
+  2026-10-01 to release 2026-10-08 at 08:30 ET.
+VISUAL_VERIFICATION: Not repeated because this finding changes only provider
+  acquisition, parsing, configuration, and documentation; no UI code changed.
 DESIGN_DEVIATIONS: None.
 KNOWN_GAPS: EIA and FAS released values remain explicitly unconfigured
   capabilities; privately published ISM, Michigan, Conference Board, and NAR
