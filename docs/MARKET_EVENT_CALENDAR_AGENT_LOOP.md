@@ -8,14 +8,14 @@ before doing work and immediately before editing it.
 
 ```text
 PROTOCOL_VERSION: 1
-LOOP_STATUS: ACTIVE
+LOOP_STATUS: COMPLETE
 CURRENT_MILESTONE: M3
-CURRENT_ROUND: M3-R5
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-015
+CURRENT_ROUND: M3-R6
+NEXT_ACTOR: NONE
+LAST_HANDOFF_ID: R-015
 M1_STATUS: ACCEPTED
 M2_STATUS: ACCEPTED
-M3_STATUS: IN_PROGRESS
+M3_STATUS: ACCEPTED
 OWNER_DECISION_REQUIRED: NO
 STOP_REASON: NONE
 ```
@@ -98,6 +98,52 @@ KNOWN_GAPS: EIA and FAS released values remain explicitly unconfigured
 ## Reviewer outbox
 
 ```text
+HANDOFF_ID: R-015
+MILESTONE: M3
+DECISION: ACCEPTED
+REVIEWED_BASE: 20ef7e8
+REVIEWED_COMMITS: 78c755f, abcddfb
+FINDINGS_VERIFIED_RESOLVED: M3-R4-F1
+FINAL_INTEGRATION_REVIEW: PASSED
+
+Reviewer verification for R-015:
+
+- independently fetched the configured public FAS ESRQS endpoint through the
+  unchanged production transport and User-Agent: HTTP 200, application/json,
+  3,696,039 bytes, with no credential;
+- independently parsed the 2026-10-06 through 2026-11-06 horizon into five
+  events, preserving official period-end identity and 08:30 ET publication;
+- verified the live schedule includes explicit eight-day Friday shifts and the
+  parser rejects malformed, duplicate, misaligned, or insufficient coverage;
+- full utilities suite: 838 passed;
+- full backend suite: 602 passed;
+- Angular Node 24 suite: 202 passed; production build passed;
+- documentation check, secret scan of 620 tracked objects, and commit-range
+  git diff check passed;
+- loaded the Event Risk route and confirmed the accepted risk, coverage,
+  provenance, timing, and no-directional-forecast presentation remains intact;
+  representative secondary-event desktop and narrow inspection remains
+  recorded in I-014, and this final fix changed no UI code.
+
+MILESTONE_3_ACCEPTANCE:
+
+- EIA petroleum and natural-gas schedules retain official holiday exceptions;
+- selected NASS, WASDE, and FAS schedules publish as optional secondary events;
+- FAS uses an accessible official dated schedule rather than inferred holiday
+  publication dates, with stable reporting-period identity;
+- reviewed ETF exposure mappings preserve direct, sector, indirect, current,
+  stale, and missing semantics;
+- secondary filtering and empty states cannot be read as a primary all-clear;
+- all M1/M2 contracts, dependency boundaries, source diagnostics, failed-
+  refresh retention, secret safety, and no-network test rules remain intact.
+
+All three milestones and the final cross-milestone integration review are
+accepted. The automated implementation-review loop is complete.
+```
+
+Prior review records:
+
+```text
 HANDOFF_ID: R-014
 MILESTONE: M3
 DECISION: CHANGES_REQUESTED
@@ -130,11 +176,7 @@ Reviewer verification for R-014:
 - Angular Node 24 suite: 202 passed; production build passed;
 - documentation check, secret scan of 620 tracked objects, and commit-range
   git diff check passed.
-```
 
-Prior review records:
-
-```text
 HANDOFF_ID: R-013
 MILESTONE: M3
 DECISION: CHANGES_REQUESTED

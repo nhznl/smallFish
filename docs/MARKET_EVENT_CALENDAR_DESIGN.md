@@ -1,7 +1,7 @@
 # Market Event Risk Calendar design
 
-**Status:** Milestones 1 and 2 are accepted. Milestone 3 implementation is in
-review.
+**Status:** Milestones 1, 2, and 3 are accepted. The final cross-milestone
+integration review passed.
 
 **Primary user:** a local smallFish user planning SPY and QQQ 0-DTE trades
 
