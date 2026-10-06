@@ -167,10 +167,6 @@ def _reconcile_federal_reserve_occurrences(
             index for index, item in enumerate(observations)
             if item.event_type == event_type
         ]
-        if old and len(old) != len(new_indices):
-            raise PrimaryCalendarParseError(
-                f"ambiguous persisted identity count change for {event_type}"
-            )
         unmatched_old = set(range(len(old)))
         unmatched_new = set(new_indices)
         matches: list[tuple[int, int]] = []
@@ -193,14 +189,27 @@ def _reconcile_federal_reserve_occurrences(
         match_unique(lambda item: item.civil_date)
         match_unique(lambda item: item.civil_date[:7])
 
-        if unmatched_old or unmatched_new:
-            if len(unmatched_old) == len(unmatched_new) == 1:
+        if unmatched_old and unmatched_new:
+            if (
+                len(old) == len(new_indices)
+                and len(unmatched_old) == len(unmatched_new) == 1
+            ):
                 old_index = unmatched_old.pop()
                 new_index = unmatched_new.pop()
                 matches.append((old_index, new_index))
-            elif unmatched_old and unmatched_new:
+            else:
                 raise PrimaryCalendarParseError(
                     f"ambiguous persisted identity reconciliation for {event_type}"
+                )
+        elif unmatched_new and matches:
+            # The official feed is chronological. A genuine newly published
+            # future occurrence follows every anchored occurrence. If an
+            # unmatched row precedes an anchor, the same shape can instead be
+            # a move plus an insertion on the vacated date, so fail closed.
+            last_anchored_index = max(new_index for _, new_index in matches)
+            if min(unmatched_new) < last_anchored_index:
+                raise PrimaryCalendarParseError(
+                    f"ambiguous persisted identity count change for {event_type}"
                 )
 
         for old_index, new_index in matches:
@@ -407,7 +416,9 @@ def _publish_provider(
         for event in scored:
             merge_event(connection, event, observed_at)
         if key == "federal_reserve" and spec.parser_version == "fed-calendar-json-4":
-            _cleanup_obsolete_federal_reserve_generations(connection, in_window)
+            _cleanup_obsolete_federal_reserve_generations(
+                connection, report.observations,
+            )
         for provider, seen in seen_by_provider.items():
             cancelled = cancel_missing(
                 connection,

@@ -75,11 +75,12 @@ the 2:00 p.m. FOMC statement and advertised 2:30 p.m. press conference as
 separate related occurrences. Because the official feed supplies no stable ids
 for FOMC or G.17 records, the first-seen date/month key becomes a persisted seed.
 Later feeds reconcile unchanged anchors and unique remaining moves against the
-normalized snapshot; count changes and ambiguous many-record changes fail
-closed while retaining the last successful snapshot. The parser-version-4
-upgrade transactionally preserves the chosen identities and schedule history,
+normalized snapshot. Pure future insertions and pure deletions are accepted;
+mixed count changes and moves or ambiguous many-record changes fail closed
+while retaining the last successful snapshot. The parser-version-4 upgrade
+transactionally preserves the chosen identities and schedule history,
 including merging and removing an already-diverged cancelled date/month
-generation.
+generation anywhere in the full provider snapshot, not only the scan horizon.
 The earnings sidecar claims
 coverage only when every retained Finnhub row has a four-digit fiscal year and
 an integral quarter from 1 through 4; malformed identities fail closed without

@@ -989,7 +989,7 @@ def test_m2_official_fed_occurrence_identity_survives_day_and_month_reschedules(
     )
 
 
-def test_m2_v4_upgrade_collapses_already_diverged_fed_identity_generations(
+def test_m2_v4_upgrade_collapses_diverged_fed_generations_outside_horizon(
     tmp_path: Path,
 ):
     official_fed = (
@@ -1106,8 +1106,13 @@ def test_m2_v4_upgrade_collapses_already_diverged_fed_identity_generations(
         ),
         encoding="utf-8",
     )
+    upgrade_common = {
+        **common,
+        "horizon_start": date(2026, 11, 1),
+        "horizon_end": date(2026, 11, 15),
+    }
     upgraded = run_primary_sync(
-        **common, now=NOW + timedelta(hours=2),
+        **upgrade_common, now=NOW + timedelta(hours=2),
         provider_documents=original_documents,
     )
     assert upgraded.exit_code == 0, upgraded.lines
@@ -1285,6 +1290,168 @@ def test_fed_reconciliation_rejects_move_plus_insertion(event_family: str):
 
     with pytest.raises(PrimaryCalendarParseError, match="identity count change"):
         _reconcile_federal_reserve_occurrences(parsed(original), parsed(changed))
+
+
+@pytest.mark.parametrize("event_family", ["fomc", "g17"])
+def test_fed_reconciliation_accepts_pure_future_insertion(event_family: str):
+    source_url = "https://www.federalreserve.gov/json/calendar.json"
+    original = json.loads(
+        (FIXTURES / "official_sources" / "federal_reserve.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    changed = json.loads(json.dumps(original))
+    if event_family == "fomc":
+        for title, clock in (
+            ("FOMC Meeting", "2:00 p.m."),
+            ("FOMC Press Conference", "2:30 p.m."),
+        ):
+            changed["events"].append({
+                "title": title,
+                "time": clock,
+                "month": "2026-12",
+                "days": "16",
+                "type": "fomc",
+            })
+    else:
+        source = next(
+            item for item in original["events"]
+            if item["title"].startswith("G.17 - Industrial Production")
+            and item["month"] == "2026-10"
+        )
+        changed["events"].append({**source, "month": "2026-11", "days": "16"})
+
+    def parsed(payload: dict):
+        return parse_official_document(
+            json.dumps(payload), provider="federal_reserve", source_url=source_url,
+            horizon_start=date(2025, 1, 1), horizon_end=date(2027, 12, 31),
+        )[0]
+
+    previous = parsed(original)
+    reconciled = _reconcile_federal_reserve_occurrences(previous, parsed(changed))
+    previous_keys = {
+        item.canonical_key for item in previous.observations
+        if item.event_type in {
+            "FOMC_DECISION", "FOMC_PRESS_CONFERENCE", "INDUSTRIAL_PRODUCTION",
+        }
+    }
+    reconciled_keys = {
+        item.canonical_key for item in reconciled.observations
+        if item.event_type in {
+            "FOMC_DECISION", "FOMC_PRESS_CONFERENCE", "INDUSTRIAL_PRODUCTION",
+        }
+    }
+    assert previous_keys < reconciled_keys
+    expected = (
+        {
+            "US:FED:FOMC_DECISION:2026-12-16",
+            "US:FED:FOMC_PRESS_CONFERENCE:2026-12-16",
+        }
+        if event_family == "fomc"
+        else {"US:FED:INDUSTRIAL_PRODUCTION:2026-11"}
+    )
+    assert expected <= reconciled_keys
+
+
+@pytest.mark.parametrize("event_family", ["fomc", "g17"])
+def test_fed_reconciliation_accepts_pure_deletion(event_family: str):
+    source_url = "https://www.federalreserve.gov/json/calendar.json"
+    original = json.loads(
+        (FIXTURES / "official_sources" / "federal_reserve.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    changed = json.loads(json.dumps(original))
+    if event_family == "fomc":
+        changed["events"] = [
+            item for item in changed["events"]
+            if not (
+                item["month"] == "2026-10"
+                and item["title"] in {"FOMC Meeting", "FOMC Press Conference"}
+            )
+        ]
+        removed = {
+            "US:FED:FOMC_DECISION:2026-10-28",
+            "US:FED:FOMC_PRESS_CONFERENCE:2026-10-28",
+        }
+    else:
+        changed["events"] = [
+            item for item in changed["events"]
+            if not (
+                item["month"] == "2026-10"
+                and item["title"].startswith("G.17 - Industrial Production")
+            )
+        ]
+        removed = {"US:FED:INDUSTRIAL_PRODUCTION:2026-10"}
+
+    def parsed(payload: dict):
+        return parse_official_document(
+            json.dumps(payload), provider="federal_reserve", source_url=source_url,
+            horizon_start=date(2025, 1, 1), horizon_end=date(2027, 12, 31),
+        )[0]
+
+    reconciled = _reconcile_federal_reserve_occurrences(
+        parsed(original), parsed(changed),
+    )
+    reconciled_keys = {item.canonical_key for item in reconciled.observations}
+    assert removed.isdisjoint(reconciled_keys)
+
+
+def test_m2_pure_future_fed_insertion_keeps_required_source_fresh(tmp_path: Path):
+    original = json.loads(
+        (FIXTURES / "official_sources" / "federal_reserve.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    documents = _primary_documents()
+    documents["federal_reserve"] = json.dumps(original)
+    _prices(tmp_path / "cache")
+    common = dict(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        earnings_csv_text=(FIXTURES / "earnings.csv").read_text(encoding="utf-8"),
+        earnings_meta_text=(FIXTURES / "earnings_meta.json").read_text(encoding="utf-8"),
+        earnings_calendar_text=(FIXTURES / "earnings_calendar.json").read_text(
+            encoding="utf-8"
+        ),
+    )
+    assert run_primary_sync(
+        **common, now=NOW, provider_documents=documents,
+    ).exit_code == 0
+    source = next(
+        item for item in original["events"]
+        if item["title"].startswith("G.17 - Industrial Production")
+        and item["month"] == "2026-10"
+    )
+    changed = json.loads(json.dumps(original))
+    changed["events"].append({**source, "month": "2026-11", "days": "10"})
+    changed_documents = _primary_documents()
+    changed_documents["federal_reserve"] = json.dumps(changed)
+
+    refreshed = run_primary_sync(
+        **common, now=NOW + timedelta(hours=1),
+        provider_documents=changed_documents,
+    )
+    assert refreshed.exit_code == 0, refreshed.lines
+    state = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT status, error_category FROM source_sync_state "
+        "WHERE provider = 'federal_reserve'",
+    )[0]
+    assert dict(state) == {"status": "fresh", "error_category": None}
+    inserted = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT canonical_key, lifecycle_status FROM events "
+        "WHERE canonical_key = 'US:FED:INDUSTRIAL_PRODUCTION:2026-11'",
+    )
+    assert [tuple(row) for row in inserted] == [
+        ("US:FED:INDUSTRIAL_PRODUCTION:2026-11", "scheduled"),
+    ]
 
 
 def test_m2_ambiguous_fed_refresh_retains_last_successful_snapshot(tmp_path: Path):

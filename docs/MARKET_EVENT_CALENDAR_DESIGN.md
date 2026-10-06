@@ -580,14 +580,17 @@ differ. The Federal Reserve feed has no stable record id for FOMC meetings,
 their press conferences, or G.17 releases. The first-seen date/month key is
 therefore persisted as a seed rather than recomputed as identity. On later
 feeds, unchanged records are anchored first and unique remaining moves retain
-their persisted seeds. Count changes and ambiguous many-record changes fail
-closed because a move plus an insertion cannot be distinguished safely from an
-unchanged occurrence plus a new one. Statement and press-conference
-reconciliation remains paired. This process does not infer an economic
-reference period. Parser version changes must migrate the normalized snapshot
-and event rows in one transaction; version 4 also merges and removes an
-already-diverged cancelled date/month generation so the API exposes one
-occurrence with the chosen identity and complete schedule history.
+their persisted seeds. Pure future insertions and pure deletions are accepted
+after unchanged occurrences anchor. Mixed count changes and moves, and
+ambiguous many-record changes, fail closed because a move plus an insertion
+cannot be distinguished safely from an unchanged occurrence plus a new one.
+Statement and press-conference reconciliation remains paired. This process
+does not infer an economic reference period. Parser version changes must
+migrate the normalized snapshot and event rows in one transaction; version 4
+uses the full reconciled snapshot to merge and remove an already-diverged
+cancelled date/month generation, including occurrences outside the current
+scan horizon, so the API exposes one occurrence with the chosen identity and
+complete schedule history.
 
 Named strategy-exposure clusters require an exact event time within the
 configured inclusive interval from strategy entry through hard exit. Pre-entry
