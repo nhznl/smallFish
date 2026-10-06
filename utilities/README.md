@@ -71,13 +71,15 @@ access ends. The legacy earnings job remains the only active Finnhub fetcher;
 its `events.csv` contract is unchanged.
 
 Milestone 3 adds optional EIA petroleum and natural-gas schedules, selected
-NASS and aligned WASDE occurrences, and the FAS weekly Export Sales publication
-rule. Natural-gas Wednesday exceptions map to the following nominal Thursday;
-Monday and Friday exceptions map to the preceding nominal Thursday. FAS uses
-the current program rule, records the official Friday-through-Thursday period
-end as identity, and keeps that identity when publication shifts to Friday.
-Holiday exceptions are normalized before publication. Their failures
-retain prior secondary rows and do not make the primary scan unavailable.
+NASS and aligned WASDE occurrences, and the public FAS ESRQS weekly Export
+Sales schedule. Natural-gas Wednesday exceptions map to the following nominal
+Thursday; Monday and Friday exceptions map to the preceding nominal Thursday.
+FAS uses
+the explicit official week-ending and scheduled-publication fields, records the
+Friday-through-Thursday period end as identity, and keeps that identity when
+publication shifts to Friday. Malformed or misaligned API rows fail closed.
+Their failures retain prior secondary rows and do not make the primary scan
+unavailable.
 EIA/FAS released-value APIs are separate `not_configured` capabilities; keys
 are never placed in URLs or source artifacts. The excluded ISM, Michigan,
 Conference Board, and NAR feeds stay visible as a terms-review coverage gap.

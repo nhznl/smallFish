@@ -1089,6 +1089,51 @@ END:VCALENDAR
             horizon_start=date(2026, 10, 7), horizon_end=date(2026, 10, 9),
         )
 
+def test_m3_fas_esrqs_schedule_consumes_explicit_holiday_shift_and_fails_closed():
+    esrqs_schedule = json.dumps([
+        {
+            "weekEndingDate": "2026-10-01T00:00:00",
+            "scheduledPublishDatetime": "2026-10-08T08:30:00",
+            "dataEntryStartDate": "2026-10-01T10:00:00",
+            "dataEntryEndDate": "2026-10-06T14:00:00",
+            "weekEndingDateStatusId": 0,
+            "isActive": True,
+        },
+        {
+            "weekEndingDate": "2026-10-08T00:00:00",
+            "scheduledPublishDatetime": "2026-10-16T08:30:00",
+            "dataEntryStartDate": "2026-10-08T10:00:00",
+            "dataEntryEndDate": "2026-10-13T14:00:00",
+            "weekEndingDateStatusId": 0,
+            "isActive": True,
+        },
+    ])
+    api_report, api_coverage = parse_official_document(
+        esrqs_schedule,
+        provider="fas_export_sales",
+        source_url="https://apps.fas.usda.gov/esrqs/api/lookups/GetWeekEndingDates",
+        horizon_start=date(2026, 10, 8), horizon_end=date(2026, 10, 16),
+    )
+    assert api_coverage == ("2026-10-08", "2026-10-16")
+    assert [item.civil_date for item in api_report.observations] == [
+        "2026-10-08", "2026-10-16",
+    ]
+    assert [item.reference_period for item in api_report.observations] == [
+        "2026-10-01", "2026-10-08",
+    ]
+    assert api_report.observations[1].canonical_key == (
+        "US:FAS:FAS_EXPORT_SALES:2026-10-08"
+    )
+    incomplete_esrqs = json.loads(esrqs_schedule)
+    del incomplete_esrqs[1]["scheduledPublishDatetime"]
+    with pytest.raises(PrimaryCalendarParseError, match="incomplete ESRQS contract"):
+        parse_official_document(
+            json.dumps(incomplete_esrqs),
+            provider="fas_export_sales",
+            source_url="https://apps.fas.usda.gov/esrqs/api/lookups/GetWeekEndingDates",
+            horizon_start=date(2026, 10, 8), horizon_end=date(2026, 10, 16),
+        )
+
 
 def test_m3_cli_keeps_m2_fixture_directory_compatible(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

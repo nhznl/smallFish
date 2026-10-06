@@ -822,9 +822,74 @@ def _fas_reference_period_end(release: date) -> date:
     return nominal_thursday - timedelta(days=7)
 
 
+def _fas_api_document(
+    text: str, source_url: str, start: date, end: date,
+) -> tuple[ParseReport, tuple[str, str]]:
+    """Normalize the public ESRQS week-ending schedule without inference."""
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise PrimaryCalendarParseError("FAS schedule is not valid JSON") from exc
+    if not isinstance(raw, list) or not raw:
+        raise PrimaryCalendarParseError("FAS schedule must be a non-empty list")
+
+    required_fields = {
+        "weekEndingDate", "scheduledPublishDatetime", "dataEntryStartDate",
+        "dataEntryEndDate", "weekEndingDateStatusId", "isActive",
+    }
+    rows = []
+    coverage_dates: list[date] = []
+    period_ends: set[date] = set()
+    for item in raw:
+        if not isinstance(item, dict) or not required_fields.issubset(item):
+            raise PrimaryCalendarParseError("FAS schedule row has an incomplete ESRQS contract")
+        if item["isActive"] is not True:
+            continue
+        try:
+            period_value = datetime.fromisoformat(str(item["weekEndingDate"]))
+            release_value = datetime.fromisoformat(str(item["scheduledPublishDatetime"]))
+            datetime.fromisoformat(str(item["dataEntryStartDate"]))
+            datetime.fromisoformat(str(item["dataEntryEndDate"]))
+        except (TypeError, ValueError) as exc:
+            raise PrimaryCalendarParseError("FAS schedule row has an invalid ESRQS date") from exc
+        if period_value.tzinfo is not None or release_value.tzinfo is not None:
+            raise PrimaryCalendarParseError("FAS ESRQS dates must be local civil times")
+        period_end = period_value.date()
+        release = release_value.date()
+        if period_end.weekday() != 3 or (release - period_end).days not in {7, 8}:
+            raise PrimaryCalendarParseError("FAS schedule row violates the weekly publication contract")
+        if period_end in period_ends:
+            raise PrimaryCalendarParseError("FAS schedule has a duplicate reporting period")
+        period_ends.add(period_end)
+        coverage_dates.append(release)
+        if not start <= release <= end:
+            continue
+        reference = period_end.isoformat()
+        rows.append({
+            "id": f"weekly-export-sales:{reference}",
+            "title": "Weekly Export Sales",
+            "eventType": "FAS_EXPORT_SALES",
+            "referencePeriod": reference,
+            "scheduledAt": release_value.replace(
+                tzinfo=ZoneInfo("America/New_York")
+            ).isoformat(),
+            "timezone": "America/New_York",
+            "canonicalKey": f"US:FAS:FAS_EXPORT_SALES:{reference}",
+        })
+    if not coverage_dates or min(coverage_dates) > start or max(coverage_dates) < end:
+        raise PrimaryCalendarParseError("FAS ESRQS schedule does not cover the requested horizon")
+    report = ParseReport(tuple(
+        item for item in (_observation("fas_export_sales", source_url, row) for row in rows)
+        if item is not None
+    ))
+    return report, (start.isoformat(), end.isoformat())
+
+
 def _fas_document(
     text: str, source_url: str, start: date, end: date,
 ) -> tuple[ParseReport, tuple[str, str]]:
+    if text.lstrip().startswith("["):
+        return _fas_api_document(text, source_url, start, end)
     lower = " ".join(_plain_text(text).lower().split())
     if "weekly summary" not in lower:
         return _agency_table_document(text, source_url, "fas_export_sales", "FAS_EXPORT_SALES")

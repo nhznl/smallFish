@@ -134,13 +134,15 @@ history even when the obsolete occurrence is outside the current scan horizon.
 
 Optional secondary schedules use the same batch boundary. EIA weekly
 petroleum and natural-gas rules, the annual NASS calendar, USDA's synchronized
-WASDE dates, and the FAS Export Sales publication rule are normalized into the
-same SQLite artifact. Failures retain earlier rows and do not change primary
-availability. EIA natural-gas exceptions retain the nominal Thursday/reporting
-week across Wednesday, Monday, and Friday shifts. FAS schedule evidence comes
-from the current official program page; identity uses the reporting-period end,
-not the shifted publication date. Released EIA/FAS values and privately published ISM, Michigan,
-Conference Board, and NAR calendars remain explicit capability gaps. The API
+WASDE dates, and the public FAS ESRQS Export Sales schedule are normalized into
+the same SQLite artifact. Failures retain earlier rows and do not change
+primary availability. EIA natural-gas exceptions retain the nominal
+Thursday/reporting week across Wednesday, Monday, and Friday shifts. FAS
+schedule evidence comes from credential-free official ESRQS rows with an
+explicit week-ending date and scheduled-publication timestamp; identity uses
+the reporting-period end, not the shifted publication date. Released EIA/FAS
+values and privately published ISM, Michigan, Conference Board, and NAR
+calendars remain explicit capability gaps. The API
 continues to read only the artifact and groups sector or commodity events after
 primary broad-index events.
 

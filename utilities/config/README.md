@@ -17,9 +17,10 @@ official document and fails closed when the requested horizon is not proved.
 Secondary schedule failures do not downgrade primary availability. Released
 EIA/FAS values and terms-blocked private feeds remain separately visible as
 unconfigured capabilities rather than being inferred from schedule coverage.
-The FAS schedule rule is accepted only when the current official program page
-proves its reporting period, normal publication, change caveat, and holiday
-exception; an older fact sheet is insufficient. Offline provider fixtures keep
+The FAS schedule is accepted only from the public official ESRQS rows that bind
+each Thursday period end to an explicit scheduled publication timestamp. The
+parser validates that weekly contract and fails closed on incomplete or
+misaligned rows; an older fact sheet is insufficient. Offline provider fixtures keep
 the M2 primary set required while treating absent M3 secondary files as an
 explicit `unknown` optional capability.
 Cluster rules compare exact event times with the inclusive configured interval

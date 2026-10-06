@@ -107,16 +107,15 @@ sources:
   fas_export_sales:
     required: false
     configured: true
-    parser_version: fas-export-sales-schedule-2
-    schedule_url: https://www.fas.usda.gov/programs/export-sales-reporting-program
+    parser_version: fas-export-sales-esrqs-3
+    schedule_url: https://apps.fas.usda.gov/esrqs/api/lookups/GetWeekEndingDates
     freshness_hours: 168
     scope: weekly_export_sales_schedule
     detail: >-
-      Current official FAS Export Sales Reporting Program rule: the reporting
-      period is Friday through Thursday, publication is Thursday at 8:30 a.m.
-      ET unless changed, and publication shifts to Friday when the preceding
-      Friday or Monday is a national holiday. API values require a separate
-      API.data.gov capability.
+      Public official ESRQS schedule rows provide the Friday-through-Thursday
+      period end and the explicit scheduled publication timestamp, including
+      Friday holiday shifts and announced changes. Released values require a
+      separate API.data.gov capability.
   eia_released_values:
     provider: eia_released_values
     required: false
