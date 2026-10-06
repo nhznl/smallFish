@@ -10,9 +10,9 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R12
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-010
+CURRENT_ROUND: M2-R13
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-010
 M1_STATUS: ACCEPTED
 M2_STATUS: CHANGES_REQUESTED
 M3_STATUS: PLANNED
@@ -104,6 +104,82 @@ KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
 ```
 
 ## Reviewer outbox
+
+```text
+HANDOFF_ID: R-010
+MILESTONE: M2
+DECISION: CHANGES_REQUESTED
+REVIEWED_BASE: 643af4f
+REVIEWED_COMMITS: db17aee, 5c8bc74
+FINDINGS_VERIFIED_RESOLVED: M2-R10-F1, M2-R10-F5
+FINDINGS_PARTIALLY_RESOLVED: M2-R10-F2, M2-R10-F3, M2-R10-F4
+
+M2-R12-F1 [P1] Calendar prerequisite freshness still diverges from primary
+sync when the supported max_age_days override is not one. _calendar_is_fresh
+uses max_age_days * 24 for calendar capability, while run_primary_sync and the
+API enforce the configured Finnhub freshness_hours value of 24. Reproduced
+with a 2026-10-04 cache at 2026-10-05T10:00:00Z and max_age_days=2:
+ensure_fresh_events returned fresh/ok with no provider call, then the immediate
+primary sync exited 1 and marked Finnhub stale_cache. Preserve the override
+only for explicitly legacy capability, and evaluate calendar capability using
+the same configured/fixed interval as primary sync and API. Add a greater-than-
+24-hour max_age_days=2 regression proving both commands agree.
+
+M2-R12-F2 [P1] Federal Reserve reconciliation does not fail closed for
+ambiguous many-record changes. After date/month anchors, it greedily pairs any
+equal-sized unmatched sets by nearest civil date unless the single shortest
+distance is tied. Reproduced by moving both September and October G.17 rows:
+the refresh was accepted but attached the October seed to the January move and
+the September seed to the February move, reversing their actual identities.
+Simultaneous FOMC crossings and a move plus insertion on the vacated date also
+silently swap or replace identities. Permit only one uniquely unmatched old/new
+move after anchors; if multiple moves remain or a count change coexists with a
+move, fail the provider refresh and retain the prior snapshot. Add simultaneous
+crossing and move-plus-insertion regressions for the FOMC pair and G.17.
+
+M2-R12-F3 [P1] Direct primary ingestion still accepts a non-schema-2 or
+malformed Finnhub sidecar as fully fresh. _calendar_identity_complete does not
+check schemaVersion and coerces identityFailureCount through int(...).
+Reproduced from an otherwise valid digest-bound sidecar with schemaVersion=1
+and identityFailureCount=false: run_primary_sync returned published/0 and
+stored Finnhub fresh. Require exact schemaVersion == 2, identityComplete is
+True, and type(identityFailureCount) is int with value zero in the ingestion
+path. Add direct primary-sync schema-1, boolean, fractional, and string count
+regressions so market-calendar cannot bypass the prerequisite's validation.
+
+M2-R12-F4 [P1] Parser-v4 migration does not clean a database already split by
+the prior parser-v3 refetch path. Reproduced through the real sequence: the
+6b292c7 date/month generation was refreshed under 78876ab into cancelled
+date/month rows plus scheduled Mnn/Rnn replacements; upgrading under db17aee
+changed the normalized snapshot to parser v4 but retained all three cancelled
+date/month rows beside the three scheduled ordinal rows. The API loads
+cancelled occurrences, so duplicate generations and split history remain.
+Transactionally merge or remove the obsolete identity generation while
+preserving the chosen event IDs and schedule history. Add an upgrade regression
+starting from the already-diverged two-generation v3 database, not only the
+clean pre-refetch v3 shape, and prove the API exposes one occurrence per event.
+```
+
+Reviewer verification for R-010:
+
+- verified exact Finnhub CSV binding, post-refresh revalidation, legacy-only
+  compatibility, and the default exact/+1-second timestamp boundary;
+- independently reproduced the max_age_days=2 prerequisite/primary-sync
+  freshness disagreement;
+- independently reproduced multi-record Federal Reserve identity reversal;
+- verified the clean parser-v3-to-v4 path is versioned and transactionally
+  preserves schedule history, then independently verified the already-diverged
+  v3 path is not cleaned;
+- independently reproduced direct primary ingestion accepting schemaVersion 1
+  with a boolean identityFailureCount as fresh;
+- verified future BLS success timestamps now require a provider refresh;
+- utilities suite: 816 passed;
+- backend suite: 601 passed;
+- focused calendar/event tests: 65 passed; focused backend API tests: 7 passed;
+- documentation check, secret scan of 620 tracked objects, and commit-range
+  git diff --check passed.
+
+Prior review records:
 
 ```text
 HANDOFF_ID: R-009
