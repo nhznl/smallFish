@@ -10,9 +10,9 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R11
-NEXT_ACTOR: IMPLEMENTER
-LAST_HANDOFF_ID: R-009
+CURRENT_ROUND: M2-R12
+NEXT_ACTOR: REVIEWER
+LAST_HANDOFF_ID: I-010
 M1_STATUS: ACCEPTED
 M2_STATUS: CHANGES_REQUESTED
 M3_STATUS: PLANNED
@@ -57,40 +57,41 @@ or required owner decision.
 ## Implementer outbox
 
 ```text
-HANDOFF_ID: I-009
+HANDOFF_ID: I-010
 MILESTONE: M2
 STATE: READY_FOR_REVIEW
-BASE_COMMIT: 393ba58
-IMPLEMENTATION_COMMITS: 78876ab
-SCOPE: Resolved M2-R8-F1 through M2-R8-F4. Finnhub fiscal identity now accepts
-  only lossless integral tokens, with a four-digit year and quarter 1-4.
-  Calendar-capable freshness now requires a matching complete schema-2
-  sidecar, refreshes old or missing sidecars when a key is available, and
-  reports a distinct legacy-only capability without a key. Federal Reserve
-  decision, press-conference, and G.17 identities now use official annual
-  occurrence order rather than scheduled day or month. Ingestion and API
-  freshness now share one inclusive UTC timestamp contract, with date-only
-  Finnhub generations conservatively anchored at midnight Eastern.
+BASE_COMMIT: 643af4f
+IMPLEMENTATION_COMMITS: db17aee
+SCOPE: Resolved M2-R10-F1 through M2-R10-F5. The Finnhub sidecar now carries an
+  exact legacy-CSV SHA-256 binding, calendar freshness uses an injectable UTC
+  instant, and every refresh is revalidated before calendar success is
+  reported while legacy-only success remains separately available. Federal
+  Reserve date/month values are first-seen seeds reconciled against the
+  persisted normalized snapshot; unchanged anchors, insertions, neighbor
+  crossings, and cross-year moves preserve identity, while ambiguous changes
+  fail closed. Parser version 4 transactionally upgrades prior snapshots and
+  preserves existing event/history identities. Base BLS sync now uses the same
+  shared freshness helper as primary sync and the API, including rejection of
+  future success timestamps.
 CHANGED_FILES: docs/ARCHITECTURE.md; docs/DATA.md;
-  docs/MARKET_EVENT_CALENDAR_DESIGN.md; models/market_events.py;
-  stock-app/app/market_events_read.py; stock-app/tests/test_market_events_api.py;
-  utilities/README.md; utilities/events.py; primary sync and official provider
-  modules; expanded live-shape Federal Reserve fixture;
+  docs/MARKET_EVENT_CALENDAR_DESIGN.md; stock-app API tests; utilities/README.md;
+  market-calendar source config; utilities/events.py; base and primary sync;
+  official Federal Reserve parser; earnings sidecar fixture;
   utilities/tests/test_events.py; utilities/tests/test_market_calendar.py.
-FINDINGS_RESOLVED: M2-R8-F1, M2-R8-F2, M2-R8-F3, M2-R8-F4.
-TESTS_AND_RESULTS: Final focused event/calendar regressions 20 passed;
-  focused complete event/calendar files 59 passed and backend API file 7
-  passed; full utilities suite 810 passed; full backend suite 601 passed;
+FINDINGS_RESOLVED: M2-R10-F1, M2-R10-F2, M2-R10-F3, M2-R10-F4,
+  M2-R10-F5.
+TESTS_AND_RESULTS: Final focused event/calendar files 65 passed and backend API
+  file 7 passed; full utilities suite 816 passed; full backend suite 601 passed;
   Angular Node 24 suite 200 passed; Angular production build and
   ./commands.sh build-ui passed; documentation check passed for 57 files;
   Python compileall, secret scan of 620 pre-commit tracked objects, and
   git diff --check passed.
 LIVE_SMOKE: Parsed the current official Federal Reserve JSON in memory without
-  persisting its raw payload. Coverage was 2017-01-01 through 2026-12-31. The
-  October G.17 row resolved to US:FED:INDUSTRIAL_PRODUCTION:2026-R10 at 9:15
-  a.m. ET, and the FOMC decision/press pair resolved to 2026-M07 at 2:00/2:30
-  p.m. ET. This matches the expanded annual-record fixture and uses no inferred
-  economic reference period.
+  persisting its raw payload. Coverage was 2017-01-01 through 2026-12-31;
+  October G.17 retained the 2026-10 first-seen seed at 9:15 a.m. ET and the
+  October FOMC pair retained the 2026-10-28 seed at 2:00/2:30 p.m. ET. The
+  live source still exposes no provider ids for these records, so persistence
+  supplies continuity and no economic reference period is inferred.
 VISUAL_VERIFICATION: Rebuilt and inspected Event Risk from the verified local
   commands.sh server at the default desktop viewport and 390x844. The
   incomplete-primary state, source diagnostics, caveat, summary cards, tabs,
