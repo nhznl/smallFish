@@ -10,9 +10,9 @@ before doing work and immediately before editing it.
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
 CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R14
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-011
+CURRENT_ROUND: M2-R15
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-011
 M1_STATUS: ACCEPTED
 M2_STATUS: CHANGES_REQUESTED
 M3_STATUS: PLANNED
@@ -92,6 +92,59 @@ KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
 ```
 
 ## Reviewer outbox
+
+```text
+HANDOFF_ID: R-011
+MILESTONE: M2
+DECISION: CHANGES_REQUESTED
+REVIEWED_BASE: f8d174d
+REVIEWED_COMMITS: c944814, f325547
+FINDINGS_VERIFIED_RESOLVED: M2-R12-F1, M2-R12-F2, M2-R12-F3
+FINDINGS_PARTIALLY_RESOLVED: M2-R12-F4
+
+M2-R14-F1 [P1] Federal Reserve reconciliation now rejects every record-count
+change before anchoring unchanged occurrences. That makes ordinary publication
+of a new future FOMC meeting or G.17 release fail the entire required provider,
+and likewise prevents a safely identifiable deletion/cancellation. Reproduced
+by appending one unique November G.17 row and, separately, one unique December
+FOMC meeting/press pair to an otherwise unchanged official fixture: both raised
+"ambiguous persisted identity count change". This is not the requested
+move-plus-insertion ambiguity; all prior records still anchor exactly, leaving
+only new records. Reconcile anchors first, then allow pure insertions when no
+old records remain unmatched and pure deletions when no new records remain
+unmatched. Continue to fail when both sides remain unmatched with unequal
+counts, when more than one move remains, or when a move and count change coexist.
+Add pure insertion and pure deletion regressions for FOMC/press and G.17, plus
+an end-to-end refresh proving the required source remains fresh.
+
+M2-R14-F2 [P1] Parser-v4 duplicate-generation cleanup is limited to the
+current scan horizon because _publish_provider passes only in_window
+observations to _cleanup_obsolete_federal_reserve_generations. If the database
+already contains split date/month and ordinal generations for an occurrence
+outside today's 31-day horizon, the v4 upgrade replaces the normalized
+snapshot but never considers or removes those duplicate event rows. They
+remain queryable historically and violate the migration contract that the two
+identity generations cannot coexist. Run migration cleanup against the full
+reconciled provider snapshot while keeping event publication horizon-bounded,
+and add an upgrade regression where the split occurrences are outside the
+upgrade scan horizon; prove one occurrence and merged schedule history remain.
+```
+
+Reviewer verification for R-011:
+
+- independently verified fixed 24-hour Finnhub calendar freshness even with a
+  two-day legacy override;
+- independently verified exact schema-2/boolean identity validation in direct
+  primary ingestion;
+- verified ambiguous multi-move and move-plus-insertion Fed changes now fail
+  without replacing the last successful snapshot;
+- independently reproduced pure FOMC and G.17 insertions being rejected;
+- inspected and reproduced the migration cleanup's current-horizon limitation;
+- focused market-calendar tests: 55 passed; focused backend API tests: 7 passed;
+- documentation check, secret scan of 620 tracked objects, and commit-range
+  git diff --check passed.
+
+Prior review records:
 
 ```text
 HANDOFF_ID: R-010
