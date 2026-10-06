@@ -9,13 +9,13 @@ before doing work and immediately before editing it.
 ```text
 PROTOCOL_VERSION: 1
 LOOP_STATUS: ACTIVE
-CURRENT_MILESTONE: M2
-CURRENT_ROUND: M2-R16
-NEXT_ACTOR: REVIEWER
-LAST_HANDOFF_ID: I-012
+CURRENT_MILESTONE: M3
+CURRENT_ROUND: M3-R1
+NEXT_ACTOR: IMPLEMENTER
+LAST_HANDOFF_ID: R-012
 M1_STATUS: ACCEPTED
-M2_STATUS: CHANGES_REQUESTED
-M3_STATUS: PLANNED
+M2_STATUS: ACCEPTED
+M3_STATUS: IN_PROGRESS
 OWNER_DECISION_REQUIRED: NO
 STOP_REASON: NONE
 ```
@@ -92,6 +92,64 @@ KNOWN_GAPS: Released values beyond the existing BLS path remain a separate,
 ```
 
 ## Reviewer outbox
+
+```text
+HANDOFF_ID: R-012
+MILESTONE: M2
+DECISION: ACCEPTED
+REVIEWED_BASE: 5a4477f
+REVIEWED_COMMITS: f4f1ee6, 908bf7e
+FINDINGS_VERIFIED_RESOLVED: M2-R14-F1, M2-R14-F2
+
+Reviewer verification for R-012:
+
+- independently verified pure future FOMC/press and G.17 insertions retain all
+  anchored identities, receive new seeds, and keep the required source fresh;
+- independently verified pure deletion, single-move, multi-move rejection,
+  and move-plus-count-change rejection behavior;
+- independently verified parser-v4 cleanup uses the full reconciled snapshot
+  and collapses an already-diverged identity generation outside the scan
+  horizon while preserving the chosen occurrence and schedule history;
+- utilities suite: 832 passed;
+- backend suite: 601 passed;
+- focused market-calendar tests: 60 passed;
+- documentation check, secret scan of 620 tracked objects, and commit-range
+  git diff --check passed;
+- implementer evidence additionally records 200 Angular tests, production and
+  commands.sh UI builds, and successful desktop Event Risk route inspection.
+
+MILESTONE_3_KICKOFF:
+
+Implement only the approved secondary sector and asset coverage:
+
+1. Add EIA petroleum and natural-gas events from official schedules, including
+   holiday exceptions. Keep schedule acquisition separate from released-value
+   acquisition, use EIA API/official CSV only under documented attribution and
+   terms, and treat a missing key as an explicit capability state.
+2. Add USDA/NASS/WASDE events and selected FAS export-sales events from official
+   calendars, ESMIS, and agency APIs/files. Do not add privately published ISM,
+   Michigan, Conference Board, or NAR feeds without the required terms review;
+   expose their absence as a coverage limitation.
+3. Add reviewed ETF exposure mappings for the new sector/commodity events.
+   Every ETF must resolve to the generated universe; duplicate mappings fail;
+   current, stale, and missing price-cache states stay distinct; and direct,
+   sector, and indirect exposure are displayed separately without implying a
+   guaranteed direction.
+4. Add the secondary-event subsection and filters to Event Risk. Primary events
+   must continue to rank ahead of secondary events by default, source caveats
+   and strategy risk must remain adjacent to qualified results, and covered-
+   empty must remain distinct from stale, unknown, and not configured.
+5. Preserve all M1/M2 contracts, the batch-to-artifact-to-read-only-API boundary,
+   stable identity/history, failed-refresh retention, secret safety, no-network
+   tests, and the ban on directional forecasts or strategy-performance claims.
+6. Verify targeted Python suites, Angular test/build, desktop and narrow route
+   inspection with representative synthetic secondary events, docs, secret
+   scan, and git diff --check. Stop for an owner decision if source rights,
+   coverage proof, authoritative-source precedence, or a dependency-boundary
+   change cannot be resolved from the approved design.
+```
+
+Prior review records:
 
 ```text
 HANDOFF_ID: R-011
