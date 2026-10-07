@@ -162,6 +162,7 @@ that a cache has been refreshed today.
 | `GET /api/market-events/daily-summary` | The same horizon grouped by session. |
 | `GET /api/market-events/sources` | Per-source freshness. An unconfigured measurement feed stays `not_configured`. |
 | `GET /api/market-events/{event_id}` | One occurrence, including strategy assessments and ETF price-cache state. |
+| `POST /runMarketCalendar` | Reuse today's completed market-calendar publication or run the allowlisted calendar command, then let the Event Risk page reload the persisted data. |
 | `GET /api/studies` | Materialized Research Studies catalog. |
 | `GET /api/studies/{studyId}` | Validated materialized study detail and variations. |
 | `GET /api/studies/{studyId}/scan` | Latest materialized candidate snapshot for a scan-capable study. |
@@ -180,7 +181,7 @@ that a cache has been refreshed today.
 | `PATCH /api/brokerages/{id}/portfolio-analysis/classifications/{symbol}` | Save or clear one account-scoped allocation-bucket override without changing broker facts. |
 | `POST /api/brokerages/{id}/portfolio-analysis/preview` | Recalculate a proposed long stock/ETF buy or non-short sale without persisting it or contacting a provider. |
 | `GET`/`POST /runWheel`, `/runChains` | Run the wheel job (with best-effort upcoming-earnings refresh) and manual prospective option-quote collection. `POST /runChains` accepts the Wheel view's horizon, OTM cushion, and symbol list in its JSON body. |
-| `GET /runEarningsScan` | Refresh the shared upcoming-earnings calendar (Finnhub, only when stale), then report how many scanner symbols have an upcoming report. |
+| `GET`/`POST /runEarningsScan` | Refresh the shared upcoming-earnings calendar (Finnhub, only when stale), then report how many scanner symbols have an upcoming report. |
 
 `/api/brokerages/{id}` is the dashboard contract. It uses public brokerage IDs
 (`tastytrade`, `fidelity`), reads materialized artifacts only, and returns one

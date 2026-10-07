@@ -25,6 +25,7 @@ from services.market_events.http import HttpResponse, TransportError, public_htt
 from utilities.events import EventRefreshResult, ensure_fresh_events, run_fetch
 from utilities.market_calendar.config import CalendarConfigError, load_risk_policy
 from utilities.market_calendar import __main__ as market_calendar_cli
+from utilities.market_calendar.database import publication_complete
 from utilities.market_calendar.etf import load_etf_mappings, validate_mappings
 from utilities.market_calendar.providers.bls import parse_ics, parse_schedule_html
 from utilities.market_calendar.providers.primary import (
@@ -889,6 +890,9 @@ def test_m2_primary_sources_publish_with_coverage_and_named_clusters(tmp_path: P
     )
     assert earnings[0]["source_url"] == "https://finnhub.io/docs/api/earnings-calendar"
     assert earnings[0]["parser_version"] == "finnhub-calendar-sidecar-2"
+    assert publication_complete(
+        tmp_path / "calendar.sqlite", START.isoformat(), END.isoformat(),
+    )
 
 
 def test_census_landing_discovers_the_requested_year_archive(tmp_path: Path):
@@ -1363,6 +1367,68 @@ def test_market_calendar_cli_refreshes_earnings_before_reading_artifacts(
     assert captured["publish"]["earnings_csv_text"] == "fresh csv"
     assert captured["publish"]["earnings_meta_text"] == "fresh metadata"
     assert captured["publish"]["earnings_calendar_text"] == "fresh calendar"
+
+
+def test_market_calendar_cli_skips_an_already_completed_horizon(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+):
+    monkeypatch.setenv("SFP_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(market_calendar_cli, "publication_complete", lambda *args: True)
+    monkeypatch.setattr(
+        market_calendar_cli,
+        "ensure_fresh_events",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("a completed daily run must skip the earnings prerequisite")
+        ),
+    )
+    monkeypatch.setattr(
+        market_calendar_cli,
+        "run_primary_sync",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("a completed daily run must skip publication")
+        ),
+    )
+
+    assert market_calendar_cli.main([
+        "--as-of", "2026-10-04",
+        "--from-date", START.isoformat(),
+        "--to-date", END.isoformat(),
+    ]) == 0
+    assert "already generated" in capsys.readouterr().out
+
+
+def test_market_calendar_cli_force_bypasses_the_completed_horizon_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    earnings_csv = artifacts / "events.csv"
+    earnings_meta = artifacts / "events_meta.json"
+    earnings_calendar = artifacts / "earnings.json"
+    earnings_csv.write_text("csv", encoding="utf-8")
+    earnings_meta.write_text("meta", encoding="utf-8")
+    earnings_calendar.write_text("calendar", encoding="utf-8")
+    called = {"n": 0}
+    monkeypatch.setattr(market_calendar_cli, "publication_complete", lambda *args: True)
+    monkeypatch.setattr(
+        market_calendar_cli,
+        "run_primary_sync",
+        lambda **kwargs: (
+            called.__setitem__("n", called["n"] + 1)
+            or SimpleNamespace(lines=(), exit_code=0)
+        ),
+    )
+
+    result = market_calendar_cli.main([
+        "--force",
+        "--database", str(tmp_path / "calendar.sqlite"),
+        "--earnings-csv", str(earnings_csv),
+        "--earnings-meta", str(earnings_meta),
+        "--earnings-calendar", str(earnings_calendar),
+    ])
+
+    assert result == 0
+    assert called["n"] == 1
 
 
 def test_market_calendar_cli_stops_when_earnings_prerequisite_is_unavailable(

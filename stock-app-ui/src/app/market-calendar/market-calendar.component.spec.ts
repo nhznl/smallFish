@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Subject, throwError } from 'rxjs';
 import { MarketCalendarService } from '../api/market-calendar.service';
+import { MarketCalendarJobResult } from '../model/job-results';
 import { MarketEvent, MarketEventCollection } from '../model/market-event';
 import { MarketCalendarComponent } from './market-calendar.component';
 
@@ -82,14 +83,19 @@ function collection(overrides: Partial<MarketEventCollection> = {}): MarketEvent
 describe('MarketCalendarComponent', () => {
   let fixture: ComponentFixture<MarketCalendarComponent>;
   let requests: Subject<MarketEventCollection>;
+  let runRequests: Subject<MarketCalendarJobResult>;
 
   beforeEach(async () => {
     requests = new Subject<MarketEventCollection>();
+    runRequests = new Subject<MarketCalendarJobResult>();
     await TestBed.configureTestingModule({
       imports: [MarketCalendarComponent],
       providers: [{
         provide: MarketCalendarService,
-        useValue: { getCollection: () => requests.asObservable() }
+        useValue: {
+          getCollection: () => requests.asObservable(),
+          runMarketCalendar: () => runRequests.asObservable()
+        }
       }]
     }).compileComponents();
     fixture = TestBed.createComponent(MarketCalendarComponent);
@@ -173,17 +179,55 @@ describe('MarketCalendarComponent', () => {
     expect(drawer).not.toContain('bullish');
   });
 
-  it('keeps the last snapshot visible while a reload is in flight', () => {
+  it('uses the Market Calendar action and keeps the last snapshot visible while it runs', () => {
     requests.next(collection());
     fixture.detectChanges();
-    const reload = [...fixture.nativeElement.querySelectorAll('button')].find(
-      (button: HTMLButtonElement) => button.textContent?.includes('Reload')
+    const action = [...fixture.nativeElement.querySelectorAll('button')].find(
+      (button: HTMLButtonElement) => button.textContent?.trim() === 'Market Calendar'
     ) as HTMLButtonElement;
-    reload.click();
+    expect(text()).not.toContain('Reload scan');
+    action.click();
     fixture.detectChanges();
     expect(text()).toContain('last successful snapshot');
     expect(text()).toContain('Consumer Price Index');
-    expect(reload.disabled).toBeTrue();
+    expect(action.disabled).toBeTrue();
+  });
+
+  it('reloads the published data after the daily calendar is reused', () => {
+    requests.next(collection());
+    fixture.detectChanges();
+    const action = [...fixture.nativeElement.querySelectorAll('button')].find(
+      (button: HTMLButtonElement) => button.textContent?.trim() === 'Market Calendar'
+    ) as HTMLButtonElement;
+
+    action.click();
+    runRequests.next({
+      status: 'ok', reused: true,
+      message: 'Today’s market calendar was already generated; the published data was reused.'
+    });
+    requests.next(collection({ generatedAtUtc: '2026-10-05T15:00:00Z' }));
+    fixture.detectChanges();
+
+    expect(text()).toContain('already generated');
+    expect(fixture.componentInstance.running).toBeFalse();
+    expect(fixture.componentInstance.reloading).toBeFalse();
+    expect(action.disabled).toBeFalse();
+  });
+
+  it('keeps the last snapshot and shows a job failure', () => {
+    requests.next(collection());
+    fixture.detectChanges();
+    const action = [...fixture.nativeElement.querySelectorAll('button')].find(
+      (button: HTMLButtonElement) => button.textContent?.trim() === 'Market Calendar'
+    ) as HTMLButtonElement;
+
+    action.click();
+    runRequests.next({ status: 'error', message: 'Provider refresh failed.' });
+    fixture.detectChanges();
+
+    expect(text()).toContain('Provider refresh failed.');
+    expect(text()).toContain('Consumer Price Index');
+    expect(fixture.componentInstance.runStatus).toBe('error');
   });
 
   it('filters secondary events and keeps exposure channels and price states visible', () => {

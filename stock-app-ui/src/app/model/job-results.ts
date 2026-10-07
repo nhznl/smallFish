@@ -33,5 +33,9 @@ export interface WheelJobResult extends JobCommandResult {
 
 export type SectorRotationJobResult = JobCommandResult;
 
+export interface MarketCalendarJobResult extends JobCommandResult {
+  reused?: boolean;
+}
+
 /** `runChains` may surface a 400 scope message in the JSON body. */
 export type ChainsJobResult = JobCommandResult;

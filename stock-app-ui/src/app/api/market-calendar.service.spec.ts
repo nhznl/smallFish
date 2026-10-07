@@ -29,4 +29,16 @@ describe('MarketCalendarService', () => {
     expect(body?.coverageStatus).toBe('unavailable');
     expect(body?.summary.primaryRiskDays).toBeNull();
   });
+
+  it('posts the idempotent market-calendar job', () => {
+    let reused: boolean | undefined;
+    service.runMarketCalendar().subscribe(response => reused = response.reused);
+
+    const request = http.expectOne(item => item.url.endsWith('/runMarketCalendar'));
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toBeNull();
+    request.flush({ status: 'ok', reused: true });
+
+    expect(reused).toBeTrue();
+  });
 });

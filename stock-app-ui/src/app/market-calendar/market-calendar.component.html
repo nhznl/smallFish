@@ -9,15 +9,15 @@
       </p>
     </div>
     <div class="page-actions">
-      <button type="button" class="btn btn-primary" (click)="load(false)"
-              [disabled]="loading || reloading"
-              [attr.aria-busy]="reloading"
-              matTooltip="Reload the published scan. Provider refresh is ./commands.sh market-calendar and does not run from this page."
+      <button type="button" class="btn btn-primary" (click)="run()"
+              [disabled]="loading || reloading || running"
+              [attr.aria-busy]="running || reloading"
+              matTooltip="Use today's completed market calendar when available; otherwise generate it, then reload this page."
               matTooltipPosition="above">
-        @if (reloading) {
+        @if (running || reloading) {
           <span class="btn-spinner" aria-hidden="true"></span>
         }
-        {{ reloading ? 'Reloading…' : 'Reload scan' }}
+        {{ running ? 'Generating…' : reloading ? 'Loading…' : 'Market Calendar' }}
       </button>
       @if (snapshot?.generatedAtUtc) {
         <span class="snapshot-chip">
@@ -40,12 +40,21 @@
     <p class="banner banner-neg" role="alert">{{ error }}</p>
   }
 
+  @if (runMessage) {
+    <p class="banner" [class.banner-pos]="runStatus === 'ok'"
+       [class.banner-neg]="runStatus === 'error'"
+       [class.banner-warn]="runStatus === 'idle'"
+       [attr.role]="runStatus === 'error' ? 'alert' : 'status'">
+      {{ runMessage }}
+    </p>
+  }
+
   @if (snapshot; as scan) {
     <p class="banner">{{ scan.caveat }}</p>
 
     @if (reloading) {
       <p class="banner banner-warn" role="status">
-        Refreshing the published scan. The rows below are the last successful snapshot, not a new result.
+        Loading the published calendar. The rows below are the last successful snapshot until loading completes.
       </p>
     }
     @if (reloadError) {
@@ -119,7 +128,7 @@
       @if (!scan.available) {
         <div class="empty-state">
           <p class="empty-title">The primary event-risk scan is unavailable</p>
-          <p class="empty-hint">Run <span class="mono">./commands.sh market-calendar</span> to publish a scan. An empty page is not a session with no event risk.</p>
+          <p class="empty-hint">Use <strong>Market Calendar</strong> to generate today’s scan. An empty page is not a session with no event risk.</p>
         </div>
       } @else if (!visibleDays().length) {
         <div class="empty-state">

@@ -166,8 +166,8 @@ see `stock-app/README.md`.
 The API owns money and risk arithmetic, so the UI cannot disagree with it. The
 UI owns filtering, sorting, presentation, and disclosure.
 
-Four run-job endpoints (`/runWheel`, `/runChains`, `/runSectorRotation`,
-`/runEarningsScan`) let the UI trigger batch work. They are the only place that
+Five run-job endpoints (`/runWheel`, `/runChains`, `/runSectorRotation`,
+`/runEarningsScan`, `/runMarketCalendar`) let the UI trigger batch work. They are the only place that
 crosses the boundary, and they shell out rather than importing the pipeline.
 
 Study 7 arm B/C live management is a separately gated bounded context under

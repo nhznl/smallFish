@@ -48,3 +48,35 @@ def _migrate(connection: sqlite3.Connection) -> None:
 
 def checkpoint(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+
+def publication_complete(path: Path, horizon_start: str, horizon_end: str) -> bool:
+    """Return whether this exact horizon already completed with fresh requirements."""
+    if not path.is_file():
+        return False
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+        connection.row_factory = sqlite3.Row
+        complete = connection.execute(
+            """
+            SELECT 1 FROM ingestion_runs
+            WHERE status = 'complete'
+              AND horizon_start = ? AND horizon_end = ?
+            LIMIT 1
+            """,
+            (horizon_start, horizon_end),
+        ).fetchone()
+        required_problem = connection.execute(
+            """
+            SELECT 1 FROM source_sync_state
+            WHERE required = 1
+              AND status != 'fresh'
+            LIMIT 1
+            """
+        ).fetchone()
+        return complete is not None and required_problem is None
+    except sqlite3.Error:
+        return False
+    finally:
+        if "connection" in locals():
+            connection.close()

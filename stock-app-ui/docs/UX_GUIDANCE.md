@@ -218,6 +218,10 @@ other textual state.
   edge.
 - Missing measurements, missing price cache, and incomplete source coverage
   stay visible. An unavailable scan is not rendered as zero risk days.
+- The header's **Market Calendar** action checks for a completed current-day
+  publication, generates it only when needed, and then reloads the persisted
+  result. Keep its running, reused, completed, and failure states visible while
+  preserving the last successful snapshot.
 
 ### Ledgers and portfolio risk
 

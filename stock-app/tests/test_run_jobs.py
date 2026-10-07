@@ -258,6 +258,46 @@ def test_run_sector_rotation_does_not_rebuild_the_stock_cache(monkeypatch):
     assert "Sector rotation" in body["output"]
 
 
+def test_run_market_calendar_reuses_a_completed_daily_run(monkeypatch):
+    called: dict = {}
+    reloaded = {"n": 0}
+
+    def _run(args, **kwargs):
+        called["args"] = args
+        return _FakeProc(
+            0,
+            "Market calendar already generated for 2026-10-06 through "
+            "2026-11-06; skipped.",
+        )
+
+    monkeypatch.setattr(run_jobs.subprocess, "run", _run)
+    monkeypatch.setattr(
+        run_jobs.cache, "reload",
+        lambda: reloaded.__setitem__("n", reloaded["n"] + 1),
+    )
+
+    body = client.post("/runMarketCalendar").json()
+
+    assert called["args"][4:] == ["market-calendar"]
+    assert body["status"] == "ok"
+    assert body["reused"] is True
+    assert "already generated" in body["message"]
+    assert reloaded["n"] == 0
+
+
+def test_run_market_calendar_reports_a_new_publication(monkeypatch):
+    monkeypatch.setattr(
+        run_jobs.subprocess, "run",
+        lambda *args, **kwargs: _FakeProc(0, "clustering: published 22 relationships."),
+    )
+
+    body = client.post("/runMarketCalendar").json()
+
+    assert body["status"] == "ok"
+    assert body["reused"] is False
+    assert body["message"] == "Today's market calendar was generated successfully."
+
+
 class _FakeStock:
     def __init__(self, code, penny=False):
         self.code = code

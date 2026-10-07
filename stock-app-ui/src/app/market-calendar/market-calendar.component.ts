@@ -31,6 +31,9 @@ export class MarketCalendarComponent implements OnInit {
   snapshot: MarketEventCollection | null = null;
   loading = false;
   reloading = false;
+  running = false;
+  runStatus: 'idle' | 'ok' | 'error' = 'idle';
+  runMessage = '';
   error = '';
   reloadError = '';
   view: ViewId = 'upcoming';
@@ -77,6 +80,36 @@ export class MarketCalendarComponent implements OnInit {
         } else {
           this.error = message;
         }
+      }
+    });
+  }
+
+  run(): void {
+    if (this.loading || this.reloading || this.running) return;
+    this.running = true;
+    this.runStatus = 'idle';
+    this.runMessage = 'Checking today’s market calendar. The last successful snapshot remains visible.';
+    this.reloadError = '';
+    this.calendar.runMarketCalendar().subscribe({
+      next: result => {
+        this.running = false;
+        if (result.status === 'ok') {
+          this.runStatus = 'ok';
+          this.runMessage = result.message ?? (
+            result.reused
+              ? 'Today’s market calendar was already generated; the published data was reused.'
+              : 'Today’s market calendar was generated successfully.'
+          );
+          this.load(false);
+        } else {
+          this.runStatus = 'error';
+          this.runMessage = result.message || result.output || 'The market-calendar job failed.';
+        }
+      },
+      error: err => {
+        this.running = false;
+        this.runStatus = 'error';
+        this.runMessage = err?.error?.detail ?? 'The market-calendar job could not be started.';
       }
     });
   }

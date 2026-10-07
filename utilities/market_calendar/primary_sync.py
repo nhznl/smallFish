@@ -1063,6 +1063,25 @@ def run_primary_sync(
         cluster_links = _rebuild_clusters(connection, windows)
         connection.execute("COMMIT")
         lines.append(f"clustering: published {cluster_links} named same-session relationships.")
+        required_problem = connection.execute(
+            "SELECT 1 FROM source_sync_state WHERE required = 1 AND status != 'fresh' LIMIT 1"
+        ).fetchone()
+        if required_failures == 0 and required_problem is None:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                INSERT INTO ingestion_runs (
+                    started_at_utc, finished_at_utc, horizon_start, horizon_end,
+                    status, detail
+                ) VALUES (?, ?, ?, ?, 'complete', ?)
+                """,
+                (
+                    observed_at, observed_at, horizon_start.isoformat(),
+                    horizon_end.isoformat(),
+                    "Complete primary and secondary market-calendar publication.",
+                ),
+            )
+            connection.execute("COMMIT")
         checkpoint(connection)
     finally:
         connection.close()

@@ -82,7 +82,8 @@ that cache when `FINNHUB_API_KEY` is configured. It stops before calendar
 publication when the prerequisite cannot be made current, preserving the last
 known-good artifacts. Explicit `--earnings-csv`, `--earnings-meta`, or
 `--earnings-calendar` inputs select pinned/offline artifacts and suppress the
-automatic refresh.
+automatic refresh. A completed publication for the exact current-day horizon
+is reused on later invocations that day; `--force` explicitly recomputes it.
 
 Milestone 3 adds optional EIA petroleum and natural-gas schedules, selected
 NASS and aligned WASDE occurrences, and the public FAS ESRQS weekly Export

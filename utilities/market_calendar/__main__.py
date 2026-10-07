@@ -20,6 +20,7 @@ from utilities.events import (
     DEFAULT_MAX_AGE_DAYS,
     ensure_fresh_events,
 )
+from utilities.market_calendar.database import publication_complete
 from utilities.market_calendar.primary_sync import (
     PRIMARY_SOURCES,
     SECONDARY_SOURCES,
@@ -55,6 +56,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--database", type=Path)
     parser.add_argument("--universe", type=Path)
     parser.add_argument("--price-cache", type=Path)
+    parser.add_argument(
+        "--force", action="store_true",
+        help="Run again even when this exact horizon already completed today.",
+    )
     args = parser.parse_args(argv)
 
     data_root = Path(os.environ.get("SFP_DATA_DIR", "")).expanduser()
@@ -68,6 +73,14 @@ def main(argv: list[str] | None = None) -> int:
     as_of = args.as_of or now.date()
     start = args.start or as_of
     end = args.end or (start + timedelta(days=31))
+    if not args.force and publication_complete(
+        database, start.isoformat(), end.isoformat(),
+    ):
+        print(
+            f"Market calendar already generated for {start.isoformat()} through "
+            f"{end.isoformat()}; skipped."
+        )
+        return 0
     explicit_earnings_artifacts = any((
         args.earnings_csv, args.earnings_meta, args.earnings_calendar,
     ))

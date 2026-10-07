@@ -49,6 +49,7 @@ _JOB_LOCKS = {
     "earnings_scan": threading.Lock(),
     "wheel": threading.Lock(),
     "sector_rotation": threading.Lock(),
+    "market_calendar": threading.Lock(),
     "chains": threading.Lock(),
 }
 
@@ -56,6 +57,7 @@ _JOB_BUSY = {
     "earnings_scan": "An earnings calendar refresh is already running.",
     "wheel": "A wheel scan is already running.",
     "sector_rotation": "A sector-rotation job is already running.",
+    "market_calendar": "A market-calendar job is already running.",
     "chains": "An option-quote collection is already running.",
 }
 
@@ -109,6 +111,7 @@ def _run_command(job: str, args: list[str] | None = None, *,
             "ensure-events": "Earnings refresh",
             "chains": "Option quote collection",
             "sector-rotation": "Sector rotation",
+            "market-calendar": "Market calendar",
         }.get(job, "Job")
         return {
             "status": "timeout",
@@ -233,6 +236,20 @@ def _sector_rotation_payload() -> dict:
     return _run_command("sector-rotation", reload_cache=False)
 
 
+def _market_calendar_payload() -> dict:
+    """Publish today's calendar once, or reuse its completed daily run."""
+    result = _run_command("market-calendar", reload_cache=False)
+    if result.get("status") == "ok":
+        reused = "Market calendar already generated for " in result.get("output", "")
+        result["reused"] = reused
+        result["message"] = (
+            "Today's market calendar was already generated; the published data was reused."
+            if reused else
+            "Today's market calendar was generated successfully."
+        )
+    return result
+
+
 def _quote_report_name(*, horizon_dte: int | None, min_otm_pct: float | None,
                        filter_holdings: bool, etfs_only: bool,
                        rv_rank_min: float | None, rv_rank_max: float | None,
@@ -297,6 +314,12 @@ def run_wheel() -> JSONResponse:
 def run_sector_rotation() -> JSONResponse:
     """Recompute sector leadership. Prefer POST; GET kept for compatibility."""
     return _run_locked("sector_rotation", _sector_rotation_payload)
+
+
+@router.post("/runMarketCalendar")
+def run_market_calendar() -> JSONResponse:
+    """Generate today's market calendar once and return its safe job status."""
+    return _run_locked("market_calendar", _market_calendar_payload)
 
 
 @router.get("/runChains", deprecated=True)
