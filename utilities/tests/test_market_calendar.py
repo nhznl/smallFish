@@ -9,6 +9,7 @@ import sqlite3
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -21,7 +22,7 @@ from models.market_events import (
     format_utc,
 )
 from services.market_events.http import HttpResponse, TransportError, public_https_url
-from utilities.events import ensure_fresh_events, run_fetch
+from utilities.events import EventRefreshResult, ensure_fresh_events, run_fetch
 from utilities.market_calendar.config import CalendarConfigError, load_risk_policy
 from utilities.market_calendar import __main__ as market_calendar_cli
 from utilities.market_calendar.etf import load_etf_mappings, validate_mappings
@@ -1284,6 +1285,13 @@ def test_m3_cli_keeps_m2_fixture_directory_compatible(
             return NOW if tz is None else NOW.astimezone(tz)
 
     monkeypatch.setattr(market_calendar_cli, "datetime", FixedDateTime)
+    monkeypatch.setattr(
+        market_calendar_cli,
+        "ensure_fresh_events",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("explicit earnings artifacts must suppress refresh")
+        ),
+    )
     _prices(tmp_path / "cache")
     result = market_calendar_cli.main([
         "--from-date", START.isoformat(),
@@ -1312,6 +1320,72 @@ def test_m3_cli_keeps_m2_fixture_directory_compatible(
         ("usda_nass", "unknown"),
         ("usda_wasde", "unknown"),
     ]
+
+
+def test_market_calendar_cli_refreshes_earnings_before_reading_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW if tz is None else NOW.astimezone(tz)
+
+    captured = {}
+
+    def refresh(as_of, **kwargs):
+        captured["refresh"] = (as_of, kwargs)
+        (tmp_path / "market_calendar").mkdir(parents=True)
+        (tmp_path / "events.csv").write_text("fresh csv", encoding="utf-8")
+        (tmp_path / "events_meta.json").write_text("fresh metadata", encoding="utf-8")
+        (tmp_path / "market_calendar" / "earnings.json").write_text(
+            "fresh calendar", encoding="utf-8",
+        )
+        return EventRefreshResult("refreshed", "refreshed for test")
+
+    def publish(**kwargs):
+        captured["publish"] = kwargs
+        return SimpleNamespace(lines=("published for test",), exit_code=0)
+
+    monkeypatch.setenv("SFP_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("FINNHUB_API_KEY", "test-key")
+    monkeypatch.setattr(market_calendar_cli, "datetime", FixedDateTime)
+    monkeypatch.setattr(market_calendar_cli, "ensure_fresh_events", refresh)
+    monkeypatch.setattr(market_calendar_cli, "run_primary_sync", publish)
+
+    result = market_calendar_cli.main([])
+
+    assert result == 0
+    as_of, refresh_kwargs = captured["refresh"]
+    assert as_of == "2026-10-04"
+    assert refresh_kwargs["lookahead_days"] == 70
+    assert refresh_kwargs["required_coverage_days"] == 31
+    assert refresh_kwargs["output_root"] == tmp_path
+    assert captured["publish"]["earnings_csv_text"] == "fresh csv"
+    assert captured["publish"]["earnings_meta_text"] == "fresh metadata"
+    assert captured["publish"]["earnings_calendar_text"] == "fresh calendar"
+
+
+def test_market_calendar_cli_stops_when_earnings_prerequisite_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("SFP_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("FINNHUB_API_KEY", raising=False)
+    monkeypatch.setattr(
+        market_calendar_cli,
+        "ensure_fresh_events",
+        lambda *args, **kwargs: EventRefreshResult(
+            "unavailable", "earnings are unavailable for test",
+        ),
+    )
+    monkeypatch.setattr(
+        market_calendar_cli,
+        "run_primary_sync",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("publication must not run after prerequisite failure")
+        ),
+    )
+
+    assert market_calendar_cli.main([]) == 3
 
 
 def test_m3_secondary_publication_is_optional_and_preserves_distinct_capability_states(tmp_path: Path):

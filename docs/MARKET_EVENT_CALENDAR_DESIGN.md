@@ -641,6 +641,8 @@ Add an explicit command rather than provider I/O on page load:
 Default behavior:
 
 - scan today through today plus 31 calendar days;
+- reuse or conditionally refresh the existing Finnhub earnings artifacts before
+  publishing, and stop if calendar-capable earnings coverage remains unavailable;
 - use cached source observations when still fresh and sufficiently covered;
 - conditionally refresh stale or incomplete sources;
 - publish source-by-source diagnostics;

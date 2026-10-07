@@ -76,6 +76,14 @@ of the requested range is present. Each bounded response therefore fails
 closed if it reaches that observed limit; only the combined, deduplicated
 responses can publish complete requested-range coverage.
 
+`./commands.sh market-calendar` is the combined operator command. Before
+publishing, it reuses a complete, current Finnhub earnings cache or refreshes
+that cache when `FINNHUB_API_KEY` is configured. It stops before calendar
+publication when the prerequisite cannot be made current, preserving the last
+known-good artifacts. Explicit `--earnings-csv`, `--earnings-meta`, or
+`--earnings-calendar` inputs select pinned/offline artifacts and suppress the
+automatic refresh.
+
 Milestone 3 adds optional EIA petroleum and natural-gas schedules, selected
 NASS and aligned WASDE occurrences, and the public FAS ESRQS weekly Export
 Sales schedule. Natural-gas Wednesday exceptions map to the following nominal

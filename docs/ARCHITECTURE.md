@@ -105,6 +105,7 @@ SnapTrade service suite runs in the API environment only.
 5. **UI** — Angular fetches JSON and renders it.
 
 The primary event-risk calendar is the same shape. `./commands.sh market-calendar`
+first invokes the existing conditional Finnhub earnings prerequisite, then
 fetches official schedules through `services/market_events`, and
 `utilities/market_calendar` normalizes, scores, and writes
 `data/market_calendar/calendar.sqlite`. FastAPI reads that file only. It does
@@ -117,8 +118,9 @@ fiscal identity. Calendar-capable freshness requires a schema-2 sidecar bound
 to the exact legacy CSV bytes by SHA-256, not merely the same fetch date; a
 still-fresh legacy cache remains usable by legacy consumers but is reported as
 calendar-incapable until a credentialed refresh upgrades it. The calendar
-reads the sidecar; it neither widens the legacy CSV contract nor adds a second
-Finnhub fetch path. That path uses bounded three-day requests and fails closed
+reads the sidecar; its combined command orchestrates the existing fetcher and
+neither widens the legacy CSV contract nor adds a second Finnhub fetch path.
+That path uses bounded three-day requests and fails closed
 if a response reaches the observed 1,500-row provider limit, so a truncated
 broad response cannot be labeled as complete horizon coverage.
 

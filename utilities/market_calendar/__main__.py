@@ -1,8 +1,9 @@
-"""Publish the primary broad-market event-risk calendar.
+"""Refresh prerequisites and publish the market event-risk calendar.
 
 The default fetch uses configured official schedule surfaces. Tests and local
 inspection pass fixtures so no socket is opened. The command reads the legacy
-earnings cache but does not write or widen its contract.
+earnings cache after conditionally refreshing it through the existing earnings
+utility; it does not widen that artifact contract.
 """
 
 from __future__ import annotations
@@ -14,6 +15,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from models.market_events import EASTERN
+from utilities.events import (
+    DEFAULT_LOOKAHEAD_DAYS,
+    DEFAULT_MAX_AGE_DAYS,
+    ensure_fresh_events,
+)
 from utilities.market_calendar.primary_sync import (
     PRIMARY_SOURCES,
     SECONDARY_SOURCES,
@@ -26,7 +32,9 @@ def _date(value: str):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Publish the primary event-risk calendar.")
+    parser = argparse.ArgumentParser(
+        description="Refresh earnings and publish the market event-risk calendar."
+    )
     parser.add_argument("--from-date", type=_date, dest="start")
     parser.add_argument("--to-date", type=_date, dest="end")
     parser.add_argument("--as-of", type=_date)
@@ -60,6 +68,23 @@ def main(argv: list[str] | None = None) -> int:
     as_of = args.as_of or now.date()
     start = args.start or as_of
     end = args.end or (start + timedelta(days=31))
+    explicit_earnings_artifacts = any((
+        args.earnings_csv, args.earnings_meta, args.earnings_calendar,
+    ))
+    if not explicit_earnings_artifacts:
+        required_coverage_days = max(0, (end - as_of).days)
+        refresh = ensure_fresh_events(
+            as_of.isoformat(),
+            lookahead_days=max(DEFAULT_LOOKAHEAD_DAYS, required_coverage_days),
+            required_coverage_days=required_coverage_days,
+            max_age_days=DEFAULT_MAX_AGE_DAYS,
+            api_key=os.environ.get("FINNHUB_API_KEY"),
+            output_root=data_root,
+            now=datetime.now(EASTERN),
+        )
+        print(f"finnhub_earnings prerequisite: {refresh.message}")
+        if not refresh.ok:
+            return 3
     schedule_text = args.fixture.read_text(encoding="utf-8") if args.fixture else None
     released = args.released_values.read_text(encoding="utf-8") if args.released_values else None
     provider_documents = None
