@@ -114,14 +114,6 @@ export class MarketCalendarComponent implements OnInit {
     });
   }
 
-  requiredProblems() {
-    return (this.snapshot?.sources ?? []).filter(source => source.required && source.status !== 'fresh');
-  }
-
-  optionalGaps() {
-    return (this.snapshot?.sources ?? []).filter(source => !source.required && source.status !== 'fresh');
-  }
-
   visibleDays(): RiskDay[] {
     const days = (this.snapshot?.days ?? []).filter(day => this.inRange(day.date));
     if (this.view === 'upcoming') {
@@ -141,6 +133,26 @@ export class MarketCalendarComponent implements OnInit {
     return this.priority === 'primary' ? [] : day.secondaryEvents;
   }
 
+  secondaryEarnings(day: RiskDay): MarketEvent[] {
+    return this.visibleSecondary(day).filter(event =>
+      event.eventType === 'EARNINGS' && event.portfolioRelevance === 'SINGLE_STOCK'
+    );
+  }
+
+  secondaryDetails(day: RiskDay): MarketEvent[] {
+    return this.visibleSecondary(day).filter(event =>
+      event.eventType !== 'EARNINGS' || event.portfolioRelevance !== 'SINGLE_STOCK'
+    );
+  }
+
+  earningsSymbol(event: MarketEvent): string {
+    return event.title.replace(/\s+earnings$/i, '').trim();
+  }
+
+  earningsImportance(day: RiskDay): string {
+    return [...new Set(this.secondaryEarnings(day).map(event => event.importance.label))].join(', ');
+  }
+
   visibleEventCount(day: RiskDay): number {
     return this.visiblePrimary(day).length + this.visibleSecondary(day).length;
   }
@@ -155,6 +167,21 @@ export class MarketCalendarComponent implements OnInit {
 
   stat(value: number | null | undefined): string {
     return value == null ? '—' : String(value);
+  }
+
+  coverageLabel(status: string): string {
+    const labels: Record<string, string> = {
+      fresh: 'Complete',
+      covered: 'Complete',
+      covered_empty: 'Complete',
+      insufficient: 'Partial',
+      stale: 'Stale',
+      failed: 'Failed',
+      unavailable: 'Unavailable',
+      not_configured: 'Not configured',
+      unknown: 'Incomplete'
+    };
+    return labels[status] ?? status.replaceAll('_', ' ');
   }
 
   dash(value: string | null | undefined): string {
@@ -199,7 +226,22 @@ export class MarketCalendarComponent implements OnInit {
   }
 
   timingLabel(value: string): string {
-    return value.replaceAll('_', ' ');
+    const labels: Record<string, string> = {
+      before_entry: 'Before entry',
+      during_typical_hold: 'During the typical hold',
+      after_typical_exit_before_hard_exit: 'Between the usual 11:30 AM exit and noon ET',
+      after_planned_exit: 'After the planned exit',
+      all_day_exposure: 'All-day exposure'
+    };
+    return labels[value] ?? value.replaceAll('_', ' ');
+  }
+
+  displayBenefits(assessment: StrategyEventAssessment): string[] {
+    return this.displayStrategyMessages(assessment.potentialBenefits);
+  }
+
+  displayRisks(assessment: StrategyEventAssessment): string[] {
+    return this.displayStrategyMessages(assessment.potentialRisks);
   }
 
   riskClass(label: string): string {
@@ -290,6 +332,27 @@ export class MarketCalendarComponent implements OnInit {
       'long-wings-repeated-0dte-premium': 'Long wings with repeated 0 DTE premium'
     };
     return names[id] ?? id;
+  }
+
+  private displayStrategyMessages(messages: string[]): string[] {
+    const hidden = new Set([
+      'Movement is not profit.',
+      "Multiple scheduled releases overlap this strategy's configured exposure window, which can concentrate movement opportunity.",
+      "Multiple scheduled releases overlap this strategy's configured exposure window; their combined effect is not a directional forecast."
+    ]);
+    const replacements: Record<string, string> = {
+      'The configured hard exit is before this release, so a position closed on that rule is no longer in the typical same-day hold.':
+        'This release is scheduled after the noon ET exit. If you follow the strategy’s exit rule, the trade should already be closed.',
+      'A position still open after the hard exit remains exposed to the release.':
+        'If you keep the trade open past noon ET, it can still be affected by this release.',
+      'Option premium may be elevated around the release. Elevated premium is not an edge.':
+        'Option premiums may be higher around the release.',
+      'Option premium may be elevated. Elevated premium is not an edge.':
+        'Option premiums may be higher around the release.'
+    };
+    return messages
+      .filter(message => !hidden.has(message))
+      .map(message => replacements[message] ?? message);
   }
 
   private inRange(iso: string): boolean {

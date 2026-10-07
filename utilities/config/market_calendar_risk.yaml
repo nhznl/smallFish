@@ -24,9 +24,9 @@ strategies:
       min_importance: 1
       assessment: conditional
       benefits:
-        - "The configured hard exit is before this release, so a position closed on that rule is no longer in the typical same-day hold."
+        - "This release is scheduled after the noon ET exit. If you follow the strategy's exit rule, the trade should already be closed."
       risks:
-        - "A position still open after the hard exit remains exposed to the release."
+        - "If you keep the trade open past noon ET, it can still be affected by this release."
     - id: s1-broad-high-while-exposed
       relevance: [DIRECT_BROAD_INDEX, INDIRECT_BROAD_INDEX]
       timing: [before_entry, during_typical_hold, after_typical_exit_before_hard_exit, all_day_exposure]

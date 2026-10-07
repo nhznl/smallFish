@@ -217,7 +217,9 @@ other textual state.
   It does not predict direction, rank a trade, or treat elevated premium as an
   edge.
 - Missing measurements, missing price cache, and incomplete source coverage
-  stay visible. An unavailable scan is not rendered as zero risk days.
+  stay visible as compact states. Do not fill the main scan with provider
+  diagnostics or repeated disclaimer banners; detailed provenance belongs in
+  the event drawer. An unavailable scan is not rendered as zero risk days.
 - The header's **Market Calendar** action checks for a completed current-day
   publication, generates it only when needed, and then reloads the persisted
   result. Keep its running, reused, completed, and failure states visible while

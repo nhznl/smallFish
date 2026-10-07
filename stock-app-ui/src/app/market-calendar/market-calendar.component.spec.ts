@@ -137,14 +137,15 @@ describe('MarketCalendarComponent', () => {
     expect(stats).not.toContain('0');
   });
 
-  it('keeps a stale required source next to the result', () => {
+  it('shows stale primary coverage compactly without provider diagnostic prose', () => {
     const stale = collection();
     stale.sources[0].status = 'stale';
     stale.coverageStatus = 'stale';
     requests.next(stale);
     fixture.detectChanges();
-    expect(text()).toContain('Primary-calendar coverage is incomplete');
-    expect(text()).toContain('stale');
+    expect(text()).toContain('Primary coverage: Stale');
+    expect(text()).not.toContain('CPI only.');
+    expect(text()).not.toContain('Primary-calendar coverage is incomplete');
   });
 
   it('filters to today and opens the shared drawer with all three strategies', () => {
@@ -170,13 +171,14 @@ describe('MarketCalendarComponent', () => {
     expect(drawer).toContain('Long premium, 20 delta, 0 or 1 DTE');
     expect(drawer).toContain('Long wings with repeated 0 DTE premium');
     expect(drawer).toContain('Different expirations mean maximum loss is not simply strike width minus credit.');
-    expect(drawer).toContain('Movement is not profit.');
+    expect(drawer).not.toContain('Movement is not profit.');
     expect(drawer).toContain('missing');
     expect(drawer).toContain('Freshness: fresh');
     expect(drawer).toContain('Coverage 2026-10-14 to 2026-11-14');
-    expect(drawer).toContain('CPI only.');
+    expect(drawer).not.toContain('CPI only.');
     expect(drawer).toContain('Last successful refresh: 2026-10-04T15:00:00Z');
     expect(drawer).not.toContain('bullish');
+    expect(drawer).not.toContain('does not predict');
   });
 
   it('uses the Market Calendar action and keeps the last snapshot visible while it runs', () => {
@@ -274,6 +276,73 @@ describe('MarketCalendarComponent', () => {
     expect(text()).toContain('Weekly Petroleum Status Report');
   });
 
+  it('collapses same-day single-stock earnings into one clickable symbol list', () => {
+    const earnings = ['APLD', 'BKSC', 'LEVI'].map(symbol => event({
+      id: `finnhub:${symbol}:2026-10-14`,
+      canonicalKey: `finnhub:${symbol}:2026-10-14`,
+      title: `${symbol} earnings`,
+      eventType: 'EARNINGS',
+      category: 'earnings',
+      scheduledAtUtc: null,
+      easternTime: null,
+      pacificTime: null,
+      portfolioRelevance: 'SINGLE_STOCK',
+      priority: 'secondary',
+      affectedAssetClasses: ['equities'],
+      affectedInstruments: [],
+      etfExposures: [],
+      importance: {
+        score: 3, label: 'Moderate', ruleIds: ['importance-earnings-moderate'],
+        policyVersion: '2026-10-04.1'
+      }
+    }));
+    const scan = collection();
+    scan.days[0].secondaryEvents = earnings;
+    scan.days[0].eventCount = 4;
+    scan.summary.secondaryEvents = 3;
+    requests.next(scan);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('.earnings-summary').length).toBe(1);
+    expect(text()).toContain('Single-stock earnings:');
+    expect([...fixture.nativeElement.querySelectorAll('.symbol-button')].map(
+      (button: HTMLButtonElement) => button.textContent?.trim()
+    )).toEqual(['APLD', 'BKSC', 'LEVI']);
+    expect(text()).toContain('3 companies · Moderate');
+    expect(text()).not.toContain('— / — APLD earnings');
+
+    const apld = [...fixture.nativeElement.querySelectorAll('.symbol-button')].find(
+      (button: HTMLButtonElement) => button.textContent?.trim() === 'APLD'
+    ) as HTMLButtonElement;
+    apld.click();
+    fixture.detectChanges();
+    expect(text()).toContain('APLD earnings');
+    const drawerHeader = fixture.nativeElement.querySelector('app-drawer [drawerHeader]');
+    expect(drawerHeader.textContent).not.toContain('/');
+  });
+
+  it('rewrites the noon exit explanation in plain language', () => {
+    const scan = collection();
+    scan.days[0].primaryEvents[0].strategyAssessments[0] = {
+      strategyId: 'short-premium-20d-0dte', assessment: 'conditional',
+      timingRelationship: 'after_planned_exit',
+      potentialBenefits: [
+        'The configured hard exit is before this release, so a position closed on that rule is no longer in the typical same-day hold.'
+      ],
+      potentialRisks: ['A position still open after the hard exit remains exposed to the release.'],
+      ruleIds: ['s1-broad-after-planned-exit'], policyVersion: '2026-10-04.1'
+    };
+    requests.next(scan);
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.row-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(text()).toContain('This release is scheduled after the noon ET exit.');
+    expect(text()).toContain('If you keep the trade open past noon ET');
+    expect(text()).not.toContain('configured hard exit');
+    expect(text()).not.toContain('position closed on that rule');
+  });
+
   it('keeps secondary empty results distinct from primary coverage and optional gaps', () => {
     const scan = collection();
     scan.sources.push({
@@ -293,10 +362,10 @@ describe('MarketCalendarComponent', () => {
     fixture.detectChanges();
 
     expect(text()).toContain('No secondary events in this range');
-    expect(text()).toContain('Primary-calendar day coverage is reported separately');
-    expect(text()).toContain('1 optional secondary source has a coverage gap');
+    expect(text()).toContain('No matching sector, commodity, agriculture, or single-stock events were returned.');
+    expect(text()).not.toContain('Optional fixture omitted.');
     expect(text()).not.toContain('No covered primary risk days in this range');
-    expect(text()).not.toContain('complete configured-source coverage');
+    expect(text()).not.toContain('not an all-clear');
   });
 
   it('shows a load failure without inventing an empty calendar', () => {

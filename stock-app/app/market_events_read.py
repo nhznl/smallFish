@@ -332,9 +332,8 @@ def _session_text(events: list[dict]) -> str:
         if item["strategyId"] == "short-premium-20d-0dte"
     )
     return (
-        f"0-DTE short premium is {assessment['assessment'].replace('_', ' ')} "
-        f"({assessment['timingRelationship'].replace('_', ' ')}). "
-        "This describes event risk, not market direction."
+        f"0-DTE short premium: {assessment['assessment'].replace('_', ' ')} "
+        f"({assessment['timingRelationship'].replace('_', ' ')})."
     )
 
 
