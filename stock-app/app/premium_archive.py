@@ -120,11 +120,14 @@ def _safe_run_paths(root: Path, run_id: str, pointer: dict[str, Any] | None = No
     run_id = str(run_id or "").strip()
     if not _RUN_ID.fullmatch(run_id):
         raise PremiumArchiveError("Latest quote archive has an invalid run id.")
-    run_dir = (root / "runs" / run_id).resolve()
+    runs_root = (root / "runs").resolve()
+    run_dir = (runs_root / run_id).resolve()
     expected_report = run_dir / "premiums.csv"
     expected_meta = run_dir / "run_meta.json"
-    if run_dir.parent != (root / "runs").resolve():
-        raise PremiumArchiveError("Latest quote archive points outside its run directory.")
+    try:
+        run_dir.relative_to(runs_root)
+    except ValueError as exc:
+        raise PremiumArchiveError("Latest quote archive points outside its run directory.") from exc
     if pointer is not None:
         if pointer.get("immutable_report") != f"runs/{run_id}/premiums.csv":
             raise PremiumArchiveError("Latest quote archive report pointer is inconsistent.")
@@ -134,8 +137,11 @@ def _safe_run_paths(root: Path, run_id: str, pointer: dict[str, Any] | None = No
         raise PremiumArchiveError("Latest quote archive is incomplete.")
     report_path = expected_report.resolve()
     meta_path = expected_meta.resolve()
-    if report_path.parent != run_dir or meta_path.parent != run_dir:
-        raise PremiumArchiveError("Latest quote archive resolves outside its run directory.")
+    try:
+        report_path.relative_to(run_dir)
+        meta_path.relative_to(run_dir)
+    except ValueError as exc:
+        raise PremiumArchiveError("Latest quote archive resolves outside its run directory.") from exc
     return run_id, report_path, meta_path
 
 
