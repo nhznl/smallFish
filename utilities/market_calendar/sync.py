@@ -34,7 +34,11 @@ from utilities.market_calendar.etf import exposures_for, load_etf_mappings, univ
 from utilities.market_calendar.importance import classify
 from utilities.market_calendar.normalization import MeasurementDocumentError, parse_released_values
 from utilities.market_calendar.providers.base import ParseReport, ScheduleObservation
-from utilities.market_calendar.providers.bls import parse_ics, payload_sha256
+from utilities.market_calendar.providers.bls import (
+    parse_ics,
+    parse_schedule_html,
+    payload_sha256,
+)
 from utilities.market_calendar.risk import assess, rank_key
 
 LOGGER = logging.getLogger("smallfish.market_calendar")
@@ -525,6 +529,16 @@ def run_sync(
             connection, "bls", materialization_sha256,
         )
         if provider_fresh and snapshot_reusable and materialization_fresh:
+            values_current = _source(connection, "bls_released_values")
+            if values_current is None or values_current["status"] == "not_configured":
+                connection.execute("BEGIN IMMEDIATE")
+                _write_source(
+                    connection, values_spec, status="not_configured",
+                    observed_at=observed_at, detail=values_spec.detail,
+                    result_count=0, success=False, configured=False,
+                )
+                connection.execute("COMMIT")
+                checkpoint(connection)
             count = connection.execute("SELECT count(*) AS n FROM events").fetchone()["n"]
             return SyncResult(0, "fresh", count, (
                 "bls: reused a fresh normalized primary-release schedule; no provider request was made.",
@@ -539,6 +553,7 @@ def run_sync(
         status = 0
         body = b""
         headers: dict[str, str] = {}
+        documents: list[tuple[str, bytes]] = []
         report: ParseReport
         if provider_fresh and snapshot_reusable:
             report = snapshot
@@ -554,6 +569,32 @@ def run_sync(
                 if schedule_text is not None:
                     status = 200
                     body = schedule_text.encode("utf-8")
+                    documents = [(source_url, body)]
+                elif "{year}" in source_url:
+                    responses = []
+                    years = tuple(range(horizon_start.year, horizon_end.year + 1))
+                    for year in years:
+                        expanded_url = source_url.format(year=year)
+                        response = fetch_schedule(
+                            transport or UrllibTransport(), expanded_url,
+                            etag=etag if len(years) == 1 else None,
+                            last_modified=modified if len(years) == 1 else None,
+                        )
+                        if response.status != 200:
+                            status = response.status
+                            body = response.body
+                            headers = response.headers
+                            break
+                        responses.append((expanded_url, response.body))
+                    else:
+                        status = 200
+                        documents = responses
+                        if len(years) == 1:
+                            headers = response.headers
+                        body = b"\n".join(
+                            url.encode("utf-8") + b"\0" + payload
+                            for url, payload in documents
+                        )
                 else:
                     response = fetch_schedule(
                         transport or UrllibTransport(),
@@ -564,6 +605,8 @@ def run_sync(
                     status = response.status
                     body = response.body
                     headers = response.headers
+                    if status == 200:
+                        documents = [(source_url, body)]
             except TransportError as exc:
                 LOGGER.warning("BLS schedule request failed: %s", exc.error_type)
                 connection.execute("BEGIN IMMEDIATE")
@@ -595,10 +638,36 @@ def run_sync(
                 provider_result = "not_modified"
             elif status == 200:
                 try:
-                    decoded = body.decode("utf-8", errors="replace")
-                    if "BEGIN:VCALENDAR" not in decoded.upper():
-                        raise ValueError("not_calendar")
-                    report = parse_ics(decoded, source_url=source_url)
+                    parsed = []
+                    for document_url, document_body in documents:
+                        decoded = document_body.decode("utf-8", errors="replace")
+                        if "BEGIN:VCALENDAR" in decoded.upper():
+                            parsed.append(parse_ics(decoded, source_url=document_url))
+                        elif "<HTML" in decoded[:1000].upper():
+                            parsed.append(parse_schedule_html(decoded, source_url=document_url))
+                        else:
+                            raise ValueError("unsupported_bls_document")
+                    report = ParseReport(
+                        tuple(
+                            observation
+                            for item in parsed
+                            for observation in item.observations
+                        ),
+                        skipped_other_releases=sum(
+                            item.skipped_other_releases for item in parsed
+                        ),
+                        skipped_without_reference_period=sum(
+                            item.skipped_without_reference_period for item in parsed
+                        ),
+                        skipped_unresolved_timezone=sum(
+                            item.skipped_unresolved_timezone for item in parsed
+                        ),
+                    )
+                    if not any(
+                        _in_horizon(item, horizon_start, horizon_end)
+                        for item in report.observations
+                    ):
+                        raise ValueError("insufficient_coverage")
                     provider_result = "published"
                 except Exception as exc:
                     LOGGER.warning("CPI schedule parse failed: %s", type(exc).__name__)
@@ -703,7 +772,7 @@ def run_sync(
                     coverage_end=horizon_end.isoformat(),
                     detail="Local measurement observations were attached. They are not a BLS actuals feed.",
                 )
-            elif values_current is None:
+            elif values_current is None or values_current["status"] == "not_configured":
                 _write_source(
                     connection, values_spec, status="not_configured", observed_at=observed_at,
                     detail=values_spec.detail, result_count=0, success=False, configured=False,

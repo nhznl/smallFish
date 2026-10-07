@@ -390,7 +390,7 @@ without the other.
 | Provider | Schedule surface | Released values/results | Initial priority |
 |---|---|---|---|
 | Federal Reserve | official calendar and FOMC pages | release pages and RSS | 1 |
-| BLS | official iCalendar | Public Data API | 1 |
+| BLS | official yearly schedule tables | Public Data API | 1 |
 | Treasury | tentative/upcoming XML | Auction Query JSON/CSV/XML | 1 |
 | BEA | official iCalendar | BEA API | 1 |
 | Census | official release calendar | Economic Indicators APIs | 1 |
@@ -624,6 +624,12 @@ all consumers, freshness behavior, failure behavior, and historical workflows
 have been audited. No duplicate active fetch implementation should remain after
 such a migration.
 
+Finnhub schedule acquisition uses bounded three-day requests because a broad
+date-range response can reach the observed 1,500-row provider limit without
+proving that the earlier part of the range is present. A chunk that reaches the
+limit fails closed; complete coverage is published only after the bounded
+responses are combined and deduplicated.
+
 ## 12. Sync workflow
 
 Add an explicit command rather than provider I/O on page load:
@@ -812,7 +818,7 @@ equities. Direction is unknown before the release.
 - source freshness and ingestion-run diagnostics;
 - importance, strategy, and ETF mapping configuration loaders;
 - deterministic risk engine;
-- BLS schedule ingestion through official iCalendar;
+- BLS schedule ingestion through official yearly schedule tables;
 - one CPI occurrence including headline/core measurements where available;
 - read-only FastAPI routes;
 - `Event Risk` Research navigation and route;

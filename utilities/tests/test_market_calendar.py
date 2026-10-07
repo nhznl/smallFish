@@ -25,7 +25,7 @@ from utilities.events import ensure_fresh_events, run_fetch
 from utilities.market_calendar.config import CalendarConfigError, load_risk_policy
 from utilities.market_calendar import __main__ as market_calendar_cli
 from utilities.market_calendar.etf import load_etf_mappings, validate_mappings
-from utilities.market_calendar.providers.bls import parse_ics
+from utilities.market_calendar.providers.bls import parse_ics, parse_schedule_html
 from utilities.market_calendar.providers.primary import (
     PrimaryCalendarParseError,
     parse_official_document,
@@ -301,6 +301,68 @@ END:VCALENDAR
 """, source_url="https://example.test/bls.ics")
     assert report.observations[0].scheduled_at_utc == "2026-10-14T12:30:00Z"
     assert report.observations[0].original_timezone == "UTC"
+
+
+def test_bls_year_schedule_html_keeps_explicit_month_and_quarter_identity():
+    report = parse_schedule_html("""<!DOCTYPE html><html><table>
+<tr><th>Date</th><th>Time</th><th>Release</th></tr>
+<tr><td>Wednesday, October 14, 2026</td><td>08:30 AM</td>
+<td><strong>Consumer Price Index</strong> for September 2026</td></tr>
+<tr><td>Friday, October 30, 2026</td><td>08:30 AM</td>
+<td><strong>Employment Cost Index</strong> for Third Quarter 2026</td></tr>
+<tr><td>Tuesday, April 28, 2026</td><td>10:00 AM</td>
+<td><strong>Employment Situation of Veterans</strong> for Annual 2025</td></tr>
+</table></html>""", source_url="https://www.bls.gov/schedule/2026/")
+
+    assert [item.canonical_key for item in report.observations] == [
+        "US:BLS:CPI:2026-09",
+        "US:BLS:ECI:2026-Q3",
+    ]
+    assert report.observations[0].scheduled_at_utc == "2026-10-14T12:30:00Z"
+    assert report.observations[1].reference_label == "Third Quarter 2026"
+
+
+def test_bls_year_template_fetches_each_horizon_year_without_network_in_tests(tmp_path: Path):
+    html_2026 = b"""<!DOCTYPE html><html><table>
+<tr><th>Date</th><th>Time</th><th>Release</th></tr>
+<tr><td>Friday, December 18, 2026</td><td>08:30 AM</td>
+<td>Consumer Price Index for November 2026</td></tr>
+</table></html>"""
+    html_2027 = b"""<!DOCTYPE html><html><table>
+<tr><th>Date</th><th>Time</th><th>Release</th></tr>
+<tr><td>Friday, January 8, 2027</td><td>08:30 AM</td>
+<td>Employment Situation for December 2026</td></tr>
+</table></html>"""
+    transport = RoutingTransport({
+        "https://www.bls.gov/schedule/2026/": html_2026,
+        "https://www.bls.gov/schedule/2027/": html_2027,
+    })
+    _prices(tmp_path / "cache")
+
+    result = run_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=date(2026, 12, 15),
+        horizon_end=date(2027, 1, 15),
+        as_of=date(2026, 12, 14),
+        now=datetime(2026, 12, 14, 15, 0, tzinfo=timezone.utc),
+        transport=transport,
+    )
+
+    assert result.status == "published"
+    assert transport.urls == [
+        "https://www.bls.gov/schedule/2026/",
+        "https://www.bls.gov/schedule/2027/",
+    ]
+    assert {
+        row["canonical_key"] for row in _rows(
+            tmp_path / "calendar.sqlite", "SELECT canonical_key FROM events",
+        )
+    } == {
+        "US:BLS:CPI:2026-11",
+        "US:BLS:EMPLOYMENT_SITUATION:2026-12",
+    }
 
 
 def test_during_hold_ranks_above_the_same_event_after_the_hard_exit():
@@ -698,7 +760,9 @@ def test_parser_version_change_fetches_full_body_and_replaces_snapshot_provenanc
     assert run_sync(**common, now=NOW).status == "published"
     sources_path = config_dir / "market_calendar_sources.yaml"
     sources_path.write_text(
-        sources_path.read_text(encoding="utf-8").replace("bls-ics-1", "bls-ics-2"),
+        sources_path.read_text(encoding="utf-8").replace(
+            "bls-year-schedule-html-2", "bls-year-schedule-html-3",
+        ),
         encoding="utf-8",
     )
 
@@ -712,8 +776,8 @@ def test_parser_version_change_fetches_full_body_and_replaces_snapshot_provenanc
         "SELECT parser_version, source_url, etag FROM provider_snapshot_state WHERE provider = 'bls'",
     )[0]
     assert dict(snapshot) == {
-        "parser_version": "bls-ics-2",
-        "source_url": "https://www.bls.gov/schedule/news_release/bls.ics",
+        "parser_version": "bls-year-schedule-html-3",
+        "source_url": "https://www.bls.gov/schedule/{year}/",
         "etag": '"v2"',
     }
     fact_versions = {
@@ -722,7 +786,7 @@ def test_parser_version_change_fetches_full_body_and_replaces_snapshot_provenanc
             "SELECT parser_version FROM event_source_facts WHERE provider = 'bls'",
         )
     }
-    assert fact_versions == {"bls-ics-2"}
+    assert fact_versions == {"bls-year-schedule-html-3"}
 
 
 def test_parser_version_change_rejects_unconditional_304_without_relabeling_snapshot(tmp_path: Path):
@@ -738,7 +802,9 @@ def test_parser_version_change_rejects_unconditional_304_without_relabeling_snap
     assert run_sync(**common, now=NOW).status == "published"
     sources_path = config_dir / "market_calendar_sources.yaml"
     sources_path.write_text(
-        sources_path.read_text(encoding="utf-8").replace("bls-ics-1", "bls-ics-2"),
+        sources_path.read_text(encoding="utf-8").replace(
+            "bls-year-schedule-html-2", "bls-year-schedule-html-3",
+        ),
         encoding="utf-8",
     )
 
@@ -761,8 +827,8 @@ def test_parser_version_change_rejects_unconditional_304_without_relabeling_snap
             "SELECT parser_version FROM event_source_facts WHERE provider = 'bls'",
         )
     }
-    assert snapshot_version == source_version == "bls-ics-1"
-    assert fact_versions == {"bls-ics-1"}
+    assert snapshot_version == source_version == "bls-year-schedule-html-2"
+    assert fact_versions == {"bls-year-schedule-html-2"}
 
 
 def test_m2_primary_sources_publish_with_coverage_and_named_clusters(tmp_path: Path):
@@ -822,6 +888,80 @@ def test_m2_primary_sources_publish_with_coverage_and_named_clusters(tmp_path: P
     )
     assert earnings[0]["source_url"] == "https://finnhub.io/docs/api/earnings-calendar"
     assert earnings[0]["parser_version"] == "finnhub-calendar-sidecar-2"
+
+
+def test_census_landing_discovers_the_requested_year_archive(tmp_path: Path):
+    landing_url = "https://www.census.gov/economic-indicators/calendar-listview.html"
+    archive_url = "https://www.census.gov/economic-indicators/calendar-listview-2026.html"
+    landing = b"""<!DOCTYPE html><html>
+<a href="/economic-indicators/calendar-listview-2026.html">2026 calendar</a>
+<table><tr>
+<td>Advance Monthly Sales for Retail and Food Services</td>
+<td>January 15, 2027</td><td>8:30 AM</td><td>December 2026</td>
+<td>A202701150830</td><td>A202612</td>
+</tr><tr>
+<td>Advance Report on Durable Goods--Manufacturers' Shipments, Inventories, and Orders</td>
+<td>December 30, 2026</td><td>8:30 AM</td><td>November 2026</td>
+<td>A202612300830</td><td>A202611</td>
+</tr></table></html>"""
+    archive = b"""<!DOCTYPE html><html><table>
+<tr><td>Advance Monthly Sales for Retail and Food Services</td>
+<td>September 16, 2026</td><td>8:30 AM</td><td>August 2026</td>
+<td>A202609160830</td><td>A202608</td></tr>
+<tr><td>Advance Monthly Sales for Retail and Food Services</td>
+<td>October 15, 2026</td><td>8:30 AM</td><td>September 2026</td>
+<td>A202610150830</td><td>A202609</td></tr>
+<tr><td>Advance Report on Durable Goods--Manufacturers' Shipments, Inventories, and Orders</td>
+<td>October 27, 2026</td><td>8:30 AM</td><td>September 2026</td>
+<td>A202610270830</td><td>A202609</td></tr>
+</table></html>"""
+    transport = RoutingTransport({landing_url: landing, archive_url: archive})
+    documents = _primary_documents()
+    del documents["census"]
+    legacy_csv = (
+        "ticker,event_type,event_date,source,fetched_as_of\n"
+        "AAA,earnings,2026-10-20,finnhub,2026-10-04\n"
+    )
+    _prices(tmp_path / "cache")
+
+    result = run_primary_sync(
+        database=tmp_path / "calendar.sqlite",
+        universe_path=FIXTURES / "universe.csv",
+        price_cache=tmp_path / "cache",
+        horizon_start=START,
+        horizon_end=END,
+        as_of=date(2026, 10, 4),
+        now=NOW,
+        schedule_text=(FIXTURES / "cpi_schedule.ics").read_text(encoding="utf-8"),
+        provider_documents=documents,
+        earnings_csv_text=legacy_csv,
+        earnings_meta_text=json.dumps({
+            "events_fetched_as_of": "2026-10-04",
+            "events_coverage_end": END.isoformat(),
+        }),
+        earnings_calendar_text=_earnings_calendar(legacy_csv_text=legacy_csv),
+        transport=transport,
+    )
+
+    assert result.exit_code == 0
+    assert transport.urls == [landing_url, archive_url]
+    census = _rows(
+        tmp_path / "calendar.sqlite",
+        "SELECT status, result_count, coverage_start, coverage_end "
+        "FROM source_sync_state WHERE provider = 'census'",
+    )[0]
+    assert dict(census) == {
+        "status": "fresh",
+        "result_count": 2,
+        "coverage_start": "2026-09-16",
+        "coverage_end": "2027-01-15",
+    }
+    assert {
+        row["source_url"] for row in _rows(
+            tmp_path / "calendar.sqlite",
+            "SELECT source_url FROM event_source_facts WHERE provider = 'census'",
+        )
+    } == {archive_url}
 
 
 def test_m2_official_source_shapes_prove_coverage_without_network(tmp_path: Path):

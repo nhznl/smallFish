@@ -11,6 +11,7 @@ from utilities.events import (
     EventDataError,
     FinnhubConfig,
     ensure_fresh_events,
+    fetch_earnings_calendar,
     main,
     run_fetch,
 )
@@ -27,6 +28,59 @@ def _events(symbol: str = "AAPL", event_date: str = "2026-08-01") -> pd.DataFram
         "fiscal_year": 2026,
         "fiscal_quarter": 3,
     }])
+
+
+def test_finnhub_fetch_chunks_ranges_and_combines_complete_identity(monkeypatch) -> None:
+    calls = []
+
+    class Response:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"earningsCalendar": [self.payload]}
+
+    def fake_get(url, *, params, timeout):
+        calls.append((url, params["from"], params["to"], timeout, params["token"]))
+        return Response({
+            "symbol": f"TEST{len(calls)}",
+            "date": params["from"],
+            "year": 2026,
+            "quarter": 3,
+        })
+
+    monkeypatch.setattr("utilities.events.requests.get", fake_get)
+
+    events = fetch_earnings_calendar(
+        "2026-07-16", "2026-07-22", FinnhubConfig(api_key="test-key")
+    )
+
+    assert [(start, end) for _, start, end, _, _ in calls] == [
+        ("2026-07-16", "2026-07-18"),
+        ("2026-07-19", "2026-07-21"),
+        ("2026-07-22", "2026-07-22"),
+    ]
+    assert list(events["ticker"]) == ["TEST1", "TEST2", "TEST3"]
+    assert list(events["fiscal_quarter"]) == [3, 3, 3]
+
+
+def test_finnhub_fetch_fails_closed_at_observed_provider_row_limit(monkeypatch) -> None:
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"earningsCalendar": [{}] * 1500}
+
+    monkeypatch.setattr("utilities.events.requests.get", lambda *args, **kwargs: Response())
+
+    with pytest.raises(EventDataError, match="row limit"):
+        fetch_earnings_calendar(
+            "2026-07-16", "2026-07-18", FinnhubConfig(api_key="test-key")
+        )
 
 
 def test_run_fetch_writes_current_history_and_freshness(tmp_path: Path) -> None:

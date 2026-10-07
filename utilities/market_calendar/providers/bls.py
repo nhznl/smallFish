@@ -1,10 +1,11 @@
-"""Parse required BLS news releases from the official iCalendar."""
+"""Parse required BLS releases from official schedule surfaces."""
 
 from __future__ import annotations
 
 import hashlib
 import re
 from datetime import datetime
+from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 
 from models.market_events import TZID_ALIASES, format_utc
@@ -18,18 +19,52 @@ _MONTH_PATTERN = re.compile(
     r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(20\d{2})\b",
     re.IGNORECASE,
 )
+_QUARTER_PATTERN = re.compile(
+    r"\b(First|Second|Third|Fourth)\s+Quarter\s+(20\d{2})\b",
+    re.IGNORECASE,
+)
 _BLS_TYPES = (
-    (re.compile(r"^Consumer Price Index\b", re.I), "CPI", "Consumer Price Index"),
-    (re.compile(r"^Producer Price Index\b", re.I), "PPI", "Producer Price Index"),
-    (re.compile(r"^Employment Situation\b", re.I), "EMPLOYMENT_SITUATION", "Employment Situation"),
-    (re.compile(r"^Job Openings and Labor Turnover|^JOLTS\b", re.I), "JOLTS", "Job Openings and Labor Turnover"),
-    (re.compile(r"^Employment Cost Index\b", re.I), "ECI", "Employment Cost Index"),
+    (re.compile(r"^Consumer Price Index(?=\s+for\b|$)", re.I), "CPI", "Consumer Price Index"),
+    (re.compile(r"^Producer Price Index(?=\s+for\b|$)", re.I), "PPI", "Producer Price Index"),
+    (re.compile(r"^Employment Situation(?=\s+for\b|$)", re.I), "EMPLOYMENT_SITUATION", "Employment Situation"),
+    (re.compile(r"^(?:Job Openings and Labor Turnover Survey|JOLTS)(?=\s+for\b|$)", re.I), "JOLTS", "Job Openings and Labor Turnover"),
+    (re.compile(r"^Employment Cost Index(?=\s+for\b|$)", re.I), "ECI", "Employment Cost Index"),
 )
 _PROPERTY = re.compile(r"^([A-Z0-9-]+)((?:;[A-Za-z0-9-]+=(?:\"[^\"]*\"|[^:;]*))*):(.*)$")
 
 
 class BLSCalendarParseError(ValueError):
     """A CPI row cannot be represented without losing schedule facts."""
+
+
+class _TableRows(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[list[str]] = []
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag.lower() == "tr":
+            self._row = []
+        elif tag.lower() in {"td", "th"} and self._row is not None:
+            self._cell = []
+
+    def handle_data(self, data: str) -> None:
+        if self._cell is not None:
+            self._cell.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        lowered = tag.lower()
+        if lowered in {"td", "th"} and self._cell is not None:
+            if self._row is not None:
+                self._row.append(" ".join("".join(self._cell).split()))
+            self._cell = None
+        elif lowered == "tr" and self._row is not None:
+            if self._row:
+                self.rows.append(self._row)
+            self._row = None
+            self._cell = None
 
 
 def payload_sha256(body: bytes) -> str:
@@ -82,12 +117,79 @@ def _events(text: str) -> list[dict[str, tuple[dict[str, str], str]]]:
 
 
 def _reference(summary: str, description: str) -> tuple[str, str] | None:
-    match = _MONTH_PATTERN.search(f"{summary}\n{description}")
-    if not match:
-        return None
-    month = _MONTHS[match.group(1).lower()]
-    year = int(match.group(2))
-    return f"{year:04d}-{month:02d}", f"{match.group(1).title()} {year}"
+    text = f"{summary}\n{description}"
+    match = _MONTH_PATTERN.search(text)
+    if match:
+        month = _MONTHS[match.group(1).lower()]
+        year = int(match.group(2))
+        return f"{year:04d}-{month:02d}", f"{match.group(1).title()} {year}"
+    quarter = _QUARTER_PATTERN.search(text)
+    if quarter:
+        number = {"first": 1, "second": 2, "third": 3, "fourth": 4}[
+            quarter.group(1).lower()
+        ]
+        year = int(quarter.group(2))
+        return f"{year:04d}-Q{number}", f"{quarter.group(1).title()} Quarter {year}"
+    return None
+
+
+def parse_schedule_html(text: str, *, source_url: str) -> ParseReport:
+    """Parse the official yearly BLS release table with explicit periods."""
+    parser = _TableRows()
+    parser.feed(text)
+    observations: list[ScheduleObservation] = []
+    skipped_other = 0
+    seen: set[str] = set()
+    eastern = ZoneInfo("America/New_York")
+    for cells in parser.rows:
+        if len(cells) != 3 or cells[:3] == ["Date", "Time", "Release"]:
+            continue
+        date_text, time_text, release_text = cells
+        recognized = next(
+            (item for item in _BLS_TYPES if item[0].match(release_text.strip())), None
+        )
+        if recognized is None:
+            skipped_other += 1
+            continue
+        _, event_type, canonical_title = recognized
+        reference = _reference(release_text, "")
+        if reference is None:
+            raise BLSCalendarParseError("recognized BLS row has no usable reference period")
+        reference_period, reference_label = reference
+        try:
+            release_date = datetime.strptime(date_text, "%A, %B %d, %Y").date()
+            release_time = datetime.strptime(time_text, "%I:%M %p").time()
+        except ValueError as exc:
+            raise BLSCalendarParseError("recognized BLS row has an invalid schedule time") from exc
+        canonical_key = f"US:BLS:{event_type}:{reference_period}"
+        if canonical_key in seen:
+            raise BLSCalendarParseError("BLS schedule has a duplicate required release")
+        seen.add(canonical_key)
+        aware = datetime.combine(release_date, release_time, eastern)
+        observations.append(ScheduleObservation(
+            provider="bls",
+            source_record_id=f"{event_type}:{reference_period}",
+            source_url=source_url,
+            canonical_key=canonical_key,
+            title=canonical_title,
+            event_type=event_type,
+            reference_period=reference_period,
+            reference_label=reference_label,
+            scheduled_at_utc=format_utc(aware),
+            civil_date=release_date.isoformat(),
+            original_timezone="America/New_York",
+            time_precision="exact",
+            schedule_status="confirmed",
+            lifecycle_status="scheduled",
+            provenance={
+                "title": "bls:release-table",
+                "referencePeriod": "bls:release-table",
+                "scheduledAt": "bls:release-table",
+            },
+        ))
+    if not observations:
+        raise BLSCalendarParseError("BLS yearly schedule has no required releases")
+    return ParseReport(tuple(observations), skipped_other)
 
 
 def _schedule_bits(props: dict[str, tuple[dict[str, str], str]]) -> tuple[str, str]:

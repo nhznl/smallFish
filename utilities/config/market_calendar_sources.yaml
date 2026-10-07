@@ -6,13 +6,14 @@ sources:
     provider: bls
     required: true
     configured: true
-    parser_version: bls-ics-1
-    schedule_url: https://www.bls.gov/schedule/news_release/bls.ics
+    parser_version: bls-year-schedule-html-2
+    schedule_url: https://www.bls.gov/schedule/{year}/
     freshness_hours: 192
     scope: required_bls_primary_releases
     detail: >-
       Required CPI, PPI, Employment Situation, JOLTS, and ECI rows from the
-      official BLS iCalendar. Unsupported BLS releases remain an explicit gap.
+      official BLS yearly schedule tables. Unsupported BLS releases remain an
+      explicit gap. The year placeholder is expanded for the requested horizon.
   bls_released_values:
     provider: bls_released_values
     required: false
@@ -20,7 +21,7 @@ sources:
     parser_version: bls-values-none
     scope: cpi_measurements
     detail: >-
-      Not configured. The official iCalendar does not publish CPI actuals or
+      Not configured. The official schedule does not publish CPI actuals or
       consensus, and no released-values provider is wired in this milestone.
   federal_reserve:
     required: true

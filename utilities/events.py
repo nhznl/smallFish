@@ -19,7 +19,7 @@ import os
 import re
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 from urllib.parse import quote
@@ -35,6 +35,8 @@ DEFAULT_LOOKAHEAD_DAYS = 70
 DEFAULT_REQUIRED_COVERAGE_DAYS = 45
 DEFAULT_MAX_AGE_DAYS = 1
 CALENDAR_FRESHNESS_HOURS = 24
+FINNHUB_CHUNK_DAYS = 3
+FINNHUB_RESPONSE_ROW_LIMIT = 1500
 EVENT_COLUMNS = ("ticker", "event_type", "event_date", "source")
 CALENDAR_IDENTITY_COLUMNS = ("fiscal_year", "fiscal_quarter")
 
@@ -67,20 +69,41 @@ class EventDataError(ValueError):
 def fetch_earnings_calendar(start_date: str, end_date: str,
                             config: FinnhubConfig) -> pd.DataFrame:
     """Return Finnhub calendar rows in the repository event-file shape."""
-    response = requests.get(
-        f"{BASE_URL}/calendar/earnings",
-        params={"from": start_date, "to": end_date, "token": config.api_key},
-        timeout=30,
-    )
-    response.raise_for_status()
-    rows = [{
-        "ticker": item.get("symbol"),
-        "event_type": "earnings",
-        "event_date": item.get("date"),
-        "source": "finnhub",
-        "fiscal_year": item.get("year"),
-        "fiscal_quarter": item.get("quarter"),
-    } for item in response.json().get("earningsCalendar", [])]
+    start = date.fromisoformat(start_date)
+    end = date.fromisoformat(end_date)
+    if end < start:
+        raise EventDataError("earnings request end precedes its start")
+    rows = []
+    cursor = start
+    while cursor <= end:
+        chunk_end = min(cursor + timedelta(days=FINNHUB_CHUNK_DAYS - 1), end)
+        response = requests.get(
+            f"{BASE_URL}/calendar/earnings",
+            params={
+                "from": cursor.isoformat(),
+                "to": chunk_end.isoformat(),
+                "token": config.api_key,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        chunk = payload.get("earningsCalendar", []) if isinstance(payload, dict) else None
+        if not isinstance(chunk, list):
+            raise EventDataError("earnings response has an invalid calendar payload")
+        if len(chunk) >= FINNHUB_RESPONSE_ROW_LIMIT:
+            raise EventDataError(
+                "earnings response reached the provider row limit; coverage is not proven"
+            )
+        rows.extend({
+            "ticker": item.get("symbol"),
+            "event_type": "earnings",
+            "event_date": item.get("date"),
+            "source": "finnhub",
+            "fiscal_year": item.get("year"),
+            "fiscal_quarter": item.get("quarter"),
+        } for item in chunk if isinstance(item, dict))
+        cursor = chunk_end + timedelta(days=1)
     events = pd.DataFrame(rows, columns=[*EVENT_COLUMNS, *CALENDAR_IDENTITY_COLUMNS])
     if not events.empty:
         events["event_date"] = pd.to_datetime(events["event_date"], errors="coerce")

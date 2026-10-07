@@ -5,9 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
+from urllib.parse import urljoin
 
 from models.market_events import EASTERN, format_utc, parse_utc, within_freshness_window
 from services.market_events.http import HttpTransport, TransportError, UrllibTransport
@@ -733,7 +735,7 @@ def run_primary_sync(
                 else:
                     can_conditionally_reuse = current is not None and _covers(
                         current, horizon_start, horizon_end,
-                    ) and reusable and key != "treasury"
+                    ) and reusable and key not in {"treasury", "census"}
                     response = fetch_schedule(
                         transport or UrllibTransport(),
                         source_url,
@@ -794,6 +796,70 @@ def run_primary_sync(
                             )
                     else:
                         report = parse_document(text, provider=key, source_url=source_url)
+                    if key == "census" and coverage is not None:
+                        reports = [report]
+                        coverages = [coverage]
+                        missing_years = [
+                            year
+                            for year in range(horizon_start.year, horizon_end.year + 1)
+                            if not any(
+                                start <= max(
+                                    horizon_start, date(year, 1, 1),
+                                ).isoformat()
+                                and end >= min(
+                                    horizon_end, date(year, 12, 31),
+                                ).isoformat()
+                                for start, end in coverages
+                            )
+                        ]
+                        for year in missing_years:
+                            match = re.search(
+                                rf'href=["\']([^"\']*calendar-listview-{year}\.html)["\']',
+                                text,
+                                re.I,
+                            )
+                            if match is None:
+                                raise PrimaryCalendarParseError("insufficient_coverage")
+                            archive_url = urljoin(source_url, match.group(1))
+                            archive_response = fetch_schedule(
+                                transport or UrllibTransport(), archive_url,
+                            )
+                            if archive_response.status != 200:
+                                raise TransportError("http_status")
+                            archive_text = archive_response.body.decode(
+                                "utf-8", errors="replace",
+                            )
+                            archive_report, archive_coverage = parse_official_document(
+                                archive_text,
+                                provider="census",
+                                source_url=archive_url,
+                                horizon_start=horizon_start,
+                                horizon_end=horizon_end,
+                            )
+                            reports.append(archive_report)
+                            coverages.append(archive_coverage)
+                            body += b"\n" + archive_response.body
+                            headers = {}
+                        report = ParseReport(
+                            tuple(
+                                observation
+                                for item in reports
+                                for observation in item.observations
+                            ),
+                            skipped_other_releases=sum(
+                                item.skipped_other_releases for item in reports
+                            ),
+                            skipped_without_reference_period=sum(
+                                item.skipped_without_reference_period for item in reports
+                            ),
+                            skipped_unresolved_timezone=sum(
+                                item.skipped_unresolved_timezone for item in reports
+                            ),
+                        )
+                        coverage = (
+                            min(start for start, _ in coverages),
+                            max(end for _, end in coverages),
+                        )
                 elif report is None:
                     raise PrimaryCalendarParseError("missing_snapshot")
                 if key == "federal_reserve" and spec.parser_version == "fed-calendar-json-4":

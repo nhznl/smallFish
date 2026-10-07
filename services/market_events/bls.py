@@ -1,7 +1,7 @@
 """Bureau of Labor Statistics schedule transport.
 
-The official iCalendar is public and keyless. This module does not interpret
-event text.
+The official schedule surfaces are public and keyless. This module does not
+interpret event text.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ def fetch_schedule(
     etag: str | None = None,
     last_modified: str | None = None,
 ) -> HttpResponse:
-    headers = {"Accept": "text/calendar", "User-Agent": USER_AGENT}
+    headers = {"Accept": "text/calendar, text/html", "User-Agent": USER_AGENT}
     if etag:
         headers["If-None-Match"] = etag
     if last_modified:

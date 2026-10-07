@@ -222,7 +222,7 @@ Full list: `./commands.sh` with no arguments.
 | `./commands.sh wheel` | Options-wheel candidate screen |
 | `./commands.sh chains` | Discover Wheel contracts, archive Tastytrade quotes |
 | `./commands.sh sector-rotation` | Recompute the sector leadership snapshot |
-| `./commands.sh market-calendar` | Publish the primary broad-market event-risk calendar for the next 31 days |
+| `./commands.sh market-calendar` | Publish the primary and secondary market event-risk calendar for the next 31 days |
 | `./commands.sh studies build\|validate` | Materialize or validate Research Studies JSON |
 | `./commands.sh scan [earnings]` | Run a strategy scan from the current earnings cache |
 | `./commands.sh fetch` | Fetch upcoming earnings (needs `FINNHUB_API_KEY`) |

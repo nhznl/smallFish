@@ -118,7 +118,9 @@ to the exact legacy CSV bytes by SHA-256, not merely the same fetch date; a
 still-fresh legacy cache remains usable by legacy consumers but is reported as
 calendar-incapable until a credentialed refresh upgrades it. The calendar
 reads the sidecar; it neither widens the legacy CSV contract nor adds a second
-Finnhub fetch path.
+Finnhub fetch path. That path uses bounded three-day requests and fails closed
+if a response reaches the observed 1,500-row provider limit, so a truncated
+broad response cannot be labeled as complete horizon coverage.
 
 The Federal Reserve calendar does not expose stable ids for FOMC meetings,
 their press conferences, or G.17 releases. Their first observed date/month key

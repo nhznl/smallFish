@@ -29,7 +29,7 @@
 #   scrape-history  - full-year backfill
 #     e.g: ./commands.sh scrape-history --year 2025 --symbols AAPL MSFT NVDA  
 #   scrape-retry    - re-run the previous run's errorStocks.txt
-#   market-calendar - publish the CPI event-risk calendar for the next 31 days
+#   market-calendar - publish the market event-risk calendar for the next 31 days
 #   sector-rotation - Select Sector SPDR price-leadership snapshot vs SPY
 #                     (rotation/relative-strength proxy, not measured fund flow)
 #   sector-rotation-study - frozen legacy-nine forward-leadership study

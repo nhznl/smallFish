@@ -62,13 +62,19 @@ optional measurement update preserves prior measurement facts and source
 state. Each snapshot is bound to its parser version and source endpoint; a
 change to either requires a full response. A wider horizon likewise requires a
 full provider response before coverage is widened. Milestone 2 adds independent
-BLS iCalendar, Federal Reserve JSON, Treasury refunding discovery and tentative
+BLS yearly schedule tables, Federal Reserve JSON, Treasury refunding discovery and tentative
 auction XML, BEA iCalendar, Census HTML, DOL's weekly publication rule, and the
 local Finnhub sidecar have independent diagnostics. Finnhub-derived rows are
 private single-user data, retain
 attribution, are not a redistribution surface, and must be deleted if dataset
 access ends. The legacy earnings job remains the only active Finnhub fetcher;
 its `events.csv` contract is unchanged.
+
+The Finnhub earnings fetcher requests three calendar days at a time. A broad
+single request can stop at 1,500 rows without proving that the earlier portion
+of the requested range is present. Each bounded response therefore fails
+closed if it reaches that observed limit; only the combined, deduplicated
+responses can publish complete requested-range coverage.
 
 Milestone 3 adds optional EIA petroleum and natural-gas schedules, selected
 NASS and aligned WASDE occurrences, and the public FAS ESRQS weekly Export
