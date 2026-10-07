@@ -154,6 +154,23 @@ def test_option_quotes_rejects_unsupported_schema(monkeypatch, tmp_path):
     assert "schema v3" in response.json()["detail"]
 
 
+def test_option_quotes_rejects_a_run_symlink_outside_the_archive(monkeypatch, tmp_path):
+    _write_latest(tmp_path)
+    run_id = "20260725T043926199394Z"
+    run = tmp_path / "runs" / run_id
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    moved = outside / run_id
+    run.rename(moved)
+    run.symlink_to(moved, target_is_directory=True)
+    monkeypatch.setenv("SFP_PREMIUMS_DIR", str(tmp_path))
+
+    response = client.get("/optionQuotes", params={"runId": run_id})
+
+    assert response.status_code == 409
+    assert "outside" in response.json()["detail"]
+
+
 def test_option_quotes_rejects_untrusted_latest_pointer(monkeypatch, tmp_path):
     _write_latest(tmp_path, pointer_report="../../outside.csv")
     monkeypatch.setenv("SFP_PREMIUMS_DIR", str(tmp_path))

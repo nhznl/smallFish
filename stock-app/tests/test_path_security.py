@@ -17,6 +17,17 @@ def test_contained_path_rejects_escape_attempts(tmp_path: Path, relative: str):
         contained_path(tmp_path, relative)
 
 
+def test_contained_path_rejects_a_sibling_with_the_same_prefix(tmp_path: Path):
+    root = tmp_path / "archive"
+    sibling = tmp_path / "archive-extra"
+    root.mkdir()
+    sibling.mkdir()
+    (sibling / "secret.txt").write_text("nope", encoding="utf-8")
+
+    with pytest.raises(UnsafePathError):
+        contained_path(root, "../archive-extra/secret.txt")
+
+
 def test_contained_path_rejects_a_symlink_escape(tmp_path: Path):
     root = tmp_path / "root"
     outside = tmp_path / "outside"

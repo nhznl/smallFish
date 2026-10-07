@@ -30,7 +30,8 @@ _BLS_TYPES = (
     (re.compile(r"^(?:Job Openings and Labor Turnover Survey|JOLTS)(?=\s+for\b|$)", re.I), "JOLTS", "Job Openings and Labor Turnover"),
     (re.compile(r"^Employment Cost Index(?=\s+for\b|$)", re.I), "ECI", "Employment Cost Index"),
 )
-_PROPERTY = re.compile(r"^([A-Z0-9-]+)((?:;[A-Za-z0-9-]+=(?:\"[^\"]*\"|[^:;]*))*):(.*)$")
+_NAME_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
+_PARAM_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-")
 
 
 class BLSCalendarParseError(ValueError):
@@ -93,6 +94,40 @@ def _params(raw: str) -> dict[str, str]:
     return found
 
 
+def _split_property(line: str) -> tuple[str, str, str] | None:
+    """Split one unfolded content line into name, parameters, and value.
+
+    A single forward scan keeps the same shape as an iCalendar property
+    (``NAME[;PARAM=VALUE]*:VALUE``, with quoted parameter values) without the
+    nested quantifiers that make a combined expression backtrack exponentially.
+    """
+    length = len(line)
+    index = 0
+    while index < length and line[index] in _NAME_CHARS:
+        index += 1
+    if index == 0:
+        return None
+    params_at = index
+    while index < length and line[index] == ";":
+        index += 1
+        name_at = index
+        while index < length and line[index] in _PARAM_CHARS:
+            index += 1
+        if index == name_at or index >= length or line[index] != "=":
+            return None
+        index += 1
+        if index < length and line[index] == '"':
+            close = line.find('"', index + 1)
+            if close != -1 and (close + 1 == length or line[close + 1] in ";:"):
+                index = close + 1
+                continue
+        while index < length and line[index] not in ":;":
+            index += 1
+    if index >= length or line[index] != ":":
+        return None
+    return line[:params_at], line[params_at:index], line[index + 1:]
+
+
 def _events(text: str) -> list[dict[str, tuple[dict[str, str], str]]]:
     blocks: list[dict[str, tuple[dict[str, str], str]]] = []
     current: dict[str, tuple[dict[str, str], str]] | None = None
@@ -108,10 +143,10 @@ def _events(text: str) -> list[dict[str, tuple[dict[str, str], str]]]:
             continue
         if current is None:
             continue
-        match = _PROPERTY.match(line.strip())
-        if not match:
+        split = _split_property(line.strip())
+        if split is None:
             continue
-        name, raw_params, value = match.groups()
+        name, raw_params, value = split
         current[name.upper()] = (_params(";" + raw_params if raw_params else ";"), _unescape(value.strip()))
     return blocks
 

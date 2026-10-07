@@ -132,7 +132,13 @@ def _atomic_json_write(path: Path, value: dict[str, Any]) -> None:
 def get_scan_snapshot(study_id: str) -> dict[str, Any]:
     if not _STUDY_ID.fullmatch(study_id):
         raise ValueError("Study ID must be lowercase kebab-case.")
-    return _read_json(_catalog_root() / study_id / "scans/latest.json", f"scan snapshot for {study_id!r}")
+    try:
+        snapshot = contained_path(_catalog_root(), study_id, "scans", "latest.json")
+    except UnsafePathError as exc:
+        raise StudyArtifactError(
+            f"Research Studies scan snapshot for {study_id!r} path is invalid."
+        ) from exc
+    return _read_json(snapshot, f"scan snapshot for {study_id!r}")
 
 
 def _scan_event_window(as_of: date) -> dict[str, Any] | None:

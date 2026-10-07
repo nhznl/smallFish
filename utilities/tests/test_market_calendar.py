@@ -6,6 +6,7 @@ import json
 import hashlib
 import shutil
 import sqlite3
+import time
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -289,6 +290,38 @@ def test_bls_parser_keeps_cpi_and_required_employment_releases():
     date_only = next(item for item in report.observations if item.time_precision == "date_only")
     assert date_only.scheduled_at_utc is None
     assert date_only.civil_date == "2026-11-10"
+
+
+def test_bls_parser_accepts_quoted_parameter_values():
+    report = parse_ics("""BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:synthetic-cpi-date@example.test
+DTSTART;VALUE="DATE":20261110
+SUMMARY:Consumer Price Index
+DESCRIPTION:Synthetic Consumer Price Index for October 2026.
+END:VEVENT
+END:VCALENDAR
+""", source_url="https://example.test/bls.ics")
+    assert report.observations[0].time_precision == "date_only"
+    assert report.observations[0].civil_date == "2026-11-10"
+
+
+def test_bls_parser_scans_ambiguous_parameters_without_backtracking():
+    payload = "-;-=" + ('"' * 2 + ";-=") * 24
+    text = f"""BEGIN:VCALENDAR
+BEGIN:VEVENT
+{payload}
+UID:synthetic-cpi-utc@example.test
+DTSTART:20261014T123000Z
+SUMMARY:Consumer Price Index
+DESCRIPTION:Synthetic Consumer Price Index for September 2026.
+END:VEVENT
+END:VCALENDAR
+"""
+    started = time.perf_counter()
+    report = parse_ics(text, source_url="https://example.test/bls.ics")
+    assert time.perf_counter() - started < 0.5
+    assert report.observations[0].scheduled_at_utc == "2026-10-14T12:30:00Z"
 
 
 def test_bls_parser_accepts_a_utc_z_timestamp_without_tzid():
