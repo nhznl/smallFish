@@ -17,7 +17,7 @@ Decided: 2026-07-26.
 
 | Runtime | Minimum | Tested in CI | Notes |
 |---|---|---|---|
-| Python | 3.12 | 3.12 | Both virtual environments use the same interpreter version. Newer versions (3.13, 3.14) work; the pinned `pandas==3.0.0` / `numpy==2.4.2` wheels set the practical floor. |
+| Python | 3.14 | 3.14 | Both virtual environments use the same interpreter version. CI tests only the declared Python runtime. |
 | Node.js | 22.22.3 | 22 and 24 | Required by Angular 22. `.nvmrc` selects Node 24 LTS; `package.json#engines` records the supported release lines. |
 | npm | 10 | 10 and 11 | `npm ci` against the committed lockfile. A global Angular CLI is **not** required. |
 | Git | 2.30 | runner default | Needed for `setup.sh` prerequisite checks. |
@@ -39,4 +39,4 @@ These are reasonable follow-ups, not launch requirements:
 - Docker images and devcontainer definitions
 - Native Windows (outside WSL)
 - Hosted or multi-user deployment
-- Python versions below 3.12
+- Python versions below 3.14

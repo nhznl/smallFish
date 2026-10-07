@@ -27,7 +27,7 @@ import preflight as P  # noqa: E402
 
 @pytest.mark.parametrize("text, expected", [
     ("v20.11.1", (20, 11, 1)),
-    ("Python 3.12.4", (3, 12, 4)),
+    ("Python 3.14.3", (3, 14, 3)),
     ("git version 2.39.5 (Apple Git-154)", (2, 39, 5)),
     ("10.8.2", (10, 8, 2)),
 ])
@@ -41,14 +41,14 @@ def test_parse_version_rejects_unparseable_output():
 
 
 @pytest.mark.parametrize("found, minimum, ok", [
-    ((3, 12, 0), (3, 12), True),
-    ((3, 14, 3), (3, 12), True),
-    ((3, 11, 9), (3, 12), False),
+    ((3, 14, 0), (3, 14), True),
+    ((3, 15, 3), (3, 14), True),
+    ((3, 13, 9), (3, 14), False),
     ((20,), (20,), True),
     ((25, 2, 1), (20,), True),
     ((18, 20, 4), (20,), False),
     # A longer found version must not lose to a shorter minimum.
-    ((3, 12), (3, 12), True),
+    ((3, 14), (3, 14), True),
 ])
 def test_meets_compares_field_by_field(found, minimum, ok):
     assert P.meets(found, minimum) is ok
@@ -56,9 +56,9 @@ def test_meets_compares_field_by_field(found, minimum, ok):
 
 def test_declared_minimums_match_the_support_matrix():
     matrix = (REPO_ROOT / "docs/SUPPORT_MATRIX.md").read_text(encoding="utf-8")
-    assert "| Python | 3.12 |" in matrix
+    assert "| Python | 3.14 |" in matrix
     assert "| Node.js | 22.22.3 |" in matrix
-    assert P.MIN_PYTHON == (3, 12)
+    assert P.MIN_PYTHON == (3, 14)
     assert P.MIN_NODE == (22, 22, 3)
 
 
@@ -374,9 +374,17 @@ def test_ci_tests_the_declared_minimum_runtimes():
     """A build that only passes on newer runtimes is not what we support."""
     import yaml
     workflow = yaml.safe_load(_workflow_text())
-    python_versions = workflow["jobs"]["backend"]["strategy"]["matrix"]["python-version"]
+    python_version = workflow["env"]["PYTHON_VERSION"]
     node_versions = workflow["jobs"]["ui"]["strategy"]["matrix"]["node-version"]
-    assert ".".join(str(part) for part in P.MIN_PYTHON) in python_versions
+    assert python_version == ".".join(str(part) for part in P.MIN_PYTHON)
+    for job_name in ("backend", "utilities"):
+        job = workflow["jobs"][job_name]
+        assert "strategy" not in job
+        setup_python = next(
+            step for step in job["steps"]
+            if step.get("uses", "").startswith("actions/setup-python@")
+        )
+        assert setup_python["with"]["python-version"] == "${{ env.PYTHON_VERSION }}"
     assert str(P.MIN_NODE[0]) in node_versions
 
 

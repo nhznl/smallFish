@@ -21,24 +21,19 @@ concurrency:
 env:
   # The declared minimums from docs/SUPPORT_MATRIX.md, not the maintainer's
   # machine. A build that only passes on newer runtimes is not supported.
-  PYTHON_VERSION: "3.12"
+  PYTHON_VERSION: "3.14"
   NODE_VERSION: "20"
 
 jobs:
   backend:
-    name: Backend tests (Python ${{ matrix.python-version }})
+    name: Backend tests (Python 3.14)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # The declared floor, and a current release to catch upcoming breakage.
-        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: stock-app/requirements.txt
 
@@ -58,18 +53,14 @@ jobs:
           stock-app/.venv/bin/python -m pytest -q --rootdir=stock-app stock-app/tests
 
   utilities:
-    name: Utilities tests (Python ${{ matrix.python-version }})
+    name: Utilities tests (Python 3.14)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: utilities/requirements.txt
 

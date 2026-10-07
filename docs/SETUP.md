@@ -6,7 +6,7 @@ Everything here works without any API key or brokerage account.
 
 | Tool | Minimum | Check |
 |---|---|---|
-| Python | 3.12 | `python3 -V` |
+| Python | 3.14 | `python3 -V` |
 | Node.js | 22.22.3 minimum; Node 24 LTS recommended | `node -v` |
 | npm | 10 | `npm -v` |
 | Git | 2.30 | `git --version` |
@@ -56,7 +56,7 @@ through npm scripts.
 | `--skip-python` | Skip both Python environments |
 | `--help` | Usage |
 
-`PYTHON=python3.12 ./setup.sh` chooses the interpreter for the virtual
+`PYTHON=python3.14 ./setup.sh` chooses the interpreter for the virtual
 environments.
 
 ## Verify

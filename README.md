@@ -107,7 +107,7 @@ batch after sandbox/production credentials are configured separately. See
 
 ## Quickstart
 
-Five minutes, no credentials. Requires Python 3.12+, Node 24 LTS, and Git.
+Five minutes, no credentials. Requires Python 3.14+, Node 24 LTS, and Git.
 
 ```bash
 git clone https://github.com/nhznl/smallFish.git

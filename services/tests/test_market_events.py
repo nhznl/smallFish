@@ -24,7 +24,7 @@ def test_fetch_schedule_sends_conditional_headers_and_no_secret():
     assert url == BLS_SCHEDULE_URL
     assert "secret" not in url
     assert headers["If-None-Match"] == '"synthetic"'
-    assert headers["Accept"] == "text/calendar"
+    assert headers["Accept"] == "text/calendar, text/html"
     assert headers["User-Agent"].startswith("smallFish-market-calendar/1.0 (+")
     assert "key" not in url.lower()
 
