@@ -30,6 +30,8 @@ Everything here works with **no account and no API key**:
 - **Wheel** — screens cash-secured-put candidates and explains the mechanics.
 - **Portfolios** — track named symbol lists with returns and sector exposure.
 - **Stock Detail** — price history, technical analysis, and classification.
+- **Event Risk** — maps scheduled broad-market, sector, commodity, and
+  agriculture events to SPY/QQQ 0-DTE risk windows and relevant ETFs.
 - **Research Studies** — the project's own frozen backtests, published with their
   verdicts, evidence levels, and provenance. Including the ones that failed.
 
@@ -68,6 +70,25 @@ below use **synthetic demonstration data** — no real account or position:
 Until a brokerage is synced, each ledger simply has nothing imported yet — that
 is a normal optional state, not an error. More in
 [`docs/screenshots/`](docs/screenshots/README.md).
+
+## Event Risk market calendar
+
+Research › **Event Risk** scans from today through the next 31 days for scheduled
+events that could complicate short-duration SPY and QQQ options trades. It calls
+out primary broad-market risk days first, then groups lower-priority sector,
+commodity, and agriculture events with the ETFs they may affect. Each day
+explains the timing, importance, strategy exposure, and reason for the risk; it
+does not predict market direction.
+
+![The Event Risk calendar showing its 31-day horizon, primary risk summary, strategy exposure, and scheduled events](docs/screenshots/event-risk-market-calendar.png)
+
+The **Market Calendar** button and `./commands.sh market-calendar` use the same
+daily check-and-run workflow. If the exact current-day horizon was already
+published successfully, smallFish reuses it and reloads the page. Otherwise it
+refreshes the available earnings calendar, fetches the configured event sources,
+and atomically publishes a new calendar. Provider gaps and unconfigured released
+values stay visible on the page, and `--force` is available for an intentional
+same-day refresh.
 
 Optional, each independently:
 

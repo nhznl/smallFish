@@ -3,9 +3,9 @@
 Feature screenshots used by the root README and the docs.
 
 **Every image here is captured from a checkout containing only starter market
-data and synthetic examples.** No real position, account name or number, cost
-basis, transaction, trade history, token, or local filesystem path appears in
-any of them.
+data, public scheduled-event data, and synthetic examples.** No real position,
+account name or number, cost basis, transaction, trade history, token, or local
+filesystem path appears in any of them.
 
 The three `*-connected.png` frames show the brokerage integrations populated.
 Their ledger data is **generated, not imported**: the trading account is named
@@ -28,6 +28,7 @@ Light theme, the application's only theme.
 | `momentum-scanner.png` | `/momentum` | 1440×900 | Setup-ranked candidates from starter data. The README's lead image. |
 | `sectors.png` | `/sectors` | 1440×900 | 11-sector leadership against SPY, with its not-a-fund-flow caveat. |
 | `research-studies.png` | `/studies` | 1440×900 | The study catalog, including the `FAILED` verdict. |
+| `event-risk-market-calendar.png` | `/market-calendar` | 1440×1100 | The 31-day Event Risk calendar with primary SPY/QQQ risk, secondary event coverage, ETF relevance, strategy exposure, and visible provider limitations. Captured 2026-10-06 from public scheduled-event data. |
 | `wheel.png` | `/wheel` | 1440×900 | Wheel candidates from the local price cache. No credential needed. |
 | `wheel-explainer.png` | `/wheelExplainer` | 1440×900 | Wheel mechanics and field definitions. |
 | `portfolios.png` | `/portfolios` | 1440×900 | The five portfolios bootstrap seeds, compared equal-weighted against SPY. Exactly what a new user sees after `bootstrap-data`. |
